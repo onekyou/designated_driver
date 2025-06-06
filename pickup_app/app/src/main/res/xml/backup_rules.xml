@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   Sample backup rules file; uncomment and customize as necessary.
+   See https://developer.android.com/guide/topics/data/autobackup
+   for details. 
+-->
+<full-backup-content>
+<!--
+   <include domain="file" path="file_path"/>
+   <include domain="database" path="db_name"/>
+   <include domain="sharedpref" path="pref_name.xml"/>
+   <include domain="external" path="external_file_path"/>
+-->
+<!--
+   <exclude domain="file" path="file_path_to_exclude"/>
+   <exclude domain="database" path="db_to_exclude"/>
+   <exclude domain="sharedpref" path="pref_to_exclude.xml"/>
+   <exclude domain="external" path="external_file_to_exclude"/>
+-->
+</full-backup-content> 

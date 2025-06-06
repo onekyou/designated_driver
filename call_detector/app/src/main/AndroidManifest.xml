@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- 위험 권한 - 런타임 권한 요청 필요 -->
+    <!-- 전화 상태 읽기 권한: 전화가 오는지, 끊겼는지 알기 위해 필요해요 -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+
+    <!-- 통화 기록 읽기 권한: 전화번호, 통화 시간 등을 가져오기 위해 필요해요 -->
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+
+    <!-- 연락처 읽기 권한: 전화번호로 저장된 이름을 찾기 위해 필요해요 -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
+    <!-- 일반 권한 - 런타임 권한 필요 없음 -->
+    <!-- 포그라운드 서비스 권한: 앱이 꺼져도 계속 전화 감지를 하기 위해 필요해요 (안드로이드 최신 버전 필수) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- 안드로이드 14 이상 대응: 포그라운드 서비스 유형 지정 필요 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    
+    <!-- 배터리 최적화 예외 권한 -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    
+    <!-- 부팅 시 자동 시작 권한 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- 네트워크 관련 권한 -->
+    <!-- 인터넷 권한: Firebase Firestore에 데이터를 보내기 위해 필요해요 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 네트워크 상태 확인 권한 -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Android 13(API 33) 이상: 알림 권한 필요 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+    <application
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.CallDetector"
+        android:usesCleartextTraffic="true"
+        tools:targetApi="31">
+        
+        <!-- 메인 액티비티 -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.CallDetector">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        
+        <!-- 전화 상태 변경 브로드캐스트 리시버 -->
+        <receiver
+            android:name=".CallReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PHONE_STATE" />
+                <action android:name="android.intent.action.NEW_OUTGOING_CALL" />
+            </intent-filter>
+        </receiver>
+        
+        <!-- 통화 정보 처리 서비스 -->
+        <service
+            android:name=".CallDetectorService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+            
+        <!-- 부팅 완료 브로드캐스트 리시버 -->
+        <receiver
+            android:name=".BootCompletedReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </receiver>
+        
+    </application>
+
+</manifest>

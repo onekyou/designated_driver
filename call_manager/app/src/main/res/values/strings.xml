@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_name">콜 매니저</string>
+
+    <!-- Call Status -->
+    <string name="call_status_pending">배정대기</string>
+    <string name="call_status_assigned">기사배정</string>
+    <string name="call_status_accepted">배차수락</string>
+    <string name="call_status_pickup_complete">픽업완료</string>
+    <string name="call_status_in_progress">운행중</string>
+    <string name="call_status_awaiting_settlement">정산대기</string>
+    <string name="call_status_completed">운행완료</string>
+    <string name="call_status_canceled">취소</string>
+    <string name="call_status_hold">보류중</string>
+    <string name="call_status_unknown">알수없음</string>
+
+    <!-- Driver Status -->
+    <string name="driver_status_waiting">대기중</string>
+    <string name="driver_status_on_trip">운행중</string>
+    <string name="driver_status_preparing">운행준비</string>
+    <string name="driver_status_offline">오프라인</string>
+    <string name="driver_status_unknown">알수없음</string>
+</resources> 
