@@ -16,8 +16,8 @@ import androidx.compose.material.icons.filled.History
 import androidx.navigation.NavController
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.designated.driver.ui.home.DriverViewModel
-import androidx.hilt.navigation.compose.hiltViewModel // Hilt ViewModel 주입을 위해 추가
+import com.designated.driverapp.viewmodel.DriverViewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import android.content.Context
@@ -45,16 +45,17 @@ import androidx.compose.runtime.SideEffect
 @Composable
 fun HistorySettlementScreen(
     navController: NavController,
-    viewModel: DriverViewModel, // 파라미터로 받도록 수정
+    viewModel: DriverViewModel,
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val completedCalls by viewModel.completedCalls.collectAsStateWithLifecycle()
-    val shouldNavigateToHome by viewModel.shouldNavigateToHome.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val completedCalls = uiState.completedCalls
+    val shouldNavigateToHistorySettlement = uiState.navigateToHistorySettlement
     var showLogoutConfirmDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val systemUiController = rememberSystemUiController()
-    // 핸드폰 StatusBar 다크모드 적용
+
     SideEffect {
         systemUiController.setStatusBarColor(
             color = Color(0xFF222222), // 어두운 배경
@@ -63,7 +64,6 @@ fun HistorySettlementScreen(
     }
     val sortedCalls = completedCalls.sortedByDescending { it.timestamp }
 
-    // Firestore 기반 completedCalls 대신 SharedPreferences에서 불러오기
     fun loadTripHistory(context: Context): List<String> {
         val prefs = context.getSharedPreferences("trip_history", Context.MODE_PRIVATE)
         val historyJson = prefs.getString("history_list", "[]")
@@ -75,7 +75,6 @@ fun HistorySettlementScreen(
         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
         for (i in 0 until historyList.length()) {
             val item = historyList.getString(i)
-            // item에서 날짜 정보 추출 (마지막에 |timestamp=... 형태로 저장한다고 가정)
             val parts = item.split("|timestamp=")
             val summary = parts[0]
             val timestamp = if (parts.size > 1) parts[1].toLongOrNull() ?: 0L else 0L
@@ -84,7 +83,6 @@ fun HistorySettlementScreen(
                 filteredJson.put(item)
             }
         }
-        // 5일 지난 데이터 자동 삭제
         if (filtered.size != historyList.length()) {
             prefs.edit().putString("history_list", filteredJson.toString()).apply()
         }
@@ -96,22 +94,21 @@ fun HistorySettlementScreen(
     var depositPercent by remember { mutableStateOf(prefs.getInt("deposit_percent", 60)) }
     var showDialog by remember { mutableStateOf(false) }
 
-    // --- 정산내역 계산 로직 ---
     data class TripSummary(
         val fare: Int,
         val payment: String,
-        val cashAmount: Int = 0 // 현금+포인트일 때 현금액
+        val cashAmount: Int = 0
     )
     fun parseTripSummary(summary: String): TripSummary? {
-        // 예시: "1. 홍길동, 용문면→양평읍, 15,000원, 현금+포인트(8,000원 현금)"
         val parts = summary.split(", ")
         if (parts.size < 4) return null
         val fare = parts[2].replace("원", "").replace(",", "").trim().toIntOrNull() ?: 0
         val payment = parts[3]
         return if (payment.startsWith("현금+포인트")) {
-            // 현금+포인트(8,000원 현금)
-            val cashRegex = Regex("\\((\\d+)원 현금\\)")
-            val cash = cashRegex.find(payment)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
+            // 쉼표가 포함된 현금 금액도 처리하도록 정규식 수정
+            val cashRegex = Regex("\\(([\\d,]+)원 현금\\)")
+            val cashMatch = cashRegex.find(payment)
+            val cash = cashMatch?.groupValues?.getOrNull(1)?.replace(",", "")?.toIntOrNull() ?: 0
             TripSummary(fare, "현금+포인트", cash)
         } else {
             TripSummary(fare, payment)
@@ -121,28 +118,23 @@ fun HistorySettlementScreen(
     val totalCount = parsedList.size
     val totalFare = parsedList.sumOf { it.fare }
     val totalDeposit = (totalFare * depositPercent / 100.0).toInt()
-    // 외상: 현금 외 모든 결제, 현금+포인트는 포인트 부분만 외상
     val totalCredit = parsedList.sumOf {
-        when {
+        val credit = when {
             it.payment == "현금" -> 0
             it.payment == "현금+포인트" -> it.fare - it.cashAmount
             else -> it.fare
         }
+        credit
     }
     val realDeposit = totalDeposit - totalCredit
     val realIncome = totalFare - totalDeposit
-    // --- ---
 
-    LaunchedEffect(shouldNavigateToHome) {
-        if (shouldNavigateToHome) {
-            navController.navigate("home") {
-                launchSingleTop = true
-            }
-            viewModel.resetShouldNavigateToHome()
+    LaunchedEffect(shouldNavigateToHistorySettlement) {
+        if (shouldNavigateToHistorySettlement) {
+            viewModel.onNavigateToHistorySettlementHandled()
         }
     }
 
-    // --- 납입금 비율 설정 팝업 ---
     if (showDialog) {
         AlertDialog(
             onDismissRequest = { showDialog = false },
@@ -171,11 +163,10 @@ fun HistorySettlementScreen(
         )
     }
 
-    // --- 세션 단위 운행내역/정산내역 관리 함수 ---
     data class SessionData(
-        val date: String, // 저장 시각
-        val history: List<String>, // 운행내역(한 줄 요약)
-        val summary: Map<String, Any> // 정산내역 요약(필요시)
+        val date: String,
+        val history: List<String>,
+        val summary: Map<String, Any>
     )
     fun loadSessions(context: Context): MutableList<SessionData> {
         val prefs = context.getSharedPreferences("trip_sessions", Context.MODE_PRIVATE)
@@ -206,78 +197,10 @@ fun HistorySettlementScreen(
         }
         prefs.edit().putString("sessions", arr.toString()).apply()
     }
-    // --- 이전 세션 리스트 ---
     var sessionList by remember { mutableStateOf(loadSessions(context)) }
-    // --- 이전 기록 보기 팝업 상태 ---
     var showHistoryDialog by remember { mutableStateOf(false) }
-    // --- 세션 상세보기 다이얼로그 상태 ---
     var showSessionDetail by remember { mutableStateOf(false) }
     var selectedSession: SessionData? by remember { mutableStateOf(null) }
-
-    // --- 운행내역을 Firestore로 업로드하는 함수 ---
-    fun uploadTripHistoryToServer(context: Context, tripHistory: List<String>) {
-        val prefs = context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
-        val regionId = prefs.getString("regionId", null)
-        val officeId = prefs.getString("officeId", null)
-        val driverId = prefs.getString("driverId", null)
-        val driverName = prefs.getString("driverName", null)
-        val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-        if (regionId != null && officeId != null && driverId != null) {
-            for (item in tripHistory) {
-                val parts = item.split("|timestamp=")
-                val summary = parts[0]
-                val timestamp = if (parts.size > 1) parts[1].toLongOrNull() ?: 0L else 0L
-                val tripData = hashMapOf(
-                    "driverId" to driverId,
-                    "driverName" to (driverName ?: ""),
-                    "summary" to summary,
-                    "timestamp" to timestamp
-                )
-                /*firestore.collection("regions").document(regionId)
-                    .collection("offices").document(officeId)
-                    .collection("completed_trips").add(tripData)
-                    .addOnSuccessListener { documentReference ->
-                        android.util.Log.d("HistorySettlementScreen", "운행내역 Firestore 저장 성공 (주석 처리됨): $summary")
-                    }
-                    .addOnFailureListener { e ->
-                        android.util.Log.e("HistorySettlementScreen", "운행내역 Firestore 저장 실패 (주석 처리됨): $summary", e)
-                    }*/
-                android.util.Log.i("HistorySettlementScreen", "uploadTripHistoryToServer: completed_trips 저장 로직 주석 처리됨.")
-            }
-        } else {
-            android.util.Log.e("HistorySettlementScreen", "regionId/officeId/driverId 중 null 있음: regionId=$regionId, officeId=$officeId, driverId=$driverId")
-        }
-    }
-
-    // --- 관리자앱 completed_trips 컬렉션 자동 검증 함수 (개발/테스트용) ---
-    /*fun verifyCompletedTripsInFirestore(context: Context) {
-        val prefs = context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
-        val regionId = prefs.getString("regionId", null)
-        val officeId = prefs.getString("officeId", null)
-        val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-        if (regionId != null && officeId != null) {
-            firestore.collection("regions").document(regionId)
-                .collection("offices").document(officeId)
-                .collection("completed_trips")
-                .get()
-                .addOnSuccessListener { result ->
-                    for (doc in result.documents) {
-                        android.util.Log.d("VerifyCompletedTrips", "문서 ID: ${doc.id}")
-                        android.util.Log.d("VerifyCompletedTrips", "driverId: ${doc.getString("driverId")}")
-                        android.util.Log.d("VerifyCompletedTrips", "driverName: ${doc.getString("driverName")}")
-                        android.util.Log.d("VerifyCompletedTrips", "summary: ${doc.getString("summary")}")
-                        android.util.Log.d("VerifyCompletedTrips", "timestamp: ${doc.getLong("timestamp")}")
-                        // 필요시 추가 필드 출력
-                        android.util.Log.d("VerifyCompletedTrips", "----")
-                    }
-                }
-                .addOnFailureListener { e ->
-                    android.util.Log.e("VerifyCompletedTrips", "Firestore 데이터 조회 실패: ${e.message}")
-                }
-        } else {
-            android.util.Log.e("VerifyCompletedTrips", "regionId 또는 officeId가 null입니다.")
-        }
-    }*/
 
     Scaffold(
         topBar = {
@@ -317,7 +240,6 @@ fun HistorySettlementScreen(
                 .padding(16.dp)
         ) {
             Spacer(modifier = Modifier.height(8.dp))
-            // --- 이전 기록 보기 다이얼로그 ---
             if (showHistoryDialog) {
                 AlertDialog(
                     onDismissRequest = { showHistoryDialog = false },
@@ -353,7 +275,6 @@ fun HistorySettlementScreen(
                     }
                 )
             }
-            // --- 세션 상세보기 다이얼로그 ---
             if (showSessionDetail && selectedSession != null) {
                 val s = selectedSession!!
                 AlertDialog(
@@ -401,7 +322,6 @@ fun HistorySettlementScreen(
                             colors = CardDefaults.cardColors(containerColor = Color.White),
                             elevation = CardDefaults.cardElevation(0.dp)
                         ) {
-                            // 날짜 정보 분리 표시
                             val parts = summary.split("|timestamp=")
                             val displaySummary = parts[0]
                             val dateStr = if (parts.size > 1) {
@@ -419,7 +339,6 @@ fun HistorySettlementScreen(
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
-            // --- 정산내역 표시 (회색 카드) ---
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -436,14 +355,14 @@ fun HistorySettlementScreen(
                         }
                     }
                     Spacer(modifier = Modifier.height(4.dp))
-                    Divider(thickness = 3.dp, color = Color(0xFFFF9800)) // 오렌지 라인
+                    Divider(thickness = 3.dp, color = Color(0xFFFF9800))
                     Spacer(modifier = Modifier.height(12.dp))
                     Text("총 운행 횟수: $totalCount", style = MaterialTheme.typography.bodyLarge, color = Color.White)
                     Text("총 수입: %,d원".format(totalFare), style = MaterialTheme.typography.bodyLarge, color = Color.White)
                     Text("총 납입: %,d원".format(totalDeposit), style = MaterialTheme.typography.bodyLarge, color = Color.White)
                     Text("총 외상: %,d원".format(totalCredit), style = MaterialTheme.typography.bodyLarge, color = Color.White)
                     Spacer(modifier = Modifier.height(8.dp))
-                    Divider(thickness = 2.dp, color = Color(0xFFFF9800)) // 오렌지 라인
+                    Divider(thickness = 2.dp, color = Color(0xFFFF9800))
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         "실 납입: %,d원".format(realDeposit),
@@ -457,7 +376,6 @@ fun HistorySettlementScreen(
                     )
                 }
             }
-            // --- 초기화 버튼(맨 아래) ---
             var showClearDialog by remember { mutableStateOf(false) }
             if (showClearDialog) {
                 AlertDialog(
@@ -466,7 +384,6 @@ fun HistorySettlementScreen(
                     text = { Text("오늘까지의 운행내역/정산내역을 저장하고 새로 시작합니다. 이전 기록은 최대 5개까지 보관됩니다. 진행할까요?") },
                     confirmButton = {
                         Button(onClick = {
-                            // 세션 저장
                             val now = SimpleDateFormat("yyyy-MM-dd HH:mm").format(Date())
                             val summaryMap = mapOf(
                                 "totalCount" to totalCount,
@@ -480,9 +397,6 @@ fun HistorySettlementScreen(
                             val updatedSessions = (sessionList + newSession).takeLast(5).toMutableList()
                             saveSessions(context, updatedSessions)
                             sessionList = updatedSessions
-                            // 운행내역 Firestore 업로드
-                            uploadTripHistoryToServer(context, tripHistory)
-                            // 현재 운행내역 초기화
                             val prefs = context.getSharedPreferences("trip_history", Context.MODE_PRIVATE)
                             prefs.edit().putString("history_list", "[]").apply()
                             tripHistory = listOf()
@@ -491,12 +405,13 @@ fun HistorySettlementScreen(
                     }
                 )
             }
-            Button(
-                onClick = { showClearDialog = true },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("오늘까지의 운행내역/정산내역 저장 및 초기화") }
+            Column {
+                Button(
+                    onClick = { showClearDialog = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("오늘까지의 운행내역/정산내역 저장 및 초기화") }
+            }
         }
-        // --- 로그아웃 확인 다이얼로그 ---
         if (showLogoutConfirmDialog) {
             AlertDialog(
                 onDismissRequest = { showLogoutConfirmDialog = false },

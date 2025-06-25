@@ -63,8 +63,7 @@ enum class Screen {
     Dashboard,
     Settings,
     PendingDrivers,
-    Settlement,
-    CallManagement
+    Settlement
 }
 
 // 화면 전환 시 전달할 데이터를 관리하는 Sealed Class
@@ -242,9 +241,6 @@ class MainActivity : ComponentActivity() {
                             Screen.Settlement, Screen.PendingDrivers -> {
                                 screenState = Screen.Settings
                             }
-                            Screen.CallManagement -> {
-                                screenState = Screen.Dashboard
-                            }
                             Screen.SignUp, Screen.PasswordReset -> {
                                 screenState = Screen.Login
                             }
@@ -285,8 +281,7 @@ class MainActivity : ComponentActivity() {
                                     Log.d(tag, "Logout button clicked. Signing out.")
                                     auth.signOut()
                                 },
-                                onNavigateToSettings = { screenState = Screen.Settings },
-                                onNavigateToCallManagement = { screenState = Screen.CallManagement }
+                                onNavigateToSettings = { screenState = Screen.Settings }
                             )
                         }
                         Screen.Settings -> {
@@ -321,12 +316,6 @@ class MainActivity : ComponentActivity() {
                         Screen.Settlement -> {
                             com.designated.callmanager.ui.settlement.SettlementScreen(
                                 onNavigateBack = { screenState = Screen.Settings },
-                                onNavigateHome = { screenState = Screen.Dashboard }
-                            )
-                        }
-                        Screen.CallManagement -> {
-                            com.designated.callmanager.ui.callmanagement.CallManagementScreen(
-                                onNavigateBack = { screenState = Screen.Dashboard },
                                 onNavigateHome = { screenState = Screen.Dashboard }
                             )
                         }

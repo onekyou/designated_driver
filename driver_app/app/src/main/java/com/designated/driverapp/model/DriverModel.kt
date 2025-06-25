@@ -1,18 +1,19 @@
 package com.designated.driverapp.model
 
 import android.os.Parcelable
+import com.designated.driverapp.data.Constants
 import com.google.firebase.Timestamp
 import kotlinx.parcelize.Parcelize
 import com.google.firebase.firestore.Exclude
 
 // 기사 운행 상태 Enum (추가)
-enum class DriverStatus(val value: String) {
-    ONLINE("온라인"),       // 앱 실행 및 근무 가능 상태
-    OFFLINE("오프라인"),     // 앱 종료 또는 근무 불가능 상태
-    PREPARING("운행준비중"), // 콜 수락 후 운행 시작 전 상태 (추가)
-    ON_TRIP("운행중"),      // 콜을 받아 운행중인 상태
-    WAITING("대기중")      // 온라인 상태에서 콜을 기다리는 중
-}
+// enum class DriverStatus(val value: String) {
+//     ONLINE(Constants.DRIVER_STATUS_ONLINE),
+//     OFFLINE(Constants.DRIVER_STATUS_OFFLINE),
+//     PREPARING(Constants.DRIVER_STATUS_PREPARING),
+//     ON_TRIP(Constants.DRIVER_STATUS_ON_TRIP),
+//     WAITING(Constants.DRIVER_STATUS_WAITING)
+// }
 
 // 기사 승인 상태 Enum (추가)
 enum class DriverApprovalStatus {
@@ -48,40 +49,3 @@ data class PickupDriver(
     val isActive: Boolean = true,
     var approvalStatus: DriverApprovalStatus = DriverApprovalStatus.PENDING
 )
-
-// 호출 정보를 담는 데이터 클래스
-@Parcelize
-data class CallInfo(
-    var id: String = "",
-    val customerName: String = "",
-    val phoneNumber: String = "",
-    val customerAddress: String = "",
-    val destination: String = "",
-    val detectedTimestamp: Timestamp = Timestamp.now(),
-    val timestamp: Timestamp = Timestamp.now(),
-    var status: String = CallStatus.WAITING.firestoreValue,
-    val fare: Int = 0,
-    val assignedDriverId: String? = null,
-    val assignedDriverName: String? = null,
-    val assignedDriverPhone: String? = null,
-    val assignedTimestamp: Timestamp? = null,
-    val assignedPickupDriverId: String? = null,
-    val deviceName: String = "",
-    val officeId: String = "",
-    val regionId: String = "",
-    val callType: String = "",
-    val memo: String = "",
-    val departure_set: String = "",
-    val destination_set: String = "",
-    val waypoints_set: String = "",
-    val fare_set: Int = 0,
-    val trip_summary: String = "",
-    val paymentMethod: String = "",
-    val cashAmount: Int? = null,
-    val isSummaryConfirmed: Boolean = false,
-    val summaryConfirmedTimestamp: Timestamp? = null
-) : Parcelable {
-    @get:Exclude
-    val statusEnum: CallStatus
-        get() = CallStatus.fromFirestoreValue(status)
-}

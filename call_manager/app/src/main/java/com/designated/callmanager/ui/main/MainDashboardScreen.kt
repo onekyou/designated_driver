@@ -14,8 +14,7 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun MainDashboardScreen(
-    onNavigateToPendingDrivers: () -> Unit,
-    onNavigateToCallManagement: () -> Unit
+    onNavigateToPendingDrivers: () -> Unit
     // 다른 네비게이션 콜백 추가...
 ) {
     // TODO: 실제 대시보드 UI 구현
@@ -28,10 +27,6 @@ fun MainDashboardScreen(
         Spacer(modifier = Modifier.height(16.dp))
         Button(onClick = onNavigateToPendingDrivers) {
             Text("기사 가입 승인 관리")
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = onNavigateToCallManagement) {
-            Text("실시간 호출 관리")
         }
         // 다른 메뉴 버튼들...
     }

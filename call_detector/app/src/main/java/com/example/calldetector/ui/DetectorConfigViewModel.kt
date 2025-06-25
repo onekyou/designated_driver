@@ -91,18 +91,11 @@ class DetectorConfigViewModel(application: Application) : AndroidViewModel(appli
                 _uiState.update {
                     it.copy(
                         regions = regionList,
-                        isLoadingRegions = false,
-                        // 만약 이전에 선택된 지역이 없다면, 그리고 지역 목록이 비어있지 않다면 첫 번째 지역을 자동으로 선택
-                        selectedRegion = it.selectedRegion ?: regionList.firstOrNull()
+                        isLoadingRegions = false
+                        // 기존 선택된 지역을 유지하고, 자동 선택 로직 제거
                     )
                 }
-                // 자동으로 첫 번째 지역이 선택되었다면, 해당 지역의 사무실 목록도 가져옴
-                _uiState.value.selectedRegion?.let { region ->
-                    if (_uiState.value.selectedOffice == null) { // 사무실이 아직 선택되지 않았을 경우에만 자동 로드
-                         fetchOffices(region.id)
-                    }
-                }
-                 Log.d(TAG, "Fetched regions: ${regionList.size} items")
+                Log.d(TAG, "Fetched regions: ${regionList.size} items")
             }
             .addOnFailureListener { exception ->
                 _uiState.update { it.copy(isLoadingRegions = false, error = "지역 정보를 가져오는데 실패했습니다: ${exception.message}") }
@@ -122,12 +115,11 @@ class DetectorConfigViewModel(application: Application) : AndroidViewModel(appli
                 _uiState.update {
                     it.copy(
                         offices = officeList,
-                        isLoadingOffices = false,
-                        // 만약 이전에 선택된 사무실이 없다면, 그리고 사무실 목록이 비어있지 않다면 첫 번째 사무실을 자동으로 선택
-                        selectedOffice = it.selectedOffice ?: officeList.firstOrNull()
+                        isLoadingOffices = false
+                        // 기존 선택된 사무실을 유지하고, 자동 선택 로직 제거
                     )
                 }
-                 Log.d(TAG, "Fetched offices for region $regionId: ${officeList.size} items")
+                Log.d(TAG, "Fetched offices for region $regionId: ${officeList.size} items")
             }
             .addOnFailureListener { exception ->
                 _uiState.update { it.copy(isLoadingOffices = false, error = "사무실 정보를 가져오는데 실패했습니다: ${exception.message}") }

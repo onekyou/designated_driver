@@ -12,6 +12,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -20,8 +21,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -182,200 +185,247 @@ fun MainScreen(viewModel: DetectorConfigViewModel) {
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            "콜디텍터 설정",
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-
-        // 지역 선택 드롭다운
-        var regionExpanded by remember { mutableStateOf(false) }
-        ExposedDropdownMenuBox(
-            expanded = regionExpanded,
-            onExpandedChange = { regionExpanded = !regionExpanded }
-        ) {
-            OutlinedTextField(
-                value = uiState.selectedRegion?.name ?: "지역 선택",
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("지역") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = regionExpanded) },
-                modifier = Modifier
-                    .menuAnchor() // 필수
-                    .fillMaxWidth(),
-                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("콜디텍터 설정", color = Color.White) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFF1A1A1A),
+                    titleContentColor = Color.White
+                )
             )
-            ExposedDropdownMenu(
+        },
+        containerColor = Color(0xFF121212) // 다크 배경
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // 지역 선택 드롭다운
+            var regionExpanded by remember { mutableStateOf(false) }
+            ExposedDropdownMenuBox(
                 expanded = regionExpanded,
-                onDismissRequest = { regionExpanded = false }
+                onExpandedChange = { regionExpanded = !regionExpanded }
             ) {
-                if (uiState.isLoadingRegions) {
-                    DropdownMenuItem(
-                        text = { Text("지역 정보 로딩 중...") },
-                        onClick = {},
-                        enabled = false
+                OutlinedTextField(
+                    value = uiState.selectedRegion?.name ?: "지역 선택",
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("지역", color = Color(0xFFB0B0B0)) },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = regionExpanded) },
+                    modifier = Modifier
+                        .menuAnchor() // 필수
+                        .fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFFFFB000),
+                        unfocusedBorderColor = Color(0xFF404040),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        cursorColor = Color(0xFFFFB000),
+                        focusedTrailingIconColor = Color(0xFFFFB000),
+                        unfocusedTrailingIconColor = Color(0xFFB0B0B0)
                     )
-                } else if (uiState.regions.isEmpty()) {
-                    DropdownMenuItem(
-                        text = { Text("사용 가능한 지역 없음") },
-                        onClick = {},
-                        enabled = false
-                    )
-                } else {
-                    uiState.regions.forEach { region ->
+                )
+                ExposedDropdownMenu(
+                    expanded = regionExpanded,
+                    onDismissRequest = { regionExpanded = false },
+                    modifier = Modifier.background(Color(0xFF2A2A2A))
+                ) {
+                    if (uiState.isLoadingRegions) {
                         DropdownMenuItem(
-                            text = { Text(region.name) },
-                            onClick = {
-                                viewModel.selectRegion(region)
-                                regionExpanded = false
-                                focusManager.clearFocus() // 키보드 숨기기
-                            }
+                            text = { Text("지역 정보 로딩 중...", color = Color.White) },
+                            onClick = {},
+                            enabled = false
                         )
+                    } else if (uiState.regions.isEmpty()) {
+                        DropdownMenuItem(
+                            text = { Text("사용 가능한 지역 없음", color = Color.White) },
+                            onClick = {},
+                            enabled = false
+                        )
+                    } else {
+                        uiState.regions.forEach { region ->
+                            DropdownMenuItem(
+                                text = { Text(region.name, color = Color.White) },
+                                onClick = {
+                                    viewModel.selectRegion(region)
+                                    regionExpanded = false
+                                    focusManager.clearFocus() // 키보드 숨기기
+                                }
+                            )
+                        }
                     }
                 }
             }
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            "서비스를 제공할 지역을 선택하세요.",
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.fillMaxWidth()
-        )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "서비스를 제공할 지역을 선택하세요.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFB0B0B0),
+                modifier = Modifier.fillMaxWidth()
+            )
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-        // 사무실 선택 드롭다운
-        var officeExpanded by remember { mutableStateOf(false) }
+            // 사무실 선택 드롭다운
+            var officeExpanded by remember { mutableStateOf(false) }
 
-        ExposedDropdownMenuBox(
-            expanded = officeExpanded && isOfficeDropdownEnabled,
-            onExpandedChange = {
-                // 현재 uiState를 직접 사용하여 확장 가능 여부를 판단합니다.
-                val canExpandNow = uiState.selectedRegion != null && !uiState.isLoadingOffices
-                Log.d("MainScreen", "Office ExposedDropdownMenuBox onExpandedChange. Captured isOfficeDropdownEnabled: $isOfficeDropdownEnabled, Evaluated canExpandNow: $canExpandNow")
-                if (canExpandNow) { // 캡처된 변수 대신 직접 평가한 값 사용
-                    officeExpanded = !officeExpanded
-                    Log.d("MainScreen", "Office officeExpanded toggled to: $officeExpanded")
-                } else {
-                    Log.d("MainScreen", "Office dropdown not expanded because canExpandNow is false (or captured isOfficeDropdownEnabled was false).")
+            ExposedDropdownMenuBox(
+                expanded = officeExpanded && isOfficeDropdownEnabled,
+                onExpandedChange = {
+                    // 현재 uiState를 직접 사용하여 확장 가능 여부를 판단합니다.
+                    val canExpandNow = uiState.selectedRegion != null && !uiState.isLoadingOffices
+                    Log.d("MainScreen", "Office ExposedDropdownMenuBox onExpandedChange. Captured isOfficeDropdownEnabled: $isOfficeDropdownEnabled, Evaluated canExpandNow: $canExpandNow")
+                    if (canExpandNow) { // 캡처된 변수 대신 직접 평가한 값 사용
+                        officeExpanded = !officeExpanded
+                        Log.d("MainScreen", "Office officeExpanded toggled to: $officeExpanded")
+                    } else {
+                        Log.d("MainScreen", "Office dropdown not expanded because canExpandNow is false (or captured isOfficeDropdownEnabled was false).")
+                    }
+                }
+            ) {
+                OutlinedTextField(
+                    value = uiState.selectedOffice?.name ?: "사무실 선택",
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("사무실", color = Color(0xFFB0B0B0)) },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = officeExpanded && isOfficeDropdownEnabled) },
+                    enabled = isOfficeDropdownEnabled,
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFFFFB000),
+                        unfocusedBorderColor = Color(0xFF404040),
+                        disabledBorderColor = Color(0xFF404040),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        disabledTextColor = Color(0xFF808080),
+                        cursorColor = Color(0xFFFFB000),
+                        focusedTrailingIconColor = Color(0xFFFFB000),
+                        unfocusedTrailingIconColor = Color(0xFFB0B0B0),
+                        disabledTrailingIconColor = Color(0xFF808080)
+                    )
+                )
+                ExposedDropdownMenu(
+                    expanded = officeExpanded && isOfficeDropdownEnabled,
+                    onDismissRequest = { officeExpanded = false },
+                    modifier = Modifier.background(Color(0xFF2A2A2A))
+                ) {
+                    if (uiState.isLoadingOffices && uiState.selectedRegion != null) {
+                         DropdownMenuItem(
+                            text = { Text("사무실 정보 로딩 중...", color = Color.White) },
+                            onClick = {},
+                            enabled = false
+                        )
+                    } else if (uiState.offices.isEmpty() && uiState.selectedRegion != null) {
+                         DropdownMenuItem(
+                            text = { Text("선택한 지역에 사무실 없음", color = Color.White) },
+                            onClick = {},
+                            enabled = false
+                        )
+                    } else {
+                        uiState.offices.forEach { office ->
+                            DropdownMenuItem(
+                                text = { Text(office.name, color = Color.White) },
+                                onClick = {
+                                    viewModel.selectOffice(office)
+                                    officeExpanded = false
+                                    focusManager.clearFocus()
+                                }
+                            )
+                        }
+                    }
                 }
             }
-        ) {
-            OutlinedTextField(
-                value = uiState.selectedOffice?.name ?: "사무실 선택",
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("사무실") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = officeExpanded && isOfficeDropdownEnabled) },
-                enabled = isOfficeDropdownEnabled,
-                modifier = Modifier
-                    .menuAnchor()
-                    .fillMaxWidth(),
-                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "선택한 지역 내의 사무실을 선택하세요.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFB0B0B0),
+                modifier = Modifier.fillMaxWidth()
             )
-            ExposedDropdownMenu(
-                expanded = officeExpanded && isOfficeDropdownEnabled,
-                onDismissRequest = { officeExpanded = false }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 전화기 이름 드롭다운 메뉴
+            var deviceNameExpanded by remember { mutableStateOf(false) }
+            ExposedDropdownMenuBox(
+                expanded = deviceNameExpanded,
+                onExpandedChange = { deviceNameExpanded = !deviceNameExpanded }
             ) {
-                if (uiState.isLoadingOffices && uiState.selectedRegion != null) {
-                     DropdownMenuItem(
-                        text = { Text("사무실 정보 로딩 중...") },
-                        onClick = {},
-                        enabled = false
+                OutlinedTextField(
+                    value = uiState.selectedDeviceName.ifEmpty { "전화기 번호 선택" },
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("전화기 번호", color = Color(0xFFB0B0B0)) },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = deviceNameExpanded) },
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFFFFB000),
+                        unfocusedBorderColor = Color(0xFF404040),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        cursorColor = Color(0xFFFFB000),
+                        focusedTrailingIconColor = Color(0xFFFFB000),
+                        unfocusedTrailingIconColor = Color(0xFFB0B0B0)
                     )
-                } else if (uiState.offices.isEmpty() && uiState.selectedRegion != null) {
-                     DropdownMenuItem(
-                        text = { Text("선택한 지역에 사무실 없음") },
-                        onClick = {},
-                        enabled = false
-                    )
-                } else {
-                    uiState.offices.forEach { office ->
+                )
+                ExposedDropdownMenu(
+                    expanded = deviceNameExpanded,
+                    onDismissRequest = { deviceNameExpanded = false },
+                    modifier = Modifier.background(Color(0xFF2A2A2A))
+                ) {
+                    uiState.availableDeviceNames.forEach { name ->
                         DropdownMenuItem(
-                            text = { Text(office.name) },
+                            text = { Text(name, color = Color.White) },
                             onClick = {
-                                viewModel.selectOffice(office)
-                                officeExpanded = false
+                                viewModel.selectDeviceName(name)
+                                deviceNameExpanded = false
                                 focusManager.clearFocus()
                             }
                         )
                     }
                 }
             }
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            "선택한 지역 내의 사무실을 선택하세요.",
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 전화기 이름 드롭다운 메뉴
-        var deviceNameExpanded by remember { mutableStateOf(false) }
-        ExposedDropdownMenuBox(
-            expanded = deviceNameExpanded,
-            onExpandedChange = { deviceNameExpanded = !deviceNameExpanded }
-        ) {
-            OutlinedTextField(
-                value = uiState.selectedDeviceName.ifEmpty { "전화기 번호 선택" },
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("전화기 번호") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = deviceNameExpanded) },
-                modifier = Modifier
-                    .menuAnchor()
-                    .fillMaxWidth(),
-                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "이 전화기를 식별할 수 있는 번호를 선택하세요.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFB0B0B0),
+                modifier = Modifier.fillMaxWidth()
             )
-            ExposedDropdownMenu(
-                expanded = deviceNameExpanded,
-                onDismissRequest = { deviceNameExpanded = false }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Button(
+                onClick = {
+                    viewModel.saveSelection()
+                },
+                enabled = !uiState.isLoadingRegions && !uiState.isLoadingOffices, // 로딩 중 아닐 때만 활성화
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFFFB000),
+                    contentColor = Color.Black,
+                    disabledContainerColor = Color(0xFF404040),
+                    disabledContentColor = Color(0xFF808080)
+                )
             ) {
-                uiState.availableDeviceNames.forEach { name ->
-                    DropdownMenuItem(
-                        text = { Text(name) },
-                        onClick = {
-                            viewModel.selectDeviceName(name)
-                            deviceNameExpanded = false
-                            focusManager.clearFocus()
-                        }
-                    )
-                }
+                Text("설정 저장", style = MaterialTheme.typography.titleMedium)
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = uiState.saveSuccess.takeIf { it }?.let { "저장 완료! 앱이 활성화되었습니다." } ?: "저장 후 앱이 백그라운드에서 실행되며 통화를 감지합니다.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (uiState.saveSuccess) Color(0xFF4CAF50) else Color(0xFFB0B0B0)
+            )
         }
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            "이 전화기를 식별할 수 있는 번호를 선택하세요.",
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Button(
-            onClick = {
-                viewModel.saveSelection()
-            },
-            enabled = !uiState.isLoadingRegions && !uiState.isLoadingOffices, // 로딩 중 아닐 때만 활성화
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("설정 저장")
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = uiState.saveSuccess.takeIf { it }?.let { "저장 완료! 앱이 활성화되었습니다." } ?: "저장 후 앱이 백그라운드에서 실행되며 통화를 감지합니다.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (uiState.saveSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-        )
     }
 }
 
@@ -385,17 +435,24 @@ fun StatusScreen(onNavigateToSettings: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("콜디텍터 상태") },
+                title = { Text("콜디텍터 상태", color = Color.White) },
                 actions = {
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(
                             imageVector = Icons.Filled.Settings,
-                            contentDescription = "설정으로 이동"
+                            contentDescription = "설정으로 이동",
+                            tint = Color.White
                         )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFF1A1A1A),
+                    titleContentColor = Color.White,
+                    actionIconContentColor = Color.White
+                )
             )
-        }
+        },
+        containerColor = Color(0xFF121212) // 다크 배경
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -407,20 +464,68 @@ fun StatusScreen(onNavigateToSettings: () -> Unit) {
         ) {
             Text(
                 text = "콜디텍터 서비스 활성화 중",
-                style = MaterialTheme.typography.headlineMedium
+                style = MaterialTheme.typography.headlineMedium,
+                color = Color.White
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
                 text = "백그라운드에서 통화 감지가 실행되고 있습니다.",
-                style = MaterialTheme.typography.bodyLarge
+                style = MaterialTheme.typography.bodyLarge,
+                color = Color(0xFFB0B0B0) // 연한 회색
             )
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            // 상태 표시 카드 추가
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFF2A2A2A)
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "🟢 서비스 실행 중",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color(0xFF4CAF50) // 녹색
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "통화 감지 및 자동 업로드 기능이 활성화되어 있습니다.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFFB0B0B0),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
 fun CallDetectorAppTheme(content: @Composable () -> Unit) {
-    MaterialTheme {
-        content()
-    }
+    val darkColorScheme = darkColorScheme(
+        primary = Color(0xFFFFB000), // 딥 옐로우
+        onPrimary = Color.Black,
+        primaryContainer = Color(0xFF2A2A2A),
+        onPrimaryContainer = Color.White,
+        secondary = Color(0xFF03DAC6),
+        onSecondary = Color.Black,
+        background = Color(0xFF121212),
+        onBackground = Color.White,
+        surface = Color(0xFF1E1E1E),
+        onSurface = Color.White,
+        surfaceVariant = Color(0xFF2A2A2A),
+        onSurfaceVariant = Color(0xFFB0B0B0),
+        outline = Color(0xFF404040),
+        error = Color(0xFFCF6679),
+        onError = Color.Black
+    )
+    
+    MaterialTheme(
+        colorScheme = darkColorScheme,
+        content = content
+    )
 }

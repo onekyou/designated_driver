@@ -40,79 +40,79 @@ android {
     buildFeatures {
         compose true
     }
+    composeOptions {
+        kotlinCompilerExtensionVersion '1.5.8' // Compatible with Kotlin 1.9.22
+    }
     packagingOptions {
         resources {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
         }
     }
-    composeOptions {
-        kotlinCompilerExtensionVersion '1.5.10'
-    }
 }
 
 dependencies {
 
-    // --- Hilt 의존성 (버전 업데이트 및 정리) ---
-    implementation "com.google.dagger:hilt-android:2.51.1"
-    kapt "com.google.dagger:hilt-compiler:2.51.1"
-    implementation "androidx.hilt:hilt-navigation-compose:1.2.0"
+    // --- Hilt 의존성 추가 ---
+    implementation libs.hilt.android
+    kapt libs.hilt.compiler
+    implementation libs.hilt.navigation.compose
+
+    // --- 추가된 의존성 ---
+    // Lifecycle + Compose 통합 (collectAsStateWithLifecycle 사용)
+    implementation libs.lifecycle.runtime.compose
+    // Firebase Task await() 사용 
+    implementation libs.kotlinx.coroutines.play.services
+    
+    // --- Kotlin Coroutines Core/Android (StateFlow, viewModelScope 등 사용) ---
+    implementation libs.kotlinx.coroutines.android
     // --- ---
 
-    // --- Lifecycle + Compose 통합 (collectAsStateWithLifecycle 사용) ---
-    implementation "androidx.lifecycle:lifecycle-runtime-compose:2.8.0"
-
-    // --- Kotlin Coroutines ---
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0'
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0'
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.0'
-
-
-    // --- Android KTX ---
-    implementation 'androidx.core:core-ktx:1.13.1'
-    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.0'
-    implementation 'androidx.activity:activity-compose:1.9.0'
+    implementation libs.core.ktx
+    implementation libs.lifecycle.runtime.ktx
+    implementation libs.activity.compose
     
     // Material Components for Android (for XML themes, etc.)
-    implementation 'com.google.android.material:material:1.12.0'
+    implementation libs.material
     
-    // --- Compose BOM (Bill of Materials) - 버전 관리 통일 ---
-    implementation platform('androidx.compose:compose-bom:2024.05.00')
-    implementation 'androidx.compose.ui:ui'
-    implementation 'androidx.compose.ui:ui-graphics'
-    implementation 'androidx.compose.ui:ui-tooling-preview'
-    implementation 'androidx.compose.material3:material3'
-    implementation 'androidx.compose.material:material-icons-core'
-    implementation 'androidx.compose.material:material-icons-extended'
+    // Compose - 모든 Compose 라이브러리를 BOM으로 통일
+    implementation platform(libs.compose.bom)
+    implementation libs.compose.ui
+    implementation libs.compose.ui.graphics
+    implementation libs.compose.ui.tooling.preview
+    implementation libs.compose.material3 // Material 3
+    // Compose Material Icons
+    implementation libs.compose.material.icons.core
+    implementation libs.compose.material.icons.extended
     
-    // --- Navigation & ViewModel for Compose ---
-    implementation 'androidx.navigation:navigation-compose:2.7.7'
-    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0'
+    // Navigation Compose - BOM 사용하도록 변경
+    implementation libs.navigation.compose
 
-    // --- Firebase BOM (Bill of Materials) ---
-    implementation platform('com.google.firebase:firebase-bom:33.0.0')
-    implementation 'com.google.firebase:firebase-auth-ktx'
-    implementation 'com.google.firebase:firebase-firestore-ktx'
-    implementation 'com.google.firebase:firebase-messaging-ktx'
+    // ViewModel Compose
+    implementation libs.lifecycle.viewmodel.compose
+
+    // Firebase Authentication
+    implementation platform(libs.firebase.bom)
+    implementation libs.firebase.auth.ktx
+    implementation libs.firebase.firestore.ktx
+    implementation libs.firebase.messaging.ktx
     
     // Google Play Services Location
-    implementation 'com.google.android.gms:play-services-location:21.2.0'
+    implementation libs.play.services.location
 
-    // reCAPTCHA
-    implementation 'com.google.android.recaptcha:recaptcha:18.4.0'
-    // SafetyNet is deprecated, but if required for reCAPTCHA legacy support
-    implementation 'com.google.android.gms:play-services-safetynet:18.0.1'
+    // reCAPTCHA 명시적 추가
+    implementation libs.recaptcha
+    implementation libs.play.services.safetynet
 
     // Testing
-    testImplementation 'junit:junit:4.13.2'
-    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
-    androidTestImplementation platform('androidx.compose:compose-bom:2024.05.00')
-    androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
-    debugImplementation 'androidx.compose.ui:ui-tooling'
-    debugImplementation 'androidx.compose.ui:ui-test-manifest'
+    testImplementation libs.junit
+    androidTestImplementation libs.androidx.test.ext.junit
+    androidTestImplementation libs.espresso.core
+    androidTestImplementation platform(libs.compose.bom)
+    androidTestImplementation libs.compose.ui.test.junit4
+    debugImplementation libs.compose.ui.tooling
+    debugImplementation libs.compose.ui.test.manifest
 
-    // System UI Controller (Accompanist)
-    implementation "com.google.accompanist:accompanist-systemuicontroller:0.34.0"
+    implementation libs.accompanist.systemuicontroller
 }
 
 kapt {

@@ -78,15 +78,18 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.7.7") // Added Navigation Compose
 
     // Firebase
-    implementation platform('com.google.firebase:firebase-bom:32.8.0') // Use the latest stable BOM
-    implementation 'com.google.firebase:firebase-auth-ktx' // Authentication
-    implementation 'com.google.firebase:firebase-firestore-ktx' // Firestore Database
-    implementation 'com.google.firebase:firebase-analytics-ktx' // Optional: Analytics
-    implementation 'com.google.firebase:firebase-common-ktx'
-    implementation 'com.google.firebase:firebase-installations:17.2.0'
+    implementation platform('com.google.firebase:firebase-bom:32.8.0')
+    implementation 'com.google.firebase:firebase-auth-ktx'
+    implementation 'com.google.firebase:firebase-firestore-ktx'
+    implementation 'com.google.firebase:firebase-analytics-ktx'
+    implementation 'com.google.firebase:firebase-installations-ktx'
+    implementation 'com.google.firebase:firebase-messaging-ktx'
 
     // Agora (Walkie-talkie)
-    implementation 'io.agora.rtc:voice-sdk:4.2.6'
+    implementation ('io.agora.rtc:voice-sdk:4.2.6'){
+        exclude group: 'com.google.protobuf', module: 'protobuf-java'
+        exclude group: 'com.google.firebase'
+    }
 
     // Coroutines
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'

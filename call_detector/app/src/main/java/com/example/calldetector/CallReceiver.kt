@@ -1,8 +1,10 @@
 package com.example.calldetector
 
+import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.telephony.TelephonyManager
 import android.util.Log
@@ -20,6 +22,12 @@ class CallReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        // ---------- Permission check ----------
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
+            Log.w(tag, "READ_PHONE_STATE permission not granted. Skipping onReceive processing.")
+            return
+        }
+
         val action = intent.action
         // Log current static values at the beginning of onReceive for better debugging
         Log.d(tag, "onReceive action: $action, current staticSavedNumber: $staticSavedNumber, current staticIsIncoming: $staticIsIncoming")
@@ -124,10 +132,14 @@ class CallReceiver : BroadcastReceiver() {
         }
 
         // 모든 유효한 상태에 대해 서비스 시작
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            ContextCompat.startForegroundService(context, serviceIntent)
-        } else {
-            context.startService(serviceIntent)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ContextCompat.startForegroundService(context, serviceIntent)
+            } else {
+                context.startService(serviceIntent)
+            }
+        } catch (e: IllegalStateException) {
+            Log.e(tag, "Failed to start CallDetectorService", e)
         }
     }
 }

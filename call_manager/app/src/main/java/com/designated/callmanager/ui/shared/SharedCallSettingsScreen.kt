@@ -12,7 +12,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.designated.callmanager.data.SharedCallInfo
 import com.designated.callmanager.ui.dashboard.DashboardViewModel
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.Icons
+import androidx.compose.material3.ExperimentalMaterial3Api
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SharedCallSettingsScreen(
     onNavigateBack: () -> Unit,

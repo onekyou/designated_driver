@@ -8,6 +8,10 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
+    <!-- ⭐️ 알림 관련 추가 권한 -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+
     <!-- 화면 위에 그리기 권한 (다른 앱 위에 표시) -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
@@ -44,7 +48,9 @@
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.CallManager"
-            android:launchMode="singleTop">
+            android:launchMode="singleTop"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -57,6 +63,11 @@
                 <action android:name="com.designated.callmanager.ACTION_SHOW_CALL_DIALOG" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
+            <!-- ⭐️ 새로운 FCM 액션을 위한 인텐트 필터 추가 -->
+            <intent-filter>
+                <action android:name="ACTION_SHOW_CALL_POPUP" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
 
         <!-- 백그라운드 서비스 등록 -->
@@ -64,7 +75,17 @@
             android:name=".service.CallManagerService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="dataSync|location" />
+            android:foregroundServiceType="dataSync"
+            tools:ignore="ForegroundServiceType" />
+
+        <!-- FCM 메시징 서비스 등록 -->
+        <service
+            android:name=".service.MyFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
 
         <!-- 부팅 시 자동 시작을 위한 BroadcastReceiver -->
         <receiver

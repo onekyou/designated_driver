@@ -19,15 +19,19 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.designated.driverapp.ui.login.LoginViewModel
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.designated.driverapp.viewmodel.DriverViewModel
+import com.google.firebase.messaging.FirebaseMessaging
+import android.util.Log
 
 @Composable
 fun LoginScreen(
-    viewModel: LoginViewModel = hiltViewModel(),
+    loginViewModel: LoginViewModel = hiltViewModel(),
+    driverViewModel: DriverViewModel,
     onLoginSuccess: (regionId: String, officeId: String, driverId: String) -> Unit,
     onNavigateToPasswordReset: () -> Unit,
     onNavigateToSignUp: () -> Unit 
 ) {
-    val loginState by viewModel.loginState.collectAsState()
+    val loginState by loginViewModel.loginState.collectAsState()
     var showPassword by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -40,10 +44,23 @@ fun LoginScreen(
                     message = state.message,
                     duration = SnackbarDuration.Long
                 )
-                viewModel.resetLoginState()
+                loginViewModel.resetLoginState()
             }
             is LoginState.Success -> {
                 errorMessage = null
+                
+                if (state.needsTokenUpdate) {
+                    Log.d("LoginScreen", "Token update required. Fetching and setting token.")
+                    FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                        if (task.isSuccessful) {
+                            val token = task.result
+                            driverViewModel.setFcmToken(token)
+                        } else {
+                            Log.w("LoginScreen", "Fetching FCM token failed for update.", task.exception)
+                        }
+                    }
+                }
+
                 onLoginSuccess(state.regionId, state.officeId, state.driverId)
             }
             else -> { /* Idle, Loading */ }
@@ -68,19 +85,19 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 OutlinedTextField(
-                    value = viewModel.email,
-                    onValueChange = { viewModel.email = it },
+                    value = loginViewModel.email,
+                    onValueChange = { loginViewModel.email = it },
                     label = { Text("이메일 또는 전화번호") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                     modifier = Modifier.fillMaxWidth(),
-                    isError = errorMessage != null && viewModel.email.isBlank(),
+                    isError = errorMessage != null && loginViewModel.email.isBlank(),
                     enabled = loginState !is LoginState.Loading
                 )
 
                 OutlinedTextField(
-                    value = viewModel.password,
-                    onValueChange = { viewModel.password = it },
+                    value = loginViewModel.password,
+                    onValueChange = { loginViewModel.password = it },
                     label = { Text("비밀번호") },
                     singleLine = true,
                     visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
@@ -92,7 +109,7 @@ fun LoginScreen(
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    isError = errorMessage != null && viewModel.password.isBlank(),
+                    isError = errorMessage != null && loginViewModel.password.isBlank(),
                     enabled = loginState !is LoginState.Loading
                 )
 
@@ -113,8 +130,8 @@ fun LoginScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Checkbox(
-                        checked = viewModel.autoLogin,
-                        onCheckedChange = { viewModel.toggleAutoLogin(it) },
+                        checked = loginViewModel.autoLogin,
+                        onCheckedChange = { loginViewModel.toggleAutoLogin(it) },
                         enabled = loginState !is LoginState.Loading,
                         colors = CheckboxDefaults.colors(
                             checkedColor = MaterialTheme.colorScheme.primary, 
@@ -130,11 +147,11 @@ fun LoginScreen(
 
                 Button(
                     onClick = {
-                        if (viewModel.email.isBlank() || viewModel.password.isBlank()) {
+                        if (loginViewModel.email.isBlank() || loginViewModel.password.isBlank()) {
                             errorMessage = "이메일(또는 전화번호)과 비밀번호를 모두 입력해주세요."
                         } else {
                             errorMessage = null
-                            viewModel.login()
+                            loginViewModel.login()
                         }
                     },
                     enabled = loginState !is LoginState.Loading,

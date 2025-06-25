@@ -21,12 +21,14 @@ import com.designated.driverapp.model.DriverStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import android.content.SharedPreferences
+import com.google.firebase.messaging.FirebaseMessaging
+import com.designated.driverapp.data.Constants
 
 // LoginState sealed class 수정 (NeedsConfirmation 제거)
 sealed class LoginState {
     object Idle : LoginState()
     object Loading : LoginState()
-    data class Success(val regionId: String, val officeId: String, val driverId: String) : LoginState()
+    data class Success(val regionId: String, val officeId: String, val driverId: String, val needsTokenUpdate: Boolean) : LoginState()
     data class Error(val message: String) : LoginState()
 }
 
@@ -143,20 +145,14 @@ class LoginViewModel @Inject constructor(
                     val driverRef = documentSnapshot.reference
                     val regionId = documentSnapshot.getString("regionId")
                     val officeId = documentSnapshot.getString("officeId")
-                    // val currentStatus = documentSnapshot.getString("status") // 상태 읽기 - 이전 로직
+                    val driverApprovalStatus = documentSnapshot.getString("approvalStatus")
+                    val currentDriverStatus = documentSnapshot.getString("status")
+                    val driverName = documentSnapshot.getString("name") ?: "기사님"
+                    val serverFcmToken = documentSnapshot.getString(Constants.FIELD_FCM_TOKEN) // 서버에 저장된 토큰 읽기
+
+                    Log.d(TAG, "Firestore: Read regionId=$regionId, officeId=$officeId, approvalStatus=$driverApprovalStatus, serverFcmToken=${serverFcmToken?.take(10)}")
 
                     // ★★★ approvalStatus 필드를 읽도록 수정 ★★★
-                    val driverApprovalStatus = documentSnapshot.getString("approvalStatus")
-                    val currentDriverStatus = documentSnapshot.getString("status") // 현재 운행 상태는 별도로 읽음
-                    val driverName = documentSnapshot.getString("name") ?: "기사님"
-
-
-                    Log.d(TAG, "Firestore: Found driver document at path: ${driverRef.path}")
-                    // Log.d(TAG, "Firestore: Read regionId=$regionId, officeId=$officeId, status=$currentStatus") - 이전 로직
-                    Log.d(TAG, "Firestore: Read regionId=$regionId, officeId=$officeId, approvalStatus=$driverApprovalStatus, currentStatus=$currentDriverStatus for $driverName")
-
-
-                    // ★★★ 승인 상태 확인 (approvalStatus 필드 기준) ★★★
                     if (driverApprovalStatus != com.designated.driverapp.model.DriverApprovalStatus.APPROVED.name) { // Enum의 name ("APPROVED")과 비교
                          Log.w(TAG, "Login failed: Driver $driverName ($userId) is not approved. Status: $driverApprovalStatus")
                          val errorMessage = when (driverApprovalStatus) {
@@ -193,20 +189,30 @@ class LoginViewModel @Inject constructor(
                         }
                         Log.i(TAG, "✅ SharedPreferences: Saved regionId, officeId, driverId and login info successfully.")
 
-                        // <<-- Start of edit: Update Firestore status to ONLINE after successful login and approval check -->>
-                        // val onlineStatus = "온라인" // ★★★ 표준 상태 문자열 사용 ★★★ - 이전 로직
-                        val onlineStatus = com.designated.driverapp.model.DriverStatus.ONLINE.value // Enum 값 사용
+                        // <<-- Start of new logic: Compare local and server FCM token -->>
+                        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                            if (!task.isSuccessful) {
+                                Log.w(TAG, "Fetching current FCM token failed", task.exception)
+                                // 토큰 가져오기 실패해도 로그인은 진행. 단, 업데이트 필요 플래그는 false.
+                                _loginState.value = LoginState.Success(regionId, officeId, userId, false)
+                                return@addOnCompleteListener
+                            }
+                            val localFcmToken = task.result
+                            val needsUpdate = serverFcmToken.isNullOrBlank() || serverFcmToken != localFcmToken
+                            Log.d(TAG, "FCM Token check: Needs update? $needsUpdate (Server: ${serverFcmToken?.take(10)}, Local: ${localFcmToken.take(10)})")
+                            
+                            // 로그인 성공 상태와 함께 토큰 업데이트 필요 여부 전달
+                            _loginState.value = LoginState.Success(regionId, officeId, userId, needsUpdate)
 
-                        // 이미 ONLINE 상태가 아니라면 업데이트 시도
-                        if (currentDriverStatus != onlineStatus) { // 현재 운행 상태(currentDriverStatus)와 비교
-                            Log.d(TAG, "Firestore: Updating status to '$onlineStatus' at ${driverRef.path}")
-                            driverRef.update("status", onlineStatus)
-                                .addOnSuccessListener { Log.i(TAG, "✅ Firestore: Successfully updated driver status to '$onlineStatus' after login.") }
-                                .addOnFailureListener { e -> Log.e(TAG, "❌ Firestore: FAILED to update driver status to '$onlineStatus' after login.", e) }
+                            // Firestore 상태 업데이트 로직은 그대로 유지
+                            val onlineStatus = com.designated.driverapp.model.DriverStatus.ONLINE.value
+                            if (currentDriverStatus != onlineStatus) {
+                                driverRef.update("status", onlineStatus)
+                                    .addOnSuccessListener { Log.i(TAG, "✅ Firestore: Driver status updated to '$onlineStatus'.") }
+                                    .addOnFailureListener { e -> Log.e(TAG, "❌ Firestore: FAILED to update driver status.", e) }
+                            }
                         }
-                        // <<-- End of edit -->>
-
-                        _loginState.value = LoginState.Success(regionId, officeId, userId) // 로그인 최종 성공 (정보 포함)
+                        // <<-- End of new logic -->>
 
                     } else {
                          Log.e(TAG, "❌ Firestore: regionId or officeId is missing: ${driverRef.path}")

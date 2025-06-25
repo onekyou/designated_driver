@@ -43,12 +43,16 @@ class BootCompletedReceiver : BroadcastReceiver() {
             serviceIntent.putExtra("device_name", deviceName)
             
             // API 레벨에 따라 적절한 서비스 시작 방법 선택
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(serviceIntent)
-                Log.i("BootCompletedReceiver", "🚀 Android O 이상에서 startForegroundService 호출")
-            } else {
-                context.startService(serviceIntent)
-                Log.i("BootCompletedReceiver", "🚀 Android O 미만에서 startService 호출")
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(serviceIntent)
+                    Log.i("BootCompletedReceiver", "🚀 Android O 이상에서 startForegroundService 호출")
+                } else {
+                    context.startService(serviceIntent)
+                    Log.i("BootCompletedReceiver", "🚀 Android O 미만에서 startService 호출")
+                }
+            } catch (e: IllegalStateException) {
+                Log.e("BootCompletedReceiver", "❌ Failed to start CallDetectorService after boot", e)
             }
         }
     }

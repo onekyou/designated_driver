@@ -13,7 +13,6 @@ sealed class Screen(val route: String) {
     object Login : Screen("login")
     object MainDashboard : Screen("main_dashboard")
     object PendingDrivers : Screen("pending_drivers")
-    object CallManagement : Screen("call_management")
     // 다른 화면 라우트 추가...
 }
 
@@ -45,9 +44,7 @@ fun AppNavGraph(
                  onNavigateToPendingDrivers = {
                      navController.navigate(Screen.PendingDrivers.route)
                  },
-                 onNavigateToCallManagement = {
-                     navController.navigate(Screen.CallManagement.route)
-                 }
+                 // CallManagement 제거됨
                  // 다른 네비게이션 액션 추가...
              )
         }
@@ -59,16 +56,7 @@ fun AppNavGraph(
                  onNavigateBack = { navController.popBackStack() } // 뒤로가기
              )
         }
-        composable(Screen.CallManagement.route) {
-             com.designated.callmanager.ui.callmanagement.CallManagementScreen(
-                 onNavigateBack = { navController.popBackStack() },
-                 onNavigateHome = {
-                     navController.navigate(Screen.MainDashboard.route) {
-                         popUpTo(Screen.MainDashboard.route) { inclusive = false }
-                     }
-                 }
-             )
-        }
+        // 실시간 호출 관리 화면은 제거됨
         // 다른 화면 composable 추가...
     }
 } 

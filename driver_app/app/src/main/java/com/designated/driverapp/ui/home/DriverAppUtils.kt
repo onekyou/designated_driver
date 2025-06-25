@@ -12,7 +12,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import android.util.Log
-import com.designated.driver.ui.home.DriverViewModel
+import com.designated.driverapp.viewmodel.DriverViewModel
+import com.designated.driverapp.data.Constants
 
 fun logoutUserAndExitApp(context: Context, scope: CoroutineScope, viewModel: DriverViewModel) {
     val auth = Firebase.auth
@@ -34,12 +35,11 @@ fun logoutUserAndExitApp(context: Context, scope: CoroutineScope, viewModel: Dri
         if (regionId != null && officeId != null) {
             val correctPath = "regions/$regionId/offices/$officeId/designated_drivers/$userId"
             val driverRef = firestore.document(correctPath)
-            val offlineStatus = "오프라인"
 
-            Log.d("HomeScreenLogout", "Firestore: Attempting to update status to '$offlineStatus' at path: $correctPath")
-            driverRef.update("status", offlineStatus)
+            Log.d("HomeScreenLogout", "Firestore: Attempting to update status to '${Constants.DRIVER_STATUS_OFFLINE}' at path: $correctPath")
+            driverRef.update("status", Constants.DRIVER_STATUS_OFFLINE)
                 .addOnSuccessListener {
-                    Log.i("HomeScreenLogout", "✅ Firestore: Successfully updated driver status to '$offlineStatus' at $correctPath")
+                    Log.i("HomeScreenLogout", "✅ Firestore: Successfully updated driver status to '${Constants.DRIVER_STATUS_OFFLINE}' at $correctPath")
                     performSignOut(context, scope)
                 }
                 .addOnFailureListener { e ->
@@ -91,4 +91,4 @@ fun performSignOut(context: Context, scope: CoroutineScope) {
             }
         }
     }
-} 
+}

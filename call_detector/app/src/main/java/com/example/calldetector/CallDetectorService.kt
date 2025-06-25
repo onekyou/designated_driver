@@ -23,6 +23,7 @@ import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.example.calldetector.data.CallStatus
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.Timestamp
@@ -43,9 +44,25 @@ class CallDetectorService : Service() {
     private val db = FirebaseFirestore.getInstance()
     private lateinit var sharedPreferences: SharedPreferences
     private val serviceScope = CoroutineScope(Dispatchers.IO)
+    
+    // 서비스 시작 시간을 기록하여 이후 통화만 처리
+    private var serviceStartTime: Long = 0
 
     override fun onCreate() {
         super.onCreate()
+
+        // ------ Runtime permission check ------
+        val hasReadCallLog = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED
+        val hasReadPhoneState = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
+
+        if (!hasReadCallLog || !hasReadPhoneState) {
+            // 필수 권한이 없으면 서비스 실행을 중단하여 SecurityException으로 인한 크래시를 예방합니다.
+            Log.e(TAG, "❌ Required permissions (READ_CALL_LOG / READ_PHONE_STATE) not granted. Stopping service to avoid crash.")
+            stopSelf()
+            return
+        }
+
+        serviceStartTime = System.currentTimeMillis() // 서비스 시작 시간 기록
         sharedPreferences = getSharedPreferences("CallDetectorPrefs", Context.MODE_PRIVATE)
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
@@ -56,6 +73,8 @@ class CallDetectorService : Service() {
             true,
             callLogObserver
         )
+        
+        Log.i(TAG, "📞 CallDetectorService started at: $serviceStartTime")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -71,6 +90,14 @@ class CallDetectorService : Service() {
         Log.d(TAG, "TelephonyManager.CALL_STATE_OFFHOOK: ${TelephonyManager.CALL_STATE_OFFHOOK}") // 예상: 2
 
         if (phoneNumber != null) {
+            val currentTime = System.currentTimeMillis()
+            
+            // 서비스 시작 시간 이후의 통화만 처리 (5초 여유 시간 추가)
+            if (currentTime < serviceStartTime + 5000) {
+                Log.i(TAG, "⏰ Ignoring call from $phoneNumber - occurred before/during service startup (current: $currentTime, serviceStart: $serviceStartTime)")
+                return START_NOT_STICKY
+            }
+            
             // 1. Handle call termination (IDLE state) to reset the lock
             if (callState == TelephonyManager.CALL_STATE_IDLE) {
                 if (phoneNumber == lastProcessedPhoneNumber) {
@@ -81,7 +108,6 @@ class CallDetectorService : Service() {
             }
             // 2. Handle incoming call answered (OFFHOOK state)
             else if (callState == TelephonyManager.CALL_STATE_OFFHOOK && isIncomingCall) {
-                val currentTime = System.currentTimeMillis()
                 // Check if this OFFHOOK is a duplicate for the *current* call session
                 if (phoneNumber == lastProcessedPhoneNumber && (currentTime - lastProcessedCallTime) < PROCESSING_THRESHOLD_MS) {
                     Log.w(TAG, "⚠️ Duplicate OFFHOOK event for $phoneNumber within threshold. Skipping processing.")
@@ -113,9 +139,10 @@ class CallDetectorService : Service() {
                         "regionId" to regionId,
                         "officeId" to officeId,
                         "deviceName" to deviceName,
-                        "status" to "대기중", // CallManager에서 이 상태를 보고 처리할 수 있음
+                        "status" to CallStatus.WAITING.firestoreValue,
                         "timestamp" to FieldValue.serverTimestamp(),
-                        "callType" to "수신" // 명확히 수신 전화임을 명시
+                        "callType" to "수신", // 명확히 수신 전화임을 명시
+                        "timestampClient" to System.currentTimeMillis()
                     )
 
                     contactName?.let { callData["customerName"] = it }
@@ -247,13 +274,13 @@ class CallDetectorService : Service() {
             val channel = NotificationChannel(
                 CALL_MANAGER_CHANNEL_ID,
                 "통화 처리 알림", // Notification channel name for user
-                NotificationManager.IMPORTANCE_HIGH // High importance for call alerts
+                NotificationManager.IMPORTANCE_HIGH // 헤드업 알림을 위해 HIGH로 설정 (소리/진동은 별도 비활성화)
             ).apply {
                 description = "수신된 통화에 대한 처리 알림입니다."
-                // Enable lights, vibration, etc. if desired
-                // enableLights(true)
-                // lightColor = Color.RED
-                // enableVibration(true)
+                // 알람 소리와 진동 비활성화
+                enableLights(false)
+                enableVibration(false)
+                setSound(null, null)
             }
             notificationManager.createNotificationChannel(channel)
             Log.d(TAG, "Notification channel $CALL_MANAGER_CHANNEL_ID created.")
@@ -269,26 +296,35 @@ class CallDetectorService : Service() {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
 
-        val pendingIntentFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        // CallManager 앱이 설치되어 있는지 확인 후 PendingIntent 생성
+        val packageManager = context.packageManager
+        val pendingIntent: PendingIntent? = if (intent.resolveActivity(packageManager) != null) {
+            val pendingIntentFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+            PendingIntent.getActivity(context, 0, intent, pendingIntentFlag)
         } else {
-            PendingIntent.FLAG_UPDATE_CURRENT
+            Log.w(TAG, "CallManager app is not installed on this device. Notification will be displayed without action.")
+            null
         }
-        val pendingIntent = PendingIntent.getActivity(context, 0, intent, pendingIntentFlag)
 
         val notificationBuilder = NotificationCompat.Builder(context, CALL_MANAGER_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info) // Default Android info icon
             .setContentTitle("새로운 통화 접수")
             .setContentText("전화번호: ${phoneNumber ?: "알 수 없음"} (${contactName ?: "이름 없음"})")
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_CALL) // Important for call-related notifications
-            .setContentIntent(pendingIntent)
+            .setPriority(NotificationCompat.PRIORITY_HIGH) // 헤드업 알림을 위해 HIGH로 설정
+            .setCategory(NotificationCompat.CATEGORY_STATUS) // CALL에서 STATUS로 변경하여 알람 제거
+            .apply { pendingIntent?.let { setContentIntent(it) } }
             .setAutoCancel(true) // Notification disappears when tapped
-            .setFullScreenIntent(pendingIntent, true) // For immediate display over other apps
             .setOngoing(false) // Not an ongoing task
+            .setSound(null) // 알람 소리 제거
+            .setVibrate(null) // 진동 제거
+            .setSilent(true) // 소리/진동 없이 조용하지만 즉시 표시
 
         notificationManager.notify(CALL_MANAGER_NOTIFICATION_ID, notificationBuilder.build())
-        Log.i(TAG, "📞 CallManager activation notification posted for call ID: $callId")
+        Log.i(TAG, "📞 CallManager activation notification posted for call ID: $callId (silent)")
     }
 
     inner class CallLogObserver(handler: Handler) : ContentObserver(handler) {
