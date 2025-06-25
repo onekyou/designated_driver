@@ -323,11 +323,6 @@ fun DashboardScreen(
                 onCallClick = { callInfo -> viewModel.showCallDialog(callInfo.id) }
             )
 
-            DriverStatusContainer(
-                modifier = Modifier.fillMaxWidth().height(200.dp),
-                drivers = drivers
-            )
-
             // 공유 콜 리스트 (하단)
             SharedCallListContainer(
                 modifier = Modifier.fillMaxWidth().height(200.dp),
@@ -851,7 +846,7 @@ fun DriverBottomBar(drivers: List<DriverInfo>) {
     var selectedDriver by remember { mutableStateOf<DriverInfo?>(null) }
     val sheetState = rememberModalBottomSheetState()
 
-    BottomAppBar(containerColor = Color.Black) {
+    BottomAppBar(containerColor = Color(0xFFFFB000)) {
         // 가로 스크롤 가능하도록 Row+horizontalScroll
         Row(Modifier.horizontalScroll(rememberScrollState())) {
             drivers.forEach { driver ->
@@ -865,22 +860,17 @@ fun DriverBottomBar(drivers: List<DriverInfo>) {
                     else -> Color.Gray
                 }
 
-                NavigationBarItem(
-                    selected = false,
-                    onClick = { selectedDriver = driver },
-                    icon = {
-                        Box {
-                            Text(driver.name.take(1), color = Color.White)
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .align(Alignment.TopEnd)
-                                    .background(statusColor, shape = CircleShape)
-                            )
-                        }
-                    },
-                    colors = NavigationBarItemDefaults.colors(indicatorColor = Color.DarkGray)
-                )
+                IconButton(onClick = { selectedDriver = driver }) {
+                    Box {
+                        Text(driver.name.take(1), color = Color.Black, fontSize = 14.sp)
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .align(Alignment.TopEnd)
+                                .background(statusColor, shape = CircleShape)
+                        )
+                    }
+                }
             }
         }
     }
