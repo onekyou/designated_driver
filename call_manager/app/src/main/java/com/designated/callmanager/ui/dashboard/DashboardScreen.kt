@@ -49,6 +49,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.NavigationBarItemDefaults
 import com.designated.callmanager.ui.shared.SharedCallSettingsScreen
+import androidx.compose.material.icons.filled.List
 
 
 private const val TAG = "DashboardScreen"
@@ -90,6 +91,7 @@ fun DashboardScreen(
     viewModel: DashboardViewModel,
     onLogout: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
+    onNavigateToCallManagement: () -> Unit = {},
 ) {
     val callInfoForDialog by viewModel.callInfoForDialog.collectAsStateWithLifecycle()
     val calls by viewModel.calls.collectAsStateWithLifecycle()
@@ -298,6 +300,9 @@ fun DashboardScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { onNavigateToCallManagement() }) {
+                        Icon(Icons.Default.List, contentDescription = "호출관리")
+                    }
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = "설정")
                     }
