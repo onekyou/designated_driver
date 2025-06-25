@@ -29,7 +29,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.designated.callmanager.data.CallInfo
 import com.designated.callmanager.data.CallStatus
@@ -38,16 +37,6 @@ import com.designated.callmanager.data.DriverStatus
 import com.designated.callmanager.data.SharedCallInfo
 import com.designated.callmanager.ui.dashboard.DashboardViewModel.Companion.formatTimeAgo
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.BottomAppBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.IconButton
-import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.NavigationBarItemDefaults
 
 
 private const val TAG = "DashboardScreen"
@@ -307,10 +296,7 @@ fun DashboardScreen(
                 )
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        bottomBar = {
-            DriverBottomBar(drivers = drivers)
-        }
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
         Column(
             modifier = Modifier.fillMaxSize().padding(paddingValues).padding(horizontal = 16.dp, vertical = 8.dp),
@@ -321,6 +307,11 @@ fun DashboardScreen(
                 calls = calls,
                 title = "내부 호출 목록",
                 onCallClick = { callInfo -> viewModel.showCallDialog(callInfo.id) }
+            )
+
+            DriverStatusContainer(
+                modifier = Modifier.fillMaxWidth().height(200.dp),
+                drivers = drivers
             )
 
             // 공유 콜 리스트 (하단)
@@ -451,8 +442,8 @@ fun DriverItem(driver: DriverInfo) {
                     color = when (driverStatus) {
                         DriverStatus.WAITING -> Color.Green
                         DriverStatus.ONLINE -> Color.Green
-                        DriverStatus.ON_TRIP -> Color.Red
-                        DriverStatus.PREPARING -> Color(0xFFFFA000)
+                        DriverStatus.ON_TRIP -> MaterialTheme.colorScheme.primary
+                        DriverStatus.PREPARING -> Color.Yellow
                         DriverStatus.OFFLINE -> Color.Gray
                         else -> Color.Red
                     },
@@ -835,69 +826,6 @@ fun SharedCallCard(sharedCall: SharedCallInfo, onAccept: (SharedCallInfo) -> Uni
             Button(onClick = { onAccept(sharedCall) }) { Text("수락") }
         } else {
             Text(sharedCall.status)
-        }
-    }
-}
-
-// ---------------- Bottom Driver Bar -----------------
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun DriverBottomBar(drivers: List<DriverInfo>) {
-    var selectedDriver by remember { mutableStateOf<DriverInfo?>(null) }
-    val sheetState = rememberModalBottomSheetState()
-
-    BottomAppBar(containerColor = Color(0xFFFFB000)) {
-        // 가로 스크롤 가능하도록 Row+horizontalScroll
-        Row(Modifier.horizontalScroll(rememberScrollState())) {
-            drivers.forEach { driver ->
-                val statusColor = when (DriverStatus.fromString(driver.status)) {
-                    DriverStatus.WAITING -> Color.Green
-                    DriverStatus.ASSIGNED -> Color(0xFFFFA000)
-                    DriverStatus.ON_TRIP -> Color.Red
-                    DriverStatus.PREPARING -> Color(0xFFFFA000)
-                    DriverStatus.ONLINE -> Color.Green
-                    DriverStatus.OFFLINE -> Color.Gray
-                    else -> Color.Gray
-                }
-
-                IconButton(onClick = { selectedDriver = driver }) {
-                    Box {
-                        Text(driver.name.take(1), color = Color.Black, fontSize = 14.sp)
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .align(Alignment.TopEnd)
-                                .background(statusColor, shape = CircleShape)
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    if (selectedDriver != null) {
-        ModalBottomSheet(onDismissRequest = { selectedDriver = null }, sheetState = sheetState) {
-            val d = selectedDriver!!
-            Column(Modifier.padding(16.dp)) {
-                Text("${d.name} 기사님", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                Spacer(Modifier.height(8.dp))
-                Text("상태: ${DriverStatus.fromString(d.status).getDisplayName()}")
-                // TODO: 현재 콜 ID 표시 기능이 필요하면 DriverInfo에 필드 추가
-                if (!d.phoneNumber.isNullOrBlank()) {
-                    val phone = d.phoneNumber!!
-                    val context = LocalContext.current
-                    Button(onClick = {
-                        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone"))
-                        context.startActivity(intent)
-                    }) {
-                        Icon(Icons.Default.Phone, contentDescription = "전화")
-                        Spacer(Modifier.width(4.dp))
-                        Text("전화하기")
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                Button(onClick = { selectedDriver = null }) { Text("닫기") }
-            }
         }
     }
 }
