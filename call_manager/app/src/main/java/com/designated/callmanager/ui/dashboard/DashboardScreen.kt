@@ -893,10 +893,11 @@ fun DriverBottomBar(drivers: List<DriverInfo>) {
                 Spacer(Modifier.height(8.dp))
                 Text("상태: ${DriverStatus.fromString(d.status).getDisplayName()}")
                 // TODO: 현재 콜 ID 표시 기능이 필요하면 DriverInfo에 필드 추가
-                d.phoneNumber?.let {
+                if (!d.phoneNumber.isNullOrBlank()) {
+                    val phone = d.phoneNumber!!
+                    val context = LocalContext.current
                     Button(onClick = {
-                        val context = LocalContext.current
-                        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$it"))
+                        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone"))
                         context.startActivity(intent)
                     }) {
                         Icon(Icons.Default.Phone, contentDescription = "전화")
