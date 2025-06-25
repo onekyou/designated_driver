@@ -123,6 +123,8 @@ fun DashboardScreen(
     // 디버그 로그 추가
     Log.d(TAG, "Recomposing... showNewCallPopup: $showNewCallPopup, newCallInfo is null: ${newCallInfo == null}")
 
+    var showSharedSettings by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         viewModel.startForegroundService(context)
     }
@@ -328,8 +330,11 @@ fun DashboardScreen(
                 modifier = Modifier.fillMaxWidth().height(200.dp),
                 sharedCalls = sharedCalls,
                 onAccept = { call -> viewModel.claimSharedCall(call.id) },
-                onSettings = onNavigateToSettings
+                onSettings = { showSharedSettings = true }
             )
+            if (showSharedSettings) {
+                SharedCallSettingsScreen(onNavigateBack = { showSharedSettings = false })
+            }
         }
     }
 }
