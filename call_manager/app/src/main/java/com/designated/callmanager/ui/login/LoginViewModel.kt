@@ -33,7 +33,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
     private val auth: FirebaseAuth = Firebase.auth
     private val db = Firebase.firestore
     private val sharedPreferences = application.getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
-    
+
     // 로그인 상태를 UI에 노출하기 위한 StateFlow
     private val _loginState = MutableStateFlow<LoginState>(LoginState.Idle)
     val loginState: StateFlow<LoginState> = _loginState
@@ -41,10 +41,10 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
     // UI에서 입력받는 이메일과 비밀번호 (Compose의 State로 관리)
     var email by mutableStateOf("")
     var password by mutableStateOf("")
-    
+
     // 자동 로그인 설정 상태
     var autoLogin by mutableStateOf(false)
-    
+
     init {
         val autoLoginFlag = sharedPreferences.getBoolean("auto_login", false)
 
@@ -60,13 +60,13 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                 password = savedPassword
                 login() // 자동 로그인 시도
             } else {
-                
+
             }
         } else {
-            
+
         }
     }
-    
+
     fun login() {
         if (email.isBlank() || password.isBlank()) {
             _loginState.value = LoginState.Error("이메일과 비밀번호를 모두 입력해주세요.")
@@ -82,7 +82,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                     // Firestore에서 관리자 정보 조회
                     fetchAdminInfoAndProceed(user.uid)
                 } else {
-                     _loginState.value = LoginState.Error("로그인에 실패했습니다. 사용자 정보를 가져올 수 없습니다.")
+                    _loginState.value = LoginState.Error("로그인에 실패했습니다. 사용자 정보를 가져올 수 없습니다.")
                 }
             } catch (e: Exception) {
                 _loginState.value = LoginState.Error(e.message ?: "로그인 중 오류가 발생했습니다.")
@@ -105,11 +105,11 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                     if (!regionId.isNullOrBlank() && !officeId.isNullOrBlank()) {
                         // 로그인 성공 시 자동 로그인 정보 저장
                         if (autoLogin) { // 자동 로그인 체크 시에만 저장
-                           val autoLoginEditor = sharedPreferences.edit()
-                           autoLoginEditor.putString("email", email)
-                           autoLoginEditor.putString("password", password)
-                           autoLoginEditor.putBoolean("auto_login", true)
-                           val prefsEditSuccess = autoLoginEditor.commit() // 표준 commit 사용
+                            val autoLoginEditor = sharedPreferences.edit()
+                            autoLoginEditor.putString("email", email)
+                            autoLoginEditor.putString("password", password)
+                            autoLoginEditor.putBoolean("auto_login", true)
+                            val prefsEditSuccess = autoLoginEditor.commit() // 표준 commit 사용
 
                             if (prefsEditSuccess) {
                                 Log.i("LoginViewModel", "Auto-login credentials saved.")
@@ -124,7 +124,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                             editor.putBoolean("auto_login", false)
                             editor.apply()
                         }
-                        
+
                         // SharedPreferences에 regionId/officeId 저장
                         val regionOfficeEditor = sharedPreferences.edit()
                         regionOfficeEditor.putString("regionId", regionId)
@@ -169,7 +169,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
     fun resetLoginState() {
         _loginState.value = LoginState.Idle
     }
-    
+
     // Factory 클래스 - AndroidViewModel에 필요한 Application 인스턴스 전달
     class Factory(private val application: Application) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -180,4 +180,4 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
             throw IllegalArgumentException("Unknown ViewModel class")
         }
     }
-} 
+}

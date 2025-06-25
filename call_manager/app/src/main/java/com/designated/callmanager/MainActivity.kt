@@ -22,6 +22,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
@@ -34,21 +35,25 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.designated.callmanager.service.CallManagerService
 import com.designated.callmanager.ui.dashboard.DashboardScreen
 import com.designated.callmanager.ui.dashboard.DashboardViewModel
+import com.designated.callmanager.ui.drivermanagement.DriverManagementScreen
 import com.designated.callmanager.ui.login.LoginScreen
 import com.designated.callmanager.ui.login.LoginViewModel
 import com.designated.callmanager.ui.pendingdrivers.PendingDriversScreen
-import com.designated.callmanager.ui.pendingdrivers.PendingDriversViewModel
 import com.designated.callmanager.ui.settings.SettingsScreen
 import com.designated.callmanager.ui.signup.SignUpScreen
 import com.designated.callmanager.ui.theme.CallManagerTheme
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
+import com.google.firebase.messaging.FirebaseMessaging
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
+import android.net.Uri
+import android.os.PowerManager
 
 // Define screens for navigation
 enum class Screen {
@@ -59,6 +64,12 @@ enum class Screen {
     Settings,
     PendingDrivers,
     Settlement
+}
+
+// 화면 전환 시 전달할 데이터를 관리하는 Sealed Class
+sealed class NavigationParams {
+    object None : NavigationParams()
+    data class DriverManagement(val regionId: String, val officeId: String) : NavigationParams()
 }
 
 class MainActivity : ComponentActivity() {
@@ -76,15 +87,17 @@ class MainActivity : ComponentActivity() {
         get() = _screenState.value
         set(value) { _screenState.value = value }
 
+    // 화면 간 데이터 전달을 위한 상태 변수
+    private var navigationParams: NavigationParams by mutableStateOf(NavigationParams.None)
+
     // 다이얼로그 표시 요청을 위한 StateFlow 추가
     private val _pendingCallDialogId = MutableStateFlow<String?>(null)
     private val pendingCallDialogId: StateFlow<String?> = _pendingCallDialogId.asStateFlow()
 
-    // Constants for Intent Actions and Extras (matching CallManagerService)
+    // Constants for Intent Actions and Extras
     companion object {
-        const val ACTION_SHOW_CALL_DIALOG = "com.designated.callmanager.ACTION_SHOW_CALL_DIALOG"
-        const val EXTRA_CALL_ID = "com.designated.callmanager.EXTRA_CALL_ID"
-        // ACTION_ASSIGN_FROM_NOTIFICATION는 Service에서 사용, 여기서는 확인용
+        const val ACTION_SHOW_CALL_POPUP = "ACTION_SHOW_CALL_POPUP"
+        const val EXTRA_CALL_ID = "callId" // FCM 서비스와 키 통일
     }
 
     // 권한 요청 결과 처리
@@ -142,6 +155,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         auth = Firebase.auth
 
+        // 배터리 최적화 제외 요청 (한 번만 요청)
+        checkAndRequestBatteryOptimizationOnce()
+
         // Apply API level check for setDecorFitsSystemWindows
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) { // Android 11 (API 30)
             window.setDecorFitsSystemWindows(false) // Recommended for edge-to-edge
@@ -158,13 +174,7 @@ class MainActivity : ComponentActivity() {
         Log.d(tag, "onCreate - Intent: ${intent?.action}, Extras: ${intent?.extras?.keySet()}")
         // currentScreen을 Activity 프로퍼티로 선언
         screenState = if (auth.currentUser == null) Screen.Login else Screen.Dashboard
-        val intentActionOnCreate = getIntent()?.action
-        val intentCallIdOnCreate = getIntent()?.getStringExtra(EXTRA_CALL_ID)
-        if (intentActionOnCreate == ACTION_SHOW_CALL_DIALOG && intentCallIdOnCreate != null) {
-            if (auth.currentUser != null) {
-                _pendingCallDialogId.value = intentCallIdOnCreate
-            }
-        }
+        handleIntent(intent) // onCreate에서도 동일한 핸들러 사용
 
         setContent {
             CallManagerTheme {
@@ -173,15 +183,25 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     // Compose navigation: Use MainActivity.screenState as single source of truth
-                    val screenState = this@MainActivity._screenState
+                    val currentScreenState by this@MainActivity._screenState
 
                     // pendingCallDialogId 상태를 관찰하여 다이얼로그 표시
                     val callIdToShow by pendingCallDialogId.collectAsState()
-                    LaunchedEffect(callIdToShow) {
-                        callIdToShow?.let { callId ->
+                    val showNewCallPopup by dashboardViewModel.showNewCallPopup.collectAsState()
+
+                    // ⭐️ 화면 상태와 보여줄 callId가 모두 준비되었을 때 다이얼로그를 띄우는 LaunchedEffect
+                    LaunchedEffect(currentScreenState, callIdToShow) {
+                        // 대시보드 화면이고, 표시할 callId가 있을 때만 팝업을 띄운다
+                        if (currentScreenState == Screen.Dashboard && callIdToShow != null) {
+                            val callId = callIdToShow!! // Null-safe
                             Log.d(tag, "LaunchedEffect triggered to show dialog for call ID: $callId")
-                            dashboardViewModel.showCallDialog(callId) // ViewModel 함수 호출
-                            _pendingCallDialogId.value = null // 처리 후 상태 초기화
+                            // 새로운 콜 팝업이 이미 표시 중이면 중복 팝업 방지
+                            if (!showNewCallPopup) {
+                                dashboardViewModel.showCallDialog(callId) // ViewModel 함수 호출
+                            } else {
+                                Log.d(tag, "NewCallPopup already showing, skipping duplicate CallInfoDialog")
+                            }
+                            _pendingCallDialogId.value = null // 처리 후 상태를 반드시 초기화하여 재실행 방지
                         }
                     }
 
@@ -199,7 +219,7 @@ class MainActivity : ComponentActivity() {
                                 Log.d(tag, "로그아웃 상태 감지, 서비스 중지 및 로그인 화면으로 이동")
                                 stopCallManagerService()
                                 isRequestingPermissions.set(false) // 로그아웃 시 플래그 리셋
-                                screenState.value = Screen.Login
+                                screenState = Screen.Login
                             }
                         }
                         auth.addAuthStateListener(listener)
@@ -208,30 +228,45 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
+                    // 하드웨어 뒤로가기 처리
+                    androidx.activity.compose.BackHandler {
+                        when (currentScreenState) {
+                            Screen.Dashboard, Screen.Login -> {
+                                // 기본 동작: 앱 종료
+                                finish()
+                            }
+                            Screen.Settings -> {
+                                screenState = Screen.Dashboard
+                            }
+                            Screen.Settlement, Screen.PendingDrivers -> {
+                                screenState = Screen.Settings
+                            }
+                            Screen.SignUp, Screen.PasswordReset -> {
+                                screenState = Screen.Login
+                            }
+                        }
+                    }
+
                     // Display the current screen
-                    when (screenState.value) {
+                    when (currentScreenState) {
                         Screen.Login -> LoginScreen(
-                            // <<-- Start of edit: Implement onLoginComplete callback -->>
                             onLoginComplete = { regionId, officeId ->
-                                // <<-- Start of edit: Add logging before and after loadDataForUser -->>
                                 Log.i(tag, "Login successful (onLoginComplete). regionId=$regionId, officeId=$officeId")
-                                // <<-- Start of edit: Add log to check if dashboardViewModel instance exists -->>
                                 Log.d(tag, "  Checking dashboardViewModel instance: ${if (dashboardViewModel != null) "Exists" else "NULL"}")
-                                // <<-- End of edit -->>
                                 Log.d(tag, "  Calling dashboardViewModel.loadDataForUser...")
                                 dashboardViewModel.loadDataForUser(regionId, officeId) // Load data for the logged-in user
-                                Log.d(tag, "  loadDataForUser called. Navigating to Dashboard screen...")
-                                screenState.value = Screen.Dashboard // Navigate to Dashboard
+                                Log.d(tag, "  loadDataForUser called. Updating FCM Token...")
+                                updateFcmTokenForAdmin(regionId, officeId) // FCM 토큰 업데이트 호출
+                                Log.d(tag, "  FCM Token update requested. Navigating to Dashboard screen...")
+                                screenState = Screen.Dashboard // Navigate to Dashboard
                                 Log.d(tag, "  screenState updated to Dashboard.")
-                                // <<-- End of edit -->>
                             },
-                            // <<-- End of edit -->>
-                            onNavigateToSignUp = { screenState.value = Screen.SignUp },
-                            onNavigateToPasswordReset = { screenState.value = Screen.PasswordReset }
+                            onNavigateToSignUp = { screenState = Screen.SignUp },
+                            onNavigateToPasswordReset = { screenState = Screen.PasswordReset }
                         )
                         Screen.SignUp -> SignUpScreen(
-                            onSignUpSuccess = { screenState.value = Screen.Login },
-                            onNavigateBack = { screenState.value = Screen.Login }
+                            onSignUpSuccess = { screenState = Screen.Login },
+                            onNavigateBack = { screenState = Screen.Login }
                         )
                         Screen.PasswordReset -> { /* TODO: Implement Password Reset Screen */ }
                         Screen.Dashboard -> {
@@ -243,93 +278,75 @@ class MainActivity : ComponentActivity() {
                             DashboardScreen(
                                 viewModel = dashboardViewModel,
                                 onLogout = {
-                                    Log.d(tag, "Logout button clicked, signing out.")
-
-                                    // <<-- Start of edit: Log before/after commit -->>
-                                    val sharedPrefs = getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
-                                    val editor = sharedPrefs.edit()
-                                    editor.putBoolean("auto_login", false)
-                                    editor.remove("email")
-                                    editor.remove("password")
-                                    Log.d(tag, "Attempting to commit auto-login prefs clear...")
-                                    val success = editor.commit() // Use traditional commit to get Boolean result
-                                    Log.d(tag, "Commit result for clearing auto-login prefs: $success")
-                                    // <<-- End of edit -->>
-
-                                    if (success) {
-                                        Log.d(tag, "Auto-login preferences cleared synchronously.")
-                                    } else {
-                                        Log.e(tag, "Failed to clear auto-login preferences synchronously.")
-                                        // Consider notifying the user or alternative handling if commit fails
-                                    }
-
-                                    auth.signOut() // Trigger AuthStateListener
+                                    Log.d(tag, "Logout button clicked. Signing out.")
+                                    auth.signOut()
                                 },
-                                onNavigateToSettings = { screenState.value = Screen.Settings },
-                                onNavigateToPendingDrivers = { screenState.value = Screen.PendingDrivers }
+                                onNavigateToSettings = { screenState = Screen.Settings }
                             )
                         }
-                        Screen.Settings -> SettingsScreen(
-                             onNavigateBack = { screenState.value = Screen.Dashboard },
-                            onNavigateToPendingDrivers = { screenState.value = Screen.PendingDrivers },
-                            onNavigateToSettlement = { screenState.value = Screen.Settlement } // 정산 관리로 이동
-                        )
+                        Screen.Settings -> {
+                            SettingsScreen(
+                                dashboardViewModel = dashboardViewModel,
+                                onNavigateBack = { screenState = Screen.Dashboard },
+                                onNavigateToPendingDrivers = { regionId, officeId ->
+                                    navigationParams = NavigationParams.DriverManagement(regionId, officeId)
+                                    screenState = Screen.PendingDrivers
+                                },
+                                onNavigateToSettlement = {
+                                    screenState = Screen.Settlement
+                                }
+                            )
+                        }
                         Screen.PendingDrivers -> {
-                            // 현재 관리자의 Region ID와 Office ID 가져오기
-                            val currentRegionId by dashboardViewModel.regionId.collectAsState()
-                            val currentOfficeId by dashboardViewModel.officeId.collectAsState()
-
-                            // ID가 유효한 경우에만 화면 표시 (로딩 중이거나 오류 시 다른 화면 표시 가능)
-                            if (!currentRegionId.isNullOrBlank() && !currentOfficeId.isNullOrBlank()) {
-                                PendingDriversScreen(
-                                    // ★★★ ViewModel Factory 사용하여 ID 전달 ★★★
-                                    viewModel = viewModel(
-                                        // ★★★ Key 추가: ID가 변경되면 ViewModel 재생성 ★★★
-                                        key = "${currentRegionId}_${currentOfficeId}", 
-                                        factory = PendingDriversViewModel.Factory(
-                                            application = application,
-                                            regionId = currentRegionId!!, // Null 아님 보장
-                                            officeId = currentOfficeId!!  // Null 아님 보장
-                                        )
-                                    ),
-                                    onNavigateBack = { screenState.value = Screen.Settings } // 설정 화면으로 돌아가도록 수정
+                            val params = navigationParams
+                            if (params is NavigationParams.DriverManagement) {
+                                DriverManagementScreen(
+                                    regionId = params.regionId,
+                                    officeId = params.officeId,
+                                    onNavigateBack = { screenState = Screen.Settings }
                                 )
                             } else {
-                                // ID 로드 중이거나 오류 발생 시 처리 (예: 로딩 인디케이터 또는 오류 메시지 표시)
-                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    if (currentRegionId == null || currentOfficeId == null) {
-                                        Text("관리자 정보를 로드하는 중 오류가 발생했습니다.")
-                                    } else {
-                                        CircularProgressIndicator()
-                                        Text("관리자 정보 로딩 중...") // 또는 로딩 스피너 등
-                                    }
+                                // 파라미터가 없는 비정상적인 접근. 이전 화면으로 돌려보낸다.
+                                LaunchedEffect(Unit) {
+                                    Toast.makeText(this@MainActivity, "잘못된 접근입니다. 이전 화면으로 돌아갑니다.", Toast.LENGTH_SHORT).show()
+                                    screenState = Screen.Settings
                                 }
                             }
                         }
                         Screen.Settlement -> {
                             com.designated.callmanager.ui.settlement.SettlementScreen(
-                                onNavigateBack = { screenState.value = Screen.Settings }
+                                onNavigateBack = { screenState = Screen.Settings },
+                                onNavigateHome = { screenState = Screen.Dashboard }
                             )
                         }
                     }
                 }
             }
         }
-
-        checkAndRequestPermissions() 
     }
 
-    // Restore onNewIntent to its simpler form or remove if not originally present
-    // Assuming a simple onNewIntent for handling calls when activity is reused:
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
-        setIntent(intent) // Important to update the activity's intent
+        Log.d(tag, "onNewIntent - Intent: ${intent?.action}, Extras: ${intent?.extras?.keySet()}")
+        handleIntent(intent)
+    }
 
-        val action = intent?.action
-        val callId = intent?.getStringExtra(EXTRA_CALL_ID)
-        if (action == ACTION_SHOW_CALL_DIALOG && callId != null) {
-            if (auth.currentUser != null) {
-                _pendingCallDialogId.value = callId
+    private fun handleIntent(intent: Intent?) {
+        if (intent?.action == ACTION_SHOW_CALL_POPUP) {
+            val callId = intent.getStringExtra(EXTRA_CALL_ID)
+            if (callId != null) {
+                Log.d(tag, "handleIntent: ACTION_SHOW_CALL_POPUP 확인. callId: $callId")
+                lifecycleScope.launch {
+                    if (_screenState.value == Screen.Dashboard) {
+                        Log.d(tag, "Dashboard에서 즉시 다이얼로그 표시")
+                        dashboardViewModel.showCallDialog(callId)
+                    } else {
+                        Log.w(tag, "Dashboard가 아니므로 팝업을 보류합니다. 현재 화면: ${_screenState.value}")
+                        _pendingCallDialogId.value = callId
+                    }
+                }
+            } else {
+                Log.w(tag, "handleIntent: callId가 null입니다.")
             }
         }
     }
@@ -375,47 +392,11 @@ class MainActivity : ComponentActivity() {
 
         // --- 2단계: 화면 위에 그리기 권한 확인 및 요청 --- 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-            Log.d(tag, "2단계: 화면 위에 그리기 권한이 필요합니다. 요청 시작.")
-            val sharedPrefs = getSharedPreferences("call_manager_prefs", MODE_PRIVATE)
-            val overlayPermissionRequestedBefore = sharedPrefs.getBoolean("overlay_permission_requested", false)
+            Log.d(tag, "2단계: 화면 위에 그리기 권한이 필요합니다. 안내 다이얼로그 표시.")
 
-            if (!overlayPermissionRequestedBefore) {
-                AlertDialog.Builder(this)
-                    .setTitle("추가 권한 필요")
-                    .setMessage("새로운 콜 정보를 화면 위에 바로 표시하려면 '다른 앱 위에 표시' 권한이 필요합니다. 설정 화면으로 이동하여 권한을 허용해주세요.")
-                    .setPositiveButton("설정으로 이동") { _, _ ->
-                        val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:$packageName".toUri())
-                        overlayPermissionLauncher.launch(intent)
-                        // 사용자가 설정 화면으로 이동했으므로, 요청한 것으로 간주
-                        sharedPrefs.edit { putBoolean("overlay_permission_requested", true) }
-                    }
-                    .setNegativeButton("나중에") { dialog, _ ->
-                        isRequestingPermissions.set(false)
-                        dialog.dismiss()
-                        Toast.makeText(this, "'다른 앱 위에 표시' 권한 없이 일부 기능이 제한될 수 있습니다.", Toast.LENGTH_LONG).show()
-                        // 거부했더라도 요청은 한 것으로 간주
-                        sharedPrefs.edit { putBoolean("overlay_permission_requested", true) }
-                        startCallManagerServiceIfNeeded() // 권한 없어도 서비스 시작 시도
-                    }
-                    .setOnDismissListener { 
-                        if (isRequestingPermissions.get()) {
-                             isRequestingPermissions.set(false)
-                             sharedPrefs.edit { putBoolean("overlay_permission_requested", true) }
-                             Log.d(tag, "Overlay 권한 요청 다이얼로그 Dismiss됨, 플래그 리셋 및 요청 기록")
-                             startCallManagerServiceIfNeeded() // 권한 없어도 서비스 시작 시도
-                        } 
-                     }
-                     .setCancelable(false)
-                     .show()
-                // 여기서 return, 결과는 overlayPermissionLauncher 콜백 등에서 처리 후 checkAndRequestPermissions 재호출 또는 startCallManagerServiceIfNeeded 호출
-                return
-            } else {
-                // 이미 요청했지만 거부된 상태. 사용자에게 토스트 메시지로 알림.
-                Toast.makeText(this, "'다른 앱 위에 표시' 권한이 필요합니다. 앱 설정에서 허용해주세요.", Toast.LENGTH_LONG).show()
-                startCallManagerServiceIfNeeded() // 권한 없어도 서비스는 시작
-                isRequestingPermissions.set(false) // 플래그 리셋
-                return // 다음 단계로 진행하지 않음
-            }
+            // 항상 다이얼로그를 표시하여 사용자에게 권한의 필요성을 알리고 설정으로 유도합니다.
+            showOverlayPermissionDialog()
+            return // 다이얼로그를 띄우고 나면, 사용자의 선택을 기다려야 하므로 여기서 함수를 종료합니다.
         }
         Log.d(tag, "2단계: 화면 위에 그리기 권한이 이미 승인되었습니다.")
 
@@ -428,6 +409,23 @@ class MainActivity : ComponentActivity() {
         Log.d(tag, "권한 확인 프로세스 완료, 플래그 리셋.")
     }
 
+    private fun showOverlayPermissionDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("필수 권한 안내")
+            .setMessage("앱의 정상적인 사용을 위해 '다른 앱 위에 표시' 권한이 반드시 필요합니다. 설정 화면으로 이동하여 권한을 허용해주세요.")
+            .setPositiveButton("설정으로 이동") { _, _ ->
+                val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:$packageName".toUri())
+                overlayPermissionLauncher.launch(intent)
+            }
+            .setNegativeButton("나중에") { dialog, _ ->
+                Toast.makeText(this, "권한이 없어 일부 기능이 제한됩니다.", Toast.LENGTH_LONG).show()
+                isRequestingPermissions.set(false) // 다이얼로그가 닫혔으므로 플래그 리셋
+                dialog.dismiss()
+            }
+            .setCancelable(false)
+            .show()
+    }
+
     // 서비스 시작 로직 분리 (중복 호출 방지 및 명확성)
     private fun startCallManagerServiceIfNeeded() {
         Log.d(tag, "서비스 시작 필요 여부 확인...")
@@ -438,19 +436,98 @@ class MainActivity : ComponentActivity() {
         if (hasLocationPermission) { // 서비스 시작에 필요한 최소 권한 (여기서는 위치)
             Log.d(tag, "서비스 시작에 필요한 최소 권한 확인 완료. 서비스 관리 시작.")
             // ViewModel을 통해 서비스 시작 요청 (중복 실행 방지 로직은 ViewModel 또는 Service 내부에 있어야 함)
-            dashboardViewModel.startForegroundService(this)
+            val serviceIntent = Intent(this, CallManagerService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
         } else {
              Log.w(tag, "서비스 시작에 필요한 최소 권한(위치)이 부족하여 서비스를 시작하지 않습니다.")
              Toast.makeText(this, "위치 권한이 없어 콜 서비스를 시작할 수 없습니다.", Toast.LENGTH_LONG).show()
              // 권한 부족 시에도 서비스가 실행 중이면 중지 (선택적, ViewModel에서 처리 가능)
-             dashboardViewModel.stopForegroundService(this)
+             val serviceIntent = Intent(this, CallManagerService::class.java)
+             stopService(serviceIntent)
         }
     }
+
+    private fun updateFcmTokenForAdmin(regionId: String, officeId: String) {
+        val adminId = auth.currentUser?.uid ?: return // 현재 로그인한 사용자의 UID를 가져옵니다.
+
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                val token = task.result
+                Log.d("FCM", "FCM Token obtained: $token")
+                val firestore = FirebaseFirestore.getInstance()
+                
+                // ✅ 올바른 경로: admins 최상위 컬렉션 사용 (set with merge)
+                val tokenData = hashMapOf("fcmToken" to token)
+                
+                firestore.collection("admins").document(adminId)
+                    .set(tokenData, com.google.firebase.firestore.SetOptions.merge())
+                    .addOnSuccessListener { Log.d("FCM", "✅ 관리자 FCM 토큰 Firestore 저장 성공 (Admin: $adminId)") }
+                    .addOnFailureListener { e -> 
+                        Log.e("FCM", "❌ 관리자 FCM 토큰 Firestore 저장 실패 (Admin: $adminId)", e)
+                        Log.e("FCM", "  실패 원인: ${e.message}")
+                    }
+            } else {
+                Log.w("FCM", "FCM 토큰 발급 실패", task.exception)
+            }
+        }
+    }
+    
+
 
     override fun onDestroy() {
         super.onDestroy()
         // 앱 종료 시 서비스 중지
-        dashboardViewModel.stopForegroundService(this)
+        val serviceIntent = Intent(this, CallManagerService::class.java)
+        stopService(serviceIntent)
+    }
+    
+    private fun checkAndRequestBatteryOptimizationOnce() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val packageName = packageName
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            val prefs = getSharedPreferences("call_manager_prefs", MODE_PRIVATE)
+            val hasRequestedBefore = prefs.getBoolean("battery_optimization_requested", false)
+            
+            if (!powerManager.isIgnoringBatteryOptimizations(packageName) && !hasRequestedBefore) {
+                Log.d(tag, "배터리 최적화 제외가 필요합니다. 사용자에게 요청합니다.")
+                
+                AlertDialog.Builder(this)
+                    .setTitle("백그라운드 작업 허용")
+                    .setMessage("콜 매니저가 백그라운드에서 정상 작동하려면 배터리 최적화에서 제외해야 합니다.\n\n기사 운행 시작/완료 알림을 받으려면 설정에서 이 앱을 '최적화하지 않음'으로 설정해 주세요.")
+                    .setPositiveButton("설정으로 이동") { _, _ ->
+                        // 요청했음을 기록
+                        prefs.edit().putBoolean("battery_optimization_requested", true).apply()
+                        
+                        try {
+                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                            intent.data = Uri.parse("package:$packageName")
+                            startActivity(intent)
+                        } catch (e: Exception) {
+                            Log.e(tag, "배터리 최적화 설정 화면 열기 실패", e)
+                            // 대체 방법: 일반 배터리 최적화 설정 화면
+                            try {
+                                val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                startActivity(intent)
+                            } catch (e2: Exception) {
+                                Log.e(tag, "배터리 최적화 설정 화면 열기 실패 (대체 방법)", e2)
+                            }
+                        }
+                    }
+                    .setNegativeButton("나중에") { _, _ -> 
+                        // 나중에 선택해도 요청했음을 기록 (하루 후 다시 요청하려면 이 줄 제거)
+                        prefs.edit().putBoolean("battery_optimization_requested", true).apply()
+                    }
+                    .show()
+            } else if (powerManager.isIgnoringBatteryOptimizations(packageName)) {
+                Log.d(tag, "배터리 최적화가 이미 제외되어 있습니다.")
+            } else {
+                Log.d(tag, "배터리 최적화 요청을 이전에 했으므로 다시 요청하지 않습니다.")
+            }
+        }
     }
 }
 

@@ -1,6 +1,7 @@
 package com.designated.callmanager.ui.settings
 
 import android.app.Application
+import android.content.Context
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -15,18 +16,26 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.designated.callmanager.data.Constants
+import com.designated.callmanager.ui.dashboard.DashboardViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    viewModel: SettingsViewModel = viewModel(
-        factory = SettingsViewModel.Factory(LocalContext.current.applicationContext as Application)
-    ),
+    dashboardViewModel: DashboardViewModel,
     onNavigateBack: () -> Unit,
-    onNavigateToPendingDrivers: () -> Unit,
+    onNavigateToPendingDrivers: (regionId: String, officeId: String) -> Unit,
     onNavigateToSettlement: () -> Unit
 ) {
-    val isOfficeOpen by viewModel.isOfficeOpen.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val officeStatus by dashboardViewModel.officeStatus.collectAsStateWithLifecycle()
+    val regionId by dashboardViewModel.regionId.collectAsStateWithLifecycle()
+    val officeId by dashboardViewModel.officeId.collectAsStateWithLifecycle()
+
+    // ★★★ 알림 설정 상태 관리 ★★★
+    val prefs = remember { context.getSharedPreferences("call_manager_settings", Context.MODE_PRIVATE) }
+    var newCallNotificationEnabled by remember { mutableStateOf(prefs.getBoolean("new_call_notification", true)) }
+    var driverEventNotificationEnabled by remember { mutableStateOf(prefs.getBoolean("driver_event_notification", true)) }
 
     Scaffold(
         topBar = {
@@ -58,15 +67,18 @@ fun SettingsScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("사무실 운영 상태", style = MaterialTheme.typography.titleMedium)
+                Text("사무실 콜 공유 상태", style = MaterialTheme.typography.titleMedium)
                 Switch(
-                    checked = isOfficeOpen,
-                    onCheckedChange = { viewModel.setOfficeStatus(it) }
+                    checked = officeStatus == Constants.OFFICE_STATUS_CLOSED_SHARING,
+                    onCheckedChange = { isChecked ->
+                        val newStatus = if (isChecked) Constants.OFFICE_STATUS_CLOSED_SHARING else Constants.OFFICE_STATUS_OPERATING
+                        dashboardViewModel.updateOfficeStatus(newStatus)
+                    }
                 )
             }
             Text(
-                text = if (isOfficeOpen) "현재 '운영 중' 상태입니다. 콜은 내부에서 처리됩니다."
-                       else "현재 '마감(공유 중)' 상태입니다. 콜은 공유 채널로 전송됩니다.",
+                text = if (officeStatus != Constants.OFFICE_STATUS_CLOSED_SHARING) "현재 '운영 중' 상태입니다. 콜은 내부에서 처리됩니다."
+                else "현재 '마감(공유 중)' 상태입니다. 콜은 공유 채널로 전송됩니다.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -92,16 +104,20 @@ fun SettingsScreen(
 
             Divider()
 
-            // --- ★★★ 기사 가입 승인 메뉴 추가 ★★★ ---
+            // --- 기사 가입 승인 메뉴 ---
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onNavigateToPendingDrivers() } // 클릭 시 콜백 호출
-                    .padding(vertical = 12.dp), // 위아래 패딩 추가
+                    .clickable {
+                        if (regionId != null && officeId != null) {
+                            onNavigateToPendingDrivers(regionId!!, officeId!!)
+                        }
+                    }
+                    .padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    Icons.Filled.PersonAdd, // 적절한 아이콘 선택
+                    Icons.Filled.PersonAdd,
                     contentDescription = "기사 가입 승인",
                     modifier = Modifier.size(24.dp)
                 )
@@ -113,14 +129,17 @@ fun SettingsScreen(
             Divider()
 
             // --- Notification Settings (Placeholder) --- 
-            Text("알림 설정 (구현 예정)", style = MaterialTheme.typography.titleMedium)
+            Text("알림 설정", style = MaterialTheme.typography.titleMedium)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text("새 콜 알림음")
-                Switch(checked = true, onCheckedChange = null, enabled = false) // Placeholder
+                Switch(checked = newCallNotificationEnabled, onCheckedChange = { isChecked ->
+                    newCallNotificationEnabled = isChecked
+                    prefs.edit().putBoolean("new_call_notification", isChecked).apply()
+                })
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -128,14 +147,20 @@ fun SettingsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text("기사 이벤트 알림 (출/퇴근, 승인 등)")
-                Switch(checked = true, onCheckedChange = null, enabled = false) // Placeholder
+                Switch(checked = driverEventNotificationEnabled, onCheckedChange = { isChecked ->
+                    driverEventNotificationEnabled = isChecked
+                    prefs.edit().putBoolean("driver_event_notification", isChecked).apply()
+                })
             }
 
             Divider()
 
-            // --- App Info (Placeholder) ---
-            Text("앱 정보 (구현 예정)", style = MaterialTheme.typography.titleMedium)
-            Text("버전: 1.0.0 (Alpha)", style = MaterialTheme.typography.bodyMedium)
+            // --- App Info ---
+            Text("앱 정보", style = MaterialTheme.typography.titleMedium)
+            Text("버전: 1.0.0 (Beta)", style = MaterialTheme.typography.bodyMedium)
+            Text("대리운전 콜 매니저", style = MaterialTheme.typography.bodyMedium)
+            Text("지역: ${regionId ?: "미설정"}", style = MaterialTheme.typography.bodySmall)
+            Text("사무실: ${officeId ?: "미설정"}", style = MaterialTheme.typography.bodySmall)
 
         }
     }

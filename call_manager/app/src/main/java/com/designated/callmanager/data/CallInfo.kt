@@ -13,7 +13,7 @@ data class CallInfo(
     @get:PropertyName("customerAddress") @set:PropertyName("customerAddress") var customerAddress: String? = null,
 
     @get:PropertyName("timestamp") @set:PropertyName("timestamp") var timestamp: Timestamp = Timestamp.now(),
-    @get:PropertyName("status") @set:PropertyName("status") var status: String = CallStatus.PENDING.firestoreValue,
+    @get:PropertyName("status") @set:PropertyName("status") var status: String = Constants.STATUS_WAITING,
 
     @get:PropertyName("assignedDriverId") @set:PropertyName("assignedDriverId") var assignedDriverId: String? = null,
     @get:PropertyName("assignedDriverName") @set:PropertyName("assignedDriverName") var assignedDriverName: String? = null,
@@ -23,6 +23,7 @@ data class CallInfo(
     @get:PropertyName("callType") @set:PropertyName("callType") var callType: String? = null,
     @get:PropertyName("deviceName") @set:PropertyName("deviceName") var deviceName: String? = null,
     @get:PropertyName("detectedTimestamp") @set:PropertyName("detectedTimestamp") var detectedTimestamp: Timestamp? = null,
+    @get:PropertyName("timestampClient") @set:PropertyName("timestampClient") var timestampClient: Long? = null,
     @PropertyName("trip_summary") var trip_summary: String? = null,
     @get:PropertyName("regionId") @set:PropertyName("regionId") var regionId: String? = null,
     @get:PropertyName("officeId") @set:PropertyName("officeId") var officeId: String? = null,
@@ -40,27 +41,4 @@ data class CallInfo(
 ) {
     // Firestore에서 객체 매핑 시 빈 생성자 필요 -> 모든 파라미터에 기본값이 있으므로 자동 생성됨. 명시적 정의 불필요.
     // constructor() : this("", "", "", Timestamp.now(), CallStatus.PENDING.value)
-}
-
-/**
- * 콜 상태를 나타내는 Enum Class (Firestore에는 firestoreValue 문자열로 저장)
- * 기사 앱의 CallStatus와 최대한 일치시킴
- */
-enum class CallStatus(val firestoreValue: String) {
-    PENDING("pending"),
-    ASSIGNED("assigned"),
-    ACCEPTED("accepted"),
-    PICKUP_COMPLETE("pickup_complete"),
-    IN_PROGRESS("in_progress"),
-    AWAITING_SETTLEMENT("awaiting_settlement"),
-    COMPLETED("completed"),
-    CANCELED("canceled"),
-    HOLD("hold"),
-    UNKNOWN("unknown");
-
-    companion object {
-        fun fromFirestoreValue(value: String?): CallStatus {
-            return entries.find { it.firestoreValue.equals(value, ignoreCase = true) } ?: UNKNOWN
-        }
-    }
 } 

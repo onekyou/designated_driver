@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.designated.callmanager.data.Constants
 import com.designated.callmanager.data.PendingDriverInfo
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ktx.firestore
@@ -121,10 +122,10 @@ class PendingDriversViewModel(
                     "driverType" to driverInfo.driverType,
                     
                     // 기사 운행 상태: DriverStatus Enum의 value 사용 (예: "오프라인")
-                    "status" to com.designated.callmanager.data.DriverStatus.OFFLINE.value, 
+                    "status" to Constants.DRIVER_STATUS_OFFLINE,
 
                     // 기사 가입 승인 상태: DriverApprovalStatus Enum의 name 사용 (예: "APPROVED")
-                    "approvalStatus" to com.designated.callmanager.data.DriverApprovalStatus.APPROVED.name,
+                    "approvalStatus" to Constants.APPROVAL_STATUS_APPROVED,
 
                     "regionId" to driverInfo.targetRegionId,
                     "officeId" to driverInfo.targetOfficeId,
