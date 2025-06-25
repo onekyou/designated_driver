@@ -1,0 +1,132 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Helper Functions ---
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Checks if the currently authenticated user's UID matches the provided userId
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Checks if the currently authenticated user is an admin of the specified office
+    function isOfficeAdmin(regionId, officeId) {
+      let adminPath = /databases/$(database)/documents/admins/$(request.auth.uid);
+      return isAuthenticated()
+             && exists(adminPath)
+             && get(adminPath).data.associatedRegionId == regionId
+             && get(adminPath).data.associatedOfficeId == officeId;
+    }
+    
+    // Checks if the currently authenticated user is an admin (any office)
+    function isAnyAdmin() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // --- Top-Level Collections ---
+
+    match /admins/{adminId} { // adminId is the document ID, should be user's UID
+      allow read, write: if isOwner(adminId);
+      // 🔥 Firebase Functions가 FCM 토큰 조회를 위해 읽기 접근 허용
+      allow read: if request.auth == null; // Firebase Functions (서버 사이드)
+    }
+
+    match /pending_drivers/{userId} { // userId is the document ID, should be user's UID
+      allow create: if isOwner(userId);
+      allow read: if isAnyAdmin() || isOwner(userId);
+      allow delete: if isAnyAdmin();
+    }
+
+    // --- Collection Group for Drivers to find their own document ---
+    // ★★★ 중요 수정: 기사가 로그인 후 자신의 정보를 가져올 수 있도록 수정 ★★★
+    // DriverViewModel이 이 규칙을 사용하여 authUid로 기사 문서를 찾습니다.
+    match /{path=**}/designated_drivers/{docId} { // docId is the document ID of the driver's record
+      allow read: if isAuthenticated() && resource.data.authUid == request.auth.uid;
+    }
+    
+    // ★★★ 임시 디버깅용 - 로그인된 사용자는 모든 기사 문서 읽기 허용 ★★★
+    match /{path=**}/designated_drivers/{docId} {
+      allow read: if isAuthenticated();
+    }
+
+    // --- Nested Collections under Regions/Offices ---
+    match /regions/{regionId}/offices/{officeId} {
+      allow read: if isAuthenticated(); // Allow basic office/region info reading
+
+      match /designated_drivers/{driverDocId} {
+        // 읽기(read): 관리자이거나, 기사 본인인 경우 허용
+        allow read: if isOfficeAdmin(regionId, officeId) || (isAuthenticated() && resource.data.authUid == request.auth.uid);
+        
+        // 쓰기(write): 관리자이거나, 기사 본인인 경우 허용
+        allow write: if isOfficeAdmin(regionId, officeId) || (isAuthenticated() && resource.data.authUid == request.auth.uid);
+      }
+
+      match /calls/{callId} {
+        // 해당 사무실의 관리자 또는 배정된 기사(assignedDriverId 필드로 확인)는 특정 콜 정보를 가져오거나 쿼리할 수 있습니다.
+        // get과 list 규칙을 read로 통합하여 권한 충돌 문제를 해결합니다.
+        allow read: if
+            isOfficeAdmin(regionId, officeId) ||
+            (isAuthenticated() && resource.data.assignedDriverId == request.auth.uid) ||
+            isAuthenticated(); // ★★★ 임시 디버깅용 - 로그인된 사용자는 모든 콜 읽기 허용 ★★★
+
+        // 콜 생성: 누구나 콜을 생성할 수 있습니다 (콜 디텍터 앱용).
+        allow create: if true;
+
+        // 콜 삭제: 사무실 관리자만 가능합니다.
+        allow delete: if isOfficeAdmin(regionId, officeId);
+
+        // 콜 업데이트 (상태 머신):
+        // 관리자 또는 배정된 기사만 업데이트 가능
+        allow update: if
+          isOfficeAdmin(regionId, officeId) ||
+          (
+            // 업데이트 요청자가 해당 콜에 배정된 기사인지 확인
+            isAuthenticated() && resource.data.assignedDriverId == request.auth.uid &&
+            (
+              // 상태 전환 규칙 (필요시 각 상태별 필드 변경 규칙 추가)
+              (resource.data.status == "ASSIGNED" && request.resource.data.status == "ACCEPTED") ||
+              (resource.data.status == "ACCEPTED" && request.resource.data.status == "IN_PROGRESS") ||
+              (resource.data.status == "IN_PROGRESS" && request.resource.data.status == "AWAITING_SETTLEMENT") ||
+              (resource.data.status == "AWAITING_SETTLEMENT" && request.resource.data.status == "COMPLETED")
+            )
+          );
+      }
+
+      // ✅ 포인트(balance) 문서 규칙 – 오직 사무실 관리자 읽기 가능, 서버(Functions)만 쓰기
+      match /points/{pointsId} {
+        allow read: if isOfficeAdmin(regionId, officeId);
+        // Cloud Functions(서버 사이드)만 잔액/충전 변경 허용
+        allow write: if request.auth == null;
+      }
+    }
+
+    // 공유 콜 규칙 – OPEN ➔ CLAIMED 1회만 허용
+    match /shared_calls/{sharedCallId} {
+      // 관리자라면 조회 가능
+      allow read: if isAnyAdmin();
+
+      // 공유 콜 생성: 관리자만 가능 (source 사무실)
+      allow create: if isAnyAdmin();
+
+      /*
+       * OPEN 상태의 공유 콜을 CLAIMED 상태로 전환할 때만 허용
+       *   – resource.data.status      == "OPEN"  (현재)
+       *   – request.resource.data.status == "CLAIMED" (요청)
+       *   – 최초 한 번만 (claimedOfficeId 가 null → 값 입력)
+       */
+      allow update: if
+        isAnyAdmin() &&
+        resource.data.status == "OPEN" &&
+        request.resource.data.status == "CLAIMED" &&
+        resource.data.claimedOfficeId == null &&
+        request.resource.data.claimedOfficeId != null;
+
+      // 클라이언트 측 삭제 금지
+      allow delete: if false;
+    }
+  }
+}

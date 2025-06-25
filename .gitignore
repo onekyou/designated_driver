@@ -1,3 +1,29 @@
+# --- Android & Kotlin ---
+*.iml
+.idea/
+.gradle/
+/local.properties
+**/build/
+
+# --- Firebase & Node Functions ---
+functions/node_modules/
+.firebase/
+
+# --- Sensitive keys ---
+*.keystore
+
+# --- OS / Editor files ---
+.DS_Store
+Thumbs.db
+
+# --- Export / temporary data ---
+/temp_export_data/
+converted_json/
+
+# --- Logs & Dumps ---
+*.hprof
+*.log
+
 # Built application files
 *.apk
 *.aab
@@ -9,29 +35,18 @@
 # Java class files
 *.class
 
-# Generated files
-*/build/
-.gradle/
-**/build/
-
 # Gradle files
-.gradle/
 gradle-app.setting
 !gradle-wrapper.jar
 !gradle/wrapper/gradle-wrapper.properties
-
-# Local configuration file (sdk path, etc)
-local.properties
 
 # Log Files
 *.log
 
 # Keystore files
 *.jks
-*.keystore
 
 # Android Studio / IntelliJ
-*.iml
 .idea/workspace.xml
 .idea/tasks.xml
 .idea/misc.xml
