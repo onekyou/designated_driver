@@ -7,7 +7,7 @@
  * See a full list of supported triggers at https://firebase.google.com/docs/functions
  */
 
-import {onDocumentWritten, onDocumentUpdated} from "firebase-functions/v2/firestore";
+import {onDocumentWritten, onDocumentUpdated, onDocumentCreated} from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
 
@@ -23,8 +23,11 @@ interface CallData {
 const DRIVER_COLLECTION_NAME = "designated_drivers";
 
 export const oncallassigned = onDocumentWritten(
-    "regions/{regionId}/offices/{officeId}/calls/{callId}",
-    async (event) => {
+    {
+        region: "asia-northeast3",
+        document: "regions/{regionId}/offices/{officeId}/calls/{callId}"
+    },
+    async (event: any) => {
         const {regionId, officeId, callId} = event.params;
 
         // 1. 이벤트 데이터와 변경 후 데이터 존재 여부 확인 (가장 안전한 방법)
@@ -112,11 +115,15 @@ interface SharedCallData {
   createdBy: string;
   claimedAt?: FirebaseFirestore.FieldValue | string;
   claimedDriverId?: string;
+  phoneNumber?: string; // 새로 추가: 공유 콜 상세정보 전달용
 }
 
 export const onSharedCallClaimed = onDocumentUpdated(
-  "shared_calls/{callId}",
-  async (event) => {
+  {
+    region: "asia-northeast3",
+    document: "shared_calls/{callId}"
+  },
+  async (event: any) => {
     const callId = event.params.callId;
 
     if (!event.data) {
@@ -142,7 +149,7 @@ export const onSharedCallClaimed = onDocumentUpdated(
 
       try {
         await admin.firestore().runTransaction(async (tx) => {
-          // 1) 대상 사무실 calls 컬렉션에 문서 생성
+          // 레퍼런스 정의 ----------------------------------
           const destCallsRef = admin
             .firestore()
             .collection("regions")
@@ -152,16 +159,6 @@ export const onSharedCallClaimed = onDocumentUpdated(
             .collection("calls")
             .doc(callId);
 
-          tx.set(destCallsRef, {
-            // 원본 필드 전부 복사 + 초기 상태 WAITING 으로 지정
-            ...afterData,
-            status: "WAITING",
-            sourceSharedCallId: callId,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
-
-          // 2) 포인트 증감
-          //   소스 사무실 points 증가, 클레임 사무실 points 감소
           const sourcePointsRef = admin
             .firestore()
             .collection("regions")
@@ -180,32 +177,103 @@ export const onSharedCallClaimed = onDocumentUpdated(
             .collection("points")
             .doc("points");
 
-          // 읽어온 후 없으면 0 으로 초기화
-          const sourceSnap = await tx.get(sourcePointsRef);
-          const targetSnap = await tx.get(targetPointsRef);
+          // 1) 먼저 READ ------------------------------------
+          logger.debug(`[shared:${callId}] READ balances for point calc`);
+          const [sourceSnap, targetSnap] = await Promise.all([
+            tx.get(sourcePointsRef),
+            tx.get(targetPointsRef),
+          ]);
 
           const sourceBalance = (sourceSnap.data()?.balance || 0) + pointAmount;
           const targetBalance = (targetSnap.data()?.balance || 0) - pointAmount;
 
+          // 2) WRITE ----------------------------------------
+          //   a) 콜 문서 복사
+          tx.set(destCallsRef, {
+            ...afterData,
+            status: "WAITING",
+            departure_set: afterData.departure ?? null,
+            destination_set: afterData.destination ?? null,
+            fare_set: afterData.fare ?? null,
+            callType: "SHARED",
+            sourceSharedCallId: callId,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+
+          //   b) 포인트 문서 업데이트
           tx.set(sourcePointsRef, {
             balance: sourceBalance,
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          }, {merge:true});
+          }, { merge: true });
 
           tx.set(targetPointsRef, {
             balance: targetBalance,
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          }, {merge:true});
+          }, { merge: true });
 
-          // 3) 공유 콜 문서 상태 IN_PROGRESS 로 업데이트 (복사 완료 체크)
-          tx.update(event.data!.after.ref, {
-            status: "CLAIMED", // 유지
-            processed: true,
-          });
+          //   c) 공유콜 문서 processed 플래그 수정 → 트랜잭션 외부로 이동하여
+          //      "읽기 후 쓰기" 제약을 피함 (트랜잭션 내부에 포함하면
+          //      사전에 해당 문서를 읽지 않았기 때문에 Firestore가
+          //      암묵적 read 를 삽입하며 오류가 발생한다)
         });
 
         logger.info(`[shared:${callId}] 콜 복사 및 포인트 처리 완료.`);
-        // TODO: FCM 알림 로직 구현
+
+        // ---- 공유콜 문서 processed 플래그 업데이트 (트랜잭션 외부) ----
+        try {
+          await event.data.after.ref.update({ processed: true });
+          logger.debug(`[shared:${callId}] shared_calls 문서 processed 플래그 업데이트 완료.`);
+        } catch (updateErr) {
+          logger.error(`[shared:${callId}] processed 플래그 업데이트 실패`, updateErr);
+        }
+
+        // ---- FCM 알림 전송 ----
+        try {
+          const adminColl = admin.firestore().collection("admins");
+
+          // 원본 사무실 관리자 토큰
+          const srcSnap = await adminColl
+            .where("associatedRegionId", "==", afterData.sourceRegionId)
+            .where("associatedOfficeId", "==", afterData.sourceOfficeId)
+            .get();
+
+          // 수락 사무실 관리자 토큰
+          const tgtSnap = await adminColl
+            .where("associatedRegionId", "==", afterData.targetRegionId)
+            .where("associatedOfficeId", "==", afterData.claimedOfficeId)
+            .get();
+
+          const tokens: string[] = [];
+          srcSnap.forEach((doc) => {
+            const t = doc.data().fcmToken;
+            if (t) tokens.push(t);
+          });
+          tgtSnap.forEach((doc) => {
+            const t = doc.data().fcmToken;
+            if (t) tokens.push(t);
+          });
+
+          if (tokens.length > 0) {
+            const msg: admin.messaging.MulticastMessage = {
+              notification: {
+                title: "공유 콜 수락됨",
+                body: `${afterData.departure ?? "출발"} → ${afterData.destination ?? "도착"} / 요금 ${afterData.fare ?? 0}원`,
+              },
+              data: {
+                sharedCallId: callId,
+                type: "SHARED_CALL_CLAIMED",
+              },
+              tokens,
+            };
+
+            const resp = await admin.messaging().sendEachForMulticast(msg);
+            logger.info(`[shared:${callId}] FCM sendEachForMulticast done. Success: ${resp.successCount}, Failure: ${resp.failureCount}`);
+          } else {
+            logger.info(`[shared:${callId}] 알림을 보낼 토큰이 없습니다.`);
+          }
+        } catch (fcmErr) {
+          logger.error(`[shared:${callId}] FCM 전송 오류`, fcmErr);
+        }
 
       } catch (err) {
         logger.error(`[shared:${callId}] 트랜잭션 오류`, err);
@@ -213,3 +281,69 @@ export const onSharedCallClaimed = onDocumentUpdated(
     }
   }
 );
+
+// 신규 콜이 생성될 때 (status == WAITING && assignedDriverId == null)
+export const sendNewCallNotification = onDocumentCreated(
+  {
+    region: "asia-northeast3",
+    document: "regions/{regionId}/offices/{officeId}/calls/{callId}",
+  },
+  async (event) => {
+    logger.info(`[sendNewCallNotification:${event.params.callId}] START - New call received.`);
+
+    const data = event.data?.data();
+    if (!data) {
+      logger.warn("[sendNewCallNotification] No data in document.");
+      return;
+    }
+
+    if (data.status !== "WAITING") {
+      logger.info("[sendNewCallNotification] Call is not in WAITING status. Skip.");
+      return;
+    }
+
+    // 1) 관리자 FCM 토큰 조회
+    const adminQuery = await admin
+      .firestore()
+      .collection("admins")
+      .where("associatedRegionId", "==", event.params.regionId)
+      .where("associatedOfficeId", "==", event.params.officeId)
+      .get();
+
+    const tokens = adminQuery.docs
+      .map((d) => d.data().fcmToken as string | undefined)
+      .filter((t): t is string => !!t && t.length > 0);
+
+    logger.info(`[getAdminTokens] SUCCESS: Found ${adminQuery.size} admins, ${tokens.length} valid tokens.`);
+
+    if (tokens.length === 0) {
+      logger.warn("[sendNewCallNotification] No valid admin FCM tokens, abort.");
+      return;
+    }
+
+    // 2) 알림 + 데이터 메시지 전송
+    await admin.messaging().sendEachForMulticast({
+      notification: {
+        title: "새로운 콜이 접수되었습니다.",
+      },
+      data: {
+        type: "NEW_CALL_WAITING",
+        callId: event.params.callId,
+        customerPhone: data.phoneNumber || "",
+      },
+      android: {
+        priority: "high",
+        notification: {
+          sound: "default",
+          channelId: "new_call_fcm_channel_v2",
+        },
+      },
+      tokens,
+    });
+
+    logger.info("[sendNewCallNotification] sendEachForMulticast with notification sent.");
+  }
+);
+
+const _forceDeploy = Date.now();   // 배포 강제용 더미 변수
+void _forceDeploy;                 // 사용해서 컴파일 경고 해소
