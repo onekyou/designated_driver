@@ -142,10 +142,13 @@ export const onSharedCallClaimed = onDocumentUpdated(
     // OPEN -> CLAIMED 인지 확인
     if (beforeData.status === "OPEN" && afterData.status === "CLAIMED") {
       logger.info(`[shared:${callId}] 공유 콜이 CLAIMED 되었습니다. 대상사무실로 복사 시작.`);
+      logger.info(`[shared:${callId}] afterData.claimedDriverId=${afterData.claimedDriverId}`);
 
       const fare = afterData.fare || 0;
       const pointRatio = 0.1; // 10%
       const pointAmount = Math.round(fare * pointRatio);
+
+      logger.info(`[shared:${callId}] assignedDriverId=${afterData.claimedDriverId}`);
 
       try {
         await admin.firestore().runTransaction(async (tx) => {
@@ -179,26 +182,47 @@ export const onSharedCallClaimed = onDocumentUpdated(
 
           // 1) 먼저 READ ------------------------------------
           logger.debug(`[shared:${callId}] READ balances for point calc`);
-          const [sourceSnap, targetSnap] = await Promise.all([
+          const [sourceSnap, targetSnap, driverSnap] = await Promise.all([
             tx.get(sourcePointsRef),
             tx.get(targetPointsRef),
+            afterData.claimedDriverId ? tx.get(admin.firestore()
+              .collection("regions").doc(afterData.targetRegionId)
+              .collection("offices").doc(afterData.claimedOfficeId!)
+              .collection("designated_drivers").doc(afterData.claimedDriverId)) : Promise.resolve(null)
           ]);
 
           const sourceBalance = (sourceSnap.data()?.balance || 0) + pointAmount;
           const targetBalance = (targetSnap.data()?.balance || 0) - pointAmount;
 
+          const driverData = driverSnap ? driverSnap.data() : undefined;
+          const assignedDriverId = afterData.claimedDriverId || null;
+          const assignedDriverName = driverData ? driverData.name : null;
+          const assignedDriverPhone = driverData ? driverData.phoneNumber : null;
+
+          logger.info(`[shared:${callId}] assignedDriverId resolved to ${assignedDriverId}`);
+
           // 2) WRITE ----------------------------------------
-          //   a) 콜 문서 복사
-          tx.set(destCallsRef, {
+          const callDoc: any = {
             ...afterData,
-            status: "WAITING",
+            status: assignedDriverId ? "ASSIGNED" : "WAITING",
             departure_set: afterData.departure ?? null,
             destination_set: afterData.destination ?? null,
             fare_set: afterData.fare ?? null,
             callType: "SHARED",
             sourceSharedCallId: callId,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
+          };
+          if (assignedDriverId) {
+            callDoc.assignedDriverId = assignedDriverId;
+            if (assignedDriverName) callDoc.assignedDriverName = assignedDriverName;
+            if (assignedDriverPhone) callDoc.assignedDriverPhone = assignedDriverPhone;
+          }
+          tx.set(destCallsRef, callDoc);
+
+          // 드라이버 상태 ASSIGNED 로 업데이트 (옵션)
+          if (assignedDriverId && driverSnap?.exists) {
+            tx.update(driverSnap.ref, { status: "배차중" });
+          }
 
           //   b) 포인트 문서 업데이트
           tx.set(sourcePointsRef, {

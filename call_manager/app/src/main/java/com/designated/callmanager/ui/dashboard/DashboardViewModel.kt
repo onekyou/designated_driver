@@ -283,17 +283,76 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
 
         // -- 공유 콜 리스너 --
-        sharedCallsListener = firestore.collection("shared_calls")
-            .whereEqualTo("status", "OPEN")
+        // 1) 내가 수락할 수 있는 OPEN/CLAIMED(내 사무실) 콜 + 2) 내가 올린 콜 모두 수신
+
+        // Map cache to merge documents from multiple listeners
+        val sharedMap = mutableMapOf<String, com.designated.callmanager.data.SharedCallInfo>()
+
+        fun emitSharedCalls() {
+            _sharedCalls.value = sharedMap.values.sortedByDescending { it.timestamp?.seconds ?: 0 }
+        }
+
+        // Listener A: region 내 OPEN / CLAIMED(내 사무실) 콜
+        val statuses = listOf("OPEN", "CLAIMED")
+        val listenerA = firestore.collection("shared_calls")
             .whereEqualTo("targetRegionId", regionId)
+            .whereIn("status", statuses)
             .addSnapshotListener { snapshots, e ->
                 if (e != null) return@addSnapshotListener
-                val list = snapshots?.documents?.mapNotNull { doc ->
+                snapshots?.documentChanges?.forEach { dc ->
+                    val doc = dc.document
                     val data = doc.toObject(com.designated.callmanager.data.SharedCallInfo::class.java)
-                    data?.copy(id = doc.id)
-                } ?: emptyList()
-                _sharedCalls.value = list
+                        ?.copy(id = doc.id)
+
+                    // 필터: CLAIMED 이면서 내 사무실이 아닌 경우 제외
+                    val shouldInclude = when {
+                        data == null -> false
+                        data.status == "CLAIMED" && data.claimedOfficeId != officeId -> false
+                        else -> true
+                    }
+
+                    if (!shouldInclude) return@forEach
+
+                    when (dc.type) {
+                        com.google.firebase.firestore.DocumentChange.Type.ADDED, com.google.firebase.firestore.DocumentChange.Type.MODIFIED -> {
+                            data?.let { sharedMap[doc.id] = it }
+                        }
+                        com.google.firebase.firestore.DocumentChange.Type.REMOVED -> {
+                            sharedMap.remove(doc.id)
+                        }
+                    }
+                }
+                emitSharedCalls()
             }
+
+        // Listener B: 내가 올린 콜 (sourceOfficeId == 내 사무실)
+        val listenerB = firestore.collection("shared_calls")
+            .whereEqualTo("sourceOfficeId", officeId)
+            .addSnapshotListener { snapshots, e ->
+                if (e != null) return@addSnapshotListener
+                snapshots?.documentChanges?.forEach { dc ->
+                    val doc = dc.document
+                    val data = doc.toObject(com.designated.callmanager.data.SharedCallInfo::class.java)
+                        ?.copy(id = doc.id)
+                    when (dc.type) {
+                        com.google.firebase.firestore.DocumentChange.Type.ADDED, com.google.firebase.firestore.DocumentChange.Type.MODIFIED -> {
+                            if (data != null) sharedMap[doc.id] = data
+                        }
+                        com.google.firebase.firestore.DocumentChange.Type.REMOVED -> {
+                            sharedMap.remove(doc.id)
+                        }
+                    }
+                }
+                emitSharedCalls()
+            }
+
+        // Store combined listeners to remove later
+        sharedCallsListener = object : ListenerRegistration {
+            override fun remove() {
+                listenerA.remove()
+                listenerB.remove()
+            }
+        }
     }
 
     private fun updateCallsFromCache() {
@@ -635,12 +694,52 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     tx.update(docRef, mapOf(
                         "status" to "CLAIMED",
                         "claimedOfficeId" to office,
-                        "claimedAt" to Timestamp.now()
+                        "claimedAt" to Timestamp.now(),
+                        "targetRegionId" to region // 타겟 지역 업데이트(다지역 지원 대비)
                     ))
                 }.await()
                 Log.d(TAG, "Shared call claimed: $sharedCallId")
             } catch (e: Exception) {
                 Log.e(TAG, "Error claiming shared call", e)
+            }
+        }
+    }
+
+    fun claimSharedCallWithDetails(
+        sharedCallId: String,
+        departure: String,
+        destination: String,
+        fare: Int,
+        driverId: String? = null
+    ) {
+        Log.d(TAG, "▶ claimSharedCallWithDetails called. sharedCallId=$sharedCallId, driverId=$driverId")
+        viewModelScope.launch {
+            try {
+                val region = _regionId.value ?: return@launch
+                val office = _officeId.value ?: return@launch
+                Log.d(TAG, "▶ TX START. driverId=$driverId")
+                firestore.runTransaction { tx ->
+                    val docRef = firestore.collection("shared_calls").document(sharedCallId)
+                    val snap = tx.get(docRef)
+                    val status = snap.getString("status")
+                    if (status != "OPEN") {
+                        throw Exception("이미 수락된 콜입니다")
+                    }
+                    val updateMap = mutableMapOf<String, Any>(
+                        "status" to "CLAIMED",
+                        "claimedOfficeId" to office,
+                        "claimedAt" to Timestamp.now(),
+                        "departure" to departure,
+                        "destination" to destination,
+                        "fare" to fare,
+                        "targetRegionId" to region // 다지역 확장 대비
+                    )
+                    driverId?.let { updateMap["claimedDriverId"] = it }
+                    tx.update(docRef, updateMap)
+                }.await()
+                Log.d(TAG, "Shared call claimed with details: $sharedCallId")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error claiming shared call with details", e)
             }
         }
     }

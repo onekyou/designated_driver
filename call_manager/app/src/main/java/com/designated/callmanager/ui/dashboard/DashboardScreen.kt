@@ -49,6 +49,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.NavigationBarItemDefaults
 import com.designated.callmanager.ui.shared.SharedCallSettingsScreen
+import androidx.compose.material.icons.filled.Check
 
 
 private const val TAG = "DashboardScreen"
@@ -125,6 +126,10 @@ fun DashboardScreen(
     Log.d(TAG, "Recomposing... showNewCallPopup: $showNewCallPopup, newCallInfo is null: ${newCallInfo == null}")
 
     var showSharedSettings by remember { mutableStateOf(false) }
+
+    // State for shared call accept dialog
+    var selectedSharedCall by remember { mutableStateOf<SharedCallInfo?>(null) }
+    var showSharedAcceptDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.startForegroundService(context)
@@ -330,13 +335,40 @@ fun DashboardScreen(
             SharedCallListContainer(
                 modifier = Modifier.fillMaxWidth().height(200.dp),
                 sharedCalls = sharedCalls,
-                onAccept = { call -> viewModel.claimSharedCall(call.id) },
+                onAccept = { call ->
+                    selectedSharedCall = call
+                    showSharedAcceptDialog = true
+                },
                 onSettings = { showSharedSettings = true }
             )
             if (showSharedSettings) {
                 SharedCallSettingsScreen(onNavigateBack = { showSharedSettings = false })
             }
         }
+    }
+
+    // ---- Shared Call Accept Dialog ----
+    if (showSharedAcceptDialog && selectedSharedCall != null) {
+        val call = selectedSharedCall!!
+        val waitingDrivers = drivers.filter { driver ->
+            val statusEnum = DriverStatus.fromString(driver.status?.trim() ?: "")
+            statusEnum == DriverStatus.WAITING || statusEnum == DriverStatus.ONLINE
+        }
+        SharedCallAcceptDialog(
+            sharedCall = call,
+            availableDrivers = waitingDrivers,
+            onDismiss = { showSharedAcceptDialog = false },
+            onConfirm = { dep, dest, fare, driver ->
+                viewModel.claimSharedCallWithDetails(
+                    sharedCallId = call.id,
+                    departure = dep,
+                    destination = dest,
+                    fare = fare,
+                    driverId = driver?.id
+                )
+                showSharedAcceptDialog = false
+            }
+        )
     }
 }
 
@@ -637,7 +669,7 @@ fun NewCallAssignmentDialog(
     val context = LocalContext.current
     
     var showShareDialog by remember { mutableStateOf(false) }
-
+    
     AlertDialog(
         onDismissRequest = {
             // 팝업 클릭 시 알람도 중지
@@ -691,17 +723,9 @@ fun NewCallAssignmentDialog(
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { 
-                                        // 기사 선택 시에도 알람 중지
-                                        try {
-                                            val ringtoneManager = RingtoneManager.getRingtone(context.applicationContext, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
-                                            if (ringtoneManager.isPlaying) {
-                                                ringtoneManager.stop()
-                                            }
-                                        } catch (e: Exception) {
-                                            Log.e(TAG, "Error stopping notification sound", e)
-                                        }
-                                        onDriverSelect(driver) 
+                                    .clickable {
+                                        Log.d(TAG, "Driver selected: ${driver.name}/${driver.id}")
+                                        onDriverSelect(driver)
                                     },
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                             ) {
@@ -734,37 +758,30 @@ fun NewCallAssignmentDialog(
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = {
-                    // 보류 버튼 클릭 시에도 알람 중지
                     try {
-                        val ringtoneManager = RingtoneManager.getRingtone(context.applicationContext, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
-                        if (ringtoneManager.isPlaying) {
-                            ringtoneManager.stop()
-                        }
+                        val r = RingtoneManager.getRingtone(context.applicationContext, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+                        if (r.isPlaying) r.stop()
                     } catch (e: Exception) {
                         Log.e(TAG, "Error stopping notification sound", e)
                     }
                     onHold()
-                }) { 
-                    Text("보류") 
-                }
+                }) { Text("보류") }
+
                 TextButton(onClick = {
-                    // 나중에 버튼 클릭 시에도 알람 중지
                     try {
-                        val ringtoneManager = RingtoneManager.getRingtone(context.applicationContext, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
-                        if (ringtoneManager.isPlaying) {
-                            ringtoneManager.stop()
-                        }
+                        val r = RingtoneManager.getRingtone(context.applicationContext, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+                        if (r.isPlaying) r.stop()
                     } catch (e: Exception) {
                         Log.e(TAG, "Error stopping notification sound", e)
                     }
                     onDismiss()
-                }) { 
-                    Text("나중에") 
-                }
-                TextButton(onClick = { showShareDialog = true }) {
-                    Text("공유")
-                }
+                }) { Text("나중에") }
+
+                TextButton(onClick = { showShareDialog = true }) { Text("공유") }
             }
+        },
+        dismissButton = {
+            TextButton(onClick = { showShareDialog = false }) { Text("취소") }
         }
     )
 
@@ -906,5 +923,82 @@ fun DriverBottomBar(drivers: List<DriverInfo>) {
             }
         }
     }
+}
+
+@Composable
+fun SharedCallAcceptDialog(
+    sharedCall: SharedCallInfo,
+    availableDrivers: List<DriverInfo>,
+    onDismiss: () -> Unit,
+    onConfirm: (departure: String, destination: String, fare: Int, driver: DriverInfo?) -> Unit
+) {
+    var departure by remember { mutableStateOf(sharedCall.departure ?: "") }
+    var destination by remember { mutableStateOf(sharedCall.destination ?: "") }
+    var fareText by remember { mutableStateOf((sharedCall.fare ?: 0).toString()) }
+    var selectedDriver by remember { mutableStateOf<DriverInfo?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("공유 콜 수락", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = departure,
+                    onValueChange = { departure = it },
+                    label = { Text("출발지") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = destination,
+                    onValueChange = { destination = it },
+                    label = { Text("도착지") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = fareText,
+                    onValueChange = { fareText = it.filter { c -> c.isDigit() } },
+                    label = { Text("요금") },
+                    singleLine = true
+                )
+                Spacer(Modifier.height(8.dp))
+                Text("기사 선택", fontWeight = FontWeight.Medium)
+                LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
+                    items(availableDrivers) { driver ->
+                        val isSelected = selectedDriver?.id == driver.id
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    Log.d(TAG, "Driver selected: ${driver.name}/${driver.id}")
+                                    selectedDriver = driver
+                                },
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                            )
+                        ) {
+                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(driver.name, Modifier.weight(1f))
+                                if (isSelected) {
+                                    Icon(Icons.Filled.Check, contentDescription = null)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            val confirmEnabled = selectedDriver != null
+            Button(enabled = confirmEnabled, onClick = {
+                val fare = fareText.toIntOrNull() ?: 0
+                if (departure.isNotBlank() && destination.isNotBlank() && fare > 0 && selectedDriver != null) {
+                    onConfirm(departure, destination, fare, selectedDriver)
+                }
+            }) { Text("확인") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("취소") }
+        }
+    )
 }
 
