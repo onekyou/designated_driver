@@ -48,14 +48,15 @@ service cloud.firestore {
       allow read: if isAuthenticated() && resource.data.authUid == request.auth.uid;
     }
     
-    // ★★★ 임시 디버깅용 - 로그인된 사용자는 모든 기사 문서 읽기 허용 ★★★
-    match /{path=**}/designated_drivers/{docId} {
-      allow read: if isAuthenticated();
-    }
+    // (임시 전체 허용 규칙 제거됨)
 
     // --- Nested Collections under Regions/Offices ---
-    match /regions/{regionId}/offices/{officeId} {
-      allow read: if isAuthenticated(); // Allow basic office/region info reading
+    // 지역(Document) 및 사무실(Document) 기본 정보는 로그인 없이 읽기 허용
+    match /regions/{regionId} {
+      allow read: if true;
+
+      match /offices/{officeId} {
+        allow read: if true; // 사무실 이름·설정 등 기본 정보
 
       match /designated_drivers/{driverDocId} {
         // 읽기(read): 관리자이거나, 기사 본인인 경우 허용
@@ -70,8 +71,7 @@ service cloud.firestore {
         // get과 list 규칙을 read로 통합하여 권한 충돌 문제를 해결합니다.
         allow read: if
             isOfficeAdmin(regionId, officeId) ||
-            (isAuthenticated() && resource.data.assignedDriverId == request.auth.uid) ||
-            isAuthenticated(); // ★★★ 임시 디버깅용 - 로그인된 사용자는 모든 콜 읽기 허용 ★★★
+            (isAuthenticated() && resource.data.assignedDriverId == request.auth.uid);
 
         // 콜 생성: 누구나 콜을 생성할 수 있습니다 (콜 디텍터 앱용).
         allow create: if true;
@@ -96,11 +96,62 @@ service cloud.firestore {
           );
       }
 
-      // ✅ 포인트(balance) 문서 규칙 – 오직 사무실 관리자 읽기 가능, 서버(Functions)만 쓰기
-      match /points/{pointsId} {
-        allow read: if isOfficeAdmin(regionId, officeId);
-        // Cloud Functions(서버 사이드)만 잔액/충전 변경 허용
-        allow write: if request.auth == null;
+        // ✅ 포인트(balance) 문서 규칙 – 오직 사무실 관리자 읽기 가능, 서버(Functions)만 쓰기
+        match /points/{pointsId} {
+          allow read: if isOfficeAdmin(regionId, officeId);
+          // Cloud Functions(서버 사이드)만 잔액/충전 변경 허용
+          allow write: if request.auth == null;
+        }
+
+        // 🗂 credits 컬렉션 – 고객별 외상 잔액
+        match /credits/{customerId} {
+          // 읽기/쓰기: 사무실 관리자, 또는 Cloud Functions (request.auth == null)
+          allow read, write: if isOfficeAdmin(regionId, officeId) || request.auth == null;
+        }
+
+        // 🗂 settlements 컬렉션 – 정산 문서
+        match /settlements/{settlementId} {
+          // 읽기: 사무실 관리자, 해당 콜의 기사, 또는 다른 사무실 관리자(전체 열람 권한)
+          allow read: if isOfficeAdmin(regionId, officeId) || isAnyAdmin() || (isAuthenticated() && resource.data.driverId == request.auth.uid);
+
+          /* 쓰기 규칙
+             - Cloud Functions: 최초 생성(PENDING)·SETTLED 처리에 사용 → request.auth == null
+             - 사무실 관리자: settlementStatus 를 SETTLED 로 변경할 때만 허용
+          */
+          // 간소화된 쓰기 규칙: 사무실 관리자는 모든 정산 작업 가능
+          allow write: if request.auth == null || isOfficeAdmin(regionId, officeId) || (
+            // 드라이버가 자신의 정산을 SETTLED로 변경 (외상/이체 제외)
+            isAuthenticated() &&
+            resource.data.driverId == request.auth.uid &&
+            resource.data.settlementStatus == "PENDING" &&
+            request.resource.data.settlementStatus == "SETTLED" &&
+            resource.data.paymentMethod != "외상" &&
+            resource.data.paymentMethod != "이체"
+          );
+        }
+
+        // 🗓 dailySettlements 컬렉션 – 업무 마감 집계 카드
+        match /dailySettlements/{dateId} {
+          // 읽기: 사무실 관리자만
+          allow read:  if isOfficeAdmin(regionId, officeId);
+
+          // 쓰기: Cloud Functions(서버) 또는 사무실 관리자 로컬 처리(batch)
+          allow write: if request.auth == null || isOfficeAdmin(regionId, officeId);
+
+          // ── sessions 하위 컬렉션: 마감 버튼별 세션 카드 ──
+          match /sessions/{sessionId} {
+            allow read:  if isOfficeAdmin(regionId, officeId);
+            allow write: if request.auth == null || isOfficeAdmin(regionId, officeId);
+          }
+        }
+
+        // 🪙 point_transactions – 포인트 거래 내역 (오피스 하위 컬렉션)
+        match /point_transactions/{txId} {
+          // 읽기: 해당 사무실 관리자만
+          allow read: if isOfficeAdmin(regionId, officeId);
+          // 쓰기: Cloud Functions(서버) 전용
+          allow write: if request.auth == null;
+        }
       }
     }
 
@@ -122,11 +173,19 @@ service cloud.firestore {
         isAnyAdmin() &&
         resource.data.status == "OPEN" &&
         request.resource.data.status == "CLAIMED" &&
-        resource.data.claimedOfficeId == null &&
+        (
+          !("claimedOfficeId" in resource.data) || resource.data.claimedOfficeId == null
+        ) &&
         request.resource.data.claimedOfficeId != null;
 
       // 클라이언트 측 삭제 금지
       allow delete: if false;
+    }
+
+    // 포인트 거래 내역 – 관리자 읽기, 서버(Function) 쓰기 전용
+    match /point_transactions/{txId} {
+      allow read: if isAnyAdmin();
+      allow write: if request.auth == null;
     }
   }
 }

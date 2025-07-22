@@ -1,0 +1,23 @@
+ C 드라이브의 볼륨: OS
+ 볼륨 일련 번호: C0F4-4F7D
+
+ C:\app_dev\designated_driver\call_manager 디렉터리
+
+2025-06-09  오후 10:31    <DIR>          .
+2025-06-09  오후 08:35    <DIR>          ..
+2025-06-09  오후 09:53    <DIR>          .gradle
+2025-06-09  오후 06:43    <DIR>          .idea
+2025-06-07  오후 11:54    <DIR>          .vscode
+2025-04-29  오후 06:53                 0 .windsurfrules
+2025-06-09  오후 09:50    <DIR>          app
+2025-04-08  오전 06:06               325 build.gradle
+2025-06-09  오후 10:31                 0 file_list.txt
+2025-06-07  오후 11:55    <DIR>          gradle
+2025-04-08  오전 06:57               660 gradle.properties
+2025-04-26  오후 03:08             8,762 gradlew
+2025-04-26  오후 03:08             2,966 gradlew.bat
+2025-04-08  오전 06:53       726,812,950 java_pid8744.hprof
+2025-04-08  오전 06:46               370 local.properties
+2025-04-08  오전 06:05               343 settings.gradle
+               9개 파일         726,826,376 바이트
+               7개 디렉터리  309,626,384,384 바이트 남음

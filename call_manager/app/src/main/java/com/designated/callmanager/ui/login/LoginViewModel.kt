@@ -90,70 +90,91 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private suspend fun ensureAdminDoc(uid: String): Pair<String, String>? {
+        var region = sharedPreferences.getString("regionId", null)
+        var office = sharedPreferences.getString("officeId", null)
+
+        // prefs 가 비어있다면 admins 문서를 먼저 조회해 fallback 시도
+        if (region.isNullOrBlank() || office.isNullOrBlank()) {
+            val adminSnap = db.collection("admins").document(uid).get().await()
+            if (adminSnap.exists()) {
+                region = adminSnap.getString("associatedRegionId")
+                office  = adminSnap.getString("associatedOfficeId")
+                if (!region.isNullOrBlank() && !office.isNullOrBlank()) {
+                    // prefs 갱신
+                    sharedPreferences.edit()
+                        .putString("regionId", region)
+                        .putString("officeId", office)
+                        .apply()
+                    Log.i("LoginViewModel", "✅ prefs 복구: $region/$office from admin doc")
+                }
+            }
+        }
+
+        if (region.isNullOrBlank() || office.isNullOrBlank()) {
+            Log.e("LoginViewModel", "❌ region/office 정보가 없습니다. (prefs & admin)")
+            return null
+        }
+        val prefRegion = region; val prefOffice = office
+
+        val adminRef = db.collection("admins").document(uid)
+        val snapshot = adminRef.get().await()
+
+        val needCreate = !snapshot.exists()
+        val needUpdate = snapshot.exists() && (
+            snapshot.getString("associatedRegionId") != region ||
+            snapshot.getString("associatedOfficeId") != office
+        )
+
+        if (needCreate || needUpdate) {
+            val data = hashMapOf(
+                "associatedRegionId" to region,
+                "associatedOfficeId" to office,
+                "updatedAt" to com.google.firebase.Timestamp.now()
+            )
+            if (needCreate) data["createdAt"] = com.google.firebase.Timestamp.now()
+            adminRef.set(data).await()
+            Log.i("LoginViewModel", "✅ admin 문서 ${if (needCreate) "created" else "updated"} for $uid -> $region/$office")
+        }
+        return Pair(region!!, office!!)
+    }
+
     private fun fetchAdminInfoAndProceed(uid: String) {
-        Log.d("LoginViewModel", "Fetching admin info for UID: $uid") // UID 확인 로그
+        Log.d("LoginViewModel", "Fetching admin info for UID: $uid")
         viewModelScope.launch {
             try {
-                Log.d("LoginViewModel", "  Attempting to read Firestore document: /admins/$uid")
-                val adminDoc = db.collection("admins").document(uid).get().await()
-                Log.d("LoginViewModel", "  Firestore document read successful. Document exists: ${adminDoc.exists()}")
-
-                if (adminDoc.exists()) {
-                    val regionId = adminDoc.getString("associatedRegionId")
-                    val officeId = adminDoc.getString("associatedOfficeId")
-                    Log.d("LoginViewModel", "  Read from Firestore - Region ID: $regionId, Office ID: $officeId")
-                    if (!regionId.isNullOrBlank() && !officeId.isNullOrBlank()) {
-                        // 로그인 성공 시 자동 로그인 정보 저장
-                        if (autoLogin) { // 자동 로그인 체크 시에만 저장
-                            val autoLoginEditor = sharedPreferences.edit()
-                            autoLoginEditor.putString("email", email)
-                            autoLoginEditor.putString("password", password)
-                            autoLoginEditor.putBoolean("auto_login", true)
-                            val prefsEditSuccess = autoLoginEditor.commit() // 표준 commit 사용
-
-                            if (prefsEditSuccess) {
-                                Log.i("LoginViewModel", "Auto-login credentials saved.")
-                            } else {
-                                Log.e("LoginViewModel", "Failed to save auto-login credentials.")
-                            }
-                        } else {
-                            // 자동 로그인 체크 안했을 시 기존 정보 삭제
-                            val editor = sharedPreferences.edit()
-                            editor.remove("email")
-                            editor.remove("password")
-                            editor.putBoolean("auto_login", false)
-                            editor.apply()
-                        }
-
-                        // SharedPreferences에 regionId/officeId 저장
-                        val regionOfficeEditor = sharedPreferences.edit()
-                        regionOfficeEditor.putString("regionId", regionId)
-                        regionOfficeEditor.putString("officeId", officeId)
-                        Log.d("LoginViewModel", "  Attempting to save region/office ID to SharedPreferences...")
-                        val success = regionOfficeEditor.commit() // 표준 commit 사용
-                        Log.d("LoginViewModel", "  SharedPreferences save result: $success")
-
-                        if (success) {
-                            Log.i("LoginViewModel", "  Login process successful. Updating state to Success with regionId=$regionId, officeId=$officeId")
-                            _loginState.value = LoginState.Success(regionId, officeId) // Success 상태에 ID 전달
-                        } else {
-                            Log.e("LoginViewModel", "Failed to save region/office ID to SharedPreferences using commit().")
-                            _loginState.value = LoginState.Error("로그인 정보 저장 실패")
-                            auth.signOut()
-                        }
-                    } else {
-                        Log.e("LoginViewModel", "Error: regionId or officeId is null or blank after reading from Firestore.")
-                        _loginState.value = LoginState.Error("관리자 정보(지역/사무실 ID)가 올바르지 않습니다.")
-                        auth.signOut()
-                    }
-                } else {
-                    Log.e("LoginViewModel", "Error: Admin document does not exist for UID: $uid")
-                    _loginState.value = LoginState.Error("등록되지 않은 관리자 계정입니다.")
+                // 1) admin 문서 확인 및 필요시 생성/업데이트
+                val regionOffice = ensureAdminDoc(uid)
+                if (regionOffice == null) {
+                    _loginState.value = LoginState.Error("앱 설정에서 지역/사무실을 먼저 선택한 후 다시 로그인해주세요.")
                     auth.signOut()
+                    return@launch
                 }
+                val (regionId, officeId) = regionOffice
+
+                // 2) 자동 로그인 정보 저장/삭제 (기존 로직 유지)
+                if (autoLogin) {
+                    sharedPreferences.edit().apply {
+                        putString("email", email)
+                        putString("password", password)
+                        putBoolean("auto_login", true)
+                    }.commit()
+                } else {
+                    sharedPreferences.edit().apply {
+                        remove("email"); remove("password"); putBoolean("auto_login", false)
+                    }.apply()
+                }
+
+                // 3) region/office prefs 보증 (이미 있으나 한번 더 저장)
+                sharedPreferences.edit().apply {
+                    putString("regionId", regionId)
+                    putString("officeId", officeId)
+                }.commit()
+
+                _loginState.value = LoginState.Success(regionId, officeId)
             } catch (e: Exception) {
-                Log.e("LoginViewModel", "Error fetching admin info from Firestore for UID: $uid", e)
-                _loginState.value = LoginState.Error("관리자 정보 조회 중 오류 발생: ${e.message}")
+                Log.e("LoginViewModel", "Error ensuring admin doc", e)
+                _loginState.value = LoginState.Error("관리자 정보 설정 중 오류: ${e.message}")
                 auth.signOut()
             }
         }

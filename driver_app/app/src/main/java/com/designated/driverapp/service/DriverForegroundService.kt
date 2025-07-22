@@ -37,6 +37,9 @@ private const val NOTIFICATION_ID = 1
 private const val SERVICE_STATUS_NOTIFICATION_TITLE = "대리운전 기사앱"
 private const val SERVICE_STATUS_NOTIFICATION_TEXT = "서비스 실행 중"
 
+// Logcat에서 파싱 과정을 별도 태그로 쉽게 필터링하기 위한 상수 (23자 제한 이하)
+private const val PARSE_DEBUG_TAG = "*** PARSE DEBUG ***"
+
 class DriverForegroundService : Service() {
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
@@ -124,7 +127,7 @@ class DriverForegroundService : Service() {
                 Constants.STATUS_ACCEPTED, 
                 Constants.STATUS_IN_PROGRESS
             ))
-            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .orderBy("assignedTimestamp", Query.Direction.DESCENDING)
             .limit(1)
             .addSnapshotListener { snapshot, e ->
                 Log.d(TAG, "[Firestore Calls] Listener triggered. Snapshot: ${snapshot?.documents?.size ?: "null"}, Exception: ${e?.message}")
@@ -342,10 +345,32 @@ class DriverForegroundService : Service() {
 
     private fun parseCallDocument(document: com.google.firebase.firestore.DocumentSnapshot): CallInfo? {
         return try {
+            // 1) Document 원본 데이터 로깅
+            Log.d(TAG, "[parseCallDocument] Raw Firestore data: \\${document.data}")
+            Log.d(PARSE_DEBUG_TAG, "[RAW] \\${document.data}")
+
+            // 2) CallInfo 변환
             val callInfo = document.toObject(CallInfo::class.java)
-            callInfo?.apply { id = document.id }
+
+            // 3) 파싱된 모델에 ID 주입 및 상세 로그
+            callInfo?.apply {
+                id = document.id
+
+                Log.d(
+                    TAG,
+                    "[parseCallDocument] Parsed CallInfo => id=$id, status=$status, statusEnum=\\${statusEnum}, " +
+                            "assignedDriverId=$assignedDriverId, departure_set=\\\"$departure_set\\\", destination_set=\\\"$destination_set\\\", fare_set=$fare_set"
+                )
+
+                Log.d(
+                    PARSE_DEBUG_TAG,
+                    "[PARSED] id=$id, status=$status, statusEnum=\\${statusEnum}, assignedDriverId=$assignedDriverId, departure_set=$departure_set, destination_set=$destination_set, fare_set=$fare_set"
+                )
+            }
+
+            callInfo
         } catch (e: Exception) {
-            Log.e(TAG, "Error parsing call document: ${document.id}", e)
+            Log.e(TAG, "[parseCallDocument] Error parsing call document: \\${document.id}", e)
             null
         }
     }

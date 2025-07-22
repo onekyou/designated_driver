@@ -14,7 +14,6 @@ import com.designated.driverapp.model.CallStatus
 import com.designated.driverapp.model.DriverStatus
 import com.designated.driverapp.ui.screens.home.InProgressScreen
 import com.designated.driverapp.ui.screens.home.NewCallPopup
-import com.designated.driverapp.ui.screens.home.TripPreparationScreen
 import com.designated.driverapp.ui.screens.home.WaitingScreen
 import com.designated.driverapp.viewmodel.DriverViewModel
 import androidx.compose.foundation.text.KeyboardOptions
@@ -26,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
+import com.designated.driverapp.ui.screens.home.TripPreparationScreen
 
 private const val TAG = "HomeScreen"
 
@@ -324,6 +324,26 @@ fun SettlementSummaryPopup(
                         )
                         Text(
                             "현금", 
+                            modifier = Modifier.weight(1f),
+                            color = Color.White
+                        )
+                    }
+
+                    // 이체 (무통장/계좌이체)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        RadioButton(
+                            selected = paymentMethod == "이체",
+                            onClick = { paymentMethod = "이체" },
+                            colors = RadioButtonDefaults.colors(
+                                selectedColor = Color(0xFFFFB000),
+                                unselectedColor = Color.Gray
+                            )
+                        )
+                        Text(
+                            "이체", 
                             modifier = Modifier.weight(1f),
                             color = Color.White
                         )

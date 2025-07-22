@@ -1,0 +1,98 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "settlements",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "settlementStatus", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "calls",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "point_transactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "fromOfficeId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "point_transactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "toOfficeId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "point_transactions", 
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "toOfficeId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "pending_drivers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "targetRegionId", "order": "ASCENDING" },
+        { "fieldPath": "targetOfficeId", "order": "ASCENDING" },
+        { "fieldPath": "requestedAt", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionId": "settlements",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "completedAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionId": "settlements",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workDate", "order": "ASCENDING" },
+        { "fieldPath": "isFinalized", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionId": "settlements",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workDate", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "settlements",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "workDate", "order": "ASCENDING" },
+        { "fieldPath": "isFinalized", "order": "ASCENDING" },
+        { "fieldPath": "paymentMethod", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+} 

@@ -10,6 +10,19 @@ object Constants {
     const val COLLECTION_PENDING_DRIVERS = "pending_drivers"
     const val COLLECTION_ADMINS = "admins"
 
+    // Points & Settlement
+    const val COLLECTION_POINTS = "points"
+    const val COLLECTION_POINT_TX = "point_transactions"
+
+    // Settlements
+    const val COLLECTION_SETTLEMENTS = "settlements"
+
+    // Settlement Fields & Values
+    const val FIELD_SETTLEMENT_STATUS = "settlementStatus"
+    const val FIELD_SETTLEMENT_ID = "settlementId"
+
+    const val SETTLEMENT_STATUS_PENDING = "PENDING"
+    const val SETTLEMENT_STATUS_SETTLED = "SETTLED"
 
     // Call Status Fields & Values
     const val FIELD_STATUS = "status"
@@ -21,7 +34,8 @@ object Constants {
     const val STATUS_WAITING = "WAITING" // This is a presumed initial status
     const val STATUS_ASSIGNED = "ASSIGNED"
     const val STATUS_ACCEPTED = "ACCEPTED"
-    const val STATUS_IN_PROGRESS = "INPROGRESS"
+    // 통일: 콜 상태 "IN_PROGRESS" 값 오탈자 수정
+    const val STATUS_IN_PROGRESS = "IN_PROGRESS"
     const val STATUS_AWAITING_SETTLEMENT = "AWAITING_SETTLEMENT"
     const val STATUS_COMPLETED = "COMPLETED"
     const val STATUS_CANCELED = "CANCELED"
@@ -50,4 +64,9 @@ object Constants {
     // Intent Actions & Extras
     const val ACTION_SHOW_CALL_DIALOG = "com.designated.driverapp.ACTION_SHOW_CALL_DIALOG"
     const val EXTRA_CALL_INFO = "com.designated.driverapp.EXTRA_CALL_INFO"
+
+    // Settlement Session
+    const val COLLECTION_SESSIONS = "settlementSessions"
+    const val SESSION_STATUS_OPEN = "OPEN"
+    const val SESSION_STATUS_CLOSED = "CLOSED"
 } 

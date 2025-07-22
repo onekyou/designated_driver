@@ -1,0 +1,26 @@
+{
+  "name": "designated_driver",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/onekyou/designated_driver.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/onekyou/designated_driver/issues"
+  },
+  "homepage": "https://github.com/onekyou/designated_driver#readme",
+  "description": "",
+  "devDependencies": {
+    "firebase-tools": "^14.6.0"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.4.0"
+  }
+}

@@ -1,0 +1,20 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+    // 여기에 버전 카탈로그를 명시적으로 로드하는 코드는 더 이상 필요 없습니다.
+    // Gradle이 'gradle/libs.versions.toml' 파일을 자동으로 인식하고 로드합니다.
+}
+
+rootProject.name = "DriverApp"
+include ':app'
