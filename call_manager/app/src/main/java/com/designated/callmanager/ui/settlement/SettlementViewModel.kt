@@ -6,7 +6,10 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import com.designated.callmanager.data.Constants
 import com.designated.callmanager.data.SettlementData
+import com.designated.callmanager.data.SessionInfo
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Query
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.text.SimpleDateFormat
@@ -41,6 +44,13 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
     // 사무실 수익 비율 (퍼센트) - 기본 60
     private val _officeShareRatio = MutableStateFlow(60)
     val officeShareRatio: StateFlow<Int> = _officeShareRatio
+
+    // 업무 마감 세션 카드 리스트
+    private val _sessionList = MutableStateFlow<List<SessionInfo>>(emptyList())
+    val sessionList: StateFlow<List<SessionInfo>> = _sessionList
+
+    // 세션 리스너
+    private var sessionsListener: ListenerRegistration? = null
 
     fun updateOfficeShareRatio(newRatio: Int) {
         _officeShareRatio.value = newRatio.coerceIn(30, 90)
@@ -110,6 +120,9 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
 
                 // 2) Fetch completed calls
                 fetchCompletedCalls(regionId, officeId, lastClearedMillis)
+
+                // 3) Start sessions listener (업무 마감 카드 히스토리)
+                startSessionsListener(regionId, officeId)
             }
             .addOnFailureListener { e ->
                 Log.e("SettlementViewModel", "💥 Error loading office info", e)
@@ -168,6 +181,10 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                 }
 
                 _settlementList.value = trips.sortedByDescending { it.completedAt }
+                // 만약 사용자가 "전체내역 초기화" 후 새 콜이 도착하면 자동으로 리스트를 다시 보여주기 위해 플래그 해제
+                if (trips.isNotEmpty()) {
+                    _allTripsCleared.value = false
+                }
                 _isLoading.value = false
                 Log.d("SettlementViewModel", "🎉 Loaded ${trips.size} settlement records after filter")
             }
@@ -178,13 +195,84 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
             }
     }
 
+    /** 실시간 세션 카드 리스너 */
+    private fun startSessionsListener(regionId: String, officeId: String) {
+        sessionsListener?.remove()
+
+        val todayWorkDate = calculateWorkDate(System.currentTimeMillis())
+
+        val sessCol = firestore.collection("regions").document(regionId)
+            .collection("offices").document(officeId)
+            .collection("dailySettlements").document(todayWorkDate)
+            .collection("sessions")
+
+        sessionsListener = sessCol
+            .orderBy("endAt", Query.Direction.DESCENDING)
+            .addSnapshotListener { snap, e ->
+                if (e != null) {
+                    Log.e("SettlementViewModel", "세션 리스너 오류", e)
+                    return@addSnapshotListener
+                }
+
+                val list = snap?.documents?.map {
+                    SessionInfo(
+                        sessionId = it.id,
+                        endAt = it.getTimestamp("endAt"),
+                        totalFare = it.getLong("totalFare") ?: 0,
+                        totalTrips = (it.getLong("totalTrips") ?: 0L).toInt()
+                    )
+                } ?: emptyList()
+
+                _sessionList.value = list
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        sessionsListener?.remove()
+    }
+
     fun clearLocalSettlement() {
         // AllTrips 탭만 비우도록 플래그 설정 (서버/공유 데이터는 유지)
+        val now = System.currentTimeMillis()
+        updateLastClearedTimestamp(now)
         _allTripsCleared.value = true
     }
 
     // 특정 업무일(workDate)에 해당하는 내역만 초기화 (로컬 목록에서 제거)
     fun clearSettlementForDate(workDate: String) {
         _clearedDates.value = _clearedDates.value + workDate
+    }
+
+    fun clearAllTrips() {
+        val r = currentRegionId ?: run { _error.value = "지역 ID가 없습니다."; return }
+        val o = currentOfficeId ?: run { _error.value = "사무실 ID가 없습니다."; return }
+        _isLoading.value = true
+
+        com.google.firebase.functions.FirebaseFunctions.getInstance("asia-northeast3")
+            .getHttpsCallable("finalizeWorkDay")
+            .call(hashMapOf("regionId" to r, "officeId" to o))
+            .addOnSuccessListener { _ ->
+                val now = System.currentTimeMillis()
+                updateLastClearedTimestamp(now)
+                _settlementList.value = emptyList()
+                _clearedDates.value = emptySet() // Clear cleared dates locally
+                _isLoading.value = false
+            }
+            .addOnFailureListener { e ->
+                _error.value = "업무 마감 실패: ${e.message}"
+                _isLoading.value = false
+            }
+    }
+
+    /**
+     * lastClearedMillisCache 값을 갱신하고 SharedPreferences 에도 저장한다.
+     */
+    private fun updateLastClearedTimestamp(ts: Long) {
+        lastClearedMillisCache = ts
+        val r = currentRegionId ?: return
+        val o = currentOfficeId ?: return
+        val key = "${r}_${o}_lastCleared"
+        prefs.edit().putLong(key, ts).apply()
     }
 }

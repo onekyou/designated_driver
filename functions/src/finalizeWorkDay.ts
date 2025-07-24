@@ -12,16 +12,21 @@ export const finalizeWorkDay = functions.onCall({region: "asia-northeast3"}, asy
       .collection("settlements");
 
   const snap = await settlementsCol.where("isFinalized", "==", false).get();
-  if (snap.empty) return { message: "no pending" };
+
   const batch = db.batch();
   let totalTrips = 0;
   let totalFare = 0;
-  snap.forEach(doc => {
-    batch.update(doc.ref, { isFinalized: true });
-    totalTrips++;
-    totalFare += doc.get("fare") || 0;
-  });
-  await batch.commit();
+
+  if (!snap.empty) {
+    snap.forEach(doc => {
+      batch.update(doc.ref, { isFinalized: true });
+      totalTrips++;
+      totalFare += doc.get("fare") || 0;
+    });
+
+    // 빈 배치가 아닐 때만 커밋 (0건이면 커밋 생략)
+    await batch.commit();
+  }
 
   const today = new Date().toISOString().substring(0,10);
   await db.collection("regions").doc(regionId)

@@ -144,7 +144,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                     } else {
                         Log.e("LoginViewModel", "Error: regionId or officeId is null or blank after reading from Firestore.")
                         _loginState.value = LoginState.Error("관리자 정보(지역/사무실 ID)가 올바르지 않습니다.")
-                        auth.signOut()
+                    auth.signOut()
                     }
                 } else {
                     Log.e("LoginViewModel", "Error: Admin document does not exist for UID: $uid")

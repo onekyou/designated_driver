@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
+import com.designated.callmanager.data.SessionInfo
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,6 +44,7 @@ fun SettlementScreen(onNavigateBack: () -> Unit, onNavigateHome: () -> Unit, vie
     val allTripsCleared by viewModel.allTripsCleared.collectAsState()
     val officeShareRatio by viewModel.officeShareRatio.collectAsState()
     val creditPersons by viewModel.creditPersons.collectAsState()
+    val sessionList by viewModel.sessionList.collectAsState()
 
     // 탭 상태 (전체내역이 첫 번째)
     var selectedTabIndex by remember { mutableStateOf(0) }
@@ -147,10 +149,9 @@ fun SettlementScreen(onNavigateBack: () -> Unit, onNavigateHome: () -> Unit, vie
                             settlementItems = if (allTripsCleared) emptyList() else allSettlementItems,
                             workDate = todayWorkDate
                         )
-                        2 -> DailySettlementSimple(
-                            settlementList = settlementList.filterNot { clearedDates.contains(it.workDate) },
-                            onDateClick = { date -> selectedTabIndex = 0 },
-                            onDateClear = { date -> viewModel.clearSettlementForDate(date) }
+                        2 -> DailySessionsSimple(
+                            sessions = sessionList,
+                            onSessionClick = { /* TODO: 상세 */ }
                         )
                         3 -> CreditManagementTab(viewModel = viewModel)
                     }
@@ -203,7 +204,7 @@ fun AllTripsMainView(
     }
     
     Column(
-        modifier = Modifier
+                    modifier = Modifier
             .padding(16.dp)
             .verticalScroll(rememberScrollState())
     ) {
@@ -257,7 +258,7 @@ fun AllTripsMainView(
 
             Spacer(modifier = Modifier.height(16.dp))
             // 🔴 전체내역 초기화 버튼
-            Button(
+                Button(
                 onClick = onClearAll,
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF4444)),
                 modifier = Modifier.fillMaxWidth()
@@ -269,7 +270,7 @@ fun AllTripsMainView(
     
     // 외상관리 다이얼로그
     if (showCreditDialog) {
-        CreditManagementDialog(
+            CreditManagementDialog(
             creditItems = creditItems,
             onDismiss = { showCreditDialog = false },
             onCreditUpdate = { /* no-op, handled in ViewModel functions */ }
@@ -340,33 +341,33 @@ fun SettlementSummaryCard(items: List<SettlementData>, filterType: String?, offi
                 Text("${officeShare.toString().replace(Regex("(\\d)(?=(\\d{3})+(?!\\d))"), "$1,")}원", color = Color(0xFFFFB000), fontWeight = FontWeight.Bold)
             }
 
-            if (showRatioDialog) {
-                AlertDialog(
-                    onDismissRequest = { showRatioDialog = false },
+        if (showRatioDialog) {
+        AlertDialog(
+                onDismissRequest = { showRatioDialog = false },
                     title = { Text("수익 비율 설정", color = Color.White) },
-                    text = {
-                        Column {
+            text = {
+                Column {
                             Text("비율: $tempRatio%", color = Color.White)
-                            Slider(
+                        Slider(
                                 value = tempRatio.toFloat(),
                                 onValueChange = { tempRatio = ((it/10).toInt()*10).coerceIn(30,90) },
                                 valueRange = 30f..90f,
-                                steps = 6,
+                            steps = 6,
                                 colors = SliderDefaults.colors(thumbColor = Color(0xFFFFB000), activeTrackColor = Color(0xFFFFB000))
-                            )
-                        }
-                    },
-                    confirmButton = {
+                    )
+                }
+            },
+            confirmButton = {
                         Button(onClick = {
                             onChangeRatio(tempRatio)
                             showRatioDialog = false
                         }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFB000), contentColor = Color.Black)) {
                             Text("확인")
                         }
-                    },
-                    containerColor = Color(0xFF2A2A2A)
-                )
-            }
+            },
+            containerColor = Color(0xFF2A2A2A)
+        )
+    }
 
             // 실수입 행
             val realIncome = officeShare - totalPoint
@@ -452,8 +453,8 @@ fun PaymentMethodCard(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A))
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -461,7 +462,7 @@ fun PaymentMethodCard(
                 Text(title, color = Color.White, fontWeight = FontWeight.Bold)
                 Text("${count}건 / ${amount.toString().replace(Regex("(\\d)(?=(\\d{3})+(?!\\d))"), "$1,")}원", color = Color(0xFFAAAAAA))
             }
-            Button(
+                    Button(
                 onClick = onButtonClick,
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFB000)),
                 modifier = Modifier.height(32.dp)
@@ -518,8 +519,8 @@ fun DailySettlementCard(date: String, items: List<SettlementData>, onDateClick: 
                 Text("운행 건수: ${items.size}건", color = Color.White)
                 Text("총 매출: ${totalRevenue.toString().replace(Regex("(\\d)(?=(\\d{3})+(?!\\d))"), "$1,")}원", color = Color.White)
                 Text("순수익: ${officeShare.toString().replace(Regex("(\\d)(?=(\\d{3})+(?!\\d))"), "$1,")}원", color = Color(0xFFFFB000), fontWeight = FontWeight.Bold)
-            }
-            Column(horizontalAlignment = Alignment.End) {
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
                 Button(
                     onClick = { onDateClick(date) },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFB000)),
@@ -574,7 +575,7 @@ fun CreditManagementDialog(
                 
                 if (creditItems.isEmpty()) {
                     Text("등록된 외상이 없습니다.", color = Color(0xFFAAAAAA))
-                } else {
+        } else {
                     androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.height(150.dp)) {
                         items(creditItems.size) { index ->
                             val credit = creditItems[index]
@@ -585,12 +586,12 @@ fun CreditManagementDialog(
                                         if (it.id == credit.id) it.copy(isCollected = true) else it 
                                     }
                                     onCreditUpdate(updatedCredits)
-                                }
                             }
                         }
                     }
                 }
             }
+        }
         },
         confirmButton = {
             Button(
@@ -764,10 +765,10 @@ fun TripListTable(tripList: List<SettlementData>, onShowCreditDialog: () -> Unit
         
         if (detailDialogState && detailDialogTrip != null) {
             val t = detailDialogTrip!!
-            AlertDialog(
+        AlertDialog(
                 onDismissRequest = { detailDialogState = false },
                 title = { Text("운행 전체 내역", color = Color.White) },
-                text = {
+            text = {
                     Column {
                         Text("기사: ${t.driverName}", color = Color.White)
                         Text("고객: ${t.customerName}", color = Color.White)
@@ -782,9 +783,9 @@ fun TripListTable(tripList: List<SettlementData>, onShowCreditDialog: () -> Unit
                             Text("현금 금액: ${t.cashAmount.toString().replace(Regex("(\\d)(?=(\\d{3})+(?!\\d))"), "$1,")}원", color = Color.White)
                         }
                         Text("업무일: ${t.workDate}", color = Color.White)
-                    }
-                },
-                confirmButton = {
+                }
+            },
+            confirmButton = {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (t.paymentMethod == "외상") {
                             Button(
@@ -811,8 +812,8 @@ fun TripListTable(tripList: List<SettlementData>, onShowCreditDialog: () -> Unit
                         }
                     }
                 },
-                containerColor = Color(0xFF2A2A2A)
-            )
+            containerColor = Color(0xFF2A2A2A)
+        )
         }
     }
 }
@@ -1017,6 +1018,57 @@ fun CreditManagementTab(viewModel: SettlementViewModel) {
             },
             containerColor = Color(0xFF2A2A2A)
         )
+    }
+}
+
+// 세션 히스토리 뷰 (업무 마감 기준)
+@Composable
+fun DailySessionsSimple(sessions: List<SessionInfo>, onSessionClick: (SessionInfo) -> Unit) {
+    Column(modifier = Modifier.padding(16.dp)) {
+        Text(
+            "일일 정산 (업무 마감 기준)",
+            style = MaterialTheme.typography.titleMedium,
+            color = Color.White,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(sessions, key = { it.sessionId }) { sess ->
+                SessionCard(sess, onSessionClick)
+            }
+        }
+    }
+}
+
+@Composable
+fun SessionCard(sess: SessionInfo, onSessionClick: (SessionInfo) -> Unit) {
+    val endTime = remember(sess.endAt) {
+        sess.endAt?.toDate()?.let {
+            java.text.SimpleDateFormat("yyyy-MM-dd HH:mm").format(it)
+        } ?: "-"
+    }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text("종료 시각: $endTime", color = Color.White, fontWeight = FontWeight.Bold)
+                Text("운행 ${sess.totalTrips}건 · 총 ${java.text.NumberFormat.getNumberInstance().format(sess.totalFare)}원", color = Color.White)
+            }
+            Button(onClick = { onSessionClick(sess) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFB000))) {
+                Text("상세", color = Color.Black)
+            }
+        }
     }
 }
 

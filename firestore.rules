@@ -102,6 +102,22 @@ service cloud.firestore {
         // Cloud Functions(서버 사이드)만 잔액/충전 변경 허용
         allow write: if request.auth == null;
       }
+
+      // =============================
+      //  일일 정산(dailySettlements) & 세션 문서
+      //  • 관리자 읽기 허용
+      //  • Cloud Functions(서버) 또는 관리자만 쓰기 허용
+      // =============================
+      match /dailySettlements/{dateId} {
+        allow read:  if isOfficeAdmin(regionId, officeId);
+        allow write: if request.auth == null || isOfficeAdmin(regionId, officeId);
+
+        // 서브컬렉션: sessions
+        match /sessions/{sessionId} {
+          allow read:  if isOfficeAdmin(regionId, officeId);
+          allow write: if request.auth == null || isOfficeAdmin(regionId, officeId);
+        }
+      }
     }
 
     // 공유 콜 규칙 – OPEN ➔ CLAIMED 1회만 허용
