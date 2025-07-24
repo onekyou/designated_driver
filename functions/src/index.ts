@@ -186,8 +186,8 @@ export const onSharedCallClaimed = onDocumentUpdated(
             tx.get(sourcePointsRef),
             tx.get(targetPointsRef),
             afterData.claimedDriverId ? tx.get(admin.firestore()
-              .collection("regions").doc(afterData.targetRegionId)
-              .collection("offices").doc(afterData.claimedOfficeId!)
+            .collection("regions").doc(afterData.targetRegionId)
+            .collection("offices").doc(afterData.claimedOfficeId!)
               .collection("designated_drivers").doc(afterData.claimedDriverId)) : Promise.resolve(null)
           ]);
 
@@ -368,6 +368,8 @@ export const sendNewCallNotification = onDocumentCreated(
     logger.info("[sendNewCallNotification] sendEachForMulticast with notification sent.");
   }
 );
+
+export { finalizeWorkDay } from "./finalizeWorkDay";
 
 const _forceDeploy = Date.now();   // 배포 강제용 더미 변수
 void _forceDeploy;                 // 사용해서 컴파일 경고 해소

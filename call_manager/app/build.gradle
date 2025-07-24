@@ -84,6 +84,8 @@ dependencies {
     implementation 'com.google.firebase:firebase-analytics-ktx'
     implementation 'com.google.firebase:firebase-installations-ktx'
     implementation 'com.google.firebase:firebase-messaging-ktx'
+    // Cloud Functions
+    implementation 'com.google.firebase:firebase-functions-ktx'
 
     // Agora (Walkie-talkie)
     implementation ('io.agora.rtc:voice-sdk:4.2.6'){

@@ -66,3 +66,7 @@ Thumbs.db
 # Unnecessary folders identified
 /adjustment/
 /com/ 
+
+# Google Cloud Service Account Key
+/credentials/serviceAccountKey.json
+/config/serviceAccountKey.json
