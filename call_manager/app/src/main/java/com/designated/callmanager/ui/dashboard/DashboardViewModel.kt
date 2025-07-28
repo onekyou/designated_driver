@@ -610,6 +610,43 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /**
+     * '+' 아이콘 클릭 시 호출: 기본값으로 WAITING 상태의 콜 문서를 먼저 생성하여
+     * 기존 대기 호출 흐름(NewCallPopup)과 동일하게 처리되도록 한다.
+     */
+    fun createPlaceholderCall() {
+        val region = _regionId.value ?: return
+        val office = _officeId.value ?: return
+
+        val officeRef = firestore.collection("regions").document(region)
+            .collection("offices").document(office)
+
+        viewModelScope.launch {
+            try {
+                val nowTs = Timestamp.now()
+                val data = hashMapOf(
+                    "phoneNumber" to "",
+                    "customerAddress" to "",
+                    "customerName" to "",
+                    "timestamp" to nowTs,
+                    "timestampClient" to System.currentTimeMillis(),
+                    "status" to CallStatus.WAITING.firestoreValue,
+                    "regionId" to region,
+                    "officeId" to office,
+                    "createdBy" to (auth.currentUser?.uid ?: "")
+                )
+
+                val docRef = officeRef.collection("calls").add(data).await()
+                Log.d(TAG, "Placeholder call created: ${docRef.id}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error creating placeholder call", e)
+            }
+        }
+    }
+
+    // 기존 수동 배차 로직은 보류 상태로 두고 사용하지 않음.
+    // fun createManualCall(driverId: String) { ... }
+
     private fun fetchOfficeName(regionId: String, officeId: String) {
         viewModelScope.launch {
             try {
