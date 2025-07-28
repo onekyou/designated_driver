@@ -328,7 +328,8 @@ fun DashboardScreen(
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 calls = calls,
                 title = "내부 호출 목록",
-                onCallClick = { callInfo -> viewModel.showCallDialog(callInfo.id) }
+                onCallClick = { callInfo -> viewModel.showCallDialog(callInfo.id) },
+                onAddCallClick = { viewModel.createPlaceholderCall() }
             )
 
             // 공유 콜 리스트 (하단)
@@ -387,10 +388,20 @@ fun CallListContainer(
     modifier: Modifier = Modifier,
     calls: List<CallInfo>,
     title: String,
-    onCallClick: (CallInfo) -> Unit
+    onCallClick: (CallInfo) -> Unit,
+    onAddCallClick: () -> Unit = {}
 ) {
     Column(modifier) {
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            IconButton(onClick = onAddCallClick) {
+                Icon(Icons.Filled.Add, contentDescription = "새 호출 추가")
+            }
+        }
         Spacer(modifier = Modifier.height(8.dp))
         LazyColumn(modifier = Modifier.border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))) {
             items(calls, key = { it.id }) { call ->
