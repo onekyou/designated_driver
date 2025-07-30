@@ -13,18 +13,22 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-// Define the dark color scheme using the custom colors
+// Define the dark color scheme using the design system colors
 private val DarkColorScheme = darkColorScheme(
-    primary = DarkPrimary,
-    secondary = DarkSecondary,
-    tertiary = DeepYellow, // Changed from Pink80 to DeepYellow
-    background = DarkBackground,
-    surface = DarkSurface,
-    onPrimary = Color.Black, // Text/icons on primary color background
-    onSecondary = Color.Black, // Text/icons on secondary color background
-    onTertiary = Color.Black,
-    onBackground = DarkOnBackground,
-    onSurface = DarkOnSurface,
+    primary = Primary,
+    secondary = Secondary,
+    tertiary = PrimaryLight,
+    background = Background,
+    surface = Surface,
+    onPrimary = OnPrimary,
+    onSecondary = OnSecondary,
+    onTertiary = OnPrimary,
+    onBackground = OnBackground,
+    onSurface = OnSurface,
+    error = Error,
+    onError = OnError,
+    surfaceVariant = SurfaceVariant,
+    onSurfaceVariant = OnSurface,
 )
 
 @Composable

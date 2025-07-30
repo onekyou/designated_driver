@@ -14,50 +14,39 @@ import androidx.core.view.WindowCompat
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 
-// Define Light Color Scheme using Material 3 builder
+// Define Light Color Scheme using design system colors
 private val LightColorScheme = lightColorScheme(
-    primary = DeepYellow, // Use custom yellow as primary
-    secondary = PurpleGrey40,
-    tertiary = Pink40,
-    background = Color.White, // Light background
-    surface = Color.White,
-    onPrimary = Color.Black, // Text/icons on primary color
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = DarkTextColor, // Dark text on light background
-    onSurface = DarkTextColor
-    /* Other default colors to override */
+    primary = Primary,
+    secondary = Secondary,
+    tertiary = PrimaryLight,
+    background = Color.White,
+    surface = Color(0xFFF5F5F5),
+    onPrimary = OnPrimary,
+    onSecondary = OnSecondary,
+    onTertiary = OnPrimary,
+    onBackground = Color(0xFF1C1B1F),
+    onSurface = Color(0xFF1C1B1F),
+    error = Error,
+    onError = OnError
 )
 
-// Define Dark Color Scheme using Material 3 builder (can be customized further)
-// private val DarkColorScheme = darkColorScheme( // <-- 첫 번째 정의 주석 처리 (선택 사항)
-//     primary = DeepYellow, 
-//     secondary = PurpleGrey80,
-//     tertiary = Pink80,
-//     background = DarkTextColor, 
-//     surface = DarkTextColor,
-//     onPrimary = Color.Black,
-//     onSecondary = Color.Black,
-//     onTertiary = Color.Black,
-//     onBackground = Color.White, 
-//     onSurface = Color.White
-// )
-
-// --- darkColorScheme 추가 --- // <-- DriverAppTheme 에서 사용하는 부분
-private val darkColorScheme = darkColorScheme(
-    primary = OrangePrimary, // <- 여기를 OrangePrimary 로 변경
-    secondary = DarkSecondary,
-    background = DarkBackground,
-    surface = DarkSurface,
-    onError = DarkOnError,
-    onPrimary = OnOrangePrimary, // <- 여기를 OnOrangePrimary 로 변경
-    onSecondary = DarkOnSecondary,
-    onBackground = DarkOnBackground,
-    onSurface = DarkOnSurface,
-    // Add other colors as needed, inheriting from Material defaults if not specified
-    tertiary = Pink80 // Example inheriting from light for simplicity, adjust as needed
+// Define Dark Color Scheme using design system colors
+private val DarkColorScheme = darkColorScheme(
+    primary = Primary,
+    secondary = Secondary,
+    tertiary = PrimaryLight,
+    background = Background,
+    surface = Surface,
+    onPrimary = OnPrimary,
+    onSecondary = OnSecondary,
+    onTertiary = OnPrimary,
+    onBackground = OnBackground,
+    onSurface = OnSurface,
+    error = Error,
+    onError = OnError,
+    surfaceVariant = SurfaceVariant,
+    onSurfaceVariant = OnSurface
 )
-// --- ---
 
 @Composable
 fun DriverAppTheme(
@@ -72,15 +61,15 @@ fun DriverAppTheme(
         //     if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         // } // 다이나믹 컬러 로직 주석 처리 또는 제거
 
-        darkTheme -> darkColorScheme // darkTheme이 true일 때 darkColorScheme 사용
-        else -> LightColorScheme      // 그 외에는 LightColorScheme 사용
+        darkTheme -> DarkColorScheme // darkTheme이 true일 때 DarkColorScheme 사용
+        else -> LightColorScheme     // 그 외에는 LightColorScheme 사용
     }
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.primary.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = darkTheme
+            window.statusBarColor = colorScheme.background.toArgb()
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }
 
