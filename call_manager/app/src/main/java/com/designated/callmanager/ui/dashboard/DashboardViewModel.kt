@@ -12,6 +12,8 @@ import com.designated.callmanager.data.CallInfo
 import com.designated.callmanager.data.CallStatus
 import com.designated.callmanager.data.DriverInfo
 import com.designated.callmanager.data.DriverStatus
+import com.designated.callmanager.data.PointsInfo
+import com.designated.callmanager.data.PointTransaction
 import com.designated.callmanager.service.CallManagerService
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
@@ -89,6 +91,15 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _sharedCalls = MutableStateFlow<List<com.designated.callmanager.data.SharedCallInfo>>(emptyList())
     val sharedCalls: StateFlow<List<com.designated.callmanager.data.SharedCallInfo>> = _sharedCalls.asStateFlow()
 
+    private val _allSharedCalls = MutableStateFlow<List<com.designated.callmanager.data.SharedCallInfo>>(emptyList())
+    val allSharedCalls: StateFlow<List<com.designated.callmanager.data.SharedCallInfo>> = _allSharedCalls.asStateFlow()
+
+    private val _pointsInfo = MutableStateFlow<PointsInfo?>(null)
+    val pointsInfo: StateFlow<PointsInfo?> = _pointsInfo.asStateFlow()
+
+    private val _pointTransactions = MutableStateFlow<List<PointTransaction>>(emptyList())
+    val pointTransactions: StateFlow<List<PointTransaction>> = _pointTransactions.asStateFlow()
+
     private val _callInfoForDialog = MutableStateFlow<CallInfo?>(null)
     val callInfoForDialog: StateFlow<CallInfo?> = _callInfoForDialog.asStateFlow()
 
@@ -128,6 +139,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private var driversListener: ListenerRegistration? = null
     private var officeStatusListener: ListenerRegistration? = null
     private var sharedCallsListener: ListenerRegistration? = null
+    private var allSharedCallsListener: ListenerRegistration? = null
+    private var pointsListener: ListenerRegistration? = null
+    private var pointTransactionsListener: ListenerRegistration? = null
 
     private val callsCache = mutableMapOf<String, CallInfo>()
     private val driverCache = mutableMapOf<String, DriverInfo>()
@@ -254,7 +268,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                         val driverInfo = doc.toObject(DriverInfo::class.java).apply { id = doc.id }
                         when (dc.type) {
                             DocumentChange.Type.ADDED, DocumentChange.Type.MODIFIED -> {
-                                Log.d(TAG, "[Drivers Listener] Caching driver: ${driverInfo.name} (${driverInfo.id}) - Status: ${driverInfo.status}")
+                                Log.d(TAG, "[Drivers Listener] Caching driver: ${driverInfo.name} (docId=${doc.id}, objId=${driverInfo.id}, authUid=${driverInfo.authUid}) - Status: ${driverInfo.status}")
                                 driverCache[doc.id] = driverInfo
                             }
                             DocumentChange.Type.REMOVED -> {
@@ -283,9 +297,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
 
         // -- 공유 콜 리스너 --
-        // 1) 내가 수락할 수 있는 OPEN/CLAIMED(내 사무실) 콜 + 2) 내가 올린 콜 모두 수신
+        // 내가 수락할 수 있는 OPEN/CLAIMED(내 사무실) 콜만 수신 (내가 올린 콜은 제외)
 
-        // Map cache to merge documents from multiple listeners
+        // Map cache for shared calls (excluding calls from my office)
         val sharedMap = mutableMapOf<String, com.designated.callmanager.data.SharedCallInfo>()
 
         fun emitSharedCalls() {
@@ -298,24 +312,37 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             .whereEqualTo("targetRegionId", regionId)
             .whereIn("status", statuses)
             .addSnapshotListener { snapshots, e ->
-                if (e != null) return@addSnapshotListener
+                if (e != null) {
+                    Log.w(TAG, "[SharedCalls] Listener failed.", e)
+                    return@addSnapshotListener
+                }
+                Log.d(TAG, "[SharedCalls] Received ${snapshots?.size()} documents")
                 snapshots?.documentChanges?.forEach { dc ->
                     val doc = dc.document
                     val data = doc.toObject(com.designated.callmanager.data.SharedCallInfo::class.java)
                         ?.copy(id = doc.id)
 
-                    // 필터: CLAIMED 이면서 내 사무실이 아닌 경우 제외
+                    Log.d(TAG, "[SharedCalls] Processing: ${doc.id}, source=${data?.sourceOfficeId}, claimed=${data?.claimedOfficeId}, status=${data?.status}")
+
+                    // 필터: 내가 올린 콜이거나 다른 사무실이 수락한 콜 제외
                     val shouldInclude = when {
                         data == null -> false
-                        data.status == "CLAIMED" && data.claimedOfficeId != officeId -> false
+                        data.sourceOfficeId == officeId -> false // 내가 올린 콜 제외
+                        data.status == "CLAIMED" && data.claimedOfficeId != officeId -> false // 다른 사무실이 수락한 콜 제외
+                        data.status == "COMPLETED" -> false // 완료된 콜은 제외 (목록 정리)
                         else -> true
                     }
-
-                    if (!shouldInclude) return@forEach
+                    
+                    Log.d(TAG, "[SharedCalls] shouldInclude: $shouldInclude")
 
                     when (dc.type) {
                         com.google.firebase.firestore.DocumentChange.Type.ADDED, com.google.firebase.firestore.DocumentChange.Type.MODIFIED -> {
-                            data?.let { sharedMap[doc.id] = it }
+                            if (shouldInclude) {
+                                data?.let { sharedMap[doc.id] = it }
+                            } else {
+                                // 필터 조건에 맞지 않으면 맵에서 제거
+                                sharedMap.remove(doc.id)
+                            }
                         }
                         com.google.firebase.firestore.DocumentChange.Type.REMOVED -> {
                             sharedMap.remove(doc.id)
@@ -325,34 +352,72 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 emitSharedCalls()
             }
 
-        // Listener B: 내가 올린 콜 (sourceOfficeId == 내 사무실)
-        val listenerB = firestore.collection("shared_calls")
-            .whereEqualTo("sourceOfficeId", officeId)
+        // Store listener to remove later
+        sharedCallsListener = listenerA
+
+        // -- 모든 공유콜 리스너 (관리 페이지용) --
+        Log.d(TAG, "[AllSharedCalls] Setting up listener for region=$regionId")
+        allSharedCallsListener = firestore.collection("shared_calls")
+            .whereEqualTo("sourceRegionId", regionId) // 내 지역의 모든 공유콜
             .addSnapshotListener { snapshots, e ->
-                if (e != null) return@addSnapshotListener
-                snapshots?.documentChanges?.forEach { dc ->
-                    val doc = dc.document
-                    val data = doc.toObject(com.designated.callmanager.data.SharedCallInfo::class.java)
-                        ?.copy(id = doc.id)
-                    when (dc.type) {
-                        com.google.firebase.firestore.DocumentChange.Type.ADDED, com.google.firebase.firestore.DocumentChange.Type.MODIFIED -> {
-                            if (data != null) sharedMap[doc.id] = data
-                        }
-                        com.google.firebase.firestore.DocumentChange.Type.REMOVED -> {
-                            sharedMap.remove(doc.id)
-                        }
-                    }
+                if (e != null) {
+                    Log.w(TAG, "[AllSharedCalls] Listener failed.", e)
+                    return@addSnapshotListener
                 }
-                emitSharedCalls()
+                Log.d(TAG, "[AllSharedCalls] Received ${snapshots?.size()} documents")
+                
+                val allCalls = snapshots?.documents?.mapNotNull { doc ->
+                    doc.toObject(com.designated.callmanager.data.SharedCallInfo::class.java)
+                        ?.copy(id = doc.id)
+                        ?.also { 
+                            Log.d(TAG, "[AllSharedCalls] Loaded: ${doc.id}, source=${it.sourceOfficeId}, claimed=${it.claimedOfficeId}, status=${it.status}")
+                        }
+                } ?: emptyList()
+                
+                Log.d(TAG, "[AllSharedCalls] Setting ${allCalls.size} shared calls")
+                _allSharedCalls.value = allCalls.sortedByDescending { it.timestamp?.seconds ?: 0 }
             }
 
-        // Store combined listeners to remove later
-        sharedCallsListener = object : ListenerRegistration {
-            override fun remove() {
-                listenerA.remove()
-                listenerB.remove()
+        // -- 포인트 잔액 리스너 --
+        pointsListener = officeRef.collection("points").document("points")
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    Log.w(TAG, "Points listener failed.", e)
+                    return@addSnapshotListener
+                }
+                Log.d(TAG, "[Points] Snapshot exists: ${snapshot?.exists()}")
+                if (snapshot != null && snapshot.exists()) {
+                    val pointsInfo = snapshot.toObject(PointsInfo::class.java)
+                    Log.d(TAG, "[Points] Loaded points: ${pointsInfo?.balance}")
+                    _pointsInfo.value = pointsInfo
+                } else {
+                    Log.d(TAG, "[Points] No points document found, setting default")
+                    _pointsInfo.value = PointsInfo(0, null)
+                }
             }
-        }
+
+        // -- 포인트 거래내역 리스너 --
+        Log.d(TAG, "[PointTransactions] Setting up listener for region=$regionId, office=$officeId")
+        pointTransactionsListener = firestore.collection("point_transactions")
+            .whereEqualTo("regionId", regionId)
+            .whereEqualTo("officeId", officeId)
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .limit(50)
+            .addSnapshotListener { snapshots, e ->
+                if (e != null) {
+                    Log.w(TAG, "[PointTransactions] Listener failed.", e)
+                    return@addSnapshotListener
+                }
+                Log.d(TAG, "[PointTransactions] Received ${snapshots?.size()} documents")
+                if (snapshots != null) {
+                    val transactions = snapshots.documents.mapNotNull { doc ->
+                        Log.d(TAG, "[PointTransactions] Processing doc: ${doc.id}")
+                        doc.toObject(PointTransaction::class.java)?.apply { id = doc.id }
+                    }
+                    Log.d(TAG, "[PointTransactions] Parsed ${transactions.size} transactions")
+                    _pointTransactions.value = transactions
+                }
+            }
     }
 
     private fun updateCallsFromCache() {
@@ -679,10 +744,16 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         driversListener?.remove()
         officeStatusListener?.remove()
         sharedCallsListener?.remove()
+        allSharedCallsListener?.remove()
+        pointsListener?.remove()
+        pointTransactionsListener?.remove()
         callsListener = null
         driversListener = null
         officeStatusListener = null
         sharedCallsListener = null
+        allSharedCallsListener = null
+        pointsListener = null
+        pointTransactionsListener = null
     }
 
     override fun onCleared() {
@@ -710,6 +781,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 )
                 docRef.set(data).await()
                 Log.d(TAG, "Shared call uploaded: ${docRef.id}")
+
+                // 원본 콜 상태를 SHARED_OUT 으로 업데이트
+                val origCallRef = firestore.collection("regions").document(region)
+                    .collection("offices").document(office)
+                    .collection("calls").document(callInfo.id)
+                origCallRef.update("status", CallStatus.SHARED_OUT.firestoreValue).await()
             } catch (e: Exception) {
                 Log.e(TAG, "Error sharing call", e)
             }
@@ -750,6 +827,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         driverId: String? = null
     ) {
         Log.d(TAG, "▶ claimSharedCallWithDetails called. sharedCallId=$sharedCallId, driverId=$driverId")
+        
+        // 디버깅: 현재 드라이버 캐시의 ID들을 확인
+        driverCache.values.forEach { driver ->
+            Log.d(TAG, "▶ Driver in cache: ${driver.name} -> docId=${driver.id}, authUid=${driver.authUid}")
+        }
         viewModelScope.launch {
             try {
                 val region = _regionId.value ?: return@launch
@@ -758,9 +840,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 firestore.runTransaction { tx ->
                     val docRef = firestore.collection("shared_calls").document(sharedCallId)
                     val snap = tx.get(docRef)
+                    if (!snap.exists()) {
+                        throw Exception("공유콜 문서가 존재하지 않습니다: $sharedCallId")
+                    }
                     val status = snap.getString("status")
+                    Log.d(TAG, "▶ Current shared call status: $status")
                     if (status != "OPEN") {
-                        throw Exception("이미 수락된 콜입니다")
+                        throw Exception("이미 수락된 콜입니다. 현재 상태: $status")
                     }
                     val updateMap = mutableMapOf<String, Any>(
                         "status" to "CLAIMED",
@@ -771,12 +857,40 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                         "fare" to fare,
                         "targetRegionId" to region // 다지역 확장 대비
                     )
-                    driverId?.let { updateMap["claimedDriverId"] = it }
+                    driverId?.let { 
+                        updateMap["claimedDriverId"] = it 
+                        Log.d(TAG, "▶ Setting claimedDriverId: $it")
+                    }
+                    Log.d(TAG, "▶ Updating shared call with map: $updateMap")
                     tx.update(docRef, updateMap)
                 }.await()
-                Log.d(TAG, "Shared call claimed with details: $sharedCallId")
+                Log.d(TAG, "✅ Shared call claimed with details: $sharedCallId")
             } catch (e: Exception) {
-                Log.e(TAG, "Error claiming shared call with details", e)
+                Log.e(TAG, "❌ Error claiming shared call with details: ${e.message}", e)
+            }
+        }
+    }
+
+    // 테스트용 포인트 문서 생성 함수
+    fun createTestPointsDocument() {
+        val region = _regionId.value ?: return
+        val office = _officeId.value ?: return
+        
+        viewModelScope.launch {
+            try {
+                val pointsRef = firestore.collection("regions").document(region)
+                    .collection("offices").document(office)
+                    .collection("points").document("points")
+                
+                val testPointsData = hashMapOf(
+                    "balance" to 1000,
+                    "updatedAt" to Timestamp.now()
+                )
+                
+                pointsRef.set(testPointsData).await()
+                Log.d(TAG, "Test points document created successfully")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error creating test points document", e)
             }
         }
     }

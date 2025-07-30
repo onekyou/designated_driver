@@ -116,7 +116,99 @@ interface SharedCallData {
   claimedAt?: FirebaseFirestore.FieldValue | string;
   claimedDriverId?: string;
   phoneNumber?: string; // 새로 추가: 공유 콜 상세정보 전달용
+  completedAt?: FirebaseFirestore.FieldValue | string; // 완료 시각
+  destCallId?: string; // 복사된 콜의 ID
 }
+
+// =============================
+// 새로운 공유 콜이 생성될 때 트리거
+// 대상 지역의 모든 사무실 관리자에게 FCM 알림 전송
+// =============================
+export const onSharedCallCreated = onDocumentCreated(
+  {
+    region: "asia-northeast3",
+    document: "shared_calls/{callId}"
+  },
+  async (event: any) => {
+    const callId = event.params.callId;
+    
+    if (!event.data) {
+      logger.warn(`[shared-created:${callId}] 이벤트 데이터가 없습니다.`);
+      return;
+    }
+
+    const sharedCallData = event.data.data() as SharedCallData;
+    
+    if (!sharedCallData || sharedCallData.status !== "OPEN") {
+      logger.info(`[shared-created:${callId}] OPEN 상태가 아니므로 알림을 보내지 않습니다. Status: ${sharedCallData?.status}`);
+      return;
+    }
+
+    logger.info(`[shared-created:${callId}] 새로운 공유콜 생성됨. 대상 지역 관리자들에게 알림 전송 시작.`);
+
+    try {
+      // 대상 지역의 모든 관리자 FCM 토큰 조회 (원본 사무실 제외)
+      const adminQuery = await admin
+        .firestore()
+        .collection("admins")
+        .where("associatedRegionId", "==", sharedCallData.targetRegionId)
+        .get();
+
+      const tokens: string[] = [];
+      adminQuery.docs.forEach((doc) => {
+        const adminData = doc.data();
+        // 원본 사무실은 제외
+        if (adminData.associatedOfficeId !== sharedCallData.sourceOfficeId && adminData.fcmToken) {
+          tokens.push(adminData.fcmToken);
+        }
+      });
+
+      logger.info(`[shared-created:${callId}] 알림 대상: ${tokens.length}명의 관리자`);
+
+      if (tokens.length === 0) {
+        logger.warn(`[shared-created:${callId}] 알림을 보낼 관리자 토큰이 없습니다.`);
+        return;
+      }
+
+      // FCM 알림 전송
+      const message: admin.messaging.MulticastMessage = {
+        notification: {
+          title: "새로운 공유콜이 도착했습니다!",
+          body: `${sharedCallData.departure || "출발지"} → ${sharedCallData.destination || "도착지"} / ${sharedCallData.fare || 0}원`,
+        },
+        data: {
+          type: "NEW_SHARED_CALL",
+          sharedCallId: callId,
+          departure: sharedCallData.departure || "",
+          destination: sharedCallData.destination || "",
+          fare: (sharedCallData.fare || 0).toString(),
+        },
+        android: {
+          priority: "high",
+          notification: {
+            sound: "default",
+            channelId: "shared_call_fcm_channel",
+            priority: "high",
+          },
+        },
+        tokens,
+      };
+
+      const response = await admin.messaging().sendEachForMulticast(message);
+      logger.info(`[shared-created:${callId}] FCM 알림 전송 완료. 성공: ${response.successCount}, 실패: ${response.failureCount}`);
+
+      // 실패한 토큰들 로그
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success) {
+          logger.warn(`[shared-created:${callId}] 토큰 ${idx} 전송 실패: ${resp.error?.message}`);
+        }
+      });
+
+    } catch (error) {
+      logger.error(`[shared-created:${callId}] 알림 전송 중 오류 발생:`, error);
+    }
+  }
+);
 
 export const onSharedCallClaimed = onDocumentUpdated(
   {
@@ -139,20 +231,16 @@ export const onSharedCallClaimed = onDocumentUpdated(
       return;
     }
 
-    // OPEN -> CLAIMED 인지 확인
+    // OPEN -> CLAIMED 인지 확인 (콜 복사만, 포인트 처리 없음)
     if (beforeData.status === "OPEN" && afterData.status === "CLAIMED") {
       logger.info(`[shared:${callId}] 공유 콜이 CLAIMED 되었습니다. 대상사무실로 복사 시작.`);
       logger.info(`[shared:${callId}] afterData.claimedDriverId=${afterData.claimedDriverId}`);
-
-      const fare = afterData.fare || 0;
-      const pointRatio = 0.1; // 10%
-      const pointAmount = Math.round(fare * pointRatio);
 
       logger.info(`[shared:${callId}] assignedDriverId=${afterData.claimedDriverId}`);
 
       try {
         await admin.firestore().runTransaction(async (tx) => {
-          // 레퍼런스 정의 ----------------------------------
+          // 대상 사무실 calls 컬렉션 레퍼런스
           const destCallsRef = admin
             .firestore()
             .collection("regions")
@@ -162,44 +250,18 @@ export const onSharedCallClaimed = onDocumentUpdated(
             .collection("calls")
             .doc(callId);
 
-          const sourcePointsRef = admin
-            .firestore()
-            .collection("regions")
-            .doc(afterData.sourceRegionId)
-            .collection("offices")
-            .doc(afterData.sourceOfficeId)
-            .collection("points")
-            .doc("points");
-
-          const targetPointsRef = admin
-            .firestore()
-            .collection("regions")
-            .doc(afterData.targetRegionId)
-            .collection("offices")
-            .doc(afterData.claimedOfficeId!)
-            .collection("points")
-            .doc("points");
-
-          // 1) 먼저 READ ------------------------------------
-          logger.debug(`[shared:${callId}] READ balances for point calc`);
-          const [sourceSnap, targetSnap, driverSnap] = await Promise.all([
-            tx.get(sourcePointsRef),
-            tx.get(targetPointsRef),
-            afterData.claimedDriverId ? tx.get(admin.firestore()
+          // 기사 정보 읽기 (배정된 기사가 있을 경우)
+          const driverSnap = afterData.claimedDriverId ? await tx.get(admin.firestore()
             .collection("regions").doc(afterData.targetRegionId)
             .collection("offices").doc(afterData.claimedOfficeId!)
-              .collection("designated_drivers").doc(afterData.claimedDriverId)) : Promise.resolve(null)
-          ]);
-
-          const sourceBalance = (sourceSnap.data()?.balance || 0) + pointAmount;
-          const targetBalance = (targetSnap.data()?.balance || 0) - pointAmount;
+            .collection("designated_drivers").doc(afterData.claimedDriverId)) : null;
 
           const driverData = driverSnap ? driverSnap.data() : undefined;
-          const assignedDriverId = afterData.claimedDriverId || null;
+          const assignedDriverId = driverData ? driverData.authUid : null; // authUid 사용
           const assignedDriverName = driverData ? driverData.name : null;
           const assignedDriverPhone = driverData ? driverData.phoneNumber : null;
 
-          logger.info(`[shared:${callId}] assignedDriverId resolved to ${assignedDriverId}`);
+          logger.info(`[shared:${callId}] driverDocId=${afterData.claimedDriverId}, assignedDriverId(authUid)=${assignedDriverId}`);
 
           // 2) WRITE ----------------------------------------
           const callDoc: any = {
@@ -223,17 +285,6 @@ export const onSharedCallClaimed = onDocumentUpdated(
           if (assignedDriverId && driverSnap?.exists) {
             tx.update(driverSnap.ref, { status: "배차중" });
           }
-
-          //   b) 포인트 문서 업데이트
-          tx.set(sourcePointsRef, {
-            balance: sourceBalance,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          }, { merge: true });
-
-          tx.set(targetPointsRef, {
-            balance: targetBalance,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          }, { merge: true });
 
           //   c) 공유콜 문서 processed 플래그 수정 → 트랜잭션 외부로 이동하여
           //      "읽기 후 쓰기" 제약을 피함 (트랜잭션 내부에 포함하면
@@ -366,6 +417,117 @@ export const sendNewCallNotification = onDocumentCreated(
     });
 
     logger.info("[sendNewCallNotification] sendEachForMulticast with notification sent.");
+  }
+);
+
+// =============================
+// 공유 콜에서 복사된 일반 콜이 COMPLETED 될 때 트리거
+// 1) 원본 shared_calls 문서를 COMPLETED로 업데이트
+// 2) 포인트 가감 처리 (10% 수수료)
+// =============================
+export const onSharedCallCompleted = onDocumentUpdated(
+  {
+    region: "asia-northeast3",
+    document: "regions/{regionId}/offices/{officeId}/calls/{callId}"
+  },
+  async (event: any) => {
+    const { regionId, officeId, callId } = event.params;
+
+    if (!event.data) {
+      logger.warn(`[call-completed:${callId}] 이벤트 데이터가 없습니다.`);
+      return;
+    }
+
+    const beforeData = event.data.before.data();
+    const afterData = event.data.after.data();
+
+    if (!beforeData || !afterData) {
+      logger.warn(`[call-completed:${callId}] before/after 데이터 누락`);
+      return;
+    }
+
+    // 공유콜에서 복사된 콜인지 확인
+    if (afterData.callType !== "SHARED" || !afterData.sourceSharedCallId) {
+      return; // 일반 콜이므로 처리하지 않음
+    }
+
+    // 완료 상태로 변경되었는지 확인
+    if (beforeData.status !== "COMPLETED" && afterData.status === "COMPLETED") {
+      logger.info(`[call-completed:${callId}] 공유콜에서 복사된 콜이 완료되었습니다. 원본 업데이트 시작.`);
+      
+      const sourceSharedCallId = afterData.sourceSharedCallId;
+      const fare = afterData.fare_set || afterData.fare || 0;
+      const pointRatio = 0.1; // 10%
+      const pointAmount = Math.round(fare * pointRatio);
+
+      try {
+        await admin.firestore().runTransaction(async (tx) => {
+          // 원본 shared_calls 문서 레퍼런스
+          const sharedCallRef = admin.firestore().collection("shared_calls").doc(sourceSharedCallId);
+          const sharedCallSnap = await tx.get(sharedCallRef);
+
+          if (!sharedCallSnap.exists) {
+            logger.error(`[call-completed:${callId}] 원본 shared_calls 문서를 찾을 수 없습니다: ${sourceSharedCallId}`);
+            return;
+          }
+
+          const sharedCallData = sharedCallSnap.data() as SharedCallData;
+
+          // 포인트 레퍼런스
+          const sourcePointsRef = admin
+            .firestore()
+            .collection("regions")
+            .doc(sharedCallData.sourceRegionId)
+            .collection("offices")
+            .doc(sharedCallData.sourceOfficeId)
+            .collection("points")
+            .doc("points");
+
+          const targetPointsRef = admin
+            .firestore()
+            .collection("regions")
+            .doc(regionId)
+            .collection("offices")
+            .doc(officeId)
+            .collection("points")
+            .doc("points");
+
+          // 포인트 잔액 읽기
+          const [sourceSnap, targetSnap] = await Promise.all([
+            tx.get(sourcePointsRef),
+            tx.get(targetPointsRef)
+          ]);
+
+          const sourceBalance = (sourceSnap.data()?.balance || 0) + pointAmount;
+          const targetBalance = (targetSnap.data()?.balance || 0) - pointAmount;
+
+          // 1) shared_calls 문서를 COMPLETED로 업데이트
+          tx.update(sharedCallRef, {
+            status: "COMPLETED",
+            completedAt: admin.firestore.FieldValue.serverTimestamp(),
+            destCallId: callId
+          });
+
+          // 2) 포인트 문서 업데이트
+          tx.set(sourcePointsRef, {
+            balance: sourceBalance,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+
+          tx.set(targetPointsRef, {
+            balance: targetBalance,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+
+          logger.info(`[call-completed:${callId}] 포인트 처리 완료. Source: +${pointAmount}, Target: -${pointAmount}`);
+        });
+
+        logger.info(`[call-completed:${callId}] 공유콜 완료 처리 성공. SharedCallId: ${sourceSharedCallId}`);
+
+      } catch (error) {
+        logger.error(`[call-completed:${callId}] 공유콜 완료 처리 오류:`, error);
+      }
+    }
   }
 );
 

@@ -129,20 +129,30 @@ service cloud.firestore {
       allow create: if isAnyAdmin();
 
       /*
-       * OPEN 상태의 공유 콜을 CLAIMED 상태로 전환할 때만 허용
-       *   – resource.data.status      == "OPEN"  (현재)
-       *   – request.resource.data.status == "CLAIMED" (요청)
-       *   – 최초 한 번만 (claimedOfficeId 가 null → 값 입력)
+       * 공유 콜 상태 전환 허용:
+       * 1) OPEN → CLAIMED: 관리자가 콜 수락 (여러 필드 업데이트 허용)
+       * 2) CLAIMED → COMPLETED: Cloud Functions가 운행 완료 시 처리
        */
       allow update: if
-        isAnyAdmin() &&
-        resource.data.status == "OPEN" &&
-        request.resource.data.status == "CLAIMED" &&
-        resource.data.claimedOfficeId == null &&
-        request.resource.data.claimedOfficeId != null;
+        // OPEN → CLAIMED (관리자가 수락) - 필드 업데이트 포함
+        (isAnyAdmin() &&
+         resource.data.status == "OPEN" &&
+         request.resource.data.status == "CLAIMED") ||
+        // CLAIMED → COMPLETED (Cloud Functions가 처리)
+        (request.auth == null &&
+         resource.data.status == "CLAIMED" &&
+         request.resource.data.status == "COMPLETED");
 
       // 클라이언트 측 삭제 금지
       allow delete: if false;
+    }
+
+    // 포인트 거래 내역 컬렉션
+    match /point_transactions/{transactionId} {
+      // 관리자만 포인트 거래 내역 조회 가능
+      allow read: if isAnyAdmin();
+      // Cloud Functions(서버)만 생성/수정 가능
+      allow write: if request.auth == null;
     }
   }
 }

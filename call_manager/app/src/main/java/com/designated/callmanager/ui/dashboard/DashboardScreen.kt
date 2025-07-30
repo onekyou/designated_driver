@@ -16,6 +16,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -50,6 +51,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.NavigationBarItemDefaults
 import com.designated.callmanager.ui.shared.SharedCallSettingsScreen
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 
 
 private const val TAG = "DashboardScreen"
@@ -66,6 +73,7 @@ fun CallStatus.getDisplayName(): String {
         CallStatus.IN_PROGRESS -> "운행중"
         CallStatus.AWAITING_SETTLEMENT -> "정산대기"
         CallStatus.COMPLETED -> "완료"
+        CallStatus.SHARED_OUT -> "공유완료"
         CallStatus.CANCELED -> "취소"
         CallStatus.HOLD -> "보류"
         CallStatus.UNKNOWN -> "알수없음"
@@ -295,7 +303,7 @@ fun DashboardScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 title = { Text(text = officeName ?: "사무실 정보 로딩 중...") },
                 navigationIcon = {
                     IconButton(onClick = onLogout) {
@@ -307,7 +315,7 @@ fun DashboardScreen(
                         Icon(Icons.Filled.Settings, contentDescription = "설정")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = Color.Black,
                     titleContentColor = Color.White,
                     actionIconContentColor = Color.White,
@@ -316,32 +324,45 @@ fun DashboardScreen(
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        bottomBar = {
-            DriverBottomBar(drivers = drivers)
-        }
+        containerColor = Color(0xFF121212)
     ) { paddingValues ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(paddingValues).padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            CallListContainer(
-                modifier = Modifier.fillMaxWidth().weight(1f),
-                calls = calls,
-                title = "내부 호출 목록",
-                onCallClick = { callInfo -> viewModel.showCallDialog(callInfo.id) },
-                onAddCallClick = { viewModel.createPlaceholderCall() }
-            )
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(paddingValues).padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // 4:2:4 비율로 3개 카드 세로 배치
+                // 내부 호출 목록 카드 (비율 4) - 완료된 콜, 취소된 콜, 공유완료된 콜 제외
+                CallListContainer(
+                    modifier = Modifier.fillMaxWidth().weight(4f),
+                    calls = calls.filter { call ->
+                        val status = CallStatus.fromFirestoreValue(call.status)
+                        status != CallStatus.COMPLETED && status != CallStatus.CANCELED && status != CallStatus.SHARED_OUT
+                    },
+                    title = "내부 호출 목록",
+                    onCallClick = { callInfo -> viewModel.showCallDialog(callInfo.id) },
+                    onAddCallClick = { viewModel.createPlaceholderCall() }
+                )
 
-            // 공유 콜 리스트 (하단)
-            SharedCallListContainer(
-                modifier = Modifier.fillMaxWidth().height(200.dp),
-                sharedCalls = sharedCalls,
-                onAccept = { call ->
-                    selectedSharedCall = call
-                    showSharedAcceptDialog = true
-                },
-                onSettings = { showSharedSettings = true }
-            )
+                // 공유 콜 카드 (비율 2) - 모든 상태 표시
+                SharedCallListContainer(
+                    modifier = Modifier.fillMaxWidth().weight(2f),
+                    sharedCalls = sharedCalls, // 모든 상태 표시
+                    onAccept = { call ->
+                        selectedSharedCall = call
+                        showSharedAcceptDialog = true
+                    },
+                    onSettings = { showSharedSettings = true }
+                )
+
+                // 기사 상태 카드 (비율 4)
+                DriverStatusCard(
+                    modifier = Modifier.fillMaxWidth().weight(4f),
+                    drivers = drivers,
+                    calls = calls
+                )
+            }
+            
             if (showSharedSettings) {
                 SharedCallSettingsScreen(onNavigateBack = { showSharedSettings = false })
             }
@@ -358,7 +379,10 @@ fun DashboardScreen(
         SharedCallAcceptDialog(
             sharedCall = call,
             availableDrivers = waitingDrivers,
-            onDismiss = { showSharedAcceptDialog = false },
+            onDismiss = { 
+                showSharedAcceptDialog = false
+                selectedSharedCall = null
+            },
             onConfirm = { dep, dest, fare, driver ->
                 viewModel.claimSharedCallWithDetails(
                     sharedCallId = call.id,
@@ -368,6 +392,7 @@ fun DashboardScreen(
                     driverId = driver?.id
                 )
                 showSharedAcceptDialog = false
+                selectedSharedCall = null
             }
         )
     }
@@ -391,22 +416,43 @@ fun CallListContainer(
     onCallClick: (CallInfo) -> Unit,
     onAddCallClick: () -> Unit = {}
 ) {
-    Column(modifier) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            IconButton(onClick = onAddCallClick) {
-                Icon(Icons.Filled.Add, contentDescription = "새 호출 추가")
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A)),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column {
+            // 타이틀 영역만 패딩 적용
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title, 
+                    style = MaterialTheme.typography.titleMedium, 
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                IconButton(onClick = onAddCallClick) {
+                    Icon(
+                        Icons.Filled.Add, 
+                        contentDescription = "새 호출 추가",
+                        tint = Color.White
+                    )
+                }
             }
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        LazyColumn(modifier = Modifier.border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))) {
-            items(calls, key = { it.id }) { call ->
-                CallCard(call = call, onCallClick = { onCallClick(call) })
-                Divider(color = Color.LightGray, thickness = 0.5.dp)
+            // 자식 카드들은 부모 카드의 경계와 일치
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                contentPadding = PaddingValues(bottom = 16.dp) // 하단만 패딩
+            ) {
+                items(calls, key = { it.id }) { call ->
+                    CallCard(call = call, onCallClick = { onCallClick(call) })
+                }
             }
         }
     }
@@ -417,67 +463,106 @@ fun CallCard(call: CallInfo, onCallClick: (CallInfo) -> Unit) {
     val callStatus = remember(call.status) { CallStatus.fromFirestoreValue(call.status) }
     val statusDisplayName = callStatus.getDisplayName()
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = { onCallClick(call) })
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF3A3A3A)),
+        shape = RoundedCornerShape(0.dp)
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            val displayText = (if (!call.customerName.isNullOrBlank()) {
-                call.customerName
-            } else {
-                call.customerAddress
-            }) ?: "정보 없음"
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = { onCallClick(call) })
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                val displayText = (if (!call.customerName.isNullOrBlank()) {
+                    call.customerName
+                } else {
+                    call.customerAddress
+                }) ?: "정보 없음"
 
-            Text(text = displayText, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-            Text(
-                text = formatTimeAgo(call.timestamp.toDate().time),
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray
-            )
-            call.assignedDriverName?.let {
                 Text(
-                    text = "배정: $it 기사",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
+                    text = displayText, 
+                    style = MaterialTheme.typography.bodyMedium, 
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
                 )
+                Text(
+                    text = formatTimeAgo(call.timestamp.toDate().time),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.LightGray
+                )
+                call.assignedDriverName?.let {
+                    Text(
+                        text = "배정: $it 기사",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFFFAB00)
+                    )
+                }
             }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = statusDisplayName,
+                style = MaterialTheme.typography.labelMedium,
+                color = when (callStatus) {
+                    CallStatus.PENDING -> Color(0xFFFF5722)
+                    CallStatus.ASSIGNED -> Color(0xFFFFAB00)
+                    CallStatus.COMPLETED -> Color.Gray
+                    CallStatus.SHARED_OUT -> Color(0xFF9C27B0) // 보라색 (공유완료)
+                    CallStatus.CANCELED -> Color.Gray
+                    else -> Color(0xFF4CAF50)
+                }
+            )
         }
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = statusDisplayName,
-            style = MaterialTheme.typography.labelMedium,
-            color = when (callStatus) {
-                CallStatus.PENDING -> MaterialTheme.colorScheme.error
-                CallStatus.ASSIGNED -> MaterialTheme.colorScheme.tertiary
-                CallStatus.COMPLETED -> Color.Gray
-                CallStatus.CANCELED -> Color.Gray
-                else -> MaterialTheme.colorScheme.primary
-            }
-        )
     }
 }
 
 @Composable
-fun DriverStatusContainer(
+fun DriverStatusCard(
     modifier: Modifier = Modifier,
-    drivers: List<DriverInfo>
+    drivers: List<DriverInfo>,
+    calls: List<CallInfo>
 ) {
-    Column(modifier) {
-        Text("기사 현황", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(8.dp))
-        Card(
-            modifier = Modifier.fillMaxSize(),
-            elevation = CardDefaults.cardElevation(2.dp),
-            shape = RoundedCornerShape(8.dp)
-        ) {
-            LazyColumn(contentPadding = PaddingValues(8.dp)) {
-                items(drivers, key = { it.id }) { driver ->
-                    DriverItem(driver = driver)
-                    Divider(color = Color.LightGray, thickness = 0.5.dp)
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A)),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column {
+            // 타이틀 영역만 패딩 적용
+            Text(
+                text = "기사 현황", 
+                style = MaterialTheme.typography.titleMedium, 
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                modifier = Modifier.padding(16.dp)
+            )
+            // 자식 카드들은 부모 카드의 경계와 일치
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                contentPadding = PaddingValues(bottom = 16.dp) // 하단만 패딩
+            ) {
+                val sortedDrivers = drivers.sortedWith(compareBy<DriverInfo> { driver ->
+                    val status = DriverStatus.fromString(driver.status)
+                    when (status) {
+                        DriverStatus.WAITING -> 0  // 대기중 우선
+                        DriverStatus.ONLINE -> 1   // 온라인 다음
+                        DriverStatus.PREPARING -> 2 // 준비중
+                        DriverStatus.ON_TRIP -> 3   // 운행중
+                        DriverStatus.OFFLINE -> 4   // 오프라인 마지막
+                        else -> 5
+                    }
+                }.thenBy { it.name }) // 같은 상태 내에서는 이름순
+                
+                items(sortedDrivers, key = { it.id }) { driver ->
+                    val driverCall = calls.find { 
+                        it.assignedDriverId == driver.id && 
+                        (it.status == "IN_PROGRESS" || it.status == "ACCEPTED")
+                    }
+                    DriverStatusItem(driver = driver, currentCall = driverCall)
                 }
             }
         }
@@ -485,40 +570,79 @@ fun DriverStatusContainer(
 }
 
 @Composable
-fun DriverItem(driver: DriverInfo) {
+fun DriverStatusItem(driver: DriverInfo, currentCall: CallInfo?) {
     val driverStatus = remember(driver.status) { DriverStatus.fromString(driver.status) }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+    
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF3A3A3A)),
+        shape = RoundedCornerShape(0.dp)
     ) {
-        Box(
+        Column(
             modifier = Modifier
-                .size(10.dp)
-                .background(
-                    color = when (driverStatus) {
-                        DriverStatus.WAITING -> Color.Green
-                        DriverStatus.ONLINE -> Color.Green
-                        DriverStatus.ON_TRIP -> Color.Red
-                        DriverStatus.PREPARING -> Color(0xFFFFA000)
-                        DriverStatus.OFFLINE -> Color.Gray
-                        else -> Color.Red
-                    },
-                    shape = CircleShape
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .background(
+                            color = when (driverStatus) {
+                                DriverStatus.WAITING -> Color(0xFF4CAF50)
+                                DriverStatus.ONLINE -> Color(0xFF4CAF50)
+                                DriverStatus.ON_TRIP -> Color(0xFFFF5722)
+                                DriverStatus.PREPARING -> Color(0xFFFFAB00)
+                                DriverStatus.OFFLINE -> Color.Gray
+                                else -> Color.Gray
+                            },
+                            shape = CircleShape
+                        )
                 )
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = driver.name,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyMedium
-        )
-        Text(
-            text = driverStatus.getDisplayName(),
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.DarkGray
-        )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = driver.name,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Text(
+                    text = driverStatus.getDisplayName(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = when (driverStatus) {
+                        DriverStatus.WAITING -> Color(0xFF4CAF50)
+                        DriverStatus.ONLINE -> Color(0xFF4CAF50)
+                        DriverStatus.ON_TRIP -> Color(0xFFFF5722)
+                        DriverStatus.PREPARING -> Color(0xFFFFAB00)
+                        DriverStatus.OFFLINE -> Color.Gray
+                        else -> Color.Gray
+                    }
+                )
+            }
+            
+            // 운행중일 때 출발지/도착지 표시
+            if (driverStatus == DriverStatus.ON_TRIP && currentCall != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                val departure = currentCall.departure_set ?: "출발지 미설정"
+                val destination = currentCall.destination_set ?: "도착지 미설정"
+                Text(
+                    text = "$departure → $destination",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.LightGray
+                )
+                currentCall.customerName?.let { customerName ->
+                    Text(
+                        text = "고객: $customerName",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.LightGray
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -800,14 +924,64 @@ fun NewCallAssignmentDialog(
         var departure by remember { mutableStateOf("") }
         var destination by remember { mutableStateOf("") }
         var fareText by remember { mutableStateOf("") }
+        
+        val departureFocusRequester = remember { FocusRequester() }
+        val destinationFocusRequester = remember { FocusRequester() }
+        val fareFocusRequester = remember { FocusRequester() }
+        
+        LaunchedEffect(Unit) {
+            departureFocusRequester.requestFocus()
+        }
+        
         AlertDialog(
             onDismissRequest = { showShareDialog = false },
             title = { Text("공유 정보 입력", fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = departure, onValueChange = { departure = it }, label = { Text("출발지") })
-                    OutlinedTextField(value = destination, onValueChange = { destination = it }, label = { Text("도착지") })
-                    OutlinedTextField(value = fareText, onValueChange = { fareText = it.filter { c -> c.isDigit() } }, label = { Text("요금") })
+                    OutlinedTextField(
+                        value = departure, 
+                        onValueChange = { departure = it }, 
+                        label = { Text("출발지") },
+                        modifier = Modifier.focusRequester(departureFocusRequester),
+                        keyboardOptions = KeyboardOptions(
+                            imeAction = ImeAction.Next
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onNext = { destinationFocusRequester.requestFocus() }
+                        )
+                    )
+                    OutlinedTextField(
+                        value = destination, 
+                        onValueChange = { destination = it }, 
+                        label = { Text("도착지") },
+                        modifier = Modifier.focusRequester(destinationFocusRequester),
+                        keyboardOptions = KeyboardOptions(
+                            imeAction = ImeAction.Next
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onNext = { fareFocusRequester.requestFocus() }
+                        )
+                    )
+                    OutlinedTextField(
+                        value = fareText, 
+                        onValueChange = { fareText = it.filter { c -> c.isDigit() } }, 
+                        label = { Text("요금") },
+                        modifier = Modifier.focusRequester(fareFocusRequester),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Number,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                val fare = fareText.toIntOrNull() ?: 0
+                                if (departure.isNotBlank() && destination.isNotBlank() && fare > 0) {
+                                    onShare(departure, destination, fare)
+                                    showShareDialog = false
+                                    onDismiss()
+                                }
+                            }
+                        )
+                    )
                 }
             },
             confirmButton = {
@@ -833,18 +1007,43 @@ fun SharedCallListContainer(
     onAccept: (SharedCallInfo) -> Unit,
     onSettings: () -> Unit
 ) {
-    Column(modifier) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("공유 콜", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            IconButton(onClick = onSettings) {
-                Icon(Icons.Default.Settings, contentDescription = "공유콜 설정")
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A)),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column {
+            // 타이틀 영역만 패딩 적용
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp), 
+                horizontalArrangement = Arrangement.SpaceBetween, 
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "공유 콜", 
+                    style = MaterialTheme.typography.titleMedium, 
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                IconButton(onClick = onSettings) {
+                    Icon(
+                        Icons.Default.Settings, 
+                        contentDescription = "공유콜 설정",
+                        tint = Color.White
+                    )
+                }
             }
-        }
-        Spacer(Modifier.height(4.dp))
-        LazyColumn(modifier = Modifier.border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))) {
-            items(sharedCalls, key = { it.id }) { sc ->
-                SharedCallCard(sharedCall = sc, onAccept = onAccept)
-                Divider(color = Color.LightGray, thickness = 0.5.dp)
+            // 자식 카드들은 부모 카드의 경계와 일치
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                contentPadding = PaddingValues(bottom = 16.dp) // 하단만 패딩
+            ) {
+                items(sharedCalls, key = { it.id }) { sc ->
+                    SharedCallCard(sharedCall = sc, onAccept = onAccept)
+                }
             }
         }
     }
@@ -852,23 +1051,68 @@ fun SharedCallListContainer(
 
 @Composable
 fun SharedCallCard(sharedCall: SharedCallInfo, onAccept: (SharedCallInfo) -> Unit) {
-    val bgColor = if (sharedCall.status == "OPEN") Color(0xFFFFF59D) else Color.LightGray
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(bgColor)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+    val bgColor = when (sharedCall.status) {
+        "OPEN" -> Color(0xFF3A3A3A)
+        "CLAIMED" -> Color(0xFF2A2A2A)
+        "COMPLETED" -> Color(0xFF1A1A1A) // 더 어두운 색상
+        else -> Color(0xFF2A2A2A)
+    }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = bgColor),
+        shape = RoundedCornerShape(0.dp)
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text("${sharedCall.departure ?: "출발지"} → ${sharedCall.destination ?: "도착지"}", fontWeight = FontWeight.Bold)
-            sharedCall.fare?.let { Text("요금: ${it}원") }
-        }
-        if (sharedCall.status == "OPEN") {
-            Button(onClick = { onAccept(sharedCall) }) { Text("수락") }
-        } else {
-            Text(sharedCall.status)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "${sharedCall.departure ?: "출발지"} → ${sharedCall.destination ?: "도착지"}", 
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                sharedCall.fare?.let { 
+                    Text(
+                        text = "요금: ${it}원",
+                        color = Color.LightGray,
+                        style = MaterialTheme.typography.bodySmall
+                    ) 
+                }
+            }
+            when (sharedCall.status) {
+                "OPEN" -> {
+                    Button(
+                        onClick = { onAccept(sharedCall) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFAB00))
+                    ) { 
+                        Text("수락", color = Color.Black) 
+                    }
+                }
+                "CLAIMED" -> {
+                    Text(
+                        text = "수락됨",
+                        color = Color(0xFFFFAB00),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                "COMPLETED" -> {
+                    Text(
+                        text = "완료",
+                        color = Color(0xFF4CAF50),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                else -> {
+                    Text(
+                        text = sharedCall.status,
+                        color = Color.Gray
+                    )
+                }
+            }
         }
     }
 }
@@ -948,6 +1192,14 @@ fun SharedCallAcceptDialog(
     var fareText by remember { mutableStateOf((sharedCall.fare ?: 0).toString()) }
     var selectedDriver by remember { mutableStateOf<DriverInfo?>(null) }
 
+    val departureFocusRequester = remember { FocusRequester() }
+    val destinationFocusRequester = remember { FocusRequester() }
+    val fareFocusRequester = remember { FocusRequester() }
+    
+    LaunchedEffect(Unit) {
+        departureFocusRequester.requestFocus()
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("공유 콜 수락", fontWeight = FontWeight.Bold) },
@@ -957,19 +1209,43 @@ fun SharedCallAcceptDialog(
                     value = departure,
                     onValueChange = { departure = it },
                     label = { Text("출발지") },
-                    singleLine = true
+                    singleLine = true,
+                    modifier = Modifier.focusRequester(departureFocusRequester),
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onNext = { destinationFocusRequester.requestFocus() }
+                    )
                 )
                 OutlinedTextField(
                     value = destination,
                     onValueChange = { destination = it },
                     label = { Text("도착지") },
-                    singleLine = true
+                    singleLine = true,
+                    modifier = Modifier.focusRequester(destinationFocusRequester),
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onNext = { fareFocusRequester.requestFocus() }
+                    )
                 )
                 OutlinedTextField(
                     value = fareText,
                     onValueChange = { fareText = it.filter { c -> c.isDigit() } },
                     label = { Text("요금") },
-                    singleLine = true
+                    singleLine = true,
+                    modifier = Modifier.focusRequester(fareFocusRequester),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            // 요금 입력 완료 후 기사 선택으로 포커스 이동 (자동 완료는 기사 선택 후)
+                        }
+                    )
                 )
                 Spacer(Modifier.height(8.dp))
                 Text("기사 선택", fontWeight = FontWeight.Medium)
