@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(mkdir:*)",
+      "Bash(./gradlew:*)",
+      "Bash(rm:*)",
+      "Bash(.gradlew assembleDebug)",
+      "Bash(gradlew:*)",
+      "Bash(npm run build:*)",
+      "Bash(cp:*)",
+      "Bash(xcopy:*)",
+      "Bash(copy:*)",
+      "Bash(git stash push:*)",
+      "Bash(git reset:*)",
+      "Bash(mv:*)",
+      "Bash(git stash show:*)",
+      "Bash(git add:*)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "Bash(git commit:*)",
+      "Bash(git rebase:*)"
+    ],
+    "deny": []
+  }
+}

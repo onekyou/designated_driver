@@ -40,6 +40,7 @@ import com.designated.callmanager.ui.login.LoginScreen
 import com.designated.callmanager.ui.login.LoginViewModel
 import com.designated.callmanager.ui.pendingdrivers.PendingDriversScreen
 import com.designated.callmanager.ui.settings.SettingsScreen
+import com.designated.callmanager.ui.settlement.SettlementTabHost
 import com.designated.callmanager.ui.signup.SignUpScreen
 import com.designated.callmanager.ui.theme.CallManagerTheme
 import com.google.firebase.auth.FirebaseAuth
@@ -314,9 +315,9 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         Screen.Settlement -> {
-                            com.designated.callmanager.ui.settlement.SettlementScreen(
-                                onNavigateBack = { screenState = Screen.Settings },
-                                onNavigateHome = { screenState = Screen.Dashboard }
+                            SettlementTabHost(
+                                onBack = { screenState = Screen.Settings },
+                                onHome = { screenState = Screen.Dashboard }
                             )
                         }
                     }
