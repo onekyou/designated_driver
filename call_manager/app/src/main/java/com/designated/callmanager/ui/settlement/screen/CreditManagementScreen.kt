@@ -40,6 +40,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import android.content.Context
 import java.text.NumberFormat
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.runtime.LaunchedEffect
 
 @Composable
 fun CreditManagementScreen(vm: SettlementViewModel = viewModel()) {
@@ -76,11 +83,37 @@ fun CreditManagementScreen(vm: SettlementViewModel = viewModel()) {
     }
 
     if (showCollectDialog && selectedPerson != null) {
+        val collectFocusRequester = remember { FocusRequester() }
+        
+        LaunchedEffect(showCollectDialog) {
+            if (showCollectDialog) {
+                collectFocusRequester.requestFocus()
+            }
+        }
+        
         AlertDialog(
             onDismissRequest = { showCollectDialog = false },
             title = { Text("금액 회수") },
             text = {
-                OutlinedTextField(value = collectAmountText, onValueChange = { collectAmountText = it.filter { ch -> ch.isDigit() } }, label = { Text("회수 금액") })
+                OutlinedTextField(
+                    value = collectAmountText, 
+                    onValueChange = { collectAmountText = it.filter { ch -> ch.isDigit() } }, 
+                    label = { Text("회수 금액") },
+                    modifier = Modifier.focusRequester(collectFocusRequester),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            val amt = collectAmountText.toIntOrNull() ?: 0
+                            if (amt > 0) {
+                                vm.reduceCredit(selectedPerson!!.id, amt)
+                                showCollectDialog = false
+                            }
+                        }
+                    )
+                )
             },
             confirmButton = {
                 TextButton(onClick = {

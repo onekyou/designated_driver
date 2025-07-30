@@ -8,7 +8,7 @@ import com.google.firebase.firestore.PropertyName
  * Firestore의 기사 정보를 나타내는 데이터 클래스 (Firestore 구조 기준)
  */
 data class DriverInfo(
-    @PropertyName("id") var id: String = "", // Firestore 문서 ID
+    var id: String = "", // Firestore 문서 ID (수동으로 설정, PropertyName 매핑 안함)
     @PropertyName("authUid") var authUid: String? = null, // Firestore 'authUid' 필드 매핑 (로그 기준)
     @PropertyName("name") var name: String = "",
     @PropertyName("status") var status: String = Constants.DRIVER_STATUS_OFFLINE, // enum 대신 상수 사용

@@ -98,7 +98,9 @@ class MainActivity : ComponentActivity() {
     // Constants for Intent Actions and Extras
     companion object {
         const val ACTION_SHOW_CALL_POPUP = "ACTION_SHOW_CALL_POPUP"
+        const val ACTION_SHOW_SHARED_CALL = "ACTION_SHOW_SHARED_CALL"
         const val EXTRA_CALL_ID = "callId" // FCM 서비스와 키 통일
+        const val EXTRA_SHARED_CALL_ID = "sharedCallId"
     }
 
     // 권한 요청 결과 처리
@@ -333,21 +335,39 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
-        if (intent?.action == ACTION_SHOW_CALL_POPUP) {
-            val callId = intent.getStringExtra(EXTRA_CALL_ID)
-            if (callId != null) {
-                Log.d(tag, "handleIntent: ACTION_SHOW_CALL_POPUP 확인. callId: $callId")
-                lifecycleScope.launch {
-                    if (_screenState.value == Screen.Dashboard) {
-                        Log.d(tag, "Dashboard에서 즉시 다이얼로그 표시")
-                        dashboardViewModel.showCallDialog(callId)
-                    } else {
-                        Log.w(tag, "Dashboard가 아니므로 팝업을 보류합니다. 현재 화면: ${_screenState.value}")
-                        _pendingCallDialogId.value = callId
+        when (intent?.action) {
+            ACTION_SHOW_CALL_POPUP -> {
+                val callId = intent.getStringExtra(EXTRA_CALL_ID)
+                if (callId != null) {
+                    Log.d(tag, "handleIntent: ACTION_SHOW_CALL_POPUP 확인. callId: $callId")
+                    lifecycleScope.launch {
+                        if (_screenState.value == Screen.Dashboard) {
+                            Log.d(tag, "Dashboard에서 즉시 다이얼로그 표시")
+                            dashboardViewModel.showCallDialog(callId)
+                        } else {
+                            Log.w(tag, "Dashboard가 아니므로 팝업을 보류합니다. 현재 화면: ${_screenState.value}")
+                            _pendingCallDialogId.value = callId
+                        }
                     }
+                } else {
+                    Log.w(tag, "handleIntent: callId가 null입니다.")
                 }
-            } else {
-                Log.w(tag, "handleIntent: callId가 null입니다.")
+            }
+            ACTION_SHOW_SHARED_CALL -> {
+                val sharedCallId = intent.getStringExtra(EXTRA_SHARED_CALL_ID)
+                if (sharedCallId != null) {
+                    Log.d(tag, "handleIntent: ACTION_SHOW_SHARED_CALL 확인. sharedCallId: $sharedCallId")
+                    lifecycleScope.launch {
+                        // 공유콜 알림 클릭 시 대시보드로 이동 (공유콜 섹션에 포커스)
+                        if (_screenState.value != Screen.Dashboard) {
+                            _screenState.value = Screen.Dashboard
+                        }
+                        // 공유콜 섹션으로 스크롤하거나 하이라이트 효과 추가 가능
+                        Log.d(tag, "공유콜 $sharedCallId 에 대한 알림으로 대시보드 이동")
+                    }
+                } else {
+                    Log.w(tag, "handleIntent: sharedCallId가 null입니다.")
+                }
             }
         }
     }

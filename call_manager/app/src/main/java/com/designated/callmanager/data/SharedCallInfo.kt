@@ -16,5 +16,9 @@ data class SharedCallInfo(
     val targetRegionId: String = "",
     val claimedOfficeId: String? = null,
     val createdBy: String = "",
-    val timestamp: Timestamp? = null
+    val timestamp: Timestamp? = null,
+    val phoneNumber: String? = null,  // 고객 전화번호 (선택)
+    val claimedAt: Timestamp? = null, // CLAIMED 시각
+    val completedAt: Timestamp? = null, // COMPLETED 시각
+    val destCallId: String? = null    // 복사된 콜의 ID
 ) 

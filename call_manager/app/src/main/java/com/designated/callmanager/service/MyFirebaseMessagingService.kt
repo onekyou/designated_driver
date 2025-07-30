@@ -27,6 +27,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         private const val NEW_CALL_CHANNEL_ID = "new_call_fcm_channel_v2"
         private const val STATUS_CHANGE_CHANNEL_ID = "status_change_fcm_channel"
         private const val DRIVER_UPDATE_CHANNEL_ID = "driver_update_fcm_channel"
+        private const val SHARED_CALL_CHANNEL_ID = "shared_call_fcm_channel"
     }
 
     override fun onCreate() {
@@ -47,7 +48,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         val messageType = remoteMessage.data["type"] ?: return
-        val callId = remoteMessage.data["callId"] ?: return
+        
+        // 공유콜의 경우 callId 대신 sharedCallId 사용
+        val callId = remoteMessage.data["callId"] 
+            ?: remoteMessage.data["sharedCallId"] 
+            ?: return
 
         // 필요 없는 알림 타입 필터링
         val ignoredTypes = setOf("DRIVER_ACCEPT", "DRIVER_REJECT", "SETTLED", "AWAITING_SETTLEMENT")
@@ -58,6 +63,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         when (messageType) {
             "NEW_CALL" -> handleNewCall(remoteMessage, callId)
+            "NEW_SHARED_CALL" -> handleNewSharedCall(remoteMessage, callId)
             "STATUS_CHANGE" -> handleStatusChange(remoteMessage, callId)  // 운행 시작(IN_PROGRESS)만 실 알림
             "DRIVER_STATUS_UPDATE" -> handleDriverStatusUpdate(remoteMessage, callId)
             else -> Log.w(TAG, "알 수 없는 메시지 타입: $messageType")
@@ -197,8 +203,24 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 setShowBadge(true)
             }
             
+            // 공유콜 채널
+            val sharedCallChannel = NotificationChannel(
+                SHARED_CALL_CHANNEL_ID,
+                "공유콜 알림",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "새로운 공유콜 도착 알림"
+                enableLights(true)
+                lightColor = Color.YELLOW
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 500, 200, 500, 200, 500)
+                setShowBadge(true)
+                lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+                setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION), null)
+            }
+            
             notificationManager.createNotificationChannels(listOf(
-                newCallChannel, statusChangeChannel, driverUpdateChannel
+                newCallChannel, statusChangeChannel, driverUpdateChannel, sharedCallChannel
             ))
             
             Log.i(TAG, "알림 채널 생성 완료: ${NEW_CALL_CHANNEL_ID}")
@@ -223,6 +245,27 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             autoCancel = true,
             isNewCall = true,
             timeoutAfter = 60000 // 1분
+        )
+    }
+
+    private fun handleNewSharedCall(remoteMessage: RemoteMessage, sharedCallId: String) {
+        Log.i(TAG, "🔄 새로운 공유콜 FCM 알림 처리: $sharedCallId")
+        
+        val departure = remoteMessage.data["departure"] ?: "출발지"
+        val destination = remoteMessage.data["destination"] ?: "도착지"
+        val fare = remoteMessage.data["fare"] ?: "0"
+        
+        showNotification(
+            channelId = SHARED_CALL_CHANNEL_ID,
+            notificationId = "shared_call_$sharedCallId".hashCode(),
+            title = "🔄 새로운 공유콜!",
+            content = "$departure → $destination",
+            bigText = "출발지: $departure\n도착지: $destination\n요금: ${fare}원\n\n다른 사무실에서 공유한 콜입니다.",
+            callId = sharedCallId,
+            color = ContextCompat.getColor(this, android.R.color.holo_orange_dark),
+            autoCancel = true,
+            isSharedCall = true,
+            timeoutAfter = 120000 // 2분
         )
     }
 
@@ -282,15 +325,22 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         color: Int,
         autoCancel: Boolean,
         isNewCall: Boolean = false,
+        isSharedCall: Boolean = false,
         timeoutAfter: Long? = null
     ) {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         // ⭐️ 클릭 시 실행될 인텐트 생성
         val intent = Intent(this, MainActivity::class.java).apply {
-            if (isNewCall) {
-                action = "ACTION_SHOW_CALL_POPUP"
-                putExtra("callId", callId)
+            when {
+                isNewCall -> {
+                    action = "ACTION_SHOW_CALL_POPUP"
+                    putExtra("callId", callId)
+                }
+                isSharedCall -> {
+                    action = "ACTION_SHOW_SHARED_CALL"
+                    putExtra("sharedCallId", callId)
+                }
             }
             // ⭐️ 앱을 새로 시작하거나 기존의 것을 맨 위로 올림
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -309,8 +359,16 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         // ⭐️ 전체 화면 인텐트 (헤드업 알림용)
         val fullScreenIntent = Intent(this, MainActivity::class.java).apply {
-            action = "ACTION_SHOW_CALL_POPUP"
-            putExtra("callId", callId)
+            when {
+                isNewCall -> {
+                    action = "ACTION_SHOW_CALL_POPUP"
+                    putExtra("callId", callId)
+                }
+                isSharedCall -> {
+                    action = "ACTION_SHOW_SHARED_CALL"
+                    putExtra("sharedCallId", callId)
+                }
+            }
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
 
@@ -339,8 +397,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             .setContentIntent(pendingIntent)
             .setOngoing(!autoCancel) // ⭐️ 새로운 콜은 지속적으로 표시
 
-        // ⭐️ 새로운 콜인 경우 전체 화면 인텐트 및 사운드 추가
-        if (isNewCall) {
+        // ⭐️ 새로운 콜이나 공유콜인 경우 전체 화면 인텐트 및 사운드 추가
+        if (isNewCall || isSharedCall) {
             notificationBuilder.setFullScreenIntent(fullScreenPendingIntent, true)
             // ⭐️ 알림 소리 명시적 설정
             val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)

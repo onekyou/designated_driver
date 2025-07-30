@@ -9,6 +9,7 @@ enum class CallStatus(val firestoreValue: String, val displayName: String) {
     IN_PROGRESS("IN_PROGRESS", "운행중"),
     AWAITING_SETTLEMENT("AWAITING_SETTLEMENT", "정산대기"),
     COMPLETED("COMPLETED", "완료"),
+    SHARED_OUT("SHARED_OUT", "공유완료"),
     CANCELED("CANCELED", "취소"),
     HOLD("HOLD", "보류"),
     UNKNOWN("UNKNOWN", "알수없음");
