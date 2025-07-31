@@ -22,6 +22,7 @@ import com.designated.driverapp.ui.state.LocationFetchStatus
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
@@ -368,6 +369,76 @@ class DriverViewModel @Inject constructor(
     fun rejectCall(callId: String) {
         viewModelScope.launch {
             // Implementation of rejectCall method
+        }
+    }
+    
+    /**
+     * 운행 준비 단계에서 운행을 취소하는 함수
+     * - 내부콜: 콜 상태를 HOLD로 변경
+     * - 공유콜: 콜 상태를 HOLD로 변경 + 원본 shared_calls를 OPEN으로 되돌림
+     * - 기사 상태를 WAITING으로 변경
+     * - assignedDriverId를 null로 변경하여 다른 기사가 배정받을 수 있도록 함
+     */
+    fun cancelTrip(callId: String, cancelReason: String = "운행취소") = performFirestoreUpdate {
+        Log.d(TAG, "cancelTrip called for callId: $callId, cancelReason: $cancelReason")
+        val (regionId, officeId) = getDriverLocationInfo()
+        val driverId = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
+        
+        val callRef = firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
+            .collection(Constants.COLLECTION_OFFICES).document(officeId)
+            .collection(Constants.COLLECTION_CALLS).document(callId)
+            
+        // 콜 정보 먼저 확인
+        val callSnapshot = callRef.get().await()
+        val callInfo = callSnapshot.toObject<CallInfo>()
+        Log.d(TAG, "Retrieved call info: callType=${callInfo?.callType}, sourceSharedCallId=${callInfo?.sourceSharedCallId}, status=${callInfo?.status}")
+        
+        // 공유콜인 경우와 일반콜인 경우 다르게 처리
+        if (callInfo?.callType == "SHARED") {
+            // 공유콜인 경우: 수락 사무실에서는 콜 삭제하고 취소 알림 표시
+            Log.d(TAG, "Cancelling shared call - deleting from accepting office")
+            
+            // 취소 정보를 포함하여 콜 업데이트 후 삭제
+            callRef.update(mapOf(
+                Constants.FIELD_STATUS to "CANCELLED_BY_DRIVER",
+                "cancelReason" to cancelReason,
+                "cancelledAt" to FieldValue.serverTimestamp(),
+                "cancelledByDriver" to true
+            )).await()
+            
+            Log.d(TAG, "Shared call marked as cancelled by driver")
+        } else {
+            // 일반콜인 경우: HOLD 상태로 변경
+            val callUpdates = mapOf(
+                Constants.FIELD_STATUS to "HOLD", // 보류 상태로 변경
+                "assignedDriverId" to null, // 기사 배정 해제
+                "assignedDriverName" to null,
+                "assignedDriverPhone" to null,
+                "cancelReason" to cancelReason, // 취소 사유 추가
+                Constants.FIELD_UPDATED_AT to FieldValue.serverTimestamp()
+            )
+            Log.d(TAG, "Updating internal call with: $callUpdates")
+            callRef.update(callUpdates).await()
+            Log.d(TAG, "Internal call update completed successfully")
+        }
+        
+        
+        // 기사 상태를 WAITING(대기중)으로 변경
+        val driverRef = firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
+            .collection(Constants.COLLECTION_OFFICES).document(officeId)
+            .collection(Constants.COLLECTION_DRIVERS).document(driverId)
+            
+        driverRef.update(Constants.FIELD_STATUS, DriverStatus.WAITING.value).await()
+        
+        Log.d(TAG, "Call cancelled successfully, callType=${callInfo?.callType}")
+        
+        // UI 상태 업데이트 - activeCall을 null로 설정하여 대기 화면으로 돌아가도록
+        _uiState.update { current ->
+            current.copy(
+                activeCall = null,
+                isLoading = false,
+                navigateToHistorySettlement = false // 히스토리 페이지로 이동하지 않도록 설정
+            )
         }
     }
 

@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -66,6 +67,8 @@ private const val TAG = "DashboardScreen"
 fun CallStatus.getDisplayName(): String {
     return when (this) {
         CallStatus.WAITING -> "대기"
+        CallStatus.SHARED_WAITING -> "공유대기"
+        CallStatus.CLAIMED -> "수락됨"
         CallStatus.PENDING -> "기사승인대기"
         CallStatus.ASSIGNED -> "배차완료"
         CallStatus.ACCEPTED -> "수락"
@@ -105,6 +108,7 @@ fun DashboardScreen(
     val drivers by viewModel.drivers.collectAsStateWithLifecycle()
     val sharedCalls by viewModel.sharedCalls.collectAsState()
     val officeName by viewModel.officeName.collectAsStateWithLifecycle()
+    val officeId by viewModel.officeId.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     var callIdForDriverAssignment by remember { mutableStateOf<String?>(null) }
@@ -129,6 +133,10 @@ fun DashboardScreen(
     // ★★★ 새로운 콜 팝업 상태 추가 ★★★
     val showNewCallPopup by viewModel.showNewCallPopup.collectAsStateWithLifecycle()
     val newCallInfo by viewModel.newCallInfo.collectAsStateWithLifecycle()
+
+    // 공유콜 취소 알림 다이얼로그 상태 추가
+    val showSharedCallCancelledDialog by viewModel.showSharedCallCancelledDialog.collectAsStateWithLifecycle()
+    val sharedCancelledCallInfo by viewModel.cancelledCallInfo.collectAsStateWithLifecycle()
 
     // 디버그 로그 추가
     Log.d(TAG, "Recomposing... showNewCallPopup: $showNewCallPopup, newCallInfo is null: ${newCallInfo == null}")
@@ -160,6 +168,7 @@ fun DashboardScreen(
             else -> { /* Idle, Loading */ }
         }
     }
+
 
     // ★★★ 알림 설정을 확인하여 알림음 재생 ★★★
     LaunchedEffect(showDriverLoginPopup, showApprovalPopup, showDriverLogoutPopup, showTripStartedPopup, showTripCompletedPopup, showCanceledCallPopup) {
@@ -258,7 +267,7 @@ fun DashboardScreen(
     if(showTripCompletedPopup && tripCompletedInfo != null){
         InfoPopup(
             title = "운행 완료",
-            content = "${tripCompletedInfo!!.first} 기사님이 ${tripCompletedInfo!!.second} 고객님의 운행을 완료했습니다.",
+            content = "${tripCompletedInfo!!.first}${if (tripCompletedInfo!!.first.endsWith("님")) "" else " 기사님"}이 ${tripCompletedInfo!!.second} 고객님의 운행을 완료했습니다.",
             onDismiss = { viewModel.dismissTripCompletedPopup() }
         )
     }
@@ -266,7 +275,7 @@ fun DashboardScreen(
     if(showCanceledCallPopup && canceledCallInfo != null){
         InfoPopup(
             title = "호출 취소",
-            content = "${canceledCallInfo!!.first} 기사님의 ${canceledCallInfo!!.second} 고객 호출이 취소되었습니다.",
+            content = "${canceledCallInfo!!.first}${if (canceledCallInfo!!.first.endsWith("님")) "" else " 기사님"}의 ${canceledCallInfo!!.second} 고객 호출이 취소되었습니다.",
             onDismiss = { viewModel.dismissCanceledCallPopup() }
         )
     }
@@ -289,12 +298,22 @@ fun DashboardScreen(
             onDriverSelect = { driver ->
                 viewModel.assignNewCall(driver.id)
             },
-            onHold = { 
-                viewModel.updateCallStatus(newCallInfo!!.id, CallStatus.HOLD)
-                viewModel.dismissNewCallPopup()
+            onDelete = {
+                viewModel.deleteCall(newCallInfo!!.id)
             },
             onShare = { departure, destination, fare ->
                 viewModel.shareCall(newCallInfo!!, departure, destination, fare)
+            }
+        )
+    }
+
+    // 공유콜 취소 알림 다이얼로그
+    if (showSharedCallCancelledDialog && sharedCancelledCallInfo != null) {
+        SharedCallCancelledDialog(
+            callInfo = sharedCancelledCallInfo!!,
+            onDismiss = { viewModel.dismissSharedCallCancelledDialog() },
+            onReshare = { departure, destination, fare ->
+                viewModel.shareCall(sharedCancelledCallInfo!!, departure, destination, fare)
             }
         )
     }
@@ -352,7 +371,14 @@ fun DashboardScreen(
                         selectedSharedCall = call
                         showSharedAcceptDialog = true
                     },
-                    onSettings = { showSharedSettings = true }
+                    onSettings = { showSharedSettings = true },
+                    onReopen = { call ->
+                        viewModel.reopenSharedCall(call.id)
+                    },
+                    onDelete = { call ->
+                        viewModel.deleteSharedCall(call.id)
+                    },
+                    currentOfficeId = officeId
                 )
 
                 // 기사 상태 카드 (비율 4)
@@ -483,12 +509,23 @@ fun CallCard(call: CallInfo, onCallClick: (CallInfo) -> Unit) {
                     call.customerAddress
                 }) ?: "정보 없음"
 
-                Text(
-                    text = displayText, 
-                    style = MaterialTheme.typography.bodyMedium, 
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (call.callType == "SHARED") {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "공유콜",
+                            modifier = Modifier.size(16.dp),
+                            tint = Color.Yellow
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                    Text(
+                        text = displayText, 
+                        style = MaterialTheme.typography.bodyMedium, 
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
                 Text(
                     text = formatTimeAgo(call.timestamp.toDate().time),
                     style = MaterialTheme.typography.bodySmall,
@@ -758,7 +795,7 @@ fun TripStartedPopup(driverName: String, driverPhone: String?, tripSummary: Stri
         title = { Text("운행 시작 알림") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("$driverName 기사님", fontWeight = FontWeight.Bold)
+                Text("$driverName${if (driverName.endsWith("님")) "" else " 기사님"}", fontWeight = FontWeight.Bold)
                 Text(tripSummary)
             }
         },
@@ -798,12 +835,13 @@ fun NewCallAssignmentDialog(
     availableDrivers: List<DriverInfo>,
     onDismiss: () -> Unit,
     onDriverSelect: (DriverInfo) -> Unit,
-    onHold: () -> Unit,
+    onDelete: () -> Unit,
     onShare: (departure: String, destination: String, fare: Int) -> Unit
 ) {
     val context = LocalContext.current
     
     var showShareDialog by remember { mutableStateOf(false) }
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     
     AlertDialog(
         onDismissRequest = {
@@ -899,24 +937,26 @@ fun NewCallAssignmentDialog(
                     } catch (e: Exception) {
                         Log.e(TAG, "Error stopping notification sound", e)
                     }
-                    onHold()
-                }) { Text("보류") }
-
-                TextButton(onClick = {
-                    try {
-                        val r = RingtoneManager.getRingtone(context.applicationContext, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
-                        if (r.isPlaying) r.stop()
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error stopping notification sound", e)
-                    }
                     onDismiss()
                 }) { Text("나중에") }
 
                 TextButton(onClick = { showShareDialog = true }) { Text("공유") }
+                
+                TextButton(
+                    onClick = { 
+                        try {
+                            val r = RingtoneManager.getRingtone(context.applicationContext, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+                            if (r.isPlaying) r.stop()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error stopping notification sound", e)
+                        }
+                        showDeleteConfirmDialog = true 
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) { Text("삭제") }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = { showShareDialog = false }) { Text("취소") }
         }
     )
 
@@ -997,6 +1037,42 @@ fun NewCallAssignmentDialog(
             dismissButton = { TextButton(onClick = { showShareDialog = false }) { Text("취소") } }
         )
     }
+    
+    // 삭제 확인 다이얼로그
+    if (showDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            icon = { Icon(Icons.Default.Warning, contentDescription = "경고") },
+            title = { Text("호출 삭제 확인") },
+            text = { 
+                Column {
+                    Text("이 호출을 정말 삭제하시겠습니까?")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "삭제된 호출은 복구할 수 없습니다.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteConfirmDialog = false
+                        onDelete()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) { Text("삭제") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmDialog = false }) { 
+                    Text("취소") 
+                }
+            }
+        )
+    }
 }
 
 // 공유 콜 리스트 컨테이너
@@ -1005,7 +1081,10 @@ fun SharedCallListContainer(
     modifier: Modifier = Modifier,
     sharedCalls: List<SharedCallInfo>,
     onAccept: (SharedCallInfo) -> Unit,
-    onSettings: () -> Unit
+    onSettings: () -> Unit,
+    onReopen: ((SharedCallInfo) -> Unit)? = null,
+    onDelete: ((SharedCallInfo) -> Unit)? = null,
+    currentOfficeId: String? = null
 ) {
     Card(
         modifier = modifier,
@@ -1042,7 +1121,13 @@ fun SharedCallListContainer(
                 contentPadding = PaddingValues(bottom = 16.dp) // 하단만 패딩
             ) {
                 items(sharedCalls, key = { it.id }) { sc ->
-                    SharedCallCard(sharedCall = sc, onAccept = onAccept)
+                    SharedCallCard(
+                        sharedCall = sc, 
+                        onAccept = onAccept,
+                        onReopen = onReopen,
+                        onDelete = onDelete,
+                        isSourceOffice = currentOfficeId == sc.sourceOfficeId
+                    )
                 }
             }
         }
@@ -1050,11 +1135,18 @@ fun SharedCallListContainer(
 }
 
 @Composable
-fun SharedCallCard(sharedCall: SharedCallInfo, onAccept: (SharedCallInfo) -> Unit) {
+fun SharedCallCard(
+    sharedCall: SharedCallInfo, 
+    onAccept: (SharedCallInfo) -> Unit,
+    onReopen: ((SharedCallInfo) -> Unit)? = null,
+    onDelete: ((SharedCallInfo) -> Unit)? = null,
+    isSourceOffice: Boolean = false
+) {
     val bgColor = when (sharedCall.status) {
         "OPEN" -> Color(0xFF3A3A3A)
         "CLAIMED" -> Color(0xFF2A2A2A)
-        "COMPLETED" -> Color(0xFF1A1A1A) // 더 어두운 색상
+        "COMPLETED" -> Color(0xFF1A1A1A)
+        "CANCELLED_BY_TARGET" -> Color(0xFF5D4037) // 갈색 계열로 취소 상태 표시
         else -> Color(0xFF2A2A2A)
     }
     Card(
@@ -1105,6 +1197,49 @@ fun SharedCallCard(sharedCall: SharedCallInfo, onAccept: (SharedCallInfo) -> Uni
                         color = Color(0xFF4CAF50),
                         fontWeight = FontWeight.Bold
                     )
+                }
+                "CANCELLED_BY_TARGET" -> {
+                    if (isSourceOffice) {
+                        // 원본 사무실에서는 재공유 또는 삭제 가능
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = "취소됨",
+                                color = Color(0xFFFF7043),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.align(Alignment.CenterVertically)
+                            )
+                            onReopen?.let { reopen ->
+                                IconButton(
+                                    onClick = { reopen(sharedCall) },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Refresh,
+                                        contentDescription = "재공유",
+                                        tint = Color(0xFF4CAF50)
+                                    )
+                                }
+                            }
+                            onDelete?.let { delete ->
+                                IconButton(
+                                    onClick = { delete(sharedCall) },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = "삭제",
+                                        tint = Color(0xFFE57373)
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "취소됨",
+                            color = Color(0xFFFF7043),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
                 else -> {
                     Text(
@@ -1285,6 +1420,105 @@ fun SharedCallAcceptDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("취소") }
+        }
+    )
+}
+
+@Composable
+fun SharedCallCancelledDialog(
+    callInfo: CallInfo,
+    onDismiss: () -> Unit,
+    onReshare: (departure: String, destination: String, fare: Int) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Filled.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("🚫 공유콜이 취소되었습니다")
+            }
+        },
+        text = {
+            Column {
+                Text(
+                    text = "수락한 사무실의 기사가 공유콜을 취소했습니다.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row {
+                            Text("📞 전화번호: ", fontWeight = FontWeight.Medium)
+                            Text(callInfo.phoneNumber)
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row {
+                            Text("📍 출발지: ", fontWeight = FontWeight.Medium)
+                            Text(callInfo.departure ?: "미설정")
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row {
+                            Text("🏁 도착지: ", fontWeight = FontWeight.Medium)
+                            Text(callInfo.destination ?: "미설정")
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row {
+                            Text("💰 요금: ", fontWeight = FontWeight.Medium)
+                            Text("${callInfo.fare ?: 0}원")
+                        }
+                        val cancelReason = callInfo.cancelReason
+                        if (!cancelReason.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row {
+                                Text("❌ 취소사유: ", fontWeight = FontWeight.Medium)
+                                Text(
+                                    cancelReason, 
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "콜이 대기상태로 복구되었습니다. 다시 기사를 배정하거나 재공유할 수 있습니다.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onReshare(
+                        callInfo.departure ?: "",
+                        callInfo.destination ?: "",
+                        (callInfo.fare ?: 0).toInt()
+                    )
+                    onDismiss()
+                }
+            ) {
+                Text("재공유")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("확인")
+            }
         }
     )
 }

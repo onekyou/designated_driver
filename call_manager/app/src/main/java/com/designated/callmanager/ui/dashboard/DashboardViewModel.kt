@@ -199,8 +199,15 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                         DocumentChange.Type.ADDED, DocumentChange.Type.MODIFIED -> {
                             if (dc.type == DocumentChange.Type.ADDED && 
                                 callInfo.status == CallStatus.WAITING.firestoreValue) {
-                                _newCallInfo.value = callInfo
-                                _showNewCallPopup.value = true
+                                Log.d(TAG, "새로운 WAITING 콜 감지: callId=${callInfo.id}, callType=${callInfo.callType}")
+                                
+                                if (callInfo.callType != "SHARED") { // 공유콜인 경우 팝업 표시 안함
+                                    Log.d(TAG, "일반 콜이므로 팝업 표시: ${callInfo.id}")
+                                    _newCallInfo.value = callInfo
+                                    _showNewCallPopup.value = true
+                                } else {
+                                    Log.d(TAG, "공유콜이므로 팝업 표시 안함: ${callInfo.id}")
+                                }
                             }
                             if (callInfo.status == CallStatus.IN_PROGRESS.firestoreValue && previousStatusMap[doc.id] != CallStatus.IN_PROGRESS.firestoreValue) {
                                 val tripSummary = buildString {
@@ -218,8 +225,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                                         phone = driverCache.values.firstOrNull { it.id == dId }?.phoneNumber
                                     }
                                 }
+                                val driverDisplayName = if (callInfo.callType == "SHARED") {
+                                    "공유 기사님"
+                                } else {
+                                    callInfo.assignedDriverName ?: "기사"
+                                }
                                 _tripStartedInfo.value = Triple(
-                                    callInfo.assignedDriverName ?: "기사",
+                                    driverDisplayName,
                                     phone,
                                     tripSummary
                                 )
@@ -227,7 +239,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                             }
                             if (callInfo.status == CallStatus.COMPLETED.firestoreValue && previousStatusMap[doc.id] != CallStatus.COMPLETED.firestoreValue) {
                                 if (lastCompletedCallId != doc.id) {
-                                    val driverName = callInfo.assignedDriverName ?: "기사"
+                                    val driverName = if (callInfo.callType == "SHARED") {
+                                        "공유 기사님"
+                                    } else {
+                                        callInfo.assignedDriverName ?: "기사"
+                                    }
                                     val customerName: String = callInfo.customerName?.takeIf { it.isNotBlank() } ?: "고객"
                                     _tripCompletedInfo.value = Pair(driverName, customerName)
                                     _showTripCompletedPopup.value = true
@@ -306,11 +322,10 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             _sharedCalls.value = sharedMap.values.sortedByDescending { it.timestamp?.seconds ?: 0 }
         }
 
-        // Listener A: region 내 OPEN / CLAIMED(내 사무실) 콜
-        val statuses = listOf("OPEN", "CLAIMED")
+        // Listener A: region 내 OPEN 콜만 표시 (CLAIMED는 내부콜로 이동하므로 숨김)
         val listenerA = firestore.collection("shared_calls")
             .whereEqualTo("targetRegionId", regionId)
-            .whereIn("status", statuses)
+            .whereEqualTo("status", "OPEN")
             .addSnapshotListener { snapshots, e ->
                 if (e != null) {
                     Log.w(TAG, "[SharedCalls] Listener failed.", e)
@@ -620,6 +635,49 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         _callInfoForDialog.value = null
     }
 
+    // 공유콜 취소 알림 다이얼로그 관련 상태 및 메서드
+    private val _showSharedCallCancelledDialog = MutableStateFlow(false)
+    val showSharedCallCancelledDialog: StateFlow<Boolean> = _showSharedCallCancelledDialog.asStateFlow()
+
+    private val _cancelledCallInfo = MutableStateFlow<CallInfo?>(null)
+    val cancelledCallInfo: StateFlow<CallInfo?> = _cancelledCallInfo.asStateFlow()
+
+    fun showSharedCallCancelledDialog(callId: String) {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "showSharedCallCancelledDialog: callId = $callId")
+                val region = _regionId.value ?: return@launch
+                val office = _officeId.value ?: return@launch
+
+                val callDocument = firestore.collection("regions").document(region)
+                    .collection("offices").document(office)
+                    .collection("calls").document(callId)
+                    .get().await()
+
+                if (callDocument.exists()) {
+                    val callInfo = parseCallDocument(callDocument)
+                    if (callInfo != null) {
+                        Log.d(TAG, "showSharedCallCancelledDialog: 콜 정보 로드 성공")
+                        _cancelledCallInfo.value = callInfo
+                        _showSharedCallCancelledDialog.value = true
+                    } else {
+                        Log.w(TAG, "showSharedCallCancelledDialog: 콜 문서 파싱 실패")
+                    }
+                } else {
+                    Log.w(TAG, "showSharedCallCancelledDialog: 콜 문서가 존재하지 않음")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "showSharedCallCancelledDialog: 오류 발생", e)
+            }
+        }
+    }
+
+    fun dismissSharedCallCancelledDialog() {
+        _showSharedCallCancelledDialog.value = false
+        _cancelledCallInfo.value = null
+    }
+
+
     fun approveDriver(driverId: String) {
         getOfficeRef()?.collection("designated_drivers")?.document(driverId)?.update("status", "대기중")
         dismissApprovalPopup()
@@ -709,6 +767,39 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /**
+     * 콜을 Firebase와 로컬 캐시에서 삭제
+     */
+    fun deleteCall(callId: String) {
+        val region = _regionId.value ?: return
+        val office = _officeId.value ?: return
+
+        viewModelScope.launch {
+            try {
+                // Firebase에서 콜 삭제
+                firestore.collection("regions").document(region)
+                    .collection("offices").document(office)
+                    .collection("calls").document(callId)
+                    .delete()
+                    .await()
+                
+                Log.d(TAG, "Call deleted successfully: $callId")
+                
+                // 로컬 캐시에서도 제거
+                callsCache.remove(callId)
+                previousStatusMap.remove(callId)
+                _calls.value = callsCache.values.toList()
+                
+                // 새로운 콜 팝업이 열려있다면 닫기
+                if (_newCallInfo.value?.id == callId) {
+                    dismissNewCallPopup()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error deleting call", e)
+            }
+        }
+    }
+
     // 기존 수동 배차 로직은 보류 상태로 두고 사용하지 않음.
     // fun createManualCall(driverId: String) { ... }
 
@@ -777,16 +868,29 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     "targetRegionId" to region, // 동일 지역 한정
                     "createdBy" to (auth.currentUser?.uid ?: ""),
                     "phoneNumber" to callInfo.phoneNumber,
+                    "originalCallId" to callInfo.id, // 원본 콜 ID 저장
                     "timestamp" to Timestamp.now()
                 )
                 docRef.set(data).await()
                 Log.d(TAG, "Shared call uploaded: ${docRef.id}")
 
-                // 원본 콜 상태를 SHARED_OUT 으로 업데이트
+                // 원본 콜을 공유콜로 표시하고 내부 목록에 유지
                 val origCallRef = firestore.collection("regions").document(region)
                     .collection("offices").document(office)
                     .collection("calls").document(callInfo.id)
-                origCallRef.update("status", CallStatus.SHARED_OUT.firestoreValue).await()
+                
+                val callUpdates = mapOf(
+                    "callType" to "SHARED",
+                    "status" to "SHARED_WAITING", // 공유 대기 상태로 명확히 구분
+                    "sourceSharedCallId" to docRef.id,
+                    "departure_set" to departure,
+                    "destination_set" to destination,
+                    "fare_set" to fare,
+                    "updatedAt" to Timestamp.now()
+                )
+                Log.d(TAG, "Updating original call with: $callUpdates")
+                origCallRef.update(callUpdates).await()
+                Log.d(TAG, "Original call updated successfully")
             } catch (e: Exception) {
                 Log.e(TAG, "Error sharing call", e)
             }
@@ -860,6 +964,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     driverId?.let { 
                         updateMap["claimedDriverId"] = it 
                         Log.d(TAG, "▶ Setting claimedDriverId: $it")
+                        
+                        // 기사의 authUid도 함께 저장
+                        val driver = driverCache[it]
+                        driver?.authUid?.let { authUid ->
+                            updateMap["claimedDriverAuthUid"] = authUid
+                            Log.d(TAG, "▶ Setting claimedDriverAuthUid: $authUid")
+                        }
                     }
                     Log.d(TAG, "▶ Updating shared call with map: $updateMap")
                     tx.update(docRef, updateMap)
@@ -891,6 +1002,40 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 Log.d(TAG, "Test points document created successfully")
             } catch (e: Exception) {
                 Log.e(TAG, "Error creating test points document", e)
+            }
+        }
+    }
+
+    // 취소된 공유콜을 재공유로 전환
+    fun reopenSharedCall(sharedCallId: String) {
+        viewModelScope.launch {
+            try {
+                val sharedCallRef = firestore.collection("shared_calls").document(sharedCallId)
+                
+                sharedCallRef.update(
+                    mapOf(
+                        "status" to "OPEN",
+                        "cancelledAt" to null,
+                        "cancelReason" to null,
+                        "updatedAt" to Timestamp.now()
+                    )
+                ).await()
+                
+                Log.d(TAG, "Shared call reopened: $sharedCallId")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error reopening shared call", e)
+            }
+        }
+    }
+
+    // 취소된 공유콜을 삭제
+    fun deleteSharedCall(sharedCallId: String) {
+        viewModelScope.launch {
+            try {
+                firestore.collection("shared_calls").document(sharedCallId).delete().await()
+                Log.d(TAG, "Shared call deleted: $sharedCallId")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error deleting shared call", e)
             }
         }
     }

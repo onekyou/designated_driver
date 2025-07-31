@@ -82,6 +82,10 @@ fun HomeScreen(
                                         waypoints,
                                         fare
                                     )
+                                },
+                                onCancel = { cancelReason ->
+                                    viewModel.cancelTrip(activeCall.id, cancelReason)
+                                    // 취소 후 홈 화면에 머무르며 자동으로 대기 화면이 표시됨
                                 }
                             )
                         }

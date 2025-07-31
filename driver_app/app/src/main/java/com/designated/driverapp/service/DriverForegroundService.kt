@@ -215,13 +215,14 @@ class DriverForegroundService : Service() {
 
                     val callStatusEnum = call?.statusEnum
                     val isInitialAssignment = previousCall == null && call != null && callStatusEnum == CallStatus.ASSIGNED
-                    Log.d(TAG, "[Service Lifecycle] Evaluating isInitialAssignment: previousCallIsNull=${previousCall == null}, callIsNotNull=${call != null}, callStatusIsAssigned=${callStatusEnum == CallStatus.ASSIGNED} -> Result=$isInitialAssignment")
+                    val isSharedCall = call?.callType == "SHARED"
+                    Log.d(TAG, "[Service Lifecycle] Evaluating isInitialAssignment: previousCallIsNull=${previousCall == null}, callIsNotNull=${call != null}, callStatusIsAssigned=${callStatusEnum == CallStatus.ASSIGNED}, isSharedCall=$isSharedCall -> Result=$isInitialAssignment")
 
-                    if (isInitialAssignment && call != null) {
+                    if (isInitialAssignment && call != null && !isSharedCall) {
                         notificationTitle = "새로운 호출 배정됨"
                         notificationText = "${call.phoneNumber} 고객님의 호출입니다."
                         notificationChannelId = CHANNEL_ID
-                        Log.d(TAG, "[Service Lifecycle] Condition met: INITIAL Call Assignment. Use URGENT channel ($notificationChannelId). Creating Full-Screen Intent.")
+                        Log.d(TAG, "[Service Lifecycle] Condition met: INITIAL Call Assignment (not shared). Use URGENT channel ($notificationChannelId). Creating Full-Screen Intent.")
 
                         val fullScreenIntent = Intent(this@DriverForegroundService, MainActivity::class.java).apply {
                             action = Constants.ACTION_SHOW_CALL_DIALOG
@@ -232,6 +233,13 @@ class DriverForegroundService : Service() {
                             this@DriverForegroundService, 0, fullScreenIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                         )
 
+                    } else if (isInitialAssignment && call != null && isSharedCall) {
+                        // 공유콜인 경우: FCM 알림이 이미 전송되므로 별도 알림 없이 일반 상태 알림만
+                        Log.d(TAG, "[Service Lifecycle] Condition met: SHARED Call Assignment (FCM handled). Use STATUS channel.")
+                        notificationTitle = SERVICE_STATUS_NOTIFICATION_TITLE
+                        notificationText = SERVICE_STATUS_NOTIFICATION_TEXT
+                        notificationChannelId = SERVICE_STATUS_CHANNEL_ID
+                        fullScreenPendingIntent = null
                     } else {
                         Log.d(TAG, "[Service Lifecycle] Condition NOT Initial Assignment because: previousCall=${previousCall?.id}, call=${call?.id}, callStatusEnum=${callStatusEnum}. Use STATUS channel.")
                         notificationTitle = SERVICE_STATUS_NOTIFICATION_TITLE
