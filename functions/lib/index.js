@@ -41,7 +41,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.finalizeWorkDay = exports.onSharedCallCompleted = exports.sendNewCallNotification = exports.onSharedCallClaimed = exports.onSharedCallCreated = exports.oncallassigned = void 0;
+exports.finalizeWorkDay = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.sendNewCallNotification = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.onSharedCallCreated = exports.oncallassigned = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const admin = __importStar(require("firebase-admin"));
 const logger = __importStar(require("firebase-functions/logger"));
@@ -67,14 +67,24 @@ exports.oncallassigned = (0, firestore_1.onDocumentWritten)({
     }
     const beforeData = (_a = event.data.before) === null || _a === void 0 ? void 0 : _a.data();
     // 2. assignedDriverId가 유효하게 할당/변경되었는지 확인
-    const isDriverAssigned = afterData.assignedDriverId &&
-        afterData.assignedDriverId !== (beforeData === null || beforeData === void 0 ? void 0 : beforeData.assignedDriverId);
+    // 공유콜의 경우 새 문서 생성 시에는 알림을 보내지 않음 (중복 알림 방지)
+    const isSharedCall = afterData.callType === "SHARED";
+    const isNewDocument = !beforeData;
+    const isDriverChanged = beforeData && afterData.assignedDriverId !== beforeData.assignedDriverId;
+    logger.info(`[${callId}] 알림 조건 확인: callType=${afterData.callType}, isSharedCall=${isSharedCall}, isNewDocument=${isNewDocument}, isDriverChanged=${isDriverChanged}, assignedDriverId=${afterData.assignedDriverId}, sourceSharedCallId=${afterData.sourceSharedCallId}`);
+    // 공유콜이면서 새 문서인 경우 상세 로그
+    if (isSharedCall && isNewDocument) {
+        logger.info(`[${callId}] 공유콜 새 문서 생성 감지. 알림을 보내지 않습니다.`);
+    }
+    const isDriverAssigned = afterData.assignedDriverId && ((isNewDocument && !isSharedCall) || // 새 문서 생성 시 (공유콜 제외)
+        isDriverChanged // 기존 문서의 기사 변경 시
+    );
     if (!isDriverAssigned || !afterData.assignedDriverId) {
-        logger.info(`[${callId}] 기사 배정 변경사항이 없어 알림을 보내지 않습니다.`);
+        logger.info(`[${callId}] 기사 배정 변경사항이 없어 알림을 보내지 않습니다. assignedDriverId: ${afterData.assignedDriverId}, beforeAssignedDriverId: ${beforeData === null || beforeData === void 0 ? void 0 : beforeData.assignedDriverId}, isSharedCall: ${isSharedCall}, isNewDocument: ${isNewDocument}, isDriverAssigned: ${isDriverAssigned}`);
         return;
     }
     const driverId = afterData.assignedDriverId;
-    logger.info(`[${callId}] 기사 [${driverId}]에게 알림 전송 시작.`);
+    logger.info(`[${callId}] 기사 [${driverId}]에게 알림 전송 시작. isNewDocument=${isNewDocument}, isDriverChanged=${isDriverChanged}`);
     try {
         // 3. 기사 문서에서 FCM 토큰 가져오기
         const driverRef = admin.firestore()
@@ -137,9 +147,15 @@ exports.onSharedCallCreated = (0, firestore_1.onDocumentCreated)({
         const tokens = [];
         adminQuery.docs.forEach((doc) => {
             const adminData = doc.data();
-            // 원본 사무실은 제외
-            if (adminData.associatedOfficeId !== sharedCallData.sourceOfficeId && adminData.fcmToken) {
+            // 원본 사무실은 제외 (sourceOfficeId와 동일한 사무실 제외)
+            if (adminData.associatedRegionId === sharedCallData.sourceRegionId &&
+                adminData.associatedOfficeId === sharedCallData.sourceOfficeId) {
+                logger.info(`[shared-created:${callId}] 원본 사무실 제외: ${adminData.associatedOfficeId}`);
+                return; // 다음 관리자로 넘어감
+            }
+            if (adminData.fcmToken) {
                 tokens.push(adminData.fcmToken);
+                logger.info(`[shared-created:${callId}] 알림 대상 추가: ${adminData.associatedOfficeId}`);
             }
         });
         logger.info(`[shared-created:${callId}] 알림 대상: ${tokens.length}명의 관리자`);
@@ -200,15 +216,116 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
         logger.warn(`[shared:${callId}] before/after 데이터 누락`);
         return;
     }
+    // CLAIMED -> OPEN 인지 확인 (기사가 공유콜 취소)
+    if (beforeData.status === "CLAIMED" && afterData.status === "OPEN" && afterData.cancelledByDriver) {
+        logger.info(`[shared:${callId}] 공유 콜이 기사에 의해 취소되었습니다. 원본 사무실 콜 복구 시작.`);
+        try {
+            await admin.firestore().runTransaction(async (tx) => {
+                // 원본 사무실의 콜을 WAITING 상태로 복구
+                const originalCallRef = admin
+                    .firestore()
+                    .collection("regions")
+                    .doc(afterData.sourceRegionId)
+                    .collection("offices")
+                    .doc(afterData.sourceOfficeId)
+                    .collection("calls")
+                    .doc(callId);
+                tx.update(originalCallRef, {
+                    status: "WAITING",
+                    callType: null,
+                    sourceSharedCallId: null,
+                    assignedDriverId: null,
+                    assignedDriverName: null,
+                    assignedDriverPhone: null,
+                    cancelReason: `공유콜 취소됨: ${afterData.cancelReason || "사유 없음"}`,
+                    departure_set: null,
+                    destination_set: null,
+                    fare_set: null,
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                });
+                logger.info(`[shared:${callId}] 원본 사무실 콜이 WAITING 상태로 복구되었습니다.`);
+            });
+            // 원본 사무실 관리자들에게 알림 전송
+            const adminQuery = await admin
+                .firestore()
+                .collection("admins")
+                .where("associatedRegionId", "==", afterData.sourceRegionId)
+                .where("associatedOfficeId", "==", afterData.sourceOfficeId)
+                .get();
+            const tokens = [];
+            adminQuery.docs.forEach((doc) => {
+                const adminData = doc.data();
+                if (adminData.fcmToken) {
+                    tokens.push(adminData.fcmToken);
+                }
+            });
+            if (tokens.length > 0) {
+                const message = {
+                    notification: {
+                        title: "공유콜이 취소되었습니다",
+                        body: `${afterData.cancelReason || "사유 없음"} - 콜이 대기 상태로 복구되었습니다.`,
+                    },
+                    data: {
+                        type: "SHARED_CALL_CANCELLED",
+                        callId: callId,
+                        cancelReason: afterData.cancelReason || "",
+                    },
+                    android: {
+                        priority: "high",
+                        notification: {
+                            sound: "default",
+                            channelId: "call_manager_fcm_channel",
+                            priority: "high",
+                        },
+                    },
+                    tokens,
+                };
+                const response = await admin.messaging().sendEachForMulticast(message);
+                logger.info(`[shared:${callId}] 원본 사무실에 취소 알림 전송 완료. 성공: ${response.successCount}`);
+            }
+        }
+        catch (error) {
+            logger.error(`[shared:${callId}] 원본 콜 복구 중 오류:`, error);
+        }
+        return;
+    }
     // OPEN -> CLAIMED 인지 확인 (콜 복사만, 포인트 처리 없음)
     if (beforeData.status === "OPEN" && afterData.status === "CLAIMED") {
         logger.info(`[shared:${callId}] 공유 콜이 CLAIMED 되었습니다. 대상사무실로 복사 시작.`);
         logger.info(`[shared:${callId}] afterData.claimedDriverId=${afterData.claimedDriverId}`);
         logger.info(`[shared:${callId}] assignedDriverId=${afterData.claimedDriverId}`);
+        // 트랜잭션 외부에서 변수 선언
+        let assignedDriverId = null;
+        let assignedDriverName = null;
+        let assignedDriverPhone = null;
+        let driverSnap = null;
         try {
             await admin.firestore().runTransaction(async (tx) => {
+                // ========== 모든 읽기 작업을 먼저 수행 ==========
                 var _a, _b, _c;
-                // 대상 사무실 calls 컬렉션 레퍼런스
+                // 1. 기사 정보 읽기 (배정된 기사가 있을 경우)
+                driverSnap = afterData.claimedDriverId ? await tx.get(admin.firestore()
+                    .collection("regions").doc(afterData.targetRegionId)
+                    .collection("offices").doc(afterData.claimedOfficeId)
+                    .collection("designated_drivers").doc(afterData.claimedDriverId)) : null;
+                // 2. 원본 콜 문서 존재 여부 확인
+                const sourceCallRef = admin
+                    .firestore()
+                    .collection("regions")
+                    .doc(afterData.sourceRegionId)
+                    .collection("offices")
+                    .doc(afterData.sourceOfficeId)
+                    .collection("calls")
+                    .doc(callId);
+                const sourceCallSnap = await tx.get(sourceCallRef);
+                // ========== 읽기 결과 처리 ==========
+                const driverData = driverSnap ? driverSnap.data() : undefined;
+                assignedDriverId = driverData ? driverData.authUid : null; // authUid 사용
+                assignedDriverName = driverData ? driverData.name : null;
+                assignedDriverPhone = driverData ? driverData.phoneNumber : null;
+                logger.info(`[shared:${callId}] driverDocId=${afterData.claimedDriverId}, assignedDriverId(authUid)=${assignedDriverId}`);
+                // ========== 모든 쓰기 작업 수행 ==========
+                // 1. 대상 사무실에 콜 복사
                 const destCallsRef = admin
                     .firestore()
                     .collection("regions")
@@ -217,36 +334,64 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
                     .doc(afterData.claimedOfficeId)
                     .collection("calls")
                     .doc(callId);
-                // 기사 정보 읽기 (배정된 기사가 있을 경우)
-                const driverSnap = afterData.claimedDriverId ? await tx.get(admin.firestore()
-                    .collection("regions").doc(afterData.targetRegionId)
-                    .collection("offices").doc(afterData.claimedOfficeId)
-                    .collection("designated_drivers").doc(afterData.claimedDriverId)) : null;
-                const driverData = driverSnap ? driverSnap.data() : undefined;
-                const assignedDriverId = driverData ? driverData.authUid : null; // authUid 사용
-                const assignedDriverName = driverData ? driverData.name : null;
-                const assignedDriverPhone = driverData ? driverData.phoneNumber : null;
-                logger.info(`[shared:${callId}] driverDocId=${afterData.claimedDriverId}, assignedDriverId(authUid)=${assignedDriverId}`);
-                // 2) WRITE ----------------------------------------
-                const callDoc = Object.assign(Object.assign({}, afterData), { status: assignedDriverId ? "ASSIGNED" : "WAITING", departure_set: (_a = afterData.departure) !== null && _a !== void 0 ? _a : null, destination_set: (_b = afterData.destination) !== null && _b !== void 0 ? _b : null, fare_set: (_c = afterData.fare) !== null && _c !== void 0 ? _c : null, callType: "SHARED", sourceSharedCallId: callId, createdAt: admin.firestore.FieldValue.serverTimestamp() });
-                if (assignedDriverId) {
-                    callDoc.assignedDriverId = assignedDriverId;
-                    if (assignedDriverName)
-                        callDoc.assignedDriverName = assignedDriverName;
-                    if (assignedDriverPhone)
-                        callDoc.assignedDriverPhone = assignedDriverPhone;
-                }
+                // 공유콜은 항상 WAITING 상태로 생성 (중복 알림 방지)
+                const callDoc = Object.assign(Object.assign({}, afterData), { status: "WAITING", departure_set: (_a = afterData.departure) !== null && _a !== void 0 ? _a : null, destination_set: (_b = afterData.destination) !== null && _b !== void 0 ? _b : null, fare_set: (_c = afterData.fare) !== null && _c !== void 0 ? _c : null, callType: "SHARED", sourceSharedCallId: callId, createdAt: admin.firestore.FieldValue.serverTimestamp() });
                 tx.set(destCallsRef, callDoc);
-                // 드라이버 상태 ASSIGNED 로 업데이트 (옵션)
-                if (assignedDriverId && (driverSnap === null || driverSnap === void 0 ? void 0 : driverSnap.exists)) {
-                    tx.update(driverSnap.ref, { status: "배차중" });
+                // assignedDriverId가 있다면 별도 업데이트로 처리 (중복 알림 방지)
+                if (assignedDriverId) {
+                    logger.info(`[shared-claimed:${callId}] 기사 배정을 별도 업데이트로 처리: ${assignedDriverId}`);
+                    // 트랜잭션 외부에서 처리하도록 변경 필요
+                }
+                // 2. 드라이버 상태 업데이트는 트랜잭션 외부에서 처리
+                // 3. 원본 콜 문서 업데이트 (존재하는 경우에만)
+                if (sourceCallSnap.exists) {
+                    // 원본 콜은 일단 CLAIMED 상태로 업데이트 (기사 배정은 나중에)
+                    const sourceCallUpdates = {
+                        status: "CLAIMED", // 수락됨 상태
+                        claimedOfficeId: afterData.claimedOfficeId,
+                        assignedDriverName: `수락됨 (${afterData.claimedOfficeId})`,
+                        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    };
+                    tx.update(sourceCallRef, sourceCallUpdates);
+                    logger.info(`[shared:${callId}] 원본 콜을 수락됨 상태로 업데이트 완료`);
+                }
+                else {
+                    logger.warn(`[shared:${callId}] 원본 콜 문서가 존재하지 않습니다. 건너뜁니다.`);
                 }
                 //   c) 공유콜 문서 processed 플래그 수정 → 트랜잭션 외부로 이동하여
                 //      "읽기 후 쓰기" 제약을 피함 (트랜잭션 내부에 포함하면
                 //      사전에 해당 문서를 읽지 않았기 때문에 Firestore가
                 //      암묵적 read 를 삽입하며 오류가 발생한다)
             });
-            logger.info(`[shared:${callId}] 콜 복사 및 포인트 처리 완료.`);
+            logger.info(`[shared:${callId}] 콜 복사 및 포인트 처리 완료. 대상 사무실에 WAITING 상태로 생성됨.`);
+            // ---- 기사 배정이 있는 경우 별도 처리 (중복 알림 방지) ----
+            if (assignedDriverId) {
+                try {
+                    logger.info(`[shared:${callId}] 기사 배정 별도 처리 시작: ${assignedDriverId}`);
+                    const destCallRef = admin.firestore()
+                        .collection("regions")
+                        .doc(afterData.targetRegionId)
+                        .collection("offices")
+                        .doc(afterData.claimedOfficeId)
+                        .collection("calls")
+                        .doc(callId);
+                    await destCallRef.update({
+                        status: "ASSIGNED",
+                        assignedDriverId: assignedDriverId,
+                        assignedDriverName: assignedDriverName,
+                        assignedDriverPhone: assignedDriverPhone,
+                        assignedTimestamp: admin.firestore.FieldValue.serverTimestamp(),
+                    });
+                    // 기사 상태 업데이트
+                    if (driverSnap === null || driverSnap === void 0 ? void 0 : driverSnap.exists) {
+                        await driverSnap.ref.update({ status: "배차중" });
+                    }
+                    logger.info(`[shared:${callId}] 기사 배정 별도 처리 완료: ${assignedDriverId}`);
+                }
+                catch (assignErr) {
+                    logger.error(`[shared:${callId}] 기사 배정 별도 처리 실패`, assignErr);
+                }
+            }
             // ---- 공유콜 문서 processed 플래그 업데이트 (트랜잭션 외부) ----
             try {
                 await event.data.after.ref.update({ processed: true });
@@ -306,6 +451,165 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
             logger.error(`[shared:${callId}] 트랜잭션 오류`, err);
         }
     }
+    // CLAIMED -> OPEN 인지 확인 (기사가 취소한 경우)
+    else if (beforeData.status === "CLAIMED" && afterData.status === "OPEN") {
+        logger.info(`[shared:${callId}] 공유 콜이 취소되어 OPEN으로 되돌려졌습니다.`);
+        try {
+            // 복사된 콜이 있다면 삭제 (선택사항 - HOLD 상태로 둘 수도 있음)
+            if (beforeData.claimedOfficeId) {
+                const copiedCallRef = admin
+                    .firestore()
+                    .collection("regions")
+                    .doc(afterData.targetRegionId)
+                    .collection("offices")
+                    .doc(beforeData.claimedOfficeId)
+                    .collection("calls")
+                    .doc(callId);
+                const copiedCallSnap = await copiedCallRef.get();
+                if (copiedCallSnap.exists) {
+                    const copiedCallData = copiedCallSnap.data();
+                    logger.info(`[shared:${callId}] 복사된 콜 상태: ${copiedCallData === null || copiedCallData === void 0 ? void 0 : copiedCallData.status}`);
+                    // HOLD 상태인 경우에만 삭제 (이미 진행 중인 콜은 건드리지 않음)
+                    if ((copiedCallData === null || copiedCallData === void 0 ? void 0 : copiedCallData.status) === "HOLD") {
+                        await copiedCallRef.delete();
+                        logger.info(`[shared:${callId}] HOLD 상태의 복사된 콜을 삭제했습니다.`);
+                    }
+                }
+            }
+            logger.info(`[shared:${callId}] 공유콜 취소 처리 완료.`);
+        }
+        catch (err) {
+            logger.error(`[shared:${callId}] 공유콜 취소 처리 오류`, err);
+        }
+    }
+});
+// 공유콜이 기사에 의해 취소될 때 처리하는 함수
+exports.onSharedCallCancelledByDriver = (0, firestore_1.onDocumentUpdated)({
+    region: "asia-northeast3",
+    document: "regions/{regionId}/offices/{officeId}/calls/{callId}"
+}, async (event) => {
+    const { callId } = event.params;
+    if (!event.data) {
+        logger.warn(`[call-cancelled:${callId}] 이벤트 데이터가 없습니다.`);
+        return;
+    }
+    const beforeData = event.data.before.data();
+    const afterData = event.data.after.data();
+    if (!beforeData || !afterData) {
+        logger.warn(`[call-cancelled:${callId}] before/after 데이터 누락`);
+        return;
+    }
+    logger.info(`[call-cancelled:${callId}] 함수 시작. callType: ${afterData.callType}, status: ${afterData.status}, cancelledByDriver: ${afterData.cancelledByDriver}, sourceSharedCallId: ${afterData.sourceSharedCallId}`);
+    // 공유콜이 기사에 의해 취소되었는지 확인
+    if (afterData.callType === "SHARED" &&
+        afterData.status === "CANCELLED_BY_DRIVER" &&
+        afterData.cancelledByDriver === true &&
+        afterData.sourceSharedCallId) {
+        logger.info(`[call-cancelled:${callId}] 공유콜이 기사에 의해 취소되었습니다. 원본 사무실 복구 시작.`);
+        try {
+            const sourceSharedCallId = afterData.sourceSharedCallId;
+            const sharedCallRef = admin.firestore().collection("shared_calls").doc(sourceSharedCallId);
+            // shared_calls 정보 가져오기
+            const sharedCallSnap = await sharedCallRef.get();
+            if (!sharedCallSnap.exists) {
+                logger.error(`[call-cancelled:${callId}] 원본 shared_calls 문서를 찾을 수 없습니다.`);
+                return;
+            }
+            const sharedCallData = sharedCallSnap.data();
+            const originalCallId = sharedCallData.originalCallId;
+            logger.info(`[call-cancelled:${callId}] shared_calls 정보: sourceRegionId=${sharedCallData.sourceRegionId}, sourceOfficeId=${sharedCallData.sourceOfficeId}, originalCallId=${originalCallId}`);
+            if (!originalCallId) {
+                logger.error(`[call-cancelled:${callId}] originalCallId가 없습니다. shared_calls 데이터를 확인하세요.`);
+                return;
+            }
+            await admin.firestore().runTransaction(async (tx) => {
+                // 원본 사무실의 콜 문서 레퍼런스 (originalCallId 사용!)
+                const originalCallRef = admin.firestore()
+                    .collection("regions").doc(sharedCallData.sourceRegionId)
+                    .collection("offices").doc(sharedCallData.sourceOfficeId)
+                    .collection("calls").doc(originalCallId);
+                // 원본 콜 문서 존재 여부 확인
+                const originalCallSnap = await tx.get(originalCallRef);
+                // shared_calls는 삭제 (원사무실에서 다시 공유 여부 결정)
+                tx.delete(sharedCallRef);
+                // 원본 콜을 HOLD 상태로 복구 (존재하는 경우에만)
+                if (originalCallSnap.exists) {
+                    const originalCallData = originalCallSnap.data();
+                    logger.info(`[call-cancelled:${callId}] 원본 콜 현재 상태: ${originalCallData === null || originalCallData === void 0 ? void 0 : originalCallData.status}`);
+                    const updateData = {
+                        status: "HOLD", // 공유콜 취소 시 보류 상태로 변경
+                        callType: null,
+                        sourceSharedCallId: null,
+                        assignedDriverId: null,
+                        assignedDriverName: null,
+                        assignedDriverPhone: null,
+                        departure_set: null,
+                        destination_set: null,
+                        fare_set: null,
+                        cancelReason: `공유콜 취소됨: ${afterData.cancelReason || "사유 없음"}`,
+                        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                    };
+                    tx.update(originalCallRef, updateData);
+                    logger.info(`[call-cancelled:${callId}] 원본 콜을 HOLD 상태로 복구 완료. Path: ${originalCallRef.path}`);
+                }
+                else {
+                    logger.warn(`[call-cancelled:${callId}] 원본 콜 문서가 존재하지 않습니다. Path: ${originalCallRef.path}`);
+                }
+                logger.info(`[call-cancelled:${callId}] shared_calls 초기화 완료`);
+            });
+            // 원본 사무실 관리자들에게 FCM 알림 전송 (팝업 포함)
+            const adminQuery = await admin
+                .firestore()
+                .collection("admins")
+                .where("associatedRegionId", "==", sharedCallData.sourceRegionId)
+                .where("associatedOfficeId", "==", sharedCallData.sourceOfficeId)
+                .get();
+            const tokens = [];
+            adminQuery.docs.forEach((doc) => {
+                const adminData = doc.data();
+                if (adminData.fcmToken) {
+                    tokens.push(adminData.fcmToken);
+                }
+            });
+            if (tokens.length > 0) {
+                const message = {
+                    notification: {
+                        title: "🚫 공유콜이 취소되었습니다!",
+                        body: `${sharedCallData.departure || "출발지"} → ${sharedCallData.destination || "도착지"}\n취소사유: ${afterData.cancelReason || "사유 없음"}\n콜이 대기상태로 복구되었습니다.`,
+                    },
+                    data: {
+                        type: "SHARED_CALL_CANCELLED_POPUP",
+                        sharedCallId: sourceSharedCallId,
+                        callId: sourceSharedCallId,
+                        departure: sharedCallData.departure || "",
+                        destination: sharedCallData.destination || "",
+                        fare: (sharedCallData.fare || 0).toString(),
+                        cancelReason: afterData.cancelReason || "사유 없음",
+                        phoneNumber: sharedCallData.phoneNumber || "",
+                        showPopup: "true" // 팝업 표시 플래그
+                    },
+                    android: {
+                        priority: "high",
+                        notification: {
+                            sound: "default",
+                            channelId: "call_manager_fcm_channel",
+                            priority: "high",
+                            clickAction: "FLUTTER_NOTIFICATION_CLICK"
+                        },
+                    },
+                    tokens,
+                };
+                const response = await admin.messaging().sendEachForMulticast(message);
+                logger.info(`[call-cancelled:${callId}] 원본 사무실에 FCM 알림 전송 완료. 성공: ${response.successCount}, 실패: ${response.failureCount}`);
+            }
+            // 수락사무실에서 취소된 콜 문서 삭제
+            await event.data.after.ref.delete();
+            logger.info(`[call-cancelled:${callId}] 수락사무실에서 취소된 공유콜 삭제 완료`);
+        }
+        catch (error) {
+            logger.error(`[call-cancelled:${callId}] 공유콜 취소 처리 오류:`, error);
+        }
+    }
 });
 // 신규 콜이 생성될 때 (status == WAITING && assignedDriverId == null)
 exports.sendNewCallNotification = (0, firestore_1.onDocumentCreated)({
@@ -358,6 +662,88 @@ exports.sendNewCallNotification = (0, firestore_1.onDocumentCreated)({
         tokens,
     });
     logger.info("[sendNewCallNotification] sendEachForMulticast with notification sent.");
+});
+// =============================
+// 공유콜 상태 동기화 - 수락사무실의 콜 상태를 원사무실에 반영
+// =============================
+exports.onSharedCallStatusSync = (0, firestore_1.onDocumentUpdated)({
+    region: "asia-northeast3",
+    document: "regions/{regionId}/offices/{officeId}/calls/{callId}"
+}, async (event) => {
+    const { callId } = event.params;
+    if (!event.data) {
+        return;
+    }
+    const beforeData = event.data.before.data();
+    const afterData = event.data.after.data();
+    if (!beforeData || !afterData) {
+        return;
+    }
+    // 공유콜인지 확인
+    if (afterData.callType !== "SHARED" || !afterData.sourceSharedCallId) {
+        logger.info(`[shared-sync:${callId}] 공유콜이 아니므로 스킵. callType: ${afterData.callType}, sourceSharedCallId: ${afterData.sourceSharedCallId}`);
+        return;
+    }
+    // 상태가 변경되었는지 확인
+    if (beforeData.status === afterData.status) {
+        logger.info(`[shared-sync:${callId}] 상태 변경 없음. status: ${afterData.status}`);
+        return;
+    }
+    // CANCELLED_BY_DRIVER는 이미 별도 함수에서 처리
+    if (afterData.status === "CANCELLED_BY_DRIVER") {
+        return;
+    }
+    logger.info(`[shared-sync:${callId}] 공유콜 상태 동기화: ${beforeData.status} → ${afterData.status}`);
+    try {
+        // shared_calls 문서에서 원사무실 정보 가져오기
+        const sharedCallRef = admin.firestore().collection("shared_calls").doc(afterData.sourceSharedCallId);
+        const sharedCallSnap = await sharedCallRef.get();
+        if (!sharedCallSnap.exists) {
+            logger.warn(`[shared-sync:${callId}] shared_calls 문서를 찾을 수 없습니다.`);
+            return;
+        }
+        const sharedCallData = sharedCallSnap.data();
+        // 원사무실 콜 업데이트 (originalCallId 사용)
+        const originalCallId = sharedCallData.originalCallId;
+        logger.info(`[shared-sync:${callId}] sharedCallData: ${JSON.stringify(sharedCallData)}`);
+        if (originalCallId) {
+            const originalCallRef = admin.firestore()
+                .collection("regions").doc(sharedCallData.sourceRegionId)
+                .collection("offices").doc(sharedCallData.sourceOfficeId)
+                .collection("calls").doc(originalCallId);
+            const originalCallSnap = await originalCallRef.get();
+            if (originalCallSnap.exists) {
+                const updateData = {
+                    status: afterData.status,
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                };
+                await originalCallRef.update(updateData);
+                logger.info(`[shared-sync:${callId}] 원사무실 콜 상태 업데이트 완료: ${originalCallId} → ${afterData.status}`);
+            }
+            else {
+                logger.warn(`[shared-sync:${callId}] 원사무실 콜을 찾을 수 없습니다: ${originalCallId}`);
+            }
+        }
+        else {
+            logger.warn(`[shared-sync:${callId}] originalCallId가 없습니다. 대신 callId로 시도합니다.`);
+            // originalCallId가 없으면 shared_calls의 ID와 원본 콜 ID가 같을 수 있음
+            const fallbackCallRef = admin.firestore()
+                .collection("regions").doc(sharedCallData.sourceRegionId)
+                .collection("offices").doc(sharedCallData.sourceOfficeId)
+                .collection("calls").doc(afterData.sourceSharedCallId);
+            const fallbackSnap = await fallbackCallRef.get();
+            if (fallbackSnap.exists) {
+                await fallbackCallRef.update({
+                    status: afterData.status,
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                });
+                logger.info(`[shared-sync:${callId}] 원사무실 콜 상태 업데이트 완료 (fallback): ${afterData.sourceSharedCallId} → ${afterData.status}`);
+            }
+        }
+    }
+    catch (error) {
+        logger.error(`[shared-sync:${callId}] 상태 동기화 오류:`, error);
+    }
 });
 // =============================
 // 공유 콜에서 복사된 일반 콜이 COMPLETED 될 때 트리거

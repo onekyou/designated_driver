@@ -7,8 +7,10 @@ import android.location.Geocoder
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -16,6 +18,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -44,7 +47,8 @@ private val CardBackground = Color(0xFF2A2A2A)
 @Composable
 fun TripPreparationScreen(
     callInfo: CallInfo,
-    onStartDriving: (departure: String, destination: String, waypoints: String, fare: Int) -> Unit
+    onStartDriving: (departure: String, destination: String, waypoints: String, fare: Int) -> Unit,
+    onCancel: (cancelReason: String) -> Unit
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -55,7 +59,7 @@ fun TripPreparationScreen(
     var departure by remember(callInfo.id) {
         mutableStateOf(
             if (callInfo.departure_set.isNotBlank()) callInfo.departure_set
-            else callInfo.customerAddress
+            else "" // 빈 상태로 시작 (도착지와 동일)
         )
     }
 
@@ -80,25 +84,8 @@ fun TripPreparationScreen(
     }
     var isLoadingLocation by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
+    var showCancelDialog by remember { mutableStateOf(false) }
 
-    // --- 여기에 Logcat 출력 코드 추가 ---
-    // Log.d("UI_DEBUG", "dep_set=${callInfo.departure_set}, dest_set=${callInfo.destination_set}, fare_set=${callInfo.fare_set}")
-    // 현재 CallInfo 모델에 departure_set 등이 직접 없을 수 있으므로,
-    // callInfo의 필드들을 직접 참조하는 대신, TextFields에 바인딩되는 상태 변수들을 로깅하는 것이 더 정확합니다.
-    // 하지만 원래 의도는 CallInfo가 UI 컴포저블로 전달될 때의 값을 확인하는 것이므로,
-    // 아래와 같이 callInfo 객체의 관련 필드를 직접 로깅하는 것이 좋습니다.
-    // CallInfo 모델에 `departure_set`, `destination_set`, `fare_set` 필드가 실제로 있는지 확인해 주세요.
-    // 만약 CallInfo에 해당 필드가 없다면 `customerAddress`와 `destination` 필드를 로깅해야 합니다.
-    Log.d("UI_DEBUG", "*** TripPreparationScreen UI DEBUG *** " +
-            "callInfo.customerAddress=${callInfo.customerAddress}, " +
-            "callInfo.destination=${callInfo.destination}, " +
-            "callInfo.fare=${callInfo.fare}, " +
-            // 만약 CallInfo에 dep_set, dest_set, fare_set 필드가 있다면 아래 주석 해제하여 사용
-            // "callInfo.departure_set=${callInfo.departure_set}, " +
-            // "callInfo.destination_set=${callInfo.destination_set}, " +
-            // "callInfo.fare_set=${callInfo.fare_set}"
-            "")
-    // --- 로그 추가 끝 ---
 
     // 위치 권한 요청 런처
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -189,6 +176,42 @@ fun TripPreparationScreen(
                 .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            
+            // 공유콜 정보 카드
+            if (callInfo.callType == "SHARED") {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF4CAF50).copy(alpha = 0.1f)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Share,
+                            contentDescription = "공유콜",
+                            tint = Color(0xFF4CAF50),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                "공유콜",
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF4CAF50)
+                            )
+                            Text(
+                                "다른 사무실에서 공유한 콜입니다",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
+                    }
+                }
+            }
 
             // 출발지 입력
             OutlinedTextField(
@@ -259,34 +282,129 @@ fun TripPreparationScreen(
 
             // 고객 전화 걸기 버튼
             if (callInfo.phoneNumber.isNotBlank()) {
+                val isSharedCall = callInfo.callType == "SHARED"
+                
                 Button(
                     onClick = {
                         val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${callInfo.phoneNumber}"))
                         context.startActivity(dialIntent)
                     },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = if (isSharedCall) {
+                        ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)) // 공유콜은 초록색
+                    } else {
+                        ButtonDefaults.buttonColors() // 기본 색상
+                    }
                 ) {
                     Icon(Icons.Default.Phone, contentDescription = null)
                     Spacer(Modifier.width(4.dp))
-                    Text("고객에게 전화하기")
+                    Text(
+                        if (isSharedCall) "공유콜 고객에게 전화하기" else "고객에게 전화하기"
+                    )
                 }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 운행 시작 버튼
-            Button(
-                onClick = {
-                    val fareInt = fare.toIntOrNull() ?: 0
-                    onStartDriving(departure, destination, waypoints, fareInt)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = DeepYellow)
+            // 버튼 영역 - 운행 시작과 취소 버튼
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("운행 시작", fontWeight = FontWeight.Bold)
+                // 취소 버튼
+                OutlinedButton(
+                    onClick = { showCancelDialog = true },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                ) {
+                    Text("취소", fontWeight = FontWeight.Bold)
+                }
+                
+                // 운행 시작 버튼
+                Button(
+                    onClick = {
+                        val fareInt = fare.toIntOrNull() ?: 0
+                        onStartDriving(departure, destination, waypoints, fareInt)
+                    },
+                    modifier = Modifier
+                        .weight(2f)
+                        .height(50.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = DeepYellow)
+                ) {
+                    Text("운행 시작", fontWeight = FontWeight.Bold)
+                }
             }
         }
+    }
+    
+    // 취소 확인 다이얼로그
+    if (showCancelDialog) {
+        var selectedReason by remember { mutableStateOf("운행취소") }
+        var isDropdownExpanded by remember { mutableStateOf(false) }
+        val cancelReasons = listOf("운행취소", "통화불가", "보류")
+        
+        AlertDialog(
+            onDismissRequest = { showCancelDialog = false },
+            title = { Text("운행 취소", fontWeight = FontWeight.Bold) },
+            text = { 
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text("운행을 취소하시겠습니까?\n취소 시 호출이 보류 상태로 변경되며, 다른 기사가 배정받을 수 있습니다.")
+                    
+                    // 취소 사유 선택 드롭다운
+                    ExposedDropdownMenuBox(
+                        expanded = isDropdownExpanded,
+                        onExpandedChange = { isDropdownExpanded = it }
+                    ) {
+                        OutlinedTextField(
+                            value = selectedReason,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("취소 사유") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isDropdownExpanded) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = isDropdownExpanded,
+                            onDismissRequest = { isDropdownExpanded = false }
+                        ) {
+                            cancelReasons.forEach { reason ->
+                                DropdownMenuItem(
+                                    text = { Text(reason) },
+                                    onClick = {
+                                        selectedReason = reason
+                                        isDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showCancelDialog = false
+                        onCancel(selectedReason)
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("취소하기")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCancelDialog = false }) {
+                    Text("계속하기")
+                }
+            }
+        )
     }
 }

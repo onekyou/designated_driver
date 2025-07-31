@@ -2,6 +2,8 @@ package com.designated.callmanager.data
 
 enum class CallStatus(val firestoreValue: String, val displayName: String) {
     WAITING("WAITING", "대기"),
+    SHARED_WAITING("SHARED_WAITING", "공유대기"),
+    CLAIMED("CLAIMED", "수락됨"),
     PENDING("PENDING", "기사승인대기"),
     ASSIGNED("ASSIGNED", "배차완료"),
     ACCEPTED("ACCEPTED", "수락"),

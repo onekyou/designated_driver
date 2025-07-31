@@ -99,6 +99,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val ACTION_SHOW_CALL_POPUP = "ACTION_SHOW_CALL_POPUP"
         const val ACTION_SHOW_SHARED_CALL = "ACTION_SHOW_SHARED_CALL"
+        const val ACTION_SHOW_SHARED_CALL_CANCELLED = "ACTION_SHOW_SHARED_CALL_CANCELLED"
         const val EXTRA_CALL_ID = "callId" // FCM 서비스와 키 통일
         const val EXTRA_SHARED_CALL_ID = "sharedCallId"
     }
@@ -367,6 +368,23 @@ class MainActivity : ComponentActivity() {
                     }
                 } else {
                     Log.w(tag, "handleIntent: sharedCallId가 null입니다.")
+                }
+            }
+            ACTION_SHOW_SHARED_CALL_CANCELLED -> {
+                val callId = intent.getStringExtra(EXTRA_CALL_ID)
+                if (callId != null) {
+                    Log.d(tag, "handleIntent: ACTION_SHOW_SHARED_CALL_CANCELLED 확인. callId: $callId")
+                    lifecycleScope.launch {
+                        // 대시보드로 이동하고 취소 알림 표시
+                        if (_screenState.value != Screen.Dashboard) {
+                            _screenState.value = Screen.Dashboard
+                        }
+                        // 공유콜 취소 알림 다이얼로그 표시
+                        dashboardViewModel.showSharedCallCancelledDialog(callId)
+                        Log.d(tag, "공유콜 취소 알림 표시: $callId")
+                    }
+                } else {
+                    Log.w(tag, "handleIntent: callId가 null입니다.")
                 }
             }
         }

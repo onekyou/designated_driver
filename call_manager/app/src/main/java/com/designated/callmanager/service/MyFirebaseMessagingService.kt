@@ -41,13 +41,17 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         Log.d(TAG, "🔔 FCM 메시지 수신: ${remoteMessage.from}")
         Log.d(TAG, "데이터: ${remoteMessage.data}")
 
+        val messageType = remoteMessage.data["type"] ?: return
+        
+        // SHARED_CALL_CANCELLED_POPUP은 포그라운드에서도 처리해야 함
+        val shouldProcessInForeground = messageType == "SHARED_CALL_CANCELLED_POPUP"
+        
         // 앱이 포그라운드라면 시스템 알림을 띄우지 않고 종료 (리스너가 처리)
-        if (isAppInForeground()) {
+        // 단, SHARED_CALL_CANCELLED_POPUP은 예외
+        if (isAppInForeground() && !shouldProcessInForeground) {
             Log.d(TAG, "앱이 포그라운드 상태이므로 FCM 알림을 무시합니다.")
             return
         }
-
-        val messageType = remoteMessage.data["type"] ?: return
         
         // 공유콜의 경우 callId 대신 sharedCallId 사용
         val callId = remoteMessage.data["callId"] 
@@ -66,6 +70,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             "NEW_SHARED_CALL" -> handleNewSharedCall(remoteMessage, callId)
             "STATUS_CHANGE" -> handleStatusChange(remoteMessage, callId)  // 운행 시작(IN_PROGRESS)만 실 알림
             "DRIVER_STATUS_UPDATE" -> handleDriverStatusUpdate(remoteMessage, callId)
+            "SHARED_CALL_CANCELLED_POPUP" -> handleSharedCallCancelled(remoteMessage, callId)
             else -> Log.w(TAG, "알 수 없는 메시지 타입: $messageType")
         }
     }
@@ -315,6 +320,28 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         )
     }
 
+    private fun handleSharedCallCancelled(remoteMessage: RemoteMessage, callId: String) {
+        Log.i(TAG, "🚫 공유콜 취소 FCM 알림 처리: $callId")
+        
+        val departure = remoteMessage.data["departure"] ?: "출발지"
+        val destination = remoteMessage.data["destination"] ?: "도착지"
+        val cancelReason = remoteMessage.data["cancelReason"] ?: "사유 없음"
+        val phoneNumber = remoteMessage.data["phoneNumber"] ?: ""
+        
+        showNotification(
+            channelId = SHARED_CALL_CHANNEL_ID,
+            notificationId = "shared_call_cancelled_$callId".hashCode(),
+            title = "🚫 공유콜이 취소되었습니다!",
+            content = "$departure → $destination",
+            bigText = "출발지: $departure\n도착지: $destination\n전화번호: $phoneNumber\n취소사유: $cancelReason\n\n콜이 대기상태로 복구되었습니다.",
+            callId = callId,
+            color = ContextCompat.getColor(this, android.R.color.holo_red_dark),
+            autoCancel = true,
+            isSharedCallCancelled = true,
+            timeoutAfter = 60000 // 1분
+        )
+    }
+
     private fun showNotification(
         channelId: String,
         notificationId: Int,
@@ -326,6 +353,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         autoCancel: Boolean,
         isNewCall: Boolean = false,
         isSharedCall: Boolean = false,
+        isSharedCallCancelled: Boolean = false,
         timeoutAfter: Long? = null
     ) {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -340,6 +368,10 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 isSharedCall -> {
                     action = "ACTION_SHOW_SHARED_CALL"
                     putExtra("sharedCallId", callId)
+                }
+                isSharedCallCancelled -> {
+                    action = "ACTION_SHOW_SHARED_CALL_CANCELLED"
+                    putExtra("callId", callId)
                 }
             }
             // ⭐️ 앱을 새로 시작하거나 기존의 것을 맨 위로 올림
@@ -367,6 +399,10 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 isSharedCall -> {
                     action = "ACTION_SHOW_SHARED_CALL"
                     putExtra("sharedCallId", callId)
+                }
+                isSharedCallCancelled -> {
+                    action = "ACTION_SHOW_SHARED_CALL_CANCELLED"
+                    putExtra("callId", callId)
                 }
             }
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -397,8 +433,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             .setContentIntent(pendingIntent)
             .setOngoing(!autoCancel) // ⭐️ 새로운 콜은 지속적으로 표시
 
-        // ⭐️ 새로운 콜이나 공유콜인 경우 전체 화면 인텐트 및 사운드 추가
-        if (isNewCall || isSharedCall) {
+        // ⭐️ 새로운 콜이나 공유콜, 공유콜 취소인 경우 전체 화면 인텐트 및 사운드 추가
+        if (isNewCall || isSharedCall || isSharedCallCancelled) {
             notificationBuilder.setFullScreenIntent(fullScreenPendingIntent, true)
             // ⭐️ 알림 소리 명시적 설정
             val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)

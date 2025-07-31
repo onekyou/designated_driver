@@ -34,7 +34,10 @@
       "Bash(where firebase)",
       "Bash(C:UsersonekyouAppDataRoamingnpmfirebase.cmd deploy --only functions)",
       "Bash(cmd /c \"firebase deploy --only functions\")",
-      "Bash(npm run deploy:*)"
+      "Bash(npm run deploy:*)",
+      "Bash(.gradlew build --stacktrace)",
+      "Bash(firebase --version)",
+      "Bash(firebase functions:log:*)"
     ],
     "deny": []
   }

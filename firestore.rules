@@ -76,8 +76,13 @@ service cloud.firestore {
         // 콜 생성: 누구나 콜을 생성할 수 있습니다 (콜 디텍터 앱용).
         allow create: if true;
 
-        // 콜 삭제: 사무실 관리자만 가능합니다.
-        allow delete: if isOfficeAdmin(regionId, officeId);
+        // 콜 삭제: 사무실 관리자 또는 공유콜을 취소하는 기사가 가능합니다.
+        allow delete: if 
+          isOfficeAdmin(regionId, officeId) ||
+          // 기사가 자신에게 배정된 공유콜을 취소(삭제)하는 경우
+          (isAuthenticated() && 
+           resource.data.assignedDriverId == request.auth.uid && 
+           resource.data.callType == "SHARED");
 
         // 콜 업데이트 (상태 머신):
         // 관리자 또는 배정된 기사만 업데이트 가능
@@ -91,9 +96,22 @@ service cloud.firestore {
               (resource.data.status == "ASSIGNED" && request.resource.data.status == "ACCEPTED") ||
               (resource.data.status == "ACCEPTED" && request.resource.data.status == "IN_PROGRESS") ||
               (resource.data.status == "IN_PROGRESS" && request.resource.data.status == "AWAITING_SETTLEMENT") ||
-              (resource.data.status == "AWAITING_SETTLEMENT" && request.resource.data.status == "COMPLETED")
+              (resource.data.status == "AWAITING_SETTLEMENT" && request.resource.data.status == "COMPLETED") ||
+              // 기사가 운행 취소할 때: ACCEPTED → HOLD 허용
+              (resource.data.status == "ACCEPTED" && request.resource.data.status == "HOLD") ||
+              // 기사가 공유콜을 취소할 때: ASSIGNED/ACCEPTED → CANCELLED_BY_DRIVER 허용
+              ((resource.data.status == "ASSIGNED" || resource.data.status == "ACCEPTED") && 
+               request.resource.data.status == "CANCELLED_BY_DRIVER" && 
+               resource.data.callType == "SHARED")
             )
-          );
+          ) ||
+          // 공유콜 취소 시 원본 사무실 콜을 원래 상태로 복구 허용
+          // 기사가 공유콜을 취소할 때 원본 사무실의 콜을 복구할 수 있도록 허용
+          (isAuthenticated() && 
+           resource.data.callType == "SHARED" && 
+           request.resource.data.status == "SHARED" &&
+           request.resource.data.status == "WAITING" &&
+           request.resource.data.cancelReason != null);
       }
 
       // ✅ 포인트(balance) 문서 규칙 – 오직 사무실 관리자 읽기 가능, 서버(Functions)만 쓰기
@@ -120,9 +138,9 @@ service cloud.firestore {
       }
     }
 
-    // 공유 콜 규칙 – OPEN ➔ CLAIMED 1회만 허용
+    // 공유 콜 규칙 – 관리자만 접근 가능, 기사는 내부콜만 처리
     match /shared_calls/{sharedCallId} {
-      // 관리자라면 조회 가능
+      // 관리자만 조회 가능
       allow read: if isAnyAdmin();
 
       // 공유 콜 생성: 관리자만 가능 (source 사무실)
@@ -130,21 +148,20 @@ service cloud.firestore {
 
       /*
        * 공유 콜 상태 전환 허용:
-       * 1) OPEN → CLAIMED: 관리자가 콜 수락 (여러 필드 업데이트 허용)
+       * 1) OPEN → CLAIMED: 관리자가 콜 수락
        * 2) CLAIMED → COMPLETED: Cloud Functions가 운행 완료 시 처리
+       * 3) CLAIMED → OPEN: Cloud Functions가 기사 취소 시 처리
        */
       allow update: if
-        // OPEN → CLAIMED (관리자가 수락) - 필드 업데이트 포함
+        // OPEN → CLAIMED (관리자가 수락)
         (isAnyAdmin() &&
          resource.data.status == "OPEN" &&
          request.resource.data.status == "CLAIMED") ||
-        // CLAIMED → COMPLETED (Cloud Functions가 처리)
-        (request.auth == null &&
-         resource.data.status == "CLAIMED" &&
-         request.resource.data.status == "COMPLETED");
+        // Cloud Functions가 상태 변경 처리
+        (request.auth == null);
 
-      // 클라이언트 측 삭제 금지
-      allow delete: if false;
+      // 클라이언트 측 삭제 금지 - 서버만 가능
+      allow delete: if request.auth == null;
     }
 
     // 포인트 거래 내역 컬렉션

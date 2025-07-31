@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Home
 import androidx.navigation.NavController
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -221,6 +222,13 @@ fun HistorySettlementScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { 
+                        navController.navigate("home") {
+                            popUpTo("home") { inclusive = false }
+                        }
+                    }) {
+                        Icon(Icons.Filled.Home, contentDescription = "홈으로 이동", tint = Color.White)
+                    }
                     IconButton(onClick = { showHistoryDialog = true }) {
                         Icon(Icons.Filled.History, contentDescription = "이전 기록 보기", tint = Color.White)
                     }
