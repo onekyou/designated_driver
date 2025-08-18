@@ -1,7 +1,6 @@
 package com.designated.callmanager.ui.pendingdrivers
 
 import android.app.Application
-import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.designated.callmanager.data.Constants
@@ -37,7 +36,6 @@ class PendingDriversViewModel(
     private val regionId: String,
     private val officeId: String
 ) : AndroidViewModel(application) {
-    private val TAG = "PendingDriversViewModel"
     private val firestore: FirebaseFirestore = Firebase.firestore
 
     private val _uiState = MutableStateFlow<PendingDriversUiState>(PendingDriversUiState.Loading)
@@ -47,68 +45,97 @@ class PendingDriversViewModel(
     val approvalState: StateFlow<DriverApprovalState> = _approvalState.asStateFlow()
 
     init {
+        android.util.Log.w("PendingDriversVM_INIT", "=== PendingDriversViewModel 초기화 ===")
+        android.util.Log.w("PendingDriversVM_INIT", "regionId: '$regionId', officeId: '$officeId'")
+        
         if (regionId.isBlank() || officeId.isBlank()) {
-            Log.e(TAG, "ViewModel initialized with invalid region/office ID. Region: '$regionId', Office: '$officeId'")
+            android.util.Log.e("PendingDriversVM_INIT", "지역/사무실 ID가 유효하지 않음!")
             _uiState.value = PendingDriversUiState.Error("관리자 정보(지역/사무실 ID)가 유효하지 않습니다.")
         } else {
+            android.util.Log.w("PendingDriversVM_INIT", "fetchPendingDrivers 호출")
             fetchPendingDrivers()
         }
     }
 
     fun fetchPendingDrivers() {
+        android.util.Log.w("PendingDriversVM_DEBUG", "=== fetchPendingDrivers 시작 ===")
+        android.util.Log.w("PendingDriversVM_DEBUG", "regionId: '$regionId', officeId: '$officeId'")
+        
         if (regionId.isBlank() || officeId.isBlank()) {
-            Log.w(TAG, "fetchPendingDrivers called with invalid IDs. Skipping fetch.")
+            android.util.Log.e("PendingDriversVM_DEBUG", "지역/사무실 ID가 비어있음!")
             _uiState.value = PendingDriversUiState.Error("관리자 정보(지역/사무실 ID)가 유효하지 않습니다.")
             return
         }
 
-        Log.d(TAG, "Fetching pending drivers for Region: $regionId, Office: $officeId")
         _uiState.value = PendingDriversUiState.Loading
         viewModelScope.launch {
             try {
+                android.util.Log.w("PendingDriversVM_DEBUG", "Firestore 쿼리 시작 - pending_drivers 컬렉션")
+                
+                // 1단계: 전체 pending_drivers 확인
+                val allPendingSnapshot = firestore.collection("pending_drivers").get().await()
+                android.util.Log.w("PendingDriversVM_DEBUG", "전체 pending_drivers 문서 수: ${allPendingSnapshot.size()}")
+                
+                allPendingSnapshot.documents.forEach { doc ->
+                    android.util.Log.w("PendingDriversVM_DEBUG", "pending_drivers 문서: ${doc.id} = ${doc.data}")
+                }
+                
+                // 2단계: 특정 지역/사무실의 기사만 필터링
                 val snapshot = firestore.collection("pending_drivers")
                     .whereEqualTo("targetRegionId", regionId)
                     .whereEqualTo("targetOfficeId", officeId)
-                    .orderBy("requestedAt", com.google.firebase.firestore.Query.Direction.ASCENDING) // 신청 순서
+                    .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.ASCENDING)
                     .get()
                     .await()
+                android.util.Log.w("PendingDriversVM_DEBUG", "필터링 후 문서 수: ${snapshot.size()}")
 
                 val driverList = snapshot.documents.mapNotNull { doc ->
                     try {
-                         val parsedDriver = doc.toObject(PendingDriverInfo::class.java)
-                         if (parsedDriver?.authUid == null) {
-                             Log.w(TAG, "Parsed pending driver ${doc.id} has null authUid, attempting to use document ID.")
-                             parsedDriver?.copy(authUid = doc.id)
-                         } else {
-                             parsedDriver
-                         }
+                        android.util.Log.w("PendingDriversVM_DEBUG", "문서 파싱 중: ${doc.id}")
+                        val parsedDriver = doc.toObject(PendingDriverInfo::class.java)
+                        android.util.Log.w("PendingDriversVM_DEBUG", "파싱 결과: $parsedDriver")
+                        
+                        if (parsedDriver?.authUid == null) {
+                            android.util.Log.w("PendingDriversVM_DEBUG", "authUid가 null, 문서 ID 사용: ${doc.id}")
+                            parsedDriver?.copy(authUid = doc.id)
+                        } else {
+                            parsedDriver
+                        }
                     } catch (e: Exception) {
-                        Log.e(TAG, "Error parsing pending driver document: ${doc.id}", e)
+                        android.util.Log.e("PendingDriversVM_DEBUG", "문서 파싱 실패: ${doc.id}", e)
                         null
                     }
                 }
-                Log.d(TAG, "Pending drivers fetched successfully: ${driverList.size} drivers for $regionId/$officeId")
+                
+                android.util.Log.w("PendingDriversVM_DEBUG", "최종 승인 대기 목록 크기: ${driverList.size}")
+                driverList.forEach { driver ->
+                    android.util.Log.w("PendingDriversVM_DEBUG", "승인 대기 기사: ${driver.name} (${driver.driverType})")
+                }
+                
                 _uiState.value = PendingDriversUiState.Success(driverList)
+                android.util.Log.w("PendingDriversVM_DEBUG", "=== fetchPendingDrivers 완료 ===")
+                
             } catch (e: Exception) {
-                Log.e(TAG, "Error fetching pending drivers for $regionId/$officeId", e)
+                android.util.Log.e("PendingDriversVM_DEBUG", "fetchPendingDrivers 실패", e)
                 _uiState.value = PendingDriversUiState.Error("승인 대기 목록 로드 실패: ${e.message}")
             }
         }
     }
 
     fun approveDriver(driverInfo: PendingDriverInfo) {
+        android.util.Log.w("PendingDriversVM", "승인 시작 - ${driverInfo.name} (${driverInfo.driverType})")
         val driverUid = driverInfo.authUid
         if (driverUid.isNullOrBlank()) {
-            Log.e(TAG, "Cannot approve driver: authUid is missing in driverInfo: ${driverInfo.name}")
+            android.util.Log.e("PendingDriversVM", "승인 실패: authUid 없음")
             _approvalState.value = DriverApprovalState.Error("승인 실패: 기사 고유 ID(authUid)가 없습니다.")
             return
         }
         if (driverInfo.targetRegionId.isNullOrBlank() || driverInfo.targetOfficeId.isNullOrBlank()) {
-            Log.e(TAG, "Cannot approve driver ${driverInfo.name}: targetRegionId or targetOfficeId is missing.")
+            android.util.Log.e("PendingDriversVM", "승인 실패: 대상 정보 없음 - regionId=${driverInfo.targetRegionId}, officeId=${driverInfo.targetOfficeId}")
             _approvalState.value = DriverApprovalState.Error("승인 실패: 기사 정보에 대상 지역/사무실 ID가 없습니다.")
             return
         }
-        Log.d(TAG, "Approving driver: ${driverInfo.name} ($driverUid) -> Target: ${driverInfo.targetRegionId}/${driverInfo.targetOfficeId}")
+        android.util.Log.w("PendingDriversVM", "승인 진행 - UID: $driverUid, 대상: ${driverInfo.targetRegionId}/${driverInfo.targetOfficeId}")
         _approvalState.value = DriverApprovalState.Loading
         viewModelScope.launch {
             try {
@@ -129,6 +156,10 @@ class PendingDriversViewModel(
 
                     "regionId" to driverInfo.targetRegionId,
                     "officeId" to driverInfo.targetOfficeId,
+                    
+                    // 픽업앱 로그인 시 필요한 associatedOfficeId 필드 추가
+                    "associatedOfficeId" to driverInfo.targetOfficeId,
+                    
                     "createdAt" to (driverInfo.requestedAt ?: com.google.firebase.Timestamp.now()),
                     "updatedAt" to com.google.firebase.Timestamp.now(),
                     "approvedAt" to com.google.firebase.Timestamp.now(),
@@ -137,27 +168,60 @@ class PendingDriversViewModel(
                     "totalTrips" to 0
                 )
 
-                // 2. 최종 경로 참조
+                // 2. 최종 경로 참조 (기사 타입에 따라 컬렉션 결정)
+                android.util.Log.w("PendingDriversVM", "원본 driverType 값: '${driverInfo.driverType}'")
+                
+                val normalizedType = driverInfo.driverType.trim()
+                val driverCollection = when {
+                    normalizedType.equals("PICKUP", ignoreCase = true) -> "pickup_drivers"
+                    normalizedType == "픽업기사" -> "pickup_drivers"  // 한국어 대응
+                    normalizedType.equals("DESIGNATED", ignoreCase = true) -> "designated_drivers"
+                    normalizedType == "대리기사" -> "designated_drivers"  // 한국어 대응
+                    else -> {
+                        android.util.Log.w("PendingDriversVM", "알 수 없는 driverType: '${driverInfo.driverType}', designated_drivers로 기본 설정")
+                        "designated_drivers" // 기본적으로 대리 기사
+                    }
+                }
+                android.util.Log.w("PendingDriversVM", "선택된 드라이버 컬렉션: $driverCollection")
+                
                 val finalDriverDocRef = firestore.collection("regions").document(driverInfo.targetRegionId)
                     .collection("offices").document(driverInfo.targetOfficeId)
-                    .collection("designated_drivers").document(driverUid)
+                    .collection(driverCollection).document(driverUid)
+                android.util.Log.w("PendingDriversVM", "최종 경로: ${finalDriverDocRef.path}")
 
                 // 3. 승인 대기 문서 참조
                 val pendingDriverDocRef = firestore.collection("pending_drivers").document(driverUid)
+                android.util.Log.w("PendingDriversVM", "Pending 경로: ${pendingDriverDocRef.path}")
 
-                // 4. Firestore 트랜잭션
-                firestore.runTransaction { transaction ->
-                    transaction.set(finalDriverDocRef, finalDriverData)
-                    transaction.delete(pendingDriverDocRef)
-                    null
-                }.await()
+                android.util.Log.w("PendingDriversVM", "최종 데이터: $finalDriverData")
 
-                Log.i(TAG, "Driver approved and moved successfully: ${driverInfo.name}")
+                // 4. 단계별 실행으로 변경 (디버깅용)
+                android.util.Log.w("PendingDriversVM", "$driverCollection 문서 생성 시작")
+                try {
+                    finalDriverDocRef.set(finalDriverData).await()
+                    android.util.Log.w("PendingDriversVM", "$driverCollection 문서 생성 성공")
+                } catch (e: Exception) {
+                    android.util.Log.e("PendingDriversVM", "$driverCollection 문서 생성 실패", e)
+                    throw e
+                }
+                
+                android.util.Log.w("PendingDriversVM", "pending_drivers 문서 삭제 시작")
+                try {
+                    pendingDriverDocRef.delete().await()
+                    android.util.Log.w("PendingDriversVM", "pending_drivers 문서 삭제 성공")
+                } catch (e: Exception) {
+                    android.util.Log.e("PendingDriversVM", "pending_drivers 문서 삭제 실패", e)
+                    // 삭제 실패해도 계속 진행 (이미 생성된 pickup_drivers는 유지)
+                }
+
                 _approvalState.value = DriverApprovalState.Success(driverInfo.name ?: "(이름 없음)", true)
+                android.util.Log.w("PendingDriversVM", "승인 성공")
                 fetchPendingDrivers() // 목록 새로고침
 
             } catch (e: Exception) {
-                Log.e(TAG, "Error approving driver: ${driverInfo.name}", e)
+                android.util.Log.e("PendingDriversVM", "승인 실패", e)
+                android.util.Log.e("PendingDriversVM", "예외 타입: ${e.javaClass.simpleName}")
+                android.util.Log.e("PendingDriversVM", "예외 메시지: ${e.message}")
                 _approvalState.value = DriverApprovalState.Error("기사 승인 중 오류 발생: ${e.message}")
             }
         }
@@ -166,11 +230,9 @@ class PendingDriversViewModel(
     fun rejectDriver(driverInfo: PendingDriverInfo) {
         val driverUid = driverInfo.authUid
         if (driverUid.isNullOrBlank()) {
-            Log.e(TAG, "Cannot reject driver: authUid is missing in driverInfo: ${driverInfo.name}")
             _approvalState.value = DriverApprovalState.Error("거절 실패: 기사 고유 ID(authUid)가 없습니다.")
             return
         }
-        Log.d(TAG, "Rejecting driver: ${driverInfo.name} ($driverUid)")
         _approvalState.value = DriverApprovalState.Loading
         viewModelScope.launch {
             try {
@@ -178,12 +240,10 @@ class PendingDriversViewModel(
                 val pendingDriverDocRef = firestore.collection("pending_drivers").document(driverUid)
                 pendingDriverDocRef.delete().await()
 
-                Log.i(TAG, "Driver rejected and removed successfully: ${driverInfo.name}")
                 _approvalState.value = DriverApprovalState.Success(driverInfo.name ?: "(이름 없음)", false)
                 fetchPendingDrivers() // 목록 새로고침
 
             } catch (e: Exception) {
-                Log.e(TAG, "Error rejecting driver: ${driverInfo.name}", e)
                 _approvalState.value = DriverApprovalState.Error("기사 거절 중 오류 발생: ${e.message}")
             }
         }

@@ -59,11 +59,11 @@ export const oncallassigned = onDocumentWritten(
         
         // 공유콜이면서 새 문서인 경우 상세 로그
         if (isSharedCall && isNewDocument) {
-            logger.info(`[${callId}] 공유콜 새 문서 생성 감지. 알림을 보내지 않습니다.`);
+            logger.info(`[${callId}] 공유콜 새 문서 생성 감지. 기사 배정 시 알림 전송됩니다.`);
         }
         
         const isDriverAssigned = afterData.assignedDriverId && (
-            (isNewDocument && !isSharedCall) || // 새 문서 생성 시 (공유콜 제외)
+            isNewDocument || // 새 문서 생성 시 (공유콜 포함)
             isDriverChanged // 기존 문서의 기사 변경 시
         );
 
@@ -94,13 +94,18 @@ export const oncallassigned = onDocumentWritten(
                 return;
             }
 
-            // 4. 알림 페이로드 구성 및 전송
+            // 4. 알림 페이로드 구성 및 전송 (고우선순위 설정)
+            // notification 필드 제거 - 앱에서 커스텀 알림 처리
             const payload = {
                 data: {
-                    title: "새로운 콜 배정",
-                    body: "새로운 콜이 배정되었습니다. 앱을 확인해주세요.",
                     callId: callId,
-                    type: "NEW_CALL_ASSIGNED"
+                    type: "call_assigned",
+                    title: "🚨 새로운 콜 배정",
+                    body: "새로운 콜이 배정되었습니다. 즉시 확인해주세요!"
+                },
+                android: {
+                    priority: "high" as const,
+                    ttl: 30000, // 30초 TTL
                 },
                 token: fcmToken,
             };
@@ -166,6 +171,7 @@ export const onSharedCallCreated = onDocumentCreated(
     }
 
     logger.info(`[shared-created:${callId}] 새로운 공유콜 생성됨. 대상 지역 관리자들에게 알림 전송 시작.`);
+    logger.info(`[shared-created:${callId}] 공유콜 데이터: sourceRegionId=${sharedCallData.sourceRegionId}, sourceOfficeId=${sharedCallData.sourceOfficeId}, targetRegionId=${sharedCallData.targetRegionId}`);
 
     try {
       // 대상 지역의 모든 관리자 FCM 토큰 조회 (원본 사무실 제외)
@@ -178,16 +184,26 @@ export const onSharedCallCreated = onDocumentCreated(
       const tokens: string[] = [];
       adminQuery.docs.forEach((doc) => {
         const adminData = doc.data();
+        logger.info(`[shared-created:${callId}] 관리자 확인: regionId=${adminData.associatedRegionId}, officeId=${adminData.associatedOfficeId}, sourceOfficeId=${sharedCallData.sourceOfficeId}`);
+        
         // 원본 사무실은 제외 (sourceOfficeId와 동일한 사무실 제외)
-        if (adminData.associatedRegionId === sharedCallData.sourceRegionId && 
-            adminData.associatedOfficeId === sharedCallData.sourceOfficeId) {
-          logger.info(`[shared-created:${callId}] 원본 사무실 제외: ${adminData.associatedOfficeId}`);
+        if (adminData.associatedOfficeId === sharedCallData.sourceOfficeId) {
+          logger.info(`[shared-created:${callId}] ⛔ 원본 사무실 제외: ${adminData.associatedOfficeId} (sourceOfficeId: ${sharedCallData.sourceOfficeId})`);
           return; // 다음 관리자로 넘어감
         }
         
+        logger.info(`[shared-created:${callId}] ✅ 원본 사무실이 아님: ${adminData.associatedOfficeId} ≠ ${sharedCallData.sourceOfficeId}`);
+        
         if (adminData.fcmToken) {
-          tokens.push(adminData.fcmToken);
-          logger.info(`[shared-created:${callId}] 알림 대상 추가: ${adminData.associatedOfficeId}`);
+          // 중복 토큰 방지
+          if (!tokens.includes(adminData.fcmToken)) {
+            tokens.push(adminData.fcmToken);
+            logger.info(`[shared-created:${callId}] 📤 알림 대상 추가: ${adminData.associatedOfficeId}`);
+          } else {
+            logger.info(`[shared-created:${callId}] 🔄 중복 토큰 제외: ${adminData.associatedOfficeId}`);
+          }
+        } else {
+          logger.warn(`[shared-created:${callId}] ⚠️ FCM 토큰 없음: ${adminData.associatedOfficeId}`);
         }
       });
 
@@ -210,6 +226,7 @@ export const onSharedCallCreated = onDocumentCreated(
           departure: sharedCallData.departure || "",
           destination: sharedCallData.destination || "",
           fare: (sharedCallData.fare || 0).toString(),
+          click_action: "ACTION_SHOW_SHARED_CALL",
         },
         android: {
           priority: "high",
@@ -217,6 +234,7 @@ export const onSharedCallCreated = onDocumentCreated(
             sound: "default",
             channelId: "shared_call_fcm_channel",
             priority: "high",
+            clickAction: "ACTION_SHOW_SHARED_CALL", // click_action → clickAction
           },
         },
         tokens,
@@ -276,7 +294,7 @@ export const onSharedCallClaimed = onDocumentUpdated(
             .doc(callId);
           
           tx.update(originalCallRef, {
-            status: "WAITING",
+            status: "HOLD",
             callType: null,
             sourceSharedCallId: null,
             assignedDriverId: null,
@@ -289,7 +307,7 @@ export const onSharedCallClaimed = onDocumentUpdated(
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
           });
           
-          logger.info(`[shared:${callId}] 원본 사무실 콜이 WAITING 상태로 복구되었습니다.`);
+          logger.info(`[shared:${callId}] 원본 사무실 콜이 HOLD 상태로 복구되었습니다.`);
         });
         
         // 원본 사무실 관리자들에게 알림 전송
@@ -394,17 +412,23 @@ export const onSharedCallClaimed = onDocumentUpdated(
             .collection("calls")
             .doc(callId);
 
-          // 공유콜은 항상 WAITING 상태로 생성 (중복 알림 방지)
+          // 공유콜 생성 - 기사 배정이 있으면 바로 ASSIGNED 상태로 생성
           const callDoc: any = {
             ...afterData,
-            status: "WAITING", // 항상 WAITING으로 시작
+            status: assignedDriverId ? "ASSIGNED" : "WAITING",
             departure_set: afterData.departure ?? null,
             destination_set: afterData.destination ?? null,
             fare_set: afterData.fare ?? null,
             callType: "SHARED",
             sourceSharedCallId: callId,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            // assignedDriverId는 나중에 관리자가 배정할 때 추가
+            // 기사 배정이 있다면 바로 포함
+            ...(assignedDriverId && {
+              assignedDriverId: assignedDriverId,
+              assignedDriverName: assignedDriverName,
+              assignedDriverPhone: assignedDriverPhone,
+              assignedTimestamp: admin.firestore.FieldValue.serverTimestamp(),
+            })
           };
           tx.set(destCallsRef, callDoc);
           
@@ -439,34 +463,14 @@ export const onSharedCallClaimed = onDocumentUpdated(
 
         logger.info(`[shared:${callId}] 콜 복사 및 포인트 처리 완료. 대상 사무실에 WAITING 상태로 생성됨.`);
 
-        // ---- 기사 배정이 있는 경우 별도 처리 (중복 알림 방지) ----
-        if (assignedDriverId) {
+        // ---- 기사 상태 업데이트 (기사 배정이 있는 경우만) ----
+        if (assignedDriverId && driverSnap?.exists) {
           try {
-            logger.info(`[shared:${callId}] 기사 배정 별도 처리 시작: ${assignedDriverId}`);
-            const destCallRef = admin.firestore()
-              .collection("regions")
-              .doc(afterData.targetRegionId)
-              .collection("offices")
-              .doc(afterData.claimedOfficeId!)
-              .collection("calls")
-              .doc(callId);
-
-            await destCallRef.update({
-              status: "ASSIGNED",
-              assignedDriverId: assignedDriverId,
-              assignedDriverName: assignedDriverName,
-              assignedDriverPhone: assignedDriverPhone,
-              assignedTimestamp: admin.firestore.FieldValue.serverTimestamp(),
-            });
-            
-            // 기사 상태 업데이트
-            if (driverSnap?.exists) {
-              await driverSnap.ref.update({ status: "배차중" });
-            }
-            
-            logger.info(`[shared:${callId}] 기사 배정 별도 처리 완료: ${assignedDriverId}`);
+            logger.info(`[shared:${callId}] 기사 상태 업데이트: ${assignedDriverId}`);
+            await driverSnap.ref.update({ status: "배차중" });
+            logger.info(`[shared:${callId}] 기사 상태 업데이트 완료: ${assignedDriverId}`);
           } catch (assignErr) {
-            logger.error(`[shared:${callId}] 기사 배정 별도 처리 실패`, assignErr);
+            logger.error(`[shared:${callId}] 기사 상태 업데이트 실패`, assignErr);
           }
         }
 
@@ -717,6 +721,142 @@ export const onSharedCallCancelledByDriver = onDocumentUpdated(
         
       } catch (error) {
         logger.error(`[call-cancelled:${callId}] 공유콜 취소 처리 오류:`, error);
+      }
+    }
+  }
+);
+
+// 콜 상태 변경 시 알림 (운행시작, 정산완료 등)
+export const onCallStatusChanged = onDocumentUpdated(
+  {
+    region: "asia-northeast3",
+    document: "regions/{regionId}/offices/{officeId}/calls/{callId}",
+  },
+  async (event) => {
+    const { regionId, officeId, callId } = event.params;
+    
+    if (!event.data) {
+      logger.warn(`[onCallStatusChanged:${callId}] No event data.`);
+      return;
+    }
+
+    const beforeData = event.data.before?.data();
+    const afterData = event.data.after?.data();
+
+    if (!afterData) {
+      logger.warn(`[onCallStatusChanged:${callId}] Missing after data.`);
+      return;
+    }
+
+    // 새 문서 생성인 경우 (공유콜 포함)
+    const isNewDocument = !beforeData;
+    if (isNewDocument) {
+      logger.info(`[onCallStatusChanged:${callId}] 새 문서 생성 감지. 알림을 보내지 않습니다. callType: ${afterData.callType}`);
+      return;
+    }
+
+    // 상태가 변경되지 않았으면 무시
+    if (beforeData.status === afterData.status) {
+      return;
+    }
+
+    logger.info(`[onCallStatusChanged:${callId}] Status changed: ${beforeData.status} → ${afterData.status}`);
+
+    // 운행 시작 (IN_PROGRESS) 또는 정산 완료 (COMPLETED) 상태 체크
+    if (afterData.status === "IN_PROGRESS" || afterData.status === "COMPLETED") {
+      // 관리자 FCM 토큰 조회
+      const adminQuery = await admin
+        .firestore()
+        .collection("admins")
+        .where("associatedRegionId", "==", regionId)
+        .where("associatedOfficeId", "==", officeId)
+        .get();
+
+      const tokens = adminQuery.docs
+        .map((d) => d.data().fcmToken as string | undefined)
+        .filter((t): t is string => !!t && t.length > 0);
+
+      if (tokens.length === 0) {
+        logger.warn(`[onCallStatusChanged:${callId}] No admin tokens found.`);
+        return;
+      }
+
+      let notificationData: any = {
+        type: "",
+        callId: callId,
+        timestamp: Date.now().toString(),
+      };
+
+      if (afterData.status === "IN_PROGRESS") {
+        // 운행 시작 알림
+        const tripSummary = `출발: ${afterData.departure_set || afterData.customerAddress || "정보없음"}, 도착: ${afterData.destination_set || "정보없음"}, 요금: ${afterData.fare_set || afterData.fare || 0}원`;
+        const driverName = afterData.assignedDriverName || "기사";
+        
+        // 공유콜인 경우: 원사무실(sourceOfficeId)에만 (공유기사) 표시, 수락사무실에는 실제 기사 이름만 표시
+        const isSourceOffice = afterData.callType === "SHARED" && afterData.sourceOfficeId === officeId;
+        const driverDisplayName = isSourceOffice ? `${driverName} (공유기사)` : driverName;
+        
+        logger.info(`[onCallStatusChanged:${callId}] 기사 이름 표시 로직 - callType: ${afterData.callType}, sourceOfficeId: ${afterData.sourceOfficeId}, currentOfficeId: ${officeId}, isSourceOffice: ${isSourceOffice}, driverDisplayName: ${driverDisplayName}`);
+        
+        notificationData = {
+          ...notificationData,
+          type: "TRIP_STARTED",
+          driverName: driverDisplayName,
+          driverPhone: afterData.assignedDriverPhone || "",
+          customerName: afterData.customerName || "고객",
+          tripSummary: tripSummary,
+          departure: afterData.departure_set || "",
+          destination: afterData.destination_set || "",
+          fare: (afterData.fare_set || afterData.fare || 0).toString(),
+          showPopup: "true"
+        };
+
+        // notification 필드 제거 - 앱에서 커스텀 알림 처리
+        await admin.messaging().sendEachForMulticast({
+          data: {
+            ...notificationData,
+            title: "🚗 운행이 시작되었습니다",
+            body: `${driverName} - ${tripSummary}`,
+          },
+          android: {
+            priority: "high",
+          },
+          tokens,
+        });
+
+        logger.info(`[onCallStatusChanged:${callId}] Trip started notification sent.`);
+        
+      } else if (afterData.status === "COMPLETED") {
+        // 정산 완료 알림
+        const basedriverName = afterData.assignedDriverName || "기사";
+        const isSourceOffice = afterData.callType === "SHARED" && afterData.sourceOfficeId === officeId;
+        const driverName = isSourceOffice ? `${basedriverName} (공유기사)` : basedriverName;
+        
+        logger.info(`[onCallStatusChanged:${callId}] 운행완료 기사 이름 표시 로직 - callType: ${afterData.callType}, sourceOfficeId: ${afterData.sourceOfficeId}, currentOfficeId: ${officeId}, isSourceOffice: ${isSourceOffice}, driverName: ${driverName}`);
+        const customerName = afterData.customerName || "고객";
+        
+        notificationData = {
+          ...notificationData,
+          type: "TRIP_COMPLETED",
+          driverName: driverName,
+          customerName: customerName,
+          showPopup: "true"
+        };
+
+        // notification 필드 제거 - 앱에서 커스텀 알림 처리
+        await admin.messaging().sendEachForMulticast({
+          data: {
+            ...notificationData,
+            title: "✅ 운행이 완료되었습니다",
+            body: `${driverName}님이 ${customerName}님의 운행을 완료했습니다`,
+          },
+          android: {
+            priority: "high",
+          },
+          tokens,
+        });
+
+        logger.info(`[onCallStatusChanged:${callId}] Trip completed notification sent.`);
       }
     }
   }
@@ -982,7 +1122,34 @@ export const onSharedCallCompleted = onDocumentUpdated(
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           }, { merge: true });
 
-          logger.info(`[call-completed:${callId}] 포인트 처리 완료. Source: +${pointAmount}, Target: -${pointAmount}`);
+          // 3) 포인트 거래 내역 저장
+          const timestamp = admin.firestore.FieldValue.serverTimestamp();
+          
+          // 원본 사무실 거래 내역 (포인트 받음)
+          const sourceTransactionRef = admin.firestore().collection("point_transactions").doc();
+          tx.set(sourceTransactionRef, {
+            type: "SHARED_CALL_RECEIVE",
+            amount: pointAmount,
+            description: `공유콜 수수료 수익 (${sharedCallData.departure || "출발지"} → ${sharedCallData.destination || "도착지"})`,
+            timestamp: timestamp,
+            regionId: sharedCallData.sourceRegionId,
+            officeId: sharedCallData.sourceOfficeId,
+            relatedSharedCallId: sourceSharedCallId
+          });
+
+          // 대상 사무실 거래 내역 (포인트 차감)
+          const targetTransactionRef = admin.firestore().collection("point_transactions").doc();
+          tx.set(targetTransactionRef, {
+            type: "SHARED_CALL_SEND",
+            amount: -pointAmount,
+            description: `공유콜 수수료 지출 (${sharedCallData.departure || "출발지"} → ${sharedCallData.destination || "도착지"})`,
+            timestamp: timestamp,
+            regionId: regionId,
+            officeId: officeId,
+            relatedSharedCallId: sourceSharedCallId
+          });
+
+          logger.info(`[call-completed:${callId}] 포인트 처리 완료. Source: +${pointAmount}, Target: -${pointAmount}, 거래내역 생성됨`);
         });
 
         logger.info(`[call-completed:${callId}] 공유콜 완료 처리 성공. SharedCallId: ${sourceSharedCallId}`);
@@ -996,5 +1163,92 @@ export const onSharedCallCompleted = onDocumentUpdated(
 
 export { finalizeWorkDay } from "./finalizeWorkDay";
 
-const _forceDeploy = Date.now();   // 배포 강제용 더미 변수
+// Agora PTT 토큰 관련 함수 추가
+export { generateAgoraToken, refreshAgoraToken } from "./agoraToken";
+
+// 픽업 기사 데이터 마이그레이션 함수 (한 번만 실행)
+import {onCall} from "firebase-functions/v2/https";
+
+export const migratePickupDrivers = onCall(
+  {
+    region: "asia-northeast3",
+  },
+  async (request) => {
+    logger.info("픽업 기사 데이터 마이그레이션 시작");
+    
+    try {
+      const results = {
+        found: 0,
+        migrated: 0,
+        errors: 0,
+        details: [] as string[]
+      };
+
+      // designated_drivers에서 driverType이 PICKUP인 기사들 찾기
+      const pickupDriversInDesignated = await admin
+        .firestore()
+        .collectionGroup("designated_drivers")
+        .where("driverType", "==", "PICKUP")
+        .get();
+
+      results.found = pickupDriversInDesignated.size;
+      logger.info(`발견된 픽업 기사: ${results.found}명`);
+
+      for (const doc of pickupDriversInDesignated.docs) {
+        try {
+          const driverData = doc.data();
+          const driverId = doc.id;
+          
+          // 경로에서 regionId와 officeId 추출
+          const pathSegments = doc.ref.path.split('/');
+          const regionId = pathSegments[1]; // regions/{regionId}
+          const officeId = pathSegments[3]; // offices/{officeId}
+          
+          logger.info(`마이그레이션 중: ${driverData.name} (${regionId}/${officeId})`);
+
+          // pickup_drivers 컬렉션에 새 문서 생성
+          const pickupDriverRef = admin
+            .firestore()
+            .collection("regions")
+            .doc(regionId)
+            .collection("offices")
+            .doc(officeId)
+            .collection("pickup_drivers")
+            .doc(driverId);
+
+          await pickupDriverRef.set(driverData);
+          
+          // 원본 designated_drivers 문서 삭제
+          await doc.ref.delete();
+          
+          results.migrated++;
+          results.details.push(`✅ ${driverData.name} (${regionId}/${officeId}) 마이그레이션 완료`);
+          
+        } catch (error) {
+          results.errors++;
+          logger.error(`픽업 기사 마이그레이션 오류: ${doc.id}`, error);
+          results.details.push(`❌ ${doc.id} 마이그레이션 실패: ${error}`);
+        }
+      }
+
+      logger.info(`픽업 기사 마이그레이션 완료: ${results.migrated}/${results.found} 성공, ${results.errors} 오류`);
+      
+      return {
+        success: true,
+        message: `픽업 기사 마이그레이션 완료`,
+        ...results
+      };
+
+    } catch (error) {
+      logger.error("픽업 기사 마이그레이션 전체 오류:", error);
+      return {
+        success: false,
+        message: `마이그레이션 실패: ${error}`,
+        error: error
+      };
+    }
+  }
+);
+
+const _forceDeploy = Date.now() + 1; // 배포 강제용 더미 변수
 void _forceDeploy;                 // 사용해서 컴파일 경고 해소
