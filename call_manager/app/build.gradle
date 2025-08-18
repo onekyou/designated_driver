@@ -20,10 +20,6 @@ android {
         vectorDrawables {
             useSupportLibrary true
         }
-        // Add NDK abiFilters if using Agora
-        ndk {
-            abiFilters 'armeabi-v7a', 'arm64-v8a' // Add others if needed (x86, x86_64 for emulators)
-        }
     }
 
     buildTypes {
@@ -49,12 +45,6 @@ android {
         resources {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
         }
-        // Add packagingOptions for Agora if needed
-        pickFirsts += [
-            'lib/armeabi-v7a/libc++_shared.so',
-            'lib/arm64-v8a/libc++_shared.so'
-            // Add others matching ndk abiFilters
-        ]
     }
 }
 
@@ -82,17 +72,19 @@ dependencies {
     implementation platform('com.google.firebase:firebase-bom:32.8.0')
     implementation 'com.google.firebase:firebase-auth-ktx'
     implementation 'com.google.firebase:firebase-firestore-ktx'
+    implementation 'com.google.firebase:firebase-database-ktx'
     implementation 'com.google.firebase:firebase-analytics-ktx'
     implementation 'com.google.firebase:firebase-installations-ktx'
     implementation 'com.google.firebase:firebase-messaging-ktx'
     // Cloud Functions
     implementation 'com.google.firebase:firebase-functions-ktx'
-
-    // Agora (Walkie-talkie)
+    
+    // Agora SDK for PTT
     implementation ('io.agora.rtc:voice-sdk:4.2.6'){
         exclude group: 'com.google.protobuf', module: 'protobuf-java'
         exclude group: 'com.google.firebase'
     }
+
 
     // Coroutines
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
@@ -105,6 +97,12 @@ dependencies {
     implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0'
     implementation "androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0"
     implementation "androidx.lifecycle:lifecycle-runtime-compose:2.7.0"
+    
+    // Security (토큰 암호화 저장)
+    implementation "androidx.security:security-crypto:1.1.0-alpha06"
+    
+    // WorkManager (일일 토큰 갱신)
+    implementation "androidx.work:work-runtime-ktx:2.9.0"
 
     // Network (Optional, if needed for direct API calls or network checks)
     implementation 'com.squareup.okhttp3:okhttp:4.11.0'

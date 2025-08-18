@@ -12,7 +12,6 @@ import android.graphics.Color
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.designated.callmanager.MainActivity
 import com.designated.callmanager.R
@@ -34,6 +33,8 @@ import android.content.pm.ServiceInfo
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import android.media.RingtoneManager
+import android.util.Log
+import com.google.firebase.auth.FirebaseAuth
 
 class CallManagerService : Service() {
     companion object {
@@ -50,6 +51,9 @@ class CallManagerService : Service() {
 
     private val firestore = FirebaseFirestore.getInstance()
     private lateinit var sharedPreferences: SharedPreferences
+    
+    // PTT Manager 인스턴스
+    private var pttManager: PTTManager? = null
 
     // ⚠️ FCM 토큰 방식 전환으로 리스너 관련 변수들 제거됨
     // private var callsListener, connectionListener, isListenerAttached 등
@@ -59,7 +63,6 @@ class CallManagerService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "서비스 생성됨")
         sharedPreferences = getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
         isServiceRunning = true
         val notification = createForegroundServiceNotification("서비스 실행 중", "콜 데이터를 실시간으로 수신하고 있습니다.")
@@ -73,36 +76,34 @@ class CallManagerService : Service() {
         } else {
             startForeground(FOREGROUND_NOTIFICATION_ID, notification)
         }
+        
+        // PTTManager 초기화
+        initializePTTManager()
+        
         // FCM 토큰 방식 사용으로 리스너 비활성화
         // setupCallListener() // 제거됨 - FCM 토큰 방식으로 대체
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "onStartCommand 호출됨, action: ${intent?.action}")
         when (intent?.action) {
             DashboardViewModel.ACTION_START_SERVICE -> {
-                Log.d(TAG, "서비스 시작 액션 수신")
                 if (!isServiceRunning) {
                     startForeground(
                         FOREGROUND_NOTIFICATION_ID,
                         createForegroundServiceNotification()
                     )
                     isServiceRunning = true
-                    Log.d(TAG, "Foreground 서비스 시작됨 (from intent)")
                 }
             }
 
             DashboardViewModel.ACTION_STOP_SERVICE -> {
-                Log.d(TAG, "서비스 중지 액션 수신")
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 isServiceRunning = false
-                Log.d(TAG, "Foreground 서비스 중지 및 자체 종료됨")
             }
 
             else -> {
                 if (!isServiceRunning) {
-                    Log.d(TAG, "서비스가 시스템에 의해 재시작됨")
                     startForeground(
                         FOREGROUND_NOTIFICATION_ID,
                         createForegroundServiceNotification()
@@ -118,8 +119,11 @@ class CallManagerService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        Log.d(TAG, "서비스 종료됨 - FCM 토큰 방식 사용 중")
         isServiceRunning = false
+        // PTTManager 정리
+        pttManager?.destroy()
+        pttManager = null
+        Log.i(TAG, "CallManagerService destroyed and PTTManager cleaned up")
         // stopFirebaseListeners() 제거됨 - FCM 토큰 방식에서는 불필요
     }
 
@@ -132,7 +136,6 @@ class CallManagerService : Service() {
             )
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(serviceChannel)
-            Log.d(TAG, "Foreground 서비스 알림 채널 생성됨: $SERVICE_CHANNEL_ID")
         }
 
         val pendingIntent = PendingIntent.getActivity(
@@ -171,6 +174,68 @@ class CallManagerService : Service() {
         val notification = createForegroundServiceNotification(title, text)
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(FOREGROUND_NOTIFICATION_ID, notification)
+    }
+    
+    /**
+     * PTTManager 초기화
+     * - SharedPreferences에서 region/office 정보를 가져와 초기화
+     * - 백그라운드에서도 PTT 자동채널 참여가 가능하도록 함
+     */
+    private fun initializePTTManager() {
+        try {
+            // Firebase Auth 확인
+            val currentUser = FirebaseAuth.getInstance().currentUser
+            if (currentUser == null) {
+                Log.w(TAG, "PTTManager 초기화 실패: 로그인되지 않음")
+                return
+            }
+            
+            // SharedPreferences에서 region/office 정보 가져오기
+            val region = sharedPreferences.getString("regionId", null)
+            val office = sharedPreferences.getString("officeId", null)
+            
+            if (region.isNullOrEmpty() || office.isNullOrEmpty()) {
+                Log.w(TAG, "PTTManager 초기화 실패: region 또는 office 정보 없음")
+                return
+            }
+            
+            Log.i(TAG, "PTTManager 초기화 시작 - region: $region, office: $office, user: ${currentUser.uid}")
+            
+            // PTTManager 인스턴스 생성
+            pttManager = PTTManager.getInstance(
+                context = applicationContext,
+                userType = "call_manager",
+                regionId = region,
+                officeId = office
+            )
+            
+            // PTTManager 초기화 (콜백 등록)
+            pttManager?.initialize(object : PTTManager.PTTCallback {
+                override fun onStatusChanged(status: String) {
+                    Log.d(TAG, "PTT 상태 변경: $status")
+                }
+                
+                override fun onConnectionStateChanged(isConnected: Boolean) {
+                    Log.d(TAG, "PTT 연결 상태: $isConnected")
+                    if (isConnected) {
+                        Log.i(TAG, "🎯 PTT 자동채널 참여 성공!")
+                    }
+                }
+                
+                override fun onSpeakingStateChanged(isSpeaking: Boolean) {
+                    Log.d(TAG, "PTT 송신 상태: $isSpeaking")
+                }
+                
+                override fun onError(error: String) {
+                    Log.e(TAG, "PTT 오류: $error")
+                }
+            })
+            
+            Log.i(TAG, "✅ PTTManager 초기화 완료 - 백그라운드에서 PTT 자동채널 참여 대기 중")
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "PTTManager 초기화 중 오류", e)
+        }
     }
     
     // ⚠️ 로컬 알림 함수들 제거 - FCM을 통해 서버에서 처리됨

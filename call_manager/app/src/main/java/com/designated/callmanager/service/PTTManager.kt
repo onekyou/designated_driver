@@ -1,4 +1,4 @@
-package com.designated.pickupapp.service
+package com.designated.callmanager.service
 
 import android.Manifest
 import android.content.Context
@@ -24,18 +24,18 @@ import kotlinx.coroutines.launch
 import java.util.*
 
 /**
- * PTT (Push-to-Talk) 매니저 클래스 - 픽업앱용
- * 콜매니저 앱의 검증된 로직을 기반으로 구현
+ * PTT (Push-to-Talk) 매니저 클래스
+ * 워키토키 앱의 검증된 로직을 기반으로 구현
  */
 class PTTManager private constructor(
     private val context: Context,
-    private val userType: String, // "pickup_driver"
+    private val userType: String, // "call_manager", "pickup_driver", "driver"
     private val regionId: String,
     private val officeId: String
 ) {
     
     companion object {
-        private const val TAG = "PTTManager_Pickup"
+        private const val TAG = "PTTManager"
         
         @Volatile
         private var INSTANCE: PTTManager? = null
@@ -80,12 +80,13 @@ class PTTManager private constructor(
     private var sessionListener: ValueEventListener? = null
     private var isSessionInitiator = false
     
-    // Phase 1+2+3+4: PTT 최적화 시스템
+    // Phase 1: 보안 강화된 토큰 관리
     private val tokenCache = TokenCache()
-    private val secureTokenManager by lazy { SecureTokenManager.getInstance(context) }
-    private val pttDebouncer by lazy { PTTDebouncer(250L) }
+    private val secureTokenManager by lazy { SecureTokenManager(context) }
     private var smartConnectionManager: SmartConnectionManager? = null
-    private val pttOptimizationEnabled = true  // 최적화 기능 활성화 플래그
+    
+    // Phase 2: 디바운싱 로직으로 비용 최적화
+    private val pttDebouncer by lazy { PTTDebouncer(250L) }
     
     // SoundPool 관련
     private lateinit var soundPool: SoundPool
@@ -204,18 +205,8 @@ class PTTManager private constructor(
         setupFirebase()
         initializeAgoraEngine()
         
-        // Phase 3: 일일 토큰 갱신 스케줄링
-        if (pttOptimizationEnabled) {
-            TokenRefreshWorker.scheduleTokenRefresh(context)
-            Log.i("PTT_PHASE3_TOKEN_REFRESH", "✅ PHASE 3 SCHEDULED - 일일 토큰 갱신 스케줄링 완료")
-        }
-        
-        // Phase 4: 지능형 연결 관리자 초기화
-        if (pttOptimizationEnabled) {
-            smartConnectionManager = SmartConnectionManager(context, regionId, officeId)
-            smartConnectionManager?.initialize()
-            Log.i("PTT_PHASE4_SMART", "✅ PHASE 4 INITIALIZED - 지능형 연결 관리자 활성화")
-        }
+        // 스마트 연결 관리자 초기화
+        smartConnectionManager = SmartConnectionManager(this)
     }
     
     private fun checkPermissions(): Boolean {
@@ -319,13 +310,12 @@ class PTTManager private constructor(
     }
     
     /**
-     * PTT 버튼 처리 - Phase 2 디바운싱 적용
-     */
-    /**
-     * 하드웨어 볼륨 다운 키 눌림 처리 - Phase 2 최적화
+     * PTT 버튼 눌림 처리 - Phase 2 디바운싱 적용
+     * - 즉시 채널 참여 및 송신 시작
+     * - 재연결 방지로 비용 최적화
      */
     fun handleVolumeDownPress(): Boolean {
-        Log.i(TAG, "=== PTTManager.handleVolumeDownPress() CALLED ===")
+        Log.i(TAG, "=== PTTManager.handleVolumeDownPress() CALLED (Phase 2) ===")
         Log.i(TAG, "Current state - isSpeaking: $isSpeaking, awaitingDoubleClickRelease: $awaitingDoubleClickRelease, isConnected: $isConnected")
         
         // 중복 호출 방지: 이미 송신 중이거나 처리 중인 경우 무시
@@ -334,109 +324,73 @@ class PTTManager private constructor(
             return true
         }
         
-        Log.i(TAG, "PTT button pressed - Phase 2 debouncing")
+        // 스마트 연결 관리자에 알림
+        smartConnectionManager?.onPTTPressed()
+        
+        Log.i(TAG, "PTT button pressed - starting PTT with Phase 2 optimization")
         playSound(soundIdPttEffect)
         awaitingDoubleClickRelease = true
         
-        // Phase 2: PTTDebouncer를 통한 최적화된 채널 연결
-        if (pttOptimizationEnabled) {
-            pttDebouncer.onPTTPressed {
-                joinChannelAndSpeak()
-            }
-        } else {
+        // Phase 2: 디바운서를 통한 스마트 채널 관리
+        pttDebouncer.onPTTPressed {
+            // 채널 연결 액션
             joinChannelAndSpeak()
         }
+        
+        // 송신은 즉시 시작 (사용자 피드백)
+        if (isConnected) {
+            startSpeakingActual()
+        }
+        
         return true
     }
     
     /**
-     * 하드웨어 볼륨 다운 키 떼기 처리 - Phase 2 최적화
+     * PTT 버튼 뗌 처리 - Phase 2 디바운싱 적용
+     * - 송신 즉시 중지 (사용자 피드백)
+     * - 채널 해제는 250ms 후 (비용 최적화)
      */
     fun handleVolumeDownRelease(): Boolean {
         if (awaitingDoubleClickRelease || isSpeaking) {
-            Log.i(TAG, "PTT button released - Phase 2 debouncing")
+            Log.i(TAG, "PTT button released - stopping PTT with Phase 2 optimization")
             
-            // Phase 2: PTTDebouncer를 통한 최적화된 송신 중지
-            if (pttOptimizationEnabled) {
-                // 즉시 송신 중지 (사용자 피드백)
-                if (isSpeaking) {
-                    isSpeaking = false
-                    rtcEngine?.enableLocalAudio(false)
-                    playSound(soundIdPttEffect)
-                    callback?.onSpeakingStateChanged(false)
-                }
-                
-                // 250ms 후 채널 해제 예약 (비용 최적화)
-                pttDebouncer.onPTTReleased {
-                    leaveAgoraChannel()
-                    callback?.onStatusChanged("PTT 연결 해제됨 (Phase 2 최적화)")
-                }
-            } else {
-                stopSpeakingAndLeaveChannel()
-            }
+            // Phase 2: 송신 즉시 중지 (사용자 경험 유지)
+            stopSpeakingOnly()  // 마이크만 끄고 채널은 유지
             awaitingDoubleClickRelease = false
+            
+            // Phase 2: 디바운서를 통한 지연된 채널 해제
+            pttDebouncer.onPTTReleased {
+                // 250ms 후 실행될 채널 해제 액션
+                leaveAgoraChannel()
+                callback?.onStatusChanged("PTT 연결 해제됨 (Phase 2 최적화)")
+            }
+            
+            // 스마트 연결 관리자에 알림
+            smartConnectionManager?.onPTTReleased()
         }
         return true
     }
     
-    /**
-     * UI 버튼용 PTT 시작
-     */
-    fun startPTT(): Boolean {
-        return handleVolumeDownPress()
-    }
-    
-    /**
-     * UI 버튼용 PTT 중지
-     */
-    fun stopPTT(): Boolean {
-        return handleVolumeDownRelease()
-    }
-    
     private suspend fun generateToken(): String? {
+        // Phase 1: 보안 강화된 토큰 확인
+        val secureToken = secureTokenManager.getToken(regionId, officeId, userType)
+        if (secureToken != null) {
+            currentChannelName = secureToken.channelName
+            currentToken = secureToken.token
+            Log.i(TAG, "Using secure cached token - Channel: $currentChannelName")
+            callback?.onStatusChanged("보안 토큰 사용. 채널: $currentChannelName")
+            return currentToken
+        }
+        
+        // 캐시에 없으면 새로 생성
         return try {
-            // Phase 1: 2단계 캐싱 전략 - 메모리 캐시 먼저 확인
-            if (pttOptimizationEnabled) {
-                // L1 캐시: 메모리 캐시 확인
-                val memoryToken = tokenCache.getToken(regionId, officeId, userType)
-                if (memoryToken != null && memoryToken.isValid()) {
-                    Log.i("PTT_PHASE1_CACHE", "✅ L1 CACHE HIT - 메모리 캐시 토큰 사용")
-                    currentChannelName = memoryToken.channelName
-                    currentToken = memoryToken.token
-                    callback?.onStatusChanged("메모리 캐시 토큰 사용 (초고속)")
-                    return memoryToken.token
-                }
-                
-                // L2 캐시: 보안 저장소 확인
-                val secureToken = secureTokenManager.getToken(regionId, officeId, userType)
-                if (secureToken != null && secureToken.isValid()) {
-                    Log.i("PTT_PHASE1_SECURITY", "✅ L2 CACHE HIT - 보안 저장소 토큰 사용")
-                    currentChannelName = secureToken.channelName
-                    currentToken = secureToken.token
-                    
-                    // L1 캐시에도 저장 (다음 요청을 위해)
-                    tokenCache.putToken(
-                        token = secureToken.token,
-                        channelName = secureToken.channelName,
-                        expiresAt = secureToken.expiresAt,
-                        regionId = regionId,
-                        officeId = officeId,
-                        userType = userType
-                    )
-                    
-                    callback?.onStatusChanged("보안 저장소 토큰 사용 (Phase 1 최적화)")
-                    return secureToken.token
-                }
-                Log.i("PTT_PHASE1_SECURITY", "📱 GENERATING NEW TOKEN - 새 토큰 생성 필요")
-            }
-            
             val data = hashMapOf(
                 "regionId" to regionId,
                 "officeId" to officeId,
                 "userType" to userType
             )
             
-            Log.i(TAG, "Calling generateAgoraToken with data: $data")
+            Log.i(TAG, "Generating new token with data: $data")
             
             val result = functions
                 .getHttpsCallable("generateAgoraToken")
@@ -460,34 +414,21 @@ class PTTManager private constructor(
                     Log.w(TAG, "⚠️ 테스트 모드에서 빈 토큰 수신됨. Agora App Certificate가 설정되지 않았습니다.")
                     Log.w(TAG, "💡 해결방법: Firebase Console > Functions > Secrets에서 AGORA_APP_CERTIFICATE 설정")
                 }
-                
-                // Phase 1: 새 토큰을 2단계 캐시에 저장
-                if (pttOptimizationEnabled && !currentToken.isNullOrBlank() && !currentChannelName.isNullOrBlank()) {
-                    val expiresAt = System.currentTimeMillis() + (24 * 60 * 60 * 1000) // 24시간
-                    
-                    // L1 캐시: 메모리 캐시에 저장
-                    tokenCache.putToken(
-                        token = currentToken!!,
-                        channelName = currentChannelName!!,
-                        expiresAt = expiresAt,
-                        regionId = regionId,
-                        officeId = officeId,
-                        userType = userType
-                    )
-                    
-                    // L2 캐시: 보안 저장소에 저장
-                    val secureToken = SecureTokenManager.SecureToken(
-                        token = currentToken!!,
-                        channelName = currentChannelName!!,
-                        generatedAt = System.currentTimeMillis(),
-                        expiresAt = expiresAt,
-                        regionId = regionId,
-                        officeId = officeId,
-                        userType = userType
-                    )
-                    secureTokenManager.saveToken(secureToken)
-                    Log.i("PTT_PHASE1_SECURITY", "💾 NEW TOKEN SAVED - 2단계 캐시 저장 완료")
-                }
+            }
+            
+            // Phase 1: 보안 토큰 저장
+            if (!currentToken.isNullOrBlank() && !currentChannelName.isNullOrBlank()) {
+                val secureToken = SecureTokenManager.SecureToken(
+                    token = currentToken!!,
+                    channelName = currentChannelName!!,
+                    generatedAt = System.currentTimeMillis(),
+                    expiresAt = System.currentTimeMillis() + (24 * 60 * 60 * 1000), // 24시간
+                    regionId = regionId,
+                    officeId = officeId,
+                    userType = userType
+                )
+                secureTokenManager.saveToken(secureToken)
+                Log.i(TAG, "Secure token saved successfully")
             }
             
             // 콜백을 통해 상태 업데이트
@@ -504,11 +445,6 @@ class PTTManager private constructor(
     
     private fun joinChannelAndSpeak() {
         Log.i(TAG, "joinChannelAndSpeak() called - isConnected: $isConnected, isSpeaking: $isSpeaking")
-        
-        // Phase 4: 지능형 연결 관리
-        if (pttOptimizationEnabled) {
-            smartConnectionManager?.recordPTTUsage(System.currentTimeMillis(), System.currentTimeMillis())
-        }
         
         // 이미 송신 중인 경우 중복 처리 방지
         if (isSpeaking) {
@@ -595,7 +531,7 @@ class PTTManager private constructor(
                 
                 callback?.onStatusChanged("송신 중...")
                 callback?.onSpeakingStateChanged(true)
-                Log.i("PTT_SESSION", "✅ PTT 송신 시작 및 세션 생성됨 (Pickup App)")
+                Log.i("PTT_SESSION", "✅ PTT 송신 시작 및 세션 생성됨")
             } else {
                 Log.e(TAG, "Failed to enable local audio: $result")
                 isSpeaking = false
@@ -604,22 +540,40 @@ class PTTManager private constructor(
         }
     }
     
+    /**
+     * Phase 2: 송신만 중지 (채널은 유지)
+     * - 사용자 피드백은 즉시 제공
+     * - 채널은 디바운싱을 위해 유지
+     */
+    private fun stopSpeakingOnly() {
+        if (isSpeaking) {
+            isSpeaking = false
+            val result = rtcEngine?.enableLocalAudio(false)
+            Log.i(TAG, "Disable local audio result (Phase 2): $result")
+            
+            playSound(soundIdPttEffect)
+            callback?.onSpeakingStateChanged(false)
+            callback?.onStatusChanged("송신 중지 (채널 유지)")
+            
+            Log.i(TAG, "Speaking stopped, channel maintained for debouncing")
+        }
+    }
+    
+    /**
+     * 기존 방식: 송신 중지 + 즉시 채널 해제
+     */
     private fun stopSpeakingAndLeaveChannel() {
         if (isSpeaking) {
             isSpeaking = false
             val result = rtcEngine?.enableLocalAudio(false)
             Log.i(TAG, "Disable local audio result: $result")
             
-            // 🎯 핵심 기능: PTT 세션 종료 알림
-            endPTTSession()
-            
             playSound(soundIdPttEffect)
             callback?.onSpeakingStateChanged(false)
             
-            // 비용 절약을 위해 즉시 채널에서 나감
+            // 즉시 채널에서 나감 (Phase 1 방식)
             leaveAgoraChannel()
-            callback?.onStatusChanged("PTT 연결 해제됨 (비용 절약)")
-            Log.i("PTT_SESSION", "✅ PTT 송신 중지 및 세션 종료됨 (Pickup App)")
+            callback?.onStatusChanged("PTT 연결 해제됨")
         }
     }
     
@@ -649,6 +603,11 @@ class PTTManager private constructor(
     }
     
     fun adjustVolume(increase: Boolean) {
+        if (!isConnected) {
+            Log.w(TAG, "Cannot adjust volume - not connected")
+            return
+        }
+        
         val step = 20
         val oldVolume = currentVolume
         
@@ -661,11 +620,6 @@ class PTTManager private constructor(
         if (oldVolume != currentVolume) {
             val result = rtcEngine?.adjustPlaybackSignalVolume(currentVolume)
             Log.i(TAG, "Volume adjusted from $oldVolume to $currentVolume, result: $result")
-            
-            // 상태 업데이트 콜백
-            callback?.onStatusChanged("볼륨: $currentVolume")
-        } else {
-            Log.i(TAG, "Volume unchanged: $currentVolume")
         }
     }
     
@@ -683,20 +637,6 @@ class PTTManager private constructor(
             forceStopSpeaking()
         }
         
-        // Phase 2: PTTDebouncer 정리
-        if (pttOptimizationEnabled) {
-            pttDebouncer.destroy()
-        }
-        
-        // Phase 4: SmartConnectionManager 정리
-        smartConnectionManager?.destroy()
-        
-        // Phase 1: TokenCache 정리
-        tokenCache.clearAll()
-        
-        // PTT 세션 리스너 정리
-        cleanupPTTSessionListener()
-        
         // Agora 정리
         leaveAgoraChannel()
         RtcEngine.destroy()
@@ -706,6 +646,19 @@ class PTTManager private constructor(
         if (::soundPool.isInitialized) {
             soundPool.release()
         }
+        
+        // 스마트 연결 관리자 정리
+        smartConnectionManager?.destroy()
+        smartConnectionManager = null
+        
+        // Phase 2: 디바운서 정리
+        pttDebouncer.destroy()
+        
+        // 토큰 캐시 정리
+        tokenCache.clearCache()
+        
+        // PTT 세션 리스너 정리
+        cleanupPTTSessionListener()
         
         INSTANCE = null
     }
@@ -728,6 +681,144 @@ class PTTManager private constructor(
     fun isConnected() = isConnected
     fun isSpeaking() = isSpeaking
     fun getCurrentChannelName() = currentChannelName
+    
+    // 드라이버 상태 업데이트
+    fun updateDriverStatus(status: SmartConnectionManager.DriverStatus) {
+        smartConnectionManager?.updateDriverStatus(status)
+    }
+    
+    // Phase 1 테스트용 함수들
+    fun testSecureTokenSave(): Boolean {
+        Log.i("PTT_PHASE1_TEST", "========== PHASE 1 TEST: SAVE TOKEN ==========")
+        return try {
+            val testToken = SecureTokenManager.SecureToken(
+                token = "test_secure_token_${System.currentTimeMillis()}",
+                channelName = "test_channel_${regionId}_${officeId}",
+                generatedAt = System.currentTimeMillis(),
+                expiresAt = System.currentTimeMillis() + (24 * 60 * 60 * 1000),
+                regionId = regionId,
+                officeId = officeId,
+                userType = userType
+            )
+            secureTokenManager.saveToken(testToken)
+            Log.i("PTT_PHASE1_TEST", "✅ Test token save successful")
+            true
+        } catch (e: Exception) {
+            Log.e("PTT_PHASE1_TEST", "❌ Test token save failed", e)
+            false
+        }
+    }
+    
+    fun testSecureTokenRetrieve(): SecureTokenManager.SecureToken? {
+        Log.i("PTT_PHASE1_TEST", "========== PHASE 1 TEST: RETRIEVE TOKEN ==========")
+        return try {
+            val token = secureTokenManager.getToken(regionId, officeId, userType)
+            if (token != null) {
+                Log.i("PTT_PHASE1_TEST", "✅ Test token retrieve successful")
+                Log.i("PTT_PHASE1_TEST", "Token valid for: ${token.remainingHours()} hours")
+            } else {
+                Log.w("PTT_PHASE1_TEST", "⚠️ No token found")
+            }
+            token
+        } catch (e: Exception) {
+            Log.e("PTT_PHASE1_TEST", "❌ Test token retrieve failed", e)
+            null
+        }
+    }
+    
+    fun testTokenExpiry(): Boolean {
+        Log.i("PTT_PHASE1_TEST", "========== PHASE 1 TEST: TOKEN EXPIRY ==========")
+        return try {
+            val expiredToken = SecureTokenManager.SecureToken(
+                token = "expired_test_token",
+                channelName = "expired_channel",
+                generatedAt = System.currentTimeMillis() - (25 * 60 * 60 * 1000), // 25시간 전
+                expiresAt = System.currentTimeMillis() - (60 * 60 * 1000), // 1시간 전 만료
+                regionId = "${regionId}_expired",
+                officeId = "${officeId}_expired",
+                userType = userType
+            )
+            
+            // 만료된 토큰 저장
+            secureTokenManager.saveToken(expiredToken)
+            
+            // 조회 시도 (만료되어 null 반환되어야 함)
+            val retrieved = secureTokenManager.getToken("${regionId}_expired", "${officeId}_expired", userType)
+            if (retrieved == null) {
+                Log.i("PTT_PHASE1_TEST", "✅ Expired token correctly rejected")
+                true
+            } else {
+                Log.e("PTT_PHASE1_TEST", "❌ Expired token incorrectly returned")
+                false
+            }
+        } catch (e: Exception) {
+            Log.e("PTT_PHASE1_TEST", "❌ Token expiry test failed", e)
+            false
+        }
+    }
+    
+    // Phase 2 테스트용 함수들
+    fun testDebouncing(): Boolean {
+        Log.i("PTT_PHASE2_TEST", "========== PHASE 2 TEST: DEBOUNCING ==========")
+        return pttDebouncer.testDebouncing()
+    }
+    
+    fun testContinuousUsage(): Boolean {
+        Log.i("PTT_PHASE2_TEST", "========== PHASE 2 TEST: CONTINUOUS USAGE ==========")
+        return pttDebouncer.testContinuousUsage()
+    }
+    
+    fun testCostSaving(): Boolean {
+        Log.i("PTT_PHASE2_TEST", "========== PHASE 2 TEST: COST SAVING ==========")
+        return try {
+            // 테스트 시작 전 통계 리셋
+            pttDebouncer.resetStats()
+            
+            // 시뮬레이션: 3번의 연속 PTT 사용
+            var mockConnectCount = 0
+            val mockConnect: () -> Unit = { mockConnectCount++ }
+            val mockDisconnect: () -> Unit = { }
+            
+            // 1차 사용
+            pttDebouncer.onPTTPressed(mockConnect)
+            pttDebouncer.onPTTReleased(mockDisconnect)
+            
+            // 250ms 내 2차 사용 (재연결 방지)
+            Thread.sleep(100)
+            pttDebouncer.onPTTPressed(mockConnect) 
+            pttDebouncer.onPTTReleased(mockDisconnect)
+            
+            // 250ms 내 3차 사용 (재연결 방지)
+            Thread.sleep(100)
+            pttDebouncer.onPTTPressed(mockConnect)
+            pttDebouncer.onPTTReleased(mockDisconnect)
+            
+            // 결과 분석
+            val expectedConnections = 1  // 3번 사용했지만 1번만 연결
+            val actualConnections = mockConnectCount
+            val costSavingRatio = ((3 - actualConnections).toFloat() / 3 * 100).toInt()
+            
+            Log.i("PTT_PHASE2_TEST", "Expected connections: $expectedConnections")
+            Log.i("PTT_PHASE2_TEST", "Actual connections: $actualConnections")
+            Log.i("PTT_PHASE2_TEST", "Cost saving: $costSavingRatio%")
+            
+            if (actualConnections == expectedConnections) {
+                Log.i("PTT_PHASE2_TEST", "✅ Cost saving test successful - ${costSavingRatio}% 비용 절약")
+                true
+            } else {
+                Log.e("PTT_PHASE2_TEST", "❌ Cost saving test failed")
+                false
+            }
+            
+        } catch (e: Exception) {
+            Log.e("PTT_PHASE2_TEST", "❌ Cost saving test failed", e)
+            false
+        }
+    }
+    
+    fun getDebounceStats(): PTTDebouncer.CostSavingStats {
+        return pttDebouncer.getCostSavingStats()
+    }
     
     // Helper functions
     private fun agoraErrorToString(err: Int): String {
@@ -793,7 +884,7 @@ class PTTManager private constructor(
         }
     }
     
-    // ========== PTT 세션 동기화 시스템 (Pickup App) ==========
+    // ========== PTT 세션 동기화 시스템 ==========
     
     /**
      * PTT 세션 변화 감지 리스너 설정
@@ -810,35 +901,35 @@ class PTTManager private constructor(
                     val token = sessionData["token"] as? String
                     val startedAt = sessionData["started_at"] as? Long
                     
-                    Log.i("PTT_SESSION", "📡 세션 변화 감지 (Pickup): active=$active, initiator=$initiator, channel=$channelName")
+                    Log.i("PTT_SESSION", "📡 세션 변화 감지: active=$active, initiator=$initiator, channel=$channelName")
                     
                     if (active && initiator != userType && !isConnected && channelName != null && token != null) {
-                        Log.i("PTT_SESSION", "🎯 픽업앱 자동 채널 참여 시작 - 다른 앱($initiator)이 PTT 시작")
+                        Log.i("PTT_SESSION", "🎯 자동 채널 참여 시작 - 다른 앱($initiator)이 PTT 시작")
                         autoJoinPTTChannel(channelName, token)
                     } else if (!active && isConnected && !isSpeaking) {
-                        Log.i("PTT_SESSION", "🚪 픽업앱 자동 채널 퇴장 - PTT 세션 종료됨")
+                        Log.i("PTT_SESSION", "🚪 자동 채널 퇴장 - PTT 세션 종료됨")
                         autoLeavePTTChannel()
                     }
                 } else {
-                    Log.d("PTT_SESSION", "📭 세션 데이터 없음 또는 삭제됨 (Pickup)")
+                    Log.d("PTT_SESSION", "📭 세션 데이터 없음 또는 삭제됨")
                 }
             }
             
             override fun onCancelled(error: DatabaseError) {
-                Log.e("PTT_SESSION", "❌ 픽업앱 세션 리스너 오류: ${error.message}")
+                Log.e("PTT_SESSION", "❌ 세션 리스너 오류: ${error.message}")
             }
         }
         
         pttSessionRef?.addValueEventListener(sessionListener!!)
-        Log.i("PTT_SESSION", "🔔 픽업앱 PTT 세션 리스너 설정 완료")
+        Log.i("PTT_SESSION", "🔔 PTT 세션 리스너 설정 완료")
     }
     
     /**
-     * PTT 세션 생성 (송신 시작 시) - Pickup App
+     * PTT 세션 생성 (송신 시작 시)
      */
     private fun createPTTSession() {
         if (currentChannelName == null || currentToken == null) {
-            Log.w("PTT_SESSION", "⚠️ 픽업앱: 채널명 또는 토큰이 없어 세션 생성 불가")
+            Log.w("PTT_SESSION", "⚠️ 채널명 또는 토큰이 없어 세션 생성 불가")
             return
         }
         
@@ -846,7 +937,7 @@ class PTTManager private constructor(
             isSessionInitiator = true
             val sessionData = mapOf(
                 "active" to true,
-                "initiator" to userType, // "pickup_driver"
+                "initiator" to userType,
                 "channel_name" to currentChannelName,
                 "token" to currentToken,
                 "started_at" to ServerValue.TIMESTAMP,
@@ -860,19 +951,19 @@ class PTTManager private constructor(
             
             pttSessionRef?.setValue(sessionData)?.addOnCompleteListener { task ->
                 if (task.isSuccessful) {
-                    Log.i("PTT_SESSION", "✅ 픽업앱 PTT 세션 생성 성공 - 콜매니저가 자동 참여할 예정")
+                    Log.i("PTT_SESSION", "✅ PTT 세션 생성 성공 - 다른 앱들이 자동 참여할 예정")
                 } else {
-                    Log.e("PTT_SESSION", "❌ 픽업앱 PTT 세션 생성 실패: ${task.exception?.message}")
+                    Log.e("PTT_SESSION", "❌ PTT 세션 생성 실패: ${task.exception?.message}")
                 }
             }
             
         } catch (e: Exception) {
-            Log.e("PTT_SESSION", "💥 픽업앱 PTT 세션 생성 중 오류", e)
+            Log.e("PTT_SESSION", "💥 PTT 세션 생성 중 오류", e)
         }
     }
     
     /**
-     * PTT 세션 종료 (송신 중지 시) - Pickup App
+     * PTT 세션 종료 (송신 중지 시)
      */
     private fun endPTTSession() {
         if (!isSessionInitiator) {
@@ -887,27 +978,27 @@ class PTTManager private constructor(
             
             pttSessionRef?.updateChildren(sessionData)?.addOnCompleteListener { task ->
                 if (task.isSuccessful) {
-                    Log.i("PTT_SESSION", "✅ 픽업앱 PTT 세션 종료 성공 - 콜매니저가 자동 퇴장할 예정")
+                    Log.i("PTT_SESSION", "✅ PTT 세션 종료 성공 - 다른 앱들이 자동 퇴장할 예정")
                 } else {
-                    Log.e("PTT_SESSION", "❌ 픽업앱 PTT 세션 종료 실패: ${task.exception?.message}")
+                    Log.e("PTT_SESSION", "❌ PTT 세션 종료 실패: ${task.exception?.message}")
                 }
             }
             
             isSessionInitiator = false
             
         } catch (e: Exception) {
-            Log.e("PTT_SESSION", "💥 픽업앱 PTT 세션 종료 중 오류", e)
+            Log.e("PTT_SESSION", "💥 PTT 세션 종료 중 오류", e)
         }
     }
     
     /**
-     * 다른 앱이 시작한 PTT 채널에 자동 참여 - Pickup App
+     * 다른 앱이 시작한 PTT 채널에 자동 참여
      */
     private fun autoJoinPTTChannel(channelName: String, token: String) {
-        Log.i("PTT_SESSION", "🚀 픽업앱 자동 PTT 채널 참여 시작: $channelName")
+        Log.i("PTT_SESSION", "🚀 자동 PTT 채널 참여 시작: $channelName")
         
         if (rtcEngine == null) {
-            Log.e("PTT_SESSION", "❌ 픽업앱: Agora 엔진이 초기화되지 않음")
+            Log.e("PTT_SESSION", "❌ Agora 엔진이 초기화되지 않음")
             return
         }
         
@@ -918,44 +1009,44 @@ class PTTManager private constructor(
             
             // 채널 참여
             val joinResult = rtcEngine?.joinChannel(token, channelName, null, 0)
-            Log.i("PTT_SESSION", "📞 픽업앱 자동 채널 참여 요청: $joinResult")
+            Log.i("PTT_SESSION", "📞 자동 채널 참여 요청: $joinResult")
             
             if (joinResult == 0) {
-                callback?.onStatusChanged("픽업앱 자동 PTT 참여 중...")
+                callback?.onStatusChanged("자동 PTT 참여 중...")
             } else {
                 val errorMsg = agoraErrorToString(joinResult ?: -1)
-                Log.e("PTT_SESSION", "❌ 픽업앱 자동 채널 참여 실패: $errorMsg")
-                callback?.onError("픽업앱 자동 PTT 참여 실패: $errorMsg")
+                Log.e("PTT_SESSION", "❌ 자동 채널 참여 실패: $errorMsg")
+                callback?.onError("자동 PTT 참여 실패: $errorMsg")
             }
             
         } catch (e: Exception) {
-            Log.e("PTT_SESSION", "💥 픽업앱 자동 채널 참여 중 오류", e)
-            callback?.onError("픽업앱 자동 PTT 참여 오류: ${e.message}")
+            Log.e("PTT_SESSION", "💥 자동 채널 참여 중 오류", e)
+            callback?.onError("자동 PTT 참여 오류: ${e.message}")
         }
     }
     
     /**
-     * PTT 세션 종료 시 자동 채널 퇴장 - Pickup App
+     * PTT 세션 종료 시 자동 채널 퇴장
      */
     private fun autoLeavePTTChannel() {
-        Log.i("PTT_SESSION", "🚪 픽업앱 자동 PTT 채널 퇴장 시작")
+        Log.i("PTT_SESSION", "🚪 자동 PTT 채널 퇴장 시작")
         
         try {
             leaveAgoraChannel()
-            callback?.onStatusChanged("픽업앱 자동 PTT 퇴장 완료")
+            callback?.onStatusChanged("자동 PTT 퇴장 완료")
             
         } catch (e: Exception) {
-            Log.e("PTT_SESSION", "💥 픽업앱 자동 채널 퇴장 중 오류", e)
+            Log.e("PTT_SESSION", "💥 자동 채널 퇴장 중 오류", e)
         }
     }
     
     /**
-     * PTT 세션 리스너 정리 - Pickup App
+     * PTT 세션 리스너 정리
      */
     private fun cleanupPTTSessionListener() {
         sessionListener?.let { listener ->
             pttSessionRef?.removeEventListener(listener)
-            Log.i("PTT_SESSION", "🧹 픽업앱 PTT 세션 리스너 정리 완료")
+            Log.i("PTT_SESSION", "🧹 PTT 세션 리스너 정리 완료")
         }
         sessionListener = null
         isSessionInitiator = false
