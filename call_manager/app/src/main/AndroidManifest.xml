@@ -38,6 +38,12 @@
     <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
     <uses-permission android:name="android.permission.ACQUIRE_CAUSES_WAKEUP" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    
+    <!-- 화면 꺼진 상태에서 PTT 사용을 위한 추가 권한 -->
+    <uses-permission android:name="android.permission.DEVICE_POWER" />
+    <uses-permission android:name="android.permission.TURN_SCREEN_ON" />
+    <uses-permission android:name="android.permission.SHOW_WHEN_LOCKED" />
+    <uses-permission android:name="android.permission.MODIFY_PHONE_STATE" />
 
     
     <!-- 전화 감지 권한 (콜 디텍터 기능) -->
@@ -164,17 +170,22 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
             
-        <!-- PTT Accessibility Service (단계별 구현) -->
+        <!-- PTT Accessibility Service (Android 15 호환) -->
         <service
             android:name=".service.PTTAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:exported="false">
+            android:exported="true"
+            android:foregroundServiceType="specialUse"
+            android:directBootAware="true">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
             <meta-data
                 android:name="android.accessibilityservice"
                 android:resource="@xml/ptt_accessibility_service_config" />
+            <meta-data
+                android:name="android.accessibilityservice.category"
+                android:value="feedback|control" />
         </service>
 
         <!-- 

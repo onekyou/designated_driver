@@ -85,13 +85,17 @@ class PTTManager private constructor(
     private val secureTokenManager by lazy { SecureTokenManager(context) }
     private var smartConnectionManager: SmartConnectionManager? = null
     
-    // Phase 2: 디바운싱 로직으로 비용 최적화
-    private val pttDebouncer by lazy { PTTDebouncer(250L) }
+    // Phase 2: 디바운싱 로직으로 비용 최적화 (2초로 증가)
+    private val pttDebouncer by lazy { PTTDebouncer(2000L) }
     
     // SoundPool 관련
     private lateinit var soundPool: SoundPool
     private var soundIdPttEffect: Int = 0
     private var soundPoolLoaded = false
+    
+    // 백그라운드 모드 관련
+    private var isBackgroundAudioMode = false
+    private var backgroundAudioManager: BackgroundAudioManager? = null
     
     // 콜백 인터페이스
     interface PTTCallback {
@@ -628,6 +632,38 @@ class PTTManager private constructor(
             soundPool.play(soundId, 0.7f, 0.7f, 1, 0, 1.0f)
         }
     }
+    
+    /**
+     * 백그라운드 오디오 모드 설정
+     * - 화면 꺼짐 상태에서도 오디오 처리 가능하도록 설정
+     */
+    fun setBackgroundAudioMode(enabled: Boolean) {
+        Log.i(TAG, "Setting background audio mode: $enabled")
+        isBackgroundAudioMode = enabled
+        
+        if (enabled) {
+            backgroundAudioManager = BackgroundAudioManager(context)
+            backgroundAudioManager?.setupBackgroundAudio()
+            
+            // 백그라운드 모드에서 Agora 설정 조정
+            rtcEngine?.apply {
+                // 백그라운드에서도 오디오 유지
+                setEnableSpeakerphone(true)
+                setDefaultAudioRoutetoSpeakerphone(true)
+                // 오디오 세션 우선순위 높게 설정
+                setAudioProfile(
+                    Constants.AUDIO_PROFILE_MUSIC_HIGH_QUALITY,
+                    Constants.AUDIO_SCENARIO_CHATROOM
+                )
+                // 백그라운드 앱 모드 활성화
+                enableAudioVolumeIndication(250, 3, true)
+            }
+        } else {
+            backgroundAudioManager?.cleanup()
+            backgroundAudioManager = null
+        }
+    }
+    
     
     fun destroy() {
         Log.i(TAG, "Destroying PTT Manager")

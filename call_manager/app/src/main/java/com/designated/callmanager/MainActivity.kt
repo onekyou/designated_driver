@@ -34,6 +34,8 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import com.designated.callmanager.service.VolumeKeyHandler
+import com.designated.callmanager.service.AccessibilityPermissionHelper
+import com.designated.callmanager.util.BatteryOptimizationHelper
 import kotlinx.coroutines.delay
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -96,6 +98,8 @@ import android.os.PowerManager
 import android.content.BroadcastReceiver
 import android.content.IntentFilter
 import android.view.KeyEvent
+import com.designated.callmanager.utils.PTTDebugHelper
+import com.designated.callmanager.service.MediaSessionPTTService
 import android.os.SystemClock
 
 // Define screens for navigation
@@ -128,6 +132,7 @@ class MainActivity : ComponentActivity() {
     private var officeId: String? = null
     private var managerId: String? = null
     
+    
     // 권한 요청 런처
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -137,6 +142,7 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "일부 기능을 사용하려면 권한이 필요합니다.", Toast.LENGTH_LONG).show()
         }
     }
+    
 
     // 현재 보여줄 화면 상태를 Activity의 프로퍼티로 선언
     // Compose navigation: Use mutableState for single source of truth
@@ -260,6 +266,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         auth = Firebase.auth
 
+
         // 배터리 최적화 제외 요청 (한 번만 요청)
         checkAndRequestBatteryOptimizationOnce()
         
@@ -295,6 +302,12 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             Log.e("PTT_PHASE3_INIT", "❌ Phase 3 초기화 실패", e)
         }
+
+        // PTT 시스템 상태 점검 및 디버그
+        checkPTTSystemStatus()
+        
+        // MediaSession PTT 서비스 시작 (백그라운드 볼륨키 제어)
+        startMediaSessionPTTService()
 
         setContent {
             CallManagerTheme {
@@ -446,86 +459,77 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // PTT 키 이벤트 처리 - 완전한 볼륨키 차단
-    override fun dispatchKeyEvent(event: KeyEvent?): Boolean {
-        Log.d("MainActivity", "dispatchKeyEvent: action=${event?.action}, keyCode=${event?.keyCode}")
-        
-        // 볼륨 다운 키 처리 - 시스템 볼륨 변경 완전 차단
-        if (event?.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
-            when (event.action) {
-                KeyEvent.ACTION_DOWN -> {
-                    Log.d("MainActivity", "Volume Down pressed - starting PTT, blocking system volume")
-                    // PTT 연결 상태에 관계없이 항상 시도
-                    val result = dashboardViewModel.handlePTTVolumeDown()
-                    Log.d("MainActivity", "PTT Volume Down handled: $result")
-                    
-                    // PTT가 연결되지 않은 경우 초기화도 시도
-                    if (!dashboardViewModel.isPTTConnected()) {
-                        Log.d("MainActivity", "PTT not connected, also trying to initialize")
-                        dashboardViewModel.initializePTT()
-                    }
-                }
-                KeyEvent.ACTION_UP -> {
-                    Log.d("MainActivity", "Volume Down released - stopping PTT, blocking system volume")
-                    val result = dashboardViewModel.handlePTTVolumeUp()
-                    Log.d("MainActivity", "PTT Volume Up handled: $result")
-                }
-            }
-            return true // 볼륨 다운 키는 완전히 차단하여 시스템 볼륨 변경 방지
-        }
-        
-        // 볼륨 업 키도 차단 (PTT 전용 앱이므로)
-        if (event?.keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
-            Log.d("MainActivity", "Volume Up blocked for PTT app")
-            return true // 볼륨 업도 차단
-        }
-        
-        return super.dispatchKeyEvent(event)
-    }
+    // PTT 키 이벤트 처리 - 완전한 볼륨키 차단 (dispatchKeyEvent 제거, onKeyDown/Up만 사용)
     
-    // PTT 키 이벤트 처리 (백그라운드 지원)
+    // PTT 키 이벤트 처리 - 강화된 볼륨키 차단
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         Log.d("MainActivity", "onKeyDown: keyCode=$keyCode, event=$event")
+        
+        // 볼륨 다운 키 = PTT 버튼
         if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
-            Log.d("MainActivity", "Volume Down pressed - 백그라운드 PTT 시작")
+            Log.d("MainActivity", "🎯 Volume Down pressed - PTT 시작, 시스템 볼륨 완전 차단")
             
-            // 백그라운드 PTT 서비스로 PTT 시작 전달
+            // 1. 백그라운드 PTT 서비스로 전달
             val intent = Intent(this, com.designated.callmanager.service.BackgroundPTTService::class.java).apply {
                 action = com.designated.callmanager.service.BackgroundPTTService.ACTION_PTT_PRESSED
             }
             startService(intent)
             
-            // 기존 Dashboard PTT도 함께 처리 (호환성)
-            if (dashboardViewModel.isPTTConnected()) {
-                dashboardViewModel.handlePTTVolumeDown()
-            } else {
-                Log.d("MainActivity", "PTT not connected, trying to initialize")
-                dashboardViewModel.initializePTT()
+            // 2. 포그라운드 PTT 처리 (호환성)
+            try {
+                val result = dashboardViewModel.handlePTTVolumeDown()
+                Log.d("MainActivity", "PTT Volume Down handled: $result")
+                
+                if (!dashboardViewModel.isPTTConnected()) {
+                    Log.d("MainActivity", "PTT not connected, initializing")
+                    dashboardViewModel.initializePTT()
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "PTT 처리 중 오류", e)
             }
             
-            return true // 기본 볼륨 조절 동작 차단
+            return true // ⭐️ 완전 차단: 시스템으로 전파되지 않음
         }
+        
+        // 볼륨 업 키도 차단 (PTT 전용 앱)
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
+            Log.d("MainActivity", "🔇 Volume Up blocked - PTT 전용 앱")
+            return true // 볼륨 업도 완전 차단
+        }
+        
         return super.onKeyDown(keyCode, event)
     }
     
     override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
         Log.d("MainActivity", "onKeyUp: keyCode=$keyCode, event=$event")
+        
+        // 볼륨 다운 키 릴리즈 = PTT 종료
         if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
-            Log.d("MainActivity", "Volume Down released - 백그라운드 PTT 중지")
+            Log.d("MainActivity", "🎯 Volume Down released - PTT 종료, 시스템 볼륨 완전 차단")
             
-            // 백그라운드 PTT 서비스로 PTT 종료 전달
+            // 1. 백그라운드 PTT 서비스로 전달
             val intent = Intent(this, com.designated.callmanager.service.BackgroundPTTService::class.java).apply {
                 action = com.designated.callmanager.service.BackgroundPTTService.ACTION_PTT_RELEASED
             }
             startService(intent)
             
-            // 기존 Dashboard PTT도 함께 처리 (호환성)
-            if (dashboardViewModel.isPTTConnected()) {
-                dashboardViewModel.handlePTTVolumeUp()
+            // 2. 포그라운드 PTT 처리 (호환성)
+            try {
+                val result = dashboardViewModel.handlePTTVolumeUp()
+                Log.d("MainActivity", "PTT Volume Up handled: $result")
+            } catch (e: Exception) {
+                Log.e("MainActivity", "PTT 종료 처리 중 오류", e)
             }
             
-            return true // 기본 볼륨 조절 동작 차단
+            return true // ⭐️ 완전 차단: 시스템으로 전파되지 않음
         }
+        
+        // 볼륨 업 키도 차단
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
+            Log.d("MainActivity", "🔇 Volume Up released - PTT 전용 앱")
+            return true // 볼륨 업도 완전 차단
+        }
+        
         return super.onKeyUp(keyCode, event)
     }
 
@@ -904,6 +908,10 @@ class MainActivity : ComponentActivity() {
             requiredPermissions.add(Manifest.permission.RECORD_AUDIO)
         }
         
+        // Step 4: Accessibility 서비스 상태 확인 (단순 로그만)
+        val isAccessibilityEnabled = AccessibilityPermissionHelper.isAccessibilityServiceEnabled(this)
+        Log.i("MainActivity", "🎯 PTT Accessibility 서비스 상태: $isAccessibilityEnabled")
+        
         // 전화 감지 권한 추가 (콜 디텍터 기능용)
         val prefs = getSharedPreferences("call_manager_prefs", Context.MODE_PRIVATE)
         if (prefs.getBoolean("call_detection_enabled", false)) {
@@ -1068,6 +1076,72 @@ class MainActivity : ComponentActivity() {
             } else if (powerManager.isIgnoringBatteryOptimizations(packageName)) {
             } else {
             }
+        }
+    }
+    
+    /**
+     * PTT 시스템 상태 점검
+     */
+    private fun checkPTTSystemStatus() {
+        lifecycleScope.launch {
+            delay(1000) // 앱 시작 후 1초 대기
+            
+            Log.i("MainActivity", "\n\n======== PTT 시스템 점검 시작 ========")
+            
+            // 상세 상태 출력
+            PTTDebugHelper.printDetailedStatus(this@MainActivity)
+            
+            val status = PTTDebugHelper.checkPTTSystemStatus(this@MainActivity)
+            
+            if (!status.isAccessibilityEnabled) {
+                Log.e("MainActivity", "❌ 접근성 서비스가 활성화되지 않았습니다!")
+                Log.e("MainActivity", "👉 설정 > 접근성 > PTT 접근성 서비스를 활성화해주세요")
+                
+                // 사용자에게 알림
+                runOnUiThread {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "PTT 사용을 위해 접근성 서비스를 활성화해주세요",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            } else {
+                Log.i("MainActivity", "✅ 접근성 서비스가 활성화되어 있습니다")
+            }
+            
+            // 테스트 브로드캐스트 전송
+            delay(2000)
+            Log.i("MainActivity", "\n🧪 테스트 브로드캐스트 전송...")
+            PTTDebugHelper.sendTestPTTBroadcast(this@MainActivity, "start")
+            delay(1000)
+            PTTDebugHelper.sendTestPTTBroadcast(this@MainActivity, "stop")
+            
+            Log.i("MainActivity", "======== PTT 시스템 점검 완료 ========\n\n")
+        }
+    }
+    
+    /**
+     * MediaSession 기반 PTT 서비스 시작
+     */
+    private fun startMediaSessionPTTService() {
+        try {
+            if (!com.designated.callmanager.service.MediaSessionPTTService.isRunning()) {
+                val intent = Intent(this, com.designated.callmanager.service.MediaSessionPTTService::class.java).apply {
+                    action = com.designated.callmanager.service.MediaSessionPTTService.ACTION_START_MEDIA_SESSION_PTT
+                }
+                
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(intent)
+                } else {
+                    startService(intent)
+                }
+                
+                Log.i("MainActivity", "✅ MediaSession PTT 서비스 시작됨")
+            } else {
+                Log.d("MainActivity", "MediaSession PTT 서비스 이미 실행 중")
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "MediaSession PTT 서비스 시작 실패", e)
         }
     }
 }
