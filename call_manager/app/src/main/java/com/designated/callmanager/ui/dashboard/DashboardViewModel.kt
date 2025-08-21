@@ -42,6 +42,13 @@ sealed class DriverApprovalActionState {
     data class Error(val message: String) : DriverApprovalActionState()
 }
 
+data class PTTStatus(
+    val isConnected: Boolean = false,
+    val isSpeaking: Boolean = false,
+    val connectionState: String = "Disconnected",
+    val channelName: String? = null
+)
+
 class DashboardViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
@@ -642,6 +649,10 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _cancelledCallInfo = MutableStateFlow<CallInfo?>(null)
     val cancelledCallInfo: StateFlow<CallInfo?> = _cancelledCallInfo.asStateFlow()
 
+    // PTT 관련 상태
+    private val _pttStatus = MutableStateFlow(PTTStatus())
+    val pttStatus: StateFlow<PTTStatus> = _pttStatus.asStateFlow()
+
     fun showSharedCallCancelledDialog(callId: String) {
         viewModelScope.launch {
             try {
@@ -1038,5 +1049,53 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 Log.e(TAG, "Error deleting shared call", e)
             }
         }
+    }
+
+    // PTT 관련 함수들
+    fun handlePTTVolumeDown() {
+        Log.d(TAG, "handlePTTVolumeDown called")
+    }
+
+    fun handlePTTVolumeUp() {
+        Log.d(TAG, "handlePTTVolumeUp called")
+    }
+
+    fun isPTTConnected(): Boolean {
+        return _pttStatus.value.isConnected
+    }
+
+    fun initializePTT() {
+        Log.d(TAG, "initializePTT called")
+        _pttStatus.value = PTTStatus(
+            isConnected = true,
+            connectionState = "Connected"
+        )
+    }
+
+    fun showSharedCallNotificationFromId(callId: String) {
+        Log.d(TAG, "showSharedCallNotificationFromId called with callId: $callId")
+        // 공유콜 알림 표시 로직
+    }
+
+    fun adjustPTTVolume(delta: Int) {
+        Log.d(TAG, "adjustPTTVolume called with delta: $delta")
+    }
+
+    fun showTripStartedPopup(driverName: String, driverPhone: String?, tripSummary: String, customerName: String) {
+        Log.d(TAG, "showTripStartedPopup called")
+        _tripStartedInfo.value = Triple(driverName, driverPhone, tripSummary)
+        _showTripStartedPopup.value = true
+    }
+
+    fun showTripCompletedPopup(driverName: String, customerName: String) {
+        Log.d(TAG, "showTripCompletedPopup called")
+        _tripCompletedInfo.value = Pair(driverName, customerName)
+        _showTripCompletedPopup.value = true
+    }
+
+    fun showCancelledCallPopup(driverName: String, customerName: String) {
+        Log.d(TAG, "showCancelledCallPopup called")
+        _canceledCallInfo.value = Pair(driverName, customerName)
+        _showCanceledCallPopup.value = true
     }
 }

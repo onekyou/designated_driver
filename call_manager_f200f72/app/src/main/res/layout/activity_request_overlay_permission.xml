@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="24dp"
+    android:gravity="center_horizontal"
+    android:background="#FFF">
+
+    <TextView
+        android:id="@+id/textOverlayInfo"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="이 앱은 콜 수신 시 팝업을 띄우기 위해 '다른 앱 위에 표시' 권한이 필요합니다.\n\n권한을 허용해 주세요."
+        android:textSize="16sp"
+        android:layout_marginBottom="24dp"
+        android:textAlignment="center"/>
+
+    <Button
+        android:id="@+id/btnRequestOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="권한 요청하기"/>
+
+    <Button
+        android:id="@+id/btnCloseOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="닫기"
+        android:layout_marginTop="12dp"/>
+
+</LinearLayout>

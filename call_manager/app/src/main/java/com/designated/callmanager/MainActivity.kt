@@ -406,7 +406,8 @@ class MainActivity : ComponentActivity() {
                                 onLogout = {
                                     auth.signOut()
                                 },
-                                onNavigateToSettings = { screenState = Screen.Settings }
+                                onNavigateToSettings = { screenState = Screen.Settings },
+                                onNavigateToPTT = { screenState = Screen.PTT }
                             )
                         }
                         Screen.Settings -> {
@@ -824,7 +825,7 @@ class MainActivity : ComponentActivity() {
                         }
                         "TRIP_COMPLETED" -> {
                             android.util.Log.d("FCM_DEBUG", "showTripCompletedPopup 호출 (onResume)")
-                            dashboardViewModel.showTripCompletedPopup(driverName, customerName, driverPhone)
+                            dashboardViewModel.showTripCompletedPopup(driverName, customerName)
                         }
                     }
                 }

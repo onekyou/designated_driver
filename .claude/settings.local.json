@@ -39,6 +39,9 @@
       "Bash(firebase --version)",
       "Bash(firebase functions:log:*)"
     ],
-    "deny": []
+    "deny": [],
+    "additionalDirectories": [
+      "C:\\"
+    ]
   }
 }

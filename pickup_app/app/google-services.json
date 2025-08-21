@@ -1,0 +1,68 @@
+{
+  "project_info": {
+    "project_number": "60275310305",
+    "firebase_url": "https://calldetector-5d61e-default-rtdb.firebaseio.com",
+    "project_id": "calldetector-5d61e",
+    "storage_bucket": "calldetector-5d61e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:60275310305:android:24c8578a2a133ba89ac1a0",
+        "android_client_info": {
+          "package_name": "com.designated.callmanager"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA9x04acmgJozvpz1zpbe27rOwPmHrORXs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:60275310305:android:850171808bb7ec359ac1a0",
+        "android_client_info": {
+          "package_name": "com.example.calldetector"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA9x04acmgJozvpz1zpbe27rOwPmHrORXs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:60275310305:android:c1d2e3f4a5b6c7d8e9f0a1b2",
+        "android_client_info": {
+          "package_name": "com.designated.pickupapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA9x04acmgJozvpz1zpbe27rOwPmHrORXs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

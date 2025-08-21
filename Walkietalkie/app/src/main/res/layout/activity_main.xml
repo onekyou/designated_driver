@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FFEB3B"  
+    android:padding="8dp"
+    tools:context=".MainActivity">
+
+    <!-- 상단 검은 영역 -->
+    <View
+        android:id="@+id/top_black_area"
+        android:layout_width="0dp"
+        android:layout_height="60dp"
+        android:background="@android:color/black"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- 로고 -->
+    <TextView
+        android:id="@+id/logoText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="MOTOROLA"
+        android:textColor="@android:color/black"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/top_black_area" />
+
+    <!-- 상태 표시 영역 (Screen) -->
+    <TextView
+        android:id="@+id/statusText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/screen_background"
+        android:fontFamily="monospace" 
+        android:padding="16dp"
+        android:text="연결 중..."
+        android:textAlignment="center"
+        android:textColor="@android:color/black"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/logoText"
+        app:layout_constraintWidth_percent="0.6" />
+
+    <!-- 버튼 영역 -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/button_area"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        app:layout_constraintEnd_toEndOf="@+id/statusText"
+        app:layout_constraintStart_toStartOf="@+id/statusText"
+        app:layout_constraintTop_toBottomOf="@+id/statusText">
+
+        <!-- 첫 번째 줄 버튼 -->
+        <Button
+            android:id="@+id/button_music"
+            style="@style/Widget.AppCompat.Button.Small"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:background="@drawable/button_background_dark"
+            android:minWidth="48dp"
+            android:text="♫"
+            android:textColor="@android:color/white"
+            app:layout_constraintEnd_toStartOf="@+id/button_up"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <Button
+            android:id="@+id/button_up"
+            style="@style/Widget.AppCompat.Button.Small"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:background="@drawable/button_background_dark"
+            android:minWidth="48dp"
+            android:text="▲"
+            android:textColor="@android:color/white"
+            app:layout_constraintEnd_toStartOf="@+id/button_grp_menu"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toEndOf="@+id/button_music"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <Button
+            android:id="@+id/button_grp_menu"
+            style="@style/Widget.AppCompat.Button.Small"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:background="@drawable/button_background_dark"
+            android:minWidth="48dp"
+            android:text="GRP\nMENU"
+            android:textAllCaps="true"
+            android:textColor="@android:color/white"
+            android:textSize="10sp" 
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toEndOf="@+id/button_up"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- 두 번째 줄 버튼 -->
+         <Button
+            android:id="@+id/button_mon"
+            style="@style/Widget.AppCompat.Button.Small"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/button_background_dark"
+            android:minWidth="48dp"
+            android:text="MON"
+            android:textAllCaps="true"
+            android:textColor="@android:color/white"
+            android:textSize="10sp"
+            app:layout_constraintEnd_toStartOf="@+id/button_down"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/button_music" />
+
+        <Button
+            android:id="@+id/button_down"
+            style="@style/Widget.AppCompat.Button.Small"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/button_background_dark"
+            android:minWidth="48dp"
+            android:text="▼"
+            android:textColor="@android:color/white"
+            app:layout_constraintEnd_toStartOf="@+id/button_sel"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toEndOf="@+id/button_mon"
+            app:layout_constraintTop_toBottomOf="@+id/button_up" />
+
+        <Button
+            android:id="@+id/button_sel"
+            style="@style/Widget.AppCompat.Button.Small"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/button_background_dark"
+            android:minWidth="48dp"
+            android:text="SEL"
+            android:textAllCaps="true"
+            android:textColor="@android:color/white"
+            android:textSize="10sp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0.5"
+            app:layout_constraintStart_toEndOf="@+id/button_down"
+            app:layout_constraintTop_toBottomOf="@+id/button_grp_menu" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- 스피커 그릴 -->
+    <View
+        android:id="@+id/speaker_grill"
+        android:layout_width="0dp"
+        android:layout_height="80dp"
+        android:layout_marginTop="16dp"
+        android:background="@android:color/black"
+        app:layout_constraintEnd_toEndOf="@+id/button_area"
+        app:layout_constraintStart_toStartOf="@+id/button_area"
+        app:layout_constraintTop_toBottomOf="@+id/button_area" />
+
+</androidx.constraintlayout.widget.ConstraintLayout> 

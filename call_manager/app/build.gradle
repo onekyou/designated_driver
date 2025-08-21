@@ -104,6 +104,9 @@ dependencies {
     // WorkManager (일일 토큰 갱신)
     implementation "androidx.work:work-runtime-ktx:2.9.0"
 
+    // MediaSession for PTT volume key handling
+    implementation 'androidx.media:media:1.7.0'
+
     // Network (Optional, if needed for direct API calls or network checks)
     implementation 'com.squareup.okhttp3:okhttp:4.11.0'
 
