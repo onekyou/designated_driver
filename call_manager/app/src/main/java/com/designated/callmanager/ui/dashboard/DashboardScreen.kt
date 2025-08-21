@@ -102,6 +102,7 @@ fun DashboardScreen(
     viewModel: DashboardViewModel,
     onLogout: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
+    onNavigateToPTT: () -> Unit = {},
 ) {
     val callInfoForDialog by viewModel.callInfoForDialog.collectAsStateWithLifecycle()
     val calls by viewModel.calls.collectAsStateWithLifecycle()

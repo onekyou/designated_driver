@@ -25,7 +25,8 @@ fun SettingsScreen(
     dashboardViewModel: DashboardViewModel,
     onNavigateBack: () -> Unit,
     onNavigateToPendingDrivers: (regionId: String, officeId: String) -> Unit,
-    onNavigateToSettlement: () -> Unit
+    onNavigateToSettlement: () -> Unit,
+    onNavigateToPTT: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val officeStatus by dashboardViewModel.officeStatus.collectAsStateWithLifecycle()
