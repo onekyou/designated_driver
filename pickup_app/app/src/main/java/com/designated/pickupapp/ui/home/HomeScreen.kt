@@ -1,5 +1,6 @@
 package com.designated.pickupapp.ui.home
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -18,8 +19,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.border
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,13 +28,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.activity.ComponentActivity
+import androidx.compose.runtime.DisposableEffect
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.designated.pickupapp.data.CallInfo
-import com.designated.pickupapp.data.CallStatus
 import com.designated.pickupapp.data.DriverInfo
 import com.designated.pickupapp.data.PickupStatus
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,29 +49,29 @@ fun HomeScreen(
     onLogout: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
-    val calls by viewModel.calls.collectAsStateWithLifecycle()
     val drivers by viewModel.drivers.collectAsStateWithLifecycle()
     val loading by viewModel.loading.collectAsStateWithLifecycle()
-    val pttStatus by viewModel.pttStatus.collectAsStateWithLifecycle()
-    val isPttSpeaking by viewModel.isPttSpeaking.collectAsStateWithLifecycle()
-    val pttChannelName by viewModel.pttChannelName.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     
+    // HomeViewModel을 MainActivity에 설정
+    DisposableEffect(viewModel) {
+        if (context is ComponentActivity) {
+            (context as com.designated.pickupapp.MainActivity).setHomeViewModel(viewModel)
+        }
+        onDispose { }
+    }
+    
     LaunchedEffect(regionId, officeId, driverId) {
         viewModel.initialize(regionId, officeId, driverId)
-        
-        // MainActivity에 ViewModel 설정 (볼륨 키 처리용)
-        val activity = context as? com.designated.pickupapp.MainActivity
-        activity?.setHomeViewModel(viewModel)
     }
-
+    
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { 
                     Text(
-                        "픽업 콜 관리",
+                        "픽업 기사 앱",
                         color = Color.White,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
@@ -84,18 +87,10 @@ fun HomeScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF2A2A2A)
+                    containerColor = androidx.compose.ui.graphics.Color(0xFF2A2A2A)
                 )
             )
         },
-        floatingActionButton = {
-            PTTFloatingActionButton(
-                isPttSpeaking = isPttSpeaking,
-                pttStatus = pttStatus,
-                onPttPress = { viewModel.startPTT() },
-                onPttRelease = { viewModel.stopPTT() }
-            )
-        }
     ) { paddingValues ->
         if (loading) {
             Box(
@@ -107,136 +102,48 @@ fun HomeScreen(
                 CircularProgressIndicator()
             }
         } else {
+            // 위아래로 나눈 레이아웃: 위쪽은 기사현황카드(스크롤), 아래쪽은 PTT 시스템
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                
-                // 기사현황 카드 (비율 5)
-                DriverStatusCard(
-                    modifier = Modifier.fillMaxWidth().weight(5f),
-                    drivers = drivers
-                )
-
-                // PTT 관리 카드 (비율 5)
-                Column(
-                    modifier = Modifier.fillMaxWidth().weight(5f),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // PTT 상태 카드
-                    PTTStatusCard(
-                        pttStatus = pttStatus,
-                        isPttSpeaking = isPttSpeaking,
-                        pttChannelName = pttChannelName
-                    )
-                    
-                    // PTT 컨트롤 카드
-                    PTTControlCard(
-                        isPttSpeaking = isPttSpeaking,
-                        onStartPTT = { viewModel.startPTT() },
-                        onStopPTT = { viewModel.stopPTT() },
-                        onVolumeDown = { viewModel.adjustPTTVolume(false) },
-                        onVolumeUp = { viewModel.adjustPTTVolume(true) }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun CallCard(call: CallInfo) {
-    val callStatus = CallStatus.fromString(call.status)
-    val statusDisplayName = callStatus.displayName
-    val context = LocalContext.current
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF3A3A3A)),
-        shape = RoundedCornerShape(8.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                val displayText = call.customerName.takeIf { !it.isNullOrBlank() }
-                    ?: call.customerAddress
-                    ?: "정보 없음"
-
-                Text(
-                    text = displayText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                
-                Text(
-                    text = formatTimeAgo(call.timestamp.toDate().time),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.LightGray
-                )
-                
-                call.assignedDriverName?.let {
-                    Text(
-                        text = "배정: $it 기사",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Cyan
-                    )
-                }
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // 상태 표시
-                Box(
+                // 위쪽: 기사 현황 카드 (스크롤 가능, 화면의 절반)
+                LazyColumn(
                     modifier = Modifier
-                        .background(
-                            color = when (callStatus) {
-                                CallStatus.WAITING -> Color(0xFFFFAB00)
-                                CallStatus.ASSIGNED -> Color(0xFF2196F3)
-                                CallStatus.ACCEPTED -> Color(0xFF4CAF50)
-                                CallStatus.IN_PROGRESS -> Color(0xFFFF5722)
-                                CallStatus.AWAITING_SETTLEMENT -> Color(0xFF9C27B0)
-                                else -> Color.Gray
-                            },
-                            shape = RoundedCornerShape(4.dp)
-                        )
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = statusDisplayName,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White,
-                        fontSize = 12.sp
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // 전화 아이콘
-                if (!call.phoneNumber.isNullOrBlank()) {
-                    IconButton(
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_DIAL).apply {
-                                data = Uri.parse("tel:${call.phoneNumber}")
-                            }
-                            context.startActivity(intent)
-                        },
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Phone,
-                            contentDescription = "전화걸기",
-                            tint = Color(0xFF4CAF50),
-                            modifier = Modifier.size(20.dp)
+                    item {
+                        DriverStatusCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            drivers = drivers
                         )
                     }
+                }
+                
+                // 구분선
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .padding(horizontal = 16.dp)
+                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                )
+                
+                // 아래쪽: PTT 시스템 (화면의 절반)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(16.dp)
+                ) {
+                    EmbeddedPTTSection(
+                        regionId = regionId,
+                        officeId = officeId
+                    )
                 }
             }
         }
@@ -245,75 +152,46 @@ fun CallCard(call: CallInfo) {
 
 @Composable
 fun DriverStatusItem(driver: DriverInfo) {
-    val driverStatus = PickupStatus.fromString(driver.status)
-    val context = LocalContext.current
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF3A3A3A)),
-        shape = RoundedCornerShape(8.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // 상태 표시 원
-            Box(
-                modifier = Modifier
-                    .size(12.dp)
-                    .background(
-                        color = when (driverStatus) {
-                            PickupStatus.AVAILABLE -> Color(0xFF4CAF50)
-                            PickupStatus.BUSY -> Color(0xFFFF5722)
-                            PickupStatus.OFFLINE -> Color.Gray
-                        },
-                        shape = CircleShape
-                    )
-            )
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            // 기사 정보
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = driver.name,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                Text(
-                    text = driverStatus.displayName,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.LightGray
-                )
-            }
-
-            // 전화 아이콘
-            if (!driver.phoneNumber.isNullOrBlank()) {
-                IconButton(
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_DIAL).apply {
-                            data = Uri.parse("tel:${driver.phoneNumber}")
-                        }
-                        context.startActivity(intent)
+                .size(12.dp)
+                .background(
+                    color = when (driver.status) {
+                        PickupStatus.AVAILABLE.name -> Color.Green
+                        PickupStatus.BUSY.name -> Color.Red
+                        else -> Color.Gray
                     },
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Phone,
-                        contentDescription = "기사에게 전화",
-                        tint = Color(0xFF4CAF50),
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
+                    shape = CircleShape
+                )
+        )
+        
+        Spacer(modifier = Modifier.width(8.dp))
+        
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = driver.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = when (driver.status) {
+                    PickupStatus.AVAILABLE.name -> "대기중"
+                    PickupStatus.BUSY.name -> "운행중"
+                    PickupStatus.OFFLINE.name -> "오프라인"
+                    else -> driver.status
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
-
-
 
 @Composable
 fun DriverStatusCard(
@@ -322,23 +200,28 @@ fun DriverStatusCard(
 ) {
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A)),
-        shape = RoundedCornerShape(8.dp)
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
     ) {
-        Column {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             Text(
-                text = "기사 현황", 
-                style = MaterialTheme.typography.titleMedium, 
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                modifier = Modifier.padding(16.dp)
+                "기사 현황",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
             )
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                contentPadding = PaddingValues(bottom = 16.dp)
-            ) {
-                items(drivers, key = { it.id }) { driver ->
+            
+            if (drivers.isEmpty()) {
+                Text(
+                    "기사 정보가 없습니다",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                drivers.forEach { driver ->
                     DriverStatusItem(driver = driver)
                 }
             }
@@ -347,160 +230,135 @@ fun DriverStatusCard(
 }
 
 @Composable
-fun PTTStatusCard(
-    pttStatus: String,
-    isPttSpeaking: Boolean,
-    pttChannelName: String = ""
+fun EmbeddedPTTSection(
+    regionId: String,
+    officeId: String
 ) {
-    // pttStatus로부터 연결 상태 파악
-    val isConnected = pttStatus.contains("연결됨") || pttStatus.contains("대기") || pttStatus.contains("수신")
+    val context = LocalContext.current
     
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = when {
-                isPttSpeaking -> MaterialTheme.colorScheme.errorContainer
-                isConnected -> MaterialTheme.colorScheme.primaryContainer
-                else -> MaterialTheme.colorScheme.surfaceVariant
+    // Service의 상태를 구독
+    val pttState by com.designated.pickupapp.ptt.service.PTTForegroundService.pttState.collectAsStateWithLifecycle()
+    
+    var isPressing by remember { mutableStateOf(false) }
+    var isServiceStarted by remember { mutableStateOf(false) }
+    
+    // Service 시작
+    LaunchedEffect(Unit) {
+        if (!isServiceStarted) {
+            com.designated.pickupapp.ptt.service.PTTForegroundService.startService(context, regionId, officeId)
+            isServiceStarted = true
+        }
+    }
+    
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // 제목
+        Text(
+            "픽업 PTT 무전",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        
+        // 상태 표시 (간소화)
+        PTTStatusIndicator(pttState = pttState)
+        
+        Spacer(modifier = Modifier.weight(1f))
+        
+        // PTT 버튼 (크기 축소)
+        PTTButtonCompact(
+            pttState = pttState,
+            isPressing = isPressing,
+            onPressStart = {
+                isPressing = true
+                sendCommandToService(context, com.designated.pickupapp.ptt.service.PTTForegroundService.ACTION_START_PTT)
+            },
+            onPressEnd = {
+                isPressing = false
+                sendCommandToService(context, com.designated.pickupapp.ptt.service.PTTForegroundService.ACTION_STOP_PTT)
             }
+        )
+        
+        Spacer(modifier = Modifier.weight(1f))
+        
+        // 채널 제어 (간소화)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(
+                onClick = {
+                    val intent = android.content.Intent(context, com.designated.pickupapp.ptt.service.PTTForegroundService::class.java).apply {
+                        action = com.designated.pickupapp.ptt.service.PTTForegroundService.ACTION_JOIN_CHANNEL
+                        putExtra(com.designated.pickupapp.ptt.service.PTTForegroundService.EXTRA_CHANNEL, "${regionId}_${officeId}_ptt")
+                    }
+                    context.startService(intent)
+                },
+                enabled = pttState is com.designated.pickupapp.ptt.state.PTTState.Disconnected || pttState is com.designated.pickupapp.ptt.state.PTTState.Error,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("채널 참여", fontSize = 12.sp)
+            }
+            
+            Button(
+                onClick = {
+                    sendCommandToService(context, com.designated.pickupapp.ptt.service.PTTForegroundService.ACTION_LEAVE_CHANNEL)
+                },
+                enabled = pttState !is com.designated.pickupapp.ptt.state.PTTState.Disconnected,
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondary
+                )
+            ) {
+                Text("나가기", fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PTTStatusIndicator(pttState: com.designated.pickupapp.ptt.state.PTTState) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "PTT 상태",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                // 상태 표시 아이콘
-                Icon(
-                    when {
-                        isPttSpeaking -> Icons.Filled.Mic
-                        isConnected -> Icons.Filled.Radio
-                        else -> Icons.Filled.RadioButtonUnchecked
-                    },
-                    contentDescription = "PTT 상태",
-                    tint = when {
-                        isPttSpeaking -> MaterialTheme.colorScheme.error
-                        isConnected -> MaterialTheme.colorScheme.primary
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-            
-            Text(
-                pttStatus.ifBlank { "PTT 미연결" },
-                style = MaterialTheme.typography.bodyLarge,
-                color = when {
-                    isPttSpeaking -> MaterialTheme.colorScheme.onErrorContainer
-                    isConnected -> MaterialTheme.colorScheme.onPrimaryContainer
-                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+            when (pttState) {
+                is com.designated.pickupapp.ptt.state.PTTState.Disconnected -> {
+                    Text("연결 해제됨", fontSize = 14.sp, color = Color.Gray)
                 }
-            )
-            
-            // 채널명 표시 (콜매니저와 동일한 기능 추가)
-            if (pttChannelName.isNotBlank()) {
-                Text(
-                    "채널: $pttChannelName",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = when {
-                        isPttSpeaking -> MaterialTheme.colorScheme.onErrorContainer
-                        isConnected -> MaterialTheme.colorScheme.onPrimaryContainer
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    fontWeight = FontWeight.Light
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun PTTControlCard(
-    isPttSpeaking: Boolean,
-    onStartPTT: () -> Unit,
-    onStopPTT: () -> Unit,
-    onVolumeDown: () -> Unit,
-    onVolumeUp: () -> Unit
-) {
-    var isTestingPTT by remember { mutableStateOf(false) }
-    
-    Card {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                "PTT 컨트롤",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            
-            
-            // 볼륨 조절 버튼들 (콜매니저와 동일)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                Button(
-                    onClick = onVolumeDown,
-                    enabled = true
-                ) {
-                    Icon(Icons.Filled.VolumeDown, contentDescription = "볼륨 다운")
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("볼륨 -")
+                is com.designated.pickupapp.ptt.state.PTTState.Connecting -> {
+                    Text("연결 중...", fontSize = 14.sp)
                 }
-                
-                Button(
-                    onClick = onVolumeUp,
-                    enabled = true
-                ) {
-                    Icon(Icons.Filled.VolumeUp, contentDescription = "볼륨 업")
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("볼륨 +")
+                is com.designated.pickupapp.ptt.state.PTTState.Connected -> {
+                    Text("채널: ${pttState.channel}", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text("UID: ${pttState.uid}", fontSize = 12.sp, color = Color.Gray)
                 }
-            }
-            
-            // PTT 테스트 버튼들 (콜매니저와 동일)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                Button(
-                    onClick = { 
-                        isTestingPTT = true
-                        onStartPTT()
-                    },
-                    enabled = !isTestingPTT,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.secondary
+                is com.designated.pickupapp.ptt.state.PTTState.Transmitting -> {
+                    Text(
+                        if (pttState.isTransmitting) "송신 중..." else "송신 준비",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (pttState.isTransmitting) Color.Red else MaterialTheme.colorScheme.primary
                     )
-                ) {
-                    Icon(Icons.Filled.Mic, contentDescription = "PTT 송신 시작")
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("송신 시작")
                 }
-                
-                Button(
-                    onClick = { 
-                        isTestingPTT = false
-                        onStopPTT()
-                    },
-                    enabled = isTestingPTT,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Icon(Icons.Filled.MicOff, contentDescription = "PTT 송신 종료")
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("송신 종료")
+                is com.designated.pickupapp.ptt.state.PTTState.UserSpeaking -> {
+                    val userType = when {
+                        pttState.uid in 1000..1999 -> "관리자"
+                        pttState.uid in 2000..2999 -> "픽업"
+                        else -> "사용자"
+                    }
+                    Text("$userType ${pttState.uid} 말하는 중", fontSize = 14.sp, color = Color.Green)
+                }
+                is com.designated.pickupapp.ptt.state.PTTState.Error -> {
+                    Text("오류: ${pttState.message}", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
                 }
             }
         }
@@ -508,65 +366,69 @@ fun PTTControlCard(
 }
 
 @Composable
-fun PTTFloatingActionButton(
-    isPttSpeaking: Boolean,
-    pttStatus: String,
-    onPttPress: () -> Unit,
-    onPttRelease: () -> Unit
+private fun PTTButtonCompact(
+    pttState: com.designated.pickupapp.ptt.state.PTTState,
+    isPressing: Boolean,
+    onPressStart: () -> Unit,
+    onPressEnd: () -> Unit
 ) {
-    var isPressed by remember { mutableStateOf(false) }
+    val isEnabled = pttState is com.designated.pickupapp.ptt.state.PTTState.Connected || 
+                   pttState is com.designated.pickupapp.ptt.state.PTTState.Transmitting || 
+                   pttState is com.designated.pickupapp.ptt.state.PTTState.UserSpeaking
     
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        // PTT 상태 표시
-        if (pttStatus.isNotBlank()) {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = Color.Black.copy(alpha = 0.8f)
-                ),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Text(
-                    text = pttStatus,
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                )
-            }
-        }
-        
-        // PTT 버튼
-        FloatingActionButton(
-            onClick = { /* onClick은 사용하지 않음 - gesture로 처리 */ },
-            modifier = Modifier
-                .size(80.dp)
-                .pointerInput(Unit) {
+    val buttonColor = when {
+        !isEnabled -> Color.Gray
+        isPressing -> Color(0xFFFF6B35) // 픽업용 주황색
+        else -> MaterialTheme.colorScheme.primary
+    }
+    
+    Box(
+        modifier = Modifier
+            .size(120.dp) // 크기 축소
+            .clip(CircleShape)
+            .background(buttonColor)
+            .pointerInput(isEnabled) {
+                if (isEnabled) {
                     detectTapGestures(
                         onPress = {
-                            isPressed = true
-                            onPttPress()
-                            tryAwaitRelease()
-                            isPressed = false
-                            onPttRelease()
+                            onPressStart()
+                            awaitRelease()
+                            onPressEnd()
                         }
                     )
-                },
-            containerColor = when {
-                isPttSpeaking -> Color(0xFFFF5722) // 송신 중: 빨간색
-                isPressed -> Color(0xFFFF9800) // 눌림: 주황색
-                else -> Color(0xFF4CAF50) // 대기: 초록색
+                }
             },
-            contentColor = Color.White
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Icon(
-                imageVector = if (isPttSpeaking) Icons.Filled.Mic else Icons.Filled.MicNone,
-                contentDescription = if (isPttSpeaking) "송신 중" else "PTT",
-                modifier = Modifier.size(32.dp)
+                if (isPressing) Icons.Default.Mic else Icons.Default.MicOff,
+                contentDescription = if (isPressing) "송신 중" else "PTT",
+                tint = Color.White,
+                modifier = Modifier.size(36.dp) // 아이콘 크기 축소
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                if (isPressing) "송신 중" else "눌러서 말하기",
+                color = Color.White,
+                fontSize = 10.sp, // 텍스트 크기 축소
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center
             )
         }
     }
+}
+
+/**
+ * Service에 명령을 전송하는 헬퍼 함수
+ */
+private fun sendCommandToService(context: android.content.Context, action: String) {
+    val intent = android.content.Intent(context, com.designated.pickupapp.ptt.service.PTTForegroundService::class.java).apply {
+        this.action = action
+    }
+    context.startService(intent)
 }
 
 private fun formatTimeAgo(timestamp: Long): String {

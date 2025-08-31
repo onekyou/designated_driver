@@ -3,6 +3,7 @@ package com.designated.callmanager.data.local
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import androidx.room.ForeignKey
+import androidx.room.Index
 
 @Entity(
     tableName = "credit_entries",
@@ -13,6 +14,9 @@ import androidx.room.ForeignKey
             childColumns = ["personId"],
             onDelete = ForeignKey.CASCADE
         )
+    ],
+    indices = [
+        Index(value = ["personId"])
     ]
 )
 data class CreditEntryEntity(

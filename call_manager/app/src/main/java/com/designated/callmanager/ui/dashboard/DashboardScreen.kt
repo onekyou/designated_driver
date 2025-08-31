@@ -7,7 +7,7 @@ import android.content.Intent
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
-import android.util.Log
+import android.provider.Settings
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -102,7 +102,6 @@ fun DashboardScreen(
     viewModel: DashboardViewModel,
     onLogout: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
-    onNavigateToPTT: () -> Unit = {},
 ) {
     val callInfoForDialog by viewModel.callInfoForDialog.collectAsStateWithLifecycle()
     val calls by viewModel.calls.collectAsStateWithLifecycle()
@@ -139,8 +138,6 @@ fun DashboardScreen(
     val showSharedCallCancelledDialog by viewModel.showSharedCallCancelledDialog.collectAsStateWithLifecycle()
     val sharedCancelledCallInfo by viewModel.cancelledCallInfo.collectAsStateWithLifecycle()
 
-    // 디버그 로그 추가
-    Log.d(TAG, "Recomposing... showNewCallPopup: $showNewCallPopup, newCallInfo is null: ${newCallInfo == null}")
 
     var showSharedSettings by remember { mutableStateOf(false) }
 
@@ -200,7 +197,6 @@ fun DashboardScreen(
             callInfo = callInfoForDialog!!,
             onDismiss = { viewModel.dismissCallDialog() },
             onAssignRequest = {
-                Log.e(TAG, "onAssignRequest: 기사 배정 요청. Call ID: ${callInfoForDialog!!.id}")
                 callIdForDriverAssignment = callInfoForDialog!!.id
             },
             onHold = { viewModel.updateCallStatus(callInfoForDialog!!.id, CallStatus.HOLD) },
@@ -283,8 +279,6 @@ fun DashboardScreen(
 
     // ★★★ 새로운 WAITING 콜 감지 시 즉시 배차 팝업 ★★★
     if (showNewCallPopup && newCallInfo != null) {
-        // 디버그 로그 추가
-        Log.d(TAG, "Showing NewCallAssignmentDialog for call ID: ${newCallInfo?.id}")
 
         val waitingDrivers = drivers.filter { driver ->
             val statusString = driver.status?.trim() ?: ""
@@ -427,11 +421,25 @@ fun DashboardScreen(
 
 fun playNotificationSound(context: Context) {
     try {
-        val notification: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-        val r = RingtoneManager.getRingtone(context.applicationContext, notification)
-        r.play()
+        // ⭐️ 시스템 설정 기본 알림음 사용 (사용자가 설정한 알림음)
+        val systemNotificationUri = Settings.System.DEFAULT_NOTIFICATION_URI
+        val ringtone = RingtoneManager.getRingtone(context.applicationContext, systemNotificationUri)
+        if (ringtone != null) {
+            ringtone.play()
+            return
+        }
+        
+        throw Exception("System notification sound failed")
+        
     } catch (e: Exception) {
-        Log.e(TAG, "Error playing notification sound", e)
+        // 최종 폴백: 기본 알림음
+        try {
+            val fallbackNotification: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            val fallbackR = RingtoneManager.getRingtone(context.applicationContext, fallbackNotification)
+            fallbackR?.play()
+        } catch (e2: Exception) {
+            // 알림음 재생 실패 시 무시
+        }
     }
 }
 
@@ -848,12 +856,18 @@ fun NewCallAssignmentDialog(
         onDismissRequest = {
             // 팝업 클릭 시 알람도 중지
             try {
-                val ringtoneManager = RingtoneManager.getRingtone(context.applicationContext, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
-                if (ringtoneManager.isPlaying) {
-                    ringtoneManager.stop()
+                // Sticky 알림음 중지 시도
+                val stickyRingtone = RingtoneManager.getRingtone(context.applicationContext, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI)
+                if (stickyRingtone.isPlaying) {
+                    stickyRingtone.stop()
+                }
+                // 기본 알림음도 중지 시도 (폴백용)
+                val defaultRingtone = RingtoneManager.getRingtone(context.applicationContext, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+                if (defaultRingtone.isPlaying) {
+                    defaultRingtone.stop()
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error stopping notification sound", e)
+                // Ignore error stopping notification sound
             }
             onDismiss()
         },
@@ -898,7 +912,6 @@ fun NewCallAssignmentDialog(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        Log.d(TAG, "Driver selected: ${driver.name}/${driver.id}")
                                         onDriverSelect(driver)
                                     },
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -933,10 +946,13 @@ fun NewCallAssignmentDialog(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = {
                     try {
-                        val r = RingtoneManager.getRingtone(context.applicationContext, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
-                        if (r.isPlaying) r.stop()
+                        // Sticky와 기본 알림음 모두 중지
+                        val stickyR = RingtoneManager.getRingtone(context.applicationContext, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI)
+                        if (stickyR.isPlaying) stickyR.stop()
+                        val defaultR = RingtoneManager.getRingtone(context.applicationContext, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+                        if (defaultR.isPlaying) defaultR.stop()
                     } catch (e: Exception) {
-                        Log.e(TAG, "Error stopping notification sound", e)
+                        // Ignore error stopping notification sound
                     }
                     onDismiss()
                 }) { Text("나중에") }
@@ -946,10 +962,13 @@ fun NewCallAssignmentDialog(
                 TextButton(
                     onClick = { 
                         try {
-                            val r = RingtoneManager.getRingtone(context.applicationContext, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
-                            if (r.isPlaying) r.stop()
+                            // Sticky와 기본 알림음 모두 중지
+                            val stickyR = RingtoneManager.getRingtone(context.applicationContext, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI)
+                            if (stickyR.isPlaying) stickyR.stop()
+                            val defaultR = RingtoneManager.getRingtone(context.applicationContext, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+                            if (defaultR.isPlaying) defaultR.stop()
                         } catch (e: Exception) {
-                            Log.e(TAG, "Error stopping notification sound", e)
+                            // Ignore error stopping notification sound
                         }
                         showDeleteConfirmDialog = true 
                     },
@@ -1392,7 +1411,6 @@ fun SharedCallAcceptDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    Log.d(TAG, "Driver selected: ${driver.name}/${driver.id}")
                                     selectedDriver = driver
                                 },
                             colors = CardDefaults.cardColors(

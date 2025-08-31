@@ -10,11 +10,9 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="com.google.android.c2dm.permission.RECEIVE" />
     
-    <!-- Agora PTT 권한 -->
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <uses-permission android:name="android.permission.BLUETOOTH" />
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Hardware features for ChromeOS compatibility -->
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+    
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
@@ -26,8 +24,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    
     
     <!-- 전화 감지 권한 (콜 디텍터 기능) -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
@@ -36,8 +37,18 @@
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     
+    <!-- PTT 음성 통신 권한 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    
+    <!-- PTT 백그라운드 서비스 타입 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    
     <!-- Google Play Services 권한 -->
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
 
     <application
@@ -63,12 +74,6 @@
             </intent-filter>
         </activity>
         
-        <!-- PTT 테스트 액티비티 (Phase 4: 멀티 기기 테스트) -->
-        <activity
-            android:name=".ptt.PickupPTTTestActivity"
-            android:exported="false"
-            android:label="픽업앱 PTT 테스트"
-            android:theme="@style/Theme.PickupApp" />
         
         <service
             android:name=".service.MyFirebaseMessagingService"
@@ -77,6 +82,19 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+        
+        <!-- PTT Foreground Service -->
+        <service
+            android:name=".ptt.service.PTTForegroundService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="microphone|mediaPlayback">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+        
+        
         
         <!-- Firebase 관련 서비스 (자동 초기화) -->
         <service
@@ -99,6 +117,11 @@
         <meta-data
             android:name="com.google.android.gms.version"
             android:value="@integer/google_play_services_version" />
+            
+        <!-- Android 15 호환성 -->
+        <meta-data
+            android:name="android.webkit.WebView.EnableSafeBrowsing"
+            android:value="false" />
     </application>
 
 </manifest>

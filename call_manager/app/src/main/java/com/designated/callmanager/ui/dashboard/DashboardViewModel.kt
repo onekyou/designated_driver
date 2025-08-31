@@ -4,9 +4,9 @@ import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.designated.callmanager.CallManagerApplication
 import com.designated.callmanager.R
 import com.designated.callmanager.data.CallInfo
 import com.designated.callmanager.data.CallStatus
@@ -18,6 +18,7 @@ import com.designated.callmanager.service.CallManagerService
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
+import android.util.Log
 import com.google.firebase.firestore.DocumentChange
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
@@ -42,12 +43,6 @@ sealed class DriverApprovalActionState {
     data class Error(val message: String) : DriverApprovalActionState()
 }
 
-data class PTTStatus(
-    val isConnected: Boolean = false,
-    val isSpeaking: Boolean = false,
-    val connectionState: String = "Disconnected",
-    val channelName: String? = null
-)
 
 class DashboardViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -76,6 +71,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val auth: FirebaseAuth = Firebase.auth
     private val firestore = FirebaseFirestore.getInstance()
     private val sharedPreferences = application.getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
+    private val appContext = application.applicationContext
 
     private val _regionId = MutableStateFlow<String?>(null)
     val regionId: StateFlow<String?> = _regionId.asStateFlow()
@@ -206,14 +202,10 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                         DocumentChange.Type.ADDED, DocumentChange.Type.MODIFIED -> {
                             if (dc.type == DocumentChange.Type.ADDED && 
                                 callInfo.status == CallStatus.WAITING.firestoreValue) {
-                                Log.d(TAG, "새로운 WAITING 콜 감지: callId=${callInfo.id}, callType=${callInfo.callType}")
                                 
                                 if (callInfo.callType != "SHARED") { // 공유콜인 경우 팝업 표시 안함
-                                    Log.d(TAG, "일반 콜이므로 팝업 표시: ${callInfo.id}")
                                     _newCallInfo.value = callInfo
                                     _showNewCallPopup.value = true
-                                } else {
-                                    Log.d(TAG, "공유콜이므로 팝업 표시 안함: ${callInfo.id}")
                                 }
                             }
                             if (callInfo.status == CallStatus.IN_PROGRESS.firestoreValue && previousStatusMap[doc.id] != CallStatus.IN_PROGRESS.firestoreValue) {
@@ -271,51 +263,39 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
         driversListener = officeRef.collection("designated_drivers")
             .addSnapshotListener { snapshots, e ->
-                Log.d(TAG, "[Drivers Listener] Triggered.")
                 if (e != null) {
-                    Log.e(TAG, "[Drivers Listener] Error:", e)
                     return@addSnapshotListener
                 }
 
                 if (snapshots == null) {
-                    Log.w(TAG, "[Drivers Listener] Snapshot is null.")
                     return@addSnapshotListener
                 }
 
-                Log.d(TAG, "[Drivers Listener] Received ${snapshots.size()} documents. ${snapshots.documentChanges.size} changes.")
-
                 for (dc in snapshots.documentChanges) {
                     val doc = dc.document
-                    Log.d(TAG, "[Drivers Listener] Processing change: Type=${dc.type}, DocID=${doc.id}")
                     try {
                         val driverInfo = doc.toObject(DriverInfo::class.java).apply { id = doc.id }
                         when (dc.type) {
                             DocumentChange.Type.ADDED, DocumentChange.Type.MODIFIED -> {
-                                Log.d(TAG, "[Drivers Listener] Caching driver: ${driverInfo.name} (docId=${doc.id}, objId=${driverInfo.id}, authUid=${driverInfo.authUid}) - Status: ${driverInfo.status}")
                                 driverCache[doc.id] = driverInfo
                             }
                             DocumentChange.Type.REMOVED -> {
-                                Log.d(TAG, "[Drivers Listener] Removing driver from cache: ${doc.id}")
                                 driverCache.remove(doc.id)
                             }
                         }
                     } catch (parseEx: Exception) {
-                        Log.e(TAG, "[Drivers Listener] Failed to parse document ${doc.id}", parseEx)
+                        // Ignore parse errors
                     }
                 }
                 _drivers.value = driverCache.values.toList().sortedBy { it.name }
-                Log.d(TAG, "[Drivers Listener] Updated UI with ${driverCache.size} drivers.")
             }
 
         officeStatusListener = officeRef.addSnapshotListener { snapshot, e ->
             if (e != null) {
-                Log.w(TAG, "Office status listener failed.", e)
                 return@addSnapshotListener
             }
             if (snapshot != null && snapshot.exists()) {
                 _officeStatus.value = snapshot.getString("status") ?: ""
-            } else {
-                Log.d(TAG, "Current data: null")
             }
         }
 
@@ -488,9 +468,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     "status" to CallStatus.ASSIGNED.firestoreValue,
                     "updatedAt" to Timestamp.now()
                 )
-                Log.d(TAG, ">>>>>>>>>> 배차 시작: Call ID=${callInfo.id}, Driver ID=${driverId}, Status to be set=${CallStatus.ASSIGNED.firestoreValue}")
                 callRef.update(callUpdates).await()
-                Log.d(TAG, "Step 1/2 SUCCESS: Call ${callInfo.id} updated.")
 
 
                 // 3. Update Driver Document
@@ -649,9 +627,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _cancelledCallInfo = MutableStateFlow<CallInfo?>(null)
     val cancelledCallInfo: StateFlow<CallInfo?> = _cancelledCallInfo.asStateFlow()
 
-    // PTT 관련 상태
-    private val _pttStatus = MutableStateFlow(PTTStatus())
-    val pttStatus: StateFlow<PTTStatus> = _pttStatus.asStateFlow()
 
     fun showSharedCallCancelledDialog(callId: String) {
         viewModelScope.launch {
@@ -837,8 +812,14 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         _regionId.value = regionId
         _officeId.value = officeId
 
+        // 콜디텍터를 위한 지역/사무실 정보 자동 동기화
+        syncCallDetectorSettings(regionId, officeId)
+
         startListening(regionId, officeId)
         fetchOfficeName(regionId, officeId)
+        
+        // 콜디텍터가 활성화되어 있으면 서비스 시작
+        startCallDetectorIfEnabled()
     }
 
     private fun stopListening() {
@@ -1051,35 +1032,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    // PTT 관련 함수들
-    fun handlePTTVolumeDown() {
-        Log.d(TAG, "handlePTTVolumeDown called")
-    }
 
-    fun handlePTTVolumeUp() {
-        Log.d(TAG, "handlePTTVolumeUp called")
-    }
-
-    fun isPTTConnected(): Boolean {
-        return _pttStatus.value.isConnected
-    }
-
-    fun initializePTT() {
-        Log.d(TAG, "initializePTT called")
-        _pttStatus.value = PTTStatus(
-            isConnected = true,
-            connectionState = "Connected"
-        )
-    }
 
     fun showSharedCallNotificationFromId(callId: String) {
         Log.d(TAG, "showSharedCallNotificationFromId called with callId: $callId")
         // 공유콜 알림 표시 로직
     }
 
-    fun adjustPTTVolume(delta: Int) {
-        Log.d(TAG, "adjustPTTVolume called with delta: $delta")
-    }
 
     fun showTripStartedPopup(driverName: String, driverPhone: String?, tripSummary: String, customerName: String) {
         Log.d(TAG, "showTripStartedPopup called")
@@ -1097,5 +1056,75 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         Log.d(TAG, "showCancelledCallPopup called")
         _canceledCallInfo.value = Pair(driverName, customerName)
         _showCanceledCallPopup.value = true
+    }
+    
+    // ===== 콜 디텍터 관리 =====
+    fun syncCallDetectorSettings(regionId: String, officeId: String) {
+        val prefs = getApplication<Application>().getSharedPreferences("call_manager_prefs", Context.MODE_PRIVATE)
+        
+        // 콜디텍터를 위한 설정 자동 동기화
+        prefs.edit().apply {
+            putString("regionId", regionId)
+            putString("officeId", officeId) 
+            putString("deviceName", android.os.Build.MODEL) // 디바이스명은 자동으로 모델명 사용
+            // 최초 로그인 시 콜디텍터를 기본적으로 활성화
+            if (!prefs.contains("call_detection_enabled")) {
+                putBoolean("call_detection_enabled", true)
+                Log.i(TAG, "🔧 First time setup: Enabling call detection by default")
+            }
+            apply()
+        }
+        
+        Log.i(TAG, "✅ CallDetector settings synced - Region: $regionId, Office: $officeId, Device: ${android.os.Build.MODEL}")
+    }
+    
+    // 수동으로 콜디텍터 설정 동기화 (디버깅용)
+    fun forceSyncCallDetectorSettings() {
+        val currentRegionId = _regionId.value
+        val currentOfficeId = _officeId.value
+        
+        if (currentRegionId != null && currentOfficeId != null) {
+            syncCallDetectorSettings(currentRegionId, currentOfficeId)
+            Log.i(TAG, "🔧 Manual sync triggered for Region: $currentRegionId, Office: $currentOfficeId")
+        } else {
+            Log.w(TAG, "❌ Cannot sync: regionId or officeId is null")
+        }
+    }
+    
+    private fun startCallDetectorIfEnabled() {
+        val prefs = getApplication<Application>().getSharedPreferences("call_manager_prefs", Context.MODE_PRIVATE)
+        val isCallDetectionEnabled = prefs.getBoolean("call_detection_enabled", false)
+        
+        Log.d(TAG, "Call detection enabled: $isCallDetectionEnabled")
+        
+        if (isCallDetectionEnabled) {
+            // 이미 실행 중인지 확인
+            if (com.designated.callmanager.service.CallDetectorService.isServiceRunning()) {
+                Log.d(TAG, "CallDetectorService already running, skipping start")
+                return
+            }
+            
+            // 콜디텍터 서비스 시작
+            try {
+                val intent = Intent(getApplication(), com.designated.callmanager.service.CallDetectorService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    getApplication<Application>().startForegroundService(intent)
+                } else {
+                    getApplication<Application>().startService(intent)
+                }
+                Log.i(TAG, "✅ CallDetectorService started successfully")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed to start CallDetectorService", e)
+            }
+        } else {
+            // 콜디텍터 서비스 중지 (이미 실행 중인 경우)
+            try {
+                val intent = Intent(getApplication(), com.designated.callmanager.service.CallDetectorService::class.java)
+                getApplication<Application>().stopService(intent)
+                Log.i(TAG, "CallDetectorService stopped (disabled)")
+            } catch (e: Exception) {
+                Log.w(TAG, "CallDetectorService stop failed (may not be running)", e)
+            }
+        }
     }
 }

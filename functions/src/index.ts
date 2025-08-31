@@ -231,7 +231,7 @@ export const onSharedCallCreated = onDocumentCreated(
         android: {
           priority: "high",
           notification: {
-            sound: "default",
+            sound: "content://media/internal/audio/media/28",
             channelId: "shared_call_fcm_channel",
             priority: "high",
             clickAction: "ACTION_SHOW_SHARED_CALL", // click_action → clickAction
@@ -340,7 +340,7 @@ export const onSharedCallClaimed = onDocumentUpdated(
             android: {
               priority: "high",
               notification: {
-                sound: "default",
+                sound: "content://media/internal/audio/media/28",
                 channelId: "call_manager_fcm_channel",
                 priority: "high",
               },
@@ -702,7 +702,7 @@ export const onSharedCallCancelledByDriver = onDocumentUpdated(
             android: {
               priority: "high",
               notification: {
-                sound: "default",
+                sound: "content://media/internal/audio/media/28",
                 channelId: "call_manager_fcm_channel",
                 priority: "high",
                 clickAction: "FLUTTER_NOTIFICATION_CLICK"
@@ -879,6 +879,12 @@ export const sendNewCallNotification = onDocumentCreated(
 
     if (data.status !== "WAITING") {
       logger.info("[sendNewCallNotification] Call is not in WAITING status. Skip.");
+      return;
+    }
+
+    // 콜매니저에서 생성된 콜인지 확인 (콜매니저에서 생성된 콜은 FCM 알림 생략)
+    if (data.fromCallManager === true) {
+      logger.info("[sendNewCallNotification] Call created from CallManager app. Skipping FCM notification to avoid duplicate.");
       return;
     }
 
@@ -1165,6 +1171,9 @@ export { finalizeWorkDay } from "./finalizeWorkDay";
 
 // Agora PTT 토큰 관련 함수 추가
 export { generateAgoraToken, refreshAgoraToken } from "./agoraToken";
+
+// PTT 자동 채널 참여 함수들
+export { onPickupDriverStatusChange, onDesignatedDriverStatusChange } from "./pttSignaling";
 
 // 픽업 기사 데이터 마이그레이션 함수 (한 번만 실행)
 import {onCall} from "firebase-functions/v2/https";
