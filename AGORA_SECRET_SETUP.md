@@ -2,7 +2,7 @@
 
 ## App Certificate 정보
 - App ID: `e5aae3aa18484cd2a1fed0018cfb15bd`
-- App Certificate: `d4109290198749419a44bcb23a6a05c5`
+- App Certificate: `[YOUR_AGORA_APP_CERTIFICATE]`
 
 ## 설정 방법
 
@@ -21,11 +21,11 @@ cd C:\app_dev\designated_driver\functions
 ```cmd
 firebase functions:secrets:set AGORA_APP_CERTIFICATE
 ```
-프롬프트가 나타나면 `d4109290198749419a44bcb23a6a05c5` 입력 후 Enter
+프롬프트가 나타나면 `[YOUR_AGORA_APP_CERTIFICATE]` 입력 후 Enter
 
 **방법 B: 한 줄 명령**
 ```powershell
-echo d4109290198749419a44bcb23a6a05c5 | firebase functions:secrets:set AGORA_APP_CERTIFICATE --force
+echo [YOUR_AGORA_APP_CERTIFICATE] | firebase functions:secrets:set AGORA_APP_CERTIFICATE --force
 ```
 
 ### 옵션 2: Firebase Console 사용
@@ -37,7 +37,7 @@ echo d4109290198749419a44bcb23a6a05c5 | firebase functions:secrets:set AGORA_APP
 5. **Create secret** 버튼 클릭
 6. 다음 정보 입력:
    - Secret ID: `AGORA_APP_CERTIFICATE`
-   - Secret value: `d4109290198749419a44bcb23a6a05c5`
+   - Secret value: `[YOUR_AGORA_APP_CERTIFICATE]`
 7. **Create secret** 클릭
 
 ## Functions 재배포
@@ -65,7 +65,7 @@ AGORA_APP_CERTIFICATE가 목록에 나타나면 성공!
 1. Firebase Console에서 직접 설정 (옵션 2 사용)
 2. 또는 텍스트 파일을 만들어서 설정:
    ```cmd
-   echo d4109290198749419a44bcb23a6a05c5 > secret.txt
+   echo [YOUR_AGORA_APP_CERTIFICATE] > secret.txt
    firebase functions:secrets:set AGORA_APP_CERTIFICATE < secret.txt
    del secret.txt
    ```

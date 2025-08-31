@@ -70,3 +70,17 @@ Thumbs.db
 # Google Cloud Service Account Key
 /credentials/serviceAccountKey.json
 /config/serviceAccountKey.json
+
+# --- Security & Sensitive Data ---
+# Sensitive data files (never commit these)
+SENSITIVE_DATA.md
+**/sensitive_config.json
+**/*_secrets.env
+**/.env.local
+**/.env.production
+**/google-services.json.backup
+**/agora_credentials.json
+
+# Development & Test credentials
+**/test_credentials.json
+**/dev_api_keys.txt
