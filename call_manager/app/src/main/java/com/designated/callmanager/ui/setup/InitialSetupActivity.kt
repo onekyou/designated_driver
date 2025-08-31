@@ -64,6 +64,17 @@ class InitialSetupActivity : ComponentActivity() {
             requestBatteryOptimization()
         }
     }
+
+    // Android 13부터 알림 권한은 다른 권한과 별도로 요청해야 합니다. 먼저 알림 권한을 요청한 뒤 결과에 따라 나머지 권한을 요청합니다.
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted: Boolean ->
+        // 권한 상태 갱신
+        val desc = getPermissionDescription(Manifest.permission.POST_NOTIFICATIONS)
+        updatePermissionStates(mapOf(Manifest.permission.POST_NOTIFICATIONS to granted))
+        // 알림 권한 처리 후 나머지 권한 요청을 이어서 수행
+        requestBasicPermissions()
+    }
     
     // 권한 상태 관리
     private var permissionStates by mutableStateOf(mapOf<String, PermissionState>())
@@ -275,8 +286,16 @@ class InitialSetupActivity : ComponentActivity() {
             ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED
         }
         
+        // Android 13 이상에서는 POST_NOTIFICATIONS를 먼저 요청해야 함
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ungrantedPermissions.contains(Manifest.permission.POST_NOTIFICATIONS)) {
+            // 알림 권한만 먼저 요청하고 이후 다시 requestBasicPermissions()에서 나머지를 요청한다
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            return
+        }
+
         if (ungrantedPermissions.isNotEmpty()) {
-            // RequestMultiplePermissions 런처로 한번에 요청
+            // 알림 권한을 제외한 나머지 권한들을 한번에 요청
             multiplePermissionLauncher.launch(ungrantedPermissions.toTypedArray())
         } else {
             // 모든 기본 권한이 이미 허용됨 - 배터리 최적화로 진행
