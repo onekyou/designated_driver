@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- Basic placeholder colors. Actual UI colors are defined in ui/theme/Color.kt -->
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
-    <!-- Example dark theme base color (can be used for splash screen background) -->
-    <color name="dark_background_xml">#FF121212</color> 
-</resources> 

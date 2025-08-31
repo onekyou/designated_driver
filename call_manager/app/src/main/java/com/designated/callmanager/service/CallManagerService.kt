@@ -52,8 +52,6 @@ class CallManagerService : Service() {
     private val firestore = FirebaseFirestore.getInstance()
     private lateinit var sharedPreferences: SharedPreferences
     
-    // PTT Manager 인스턴스
-    private var pttManager: PTTManager? = null
 
     // ⚠️ FCM 토큰 방식 전환으로 리스너 관련 변수들 제거됨
     // private var callsListener, connectionListener, isListenerAttached 등
@@ -77,8 +75,6 @@ class CallManagerService : Service() {
             startForeground(FOREGROUND_NOTIFICATION_ID, notification)
         }
         
-        // PTTManager 초기화
-        initializePTTManager()
         
         // FCM 토큰 방식 사용으로 리스너 비활성화
         // setupCallListener() // 제거됨 - FCM 토큰 방식으로 대체
@@ -120,10 +116,7 @@ class CallManagerService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         isServiceRunning = false
-        // PTTManager 정리
-        pttManager?.destroy()
-        pttManager = null
-        Log.i(TAG, "CallManagerService destroyed and PTTManager cleaned up")
+        Log.i(TAG, "CallManagerService destroyed")
         // stopFirebaseListeners() 제거됨 - FCM 토큰 방식에서는 불필요
     }
 
@@ -176,67 +169,6 @@ class CallManagerService : Service() {
         manager.notify(FOREGROUND_NOTIFICATION_ID, notification)
     }
     
-    /**
-     * PTTManager 초기화
-     * - SharedPreferences에서 region/office 정보를 가져와 초기화
-     * - 백그라운드에서도 PTT 자동채널 참여가 가능하도록 함
-     */
-    private fun initializePTTManager() {
-        try {
-            // Firebase Auth 확인
-            val currentUser = FirebaseAuth.getInstance().currentUser
-            if (currentUser == null) {
-                Log.w(TAG, "PTTManager 초기화 실패: 로그인되지 않음")
-                return
-            }
-            
-            // SharedPreferences에서 region/office 정보 가져오기
-            val region = sharedPreferences.getString("regionId", null)
-            val office = sharedPreferences.getString("officeId", null)
-            
-            if (region.isNullOrEmpty() || office.isNullOrEmpty()) {
-                Log.w(TAG, "PTTManager 초기화 실패: region 또는 office 정보 없음")
-                return
-            }
-            
-            Log.i(TAG, "PTTManager 초기화 시작 - region: $region, office: $office, user: ${currentUser.uid}")
-            
-            // PTTManager 인스턴스 생성
-            pttManager = PTTManager.getInstance(
-                context = applicationContext,
-                userType = "call_manager",
-                regionId = region,
-                officeId = office
-            )
-            
-            // PTTManager 초기화 (콜백 등록)
-            pttManager?.initialize(object : PTTManager.PTTCallback {
-                override fun onStatusChanged(status: String) {
-                    Log.d(TAG, "PTT 상태 변경: $status")
-                }
-                
-                override fun onConnectionStateChanged(isConnected: Boolean) {
-                    Log.d(TAG, "PTT 연결 상태: $isConnected")
-                    if (isConnected) {
-                        Log.i(TAG, "🎯 PTT 자동채널 참여 성공!")
-                    }
-                }
-                
-                override fun onSpeakingStateChanged(isSpeaking: Boolean) {
-                    Log.d(TAG, "PTT 송신 상태: $isSpeaking")
-                }
-                
-                override fun onError(error: String) {
-                    Log.e(TAG, "PTT 오류: $error")
-                }
-            })
-            
-            Log.i(TAG, "✅ PTTManager 초기화 완료 - 백그라운드에서 PTT 자동채널 참여 대기 중")
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "PTTManager 초기화 중 오류", e)
-        }
-    }
     
     // ⚠️ 로컬 알림 함수들 제거 - FCM을 통해 서버에서 처리됨
     // showStatusChangeNotification() 및 showNewCallNotification() 함수는

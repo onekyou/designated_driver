@@ -52,6 +52,11 @@ service cloud.firestore {
     match /{path=**}/designated_drivers/{docId} {
       allow read: if isAuthenticated();
     }
+    
+    // ★★★ 픽업 기사 collectionGroup 쿼리 지원 ★★★
+    match /{path=**}/pickup_drivers/{docId} {
+      allow read: if isAuthenticated() && resource.data.authUid == request.auth.uid;
+    }
 
     // --- Nested Collections under Regions/Offices ---
     match /regions/{regionId}/offices/{officeId} {
@@ -119,6 +124,19 @@ service cloud.firestore {
         allow read: if isOfficeAdmin(regionId, officeId);
         // Cloud Functions(서버 사이드)만 잔액/충전 변경 허용
         allow write: if request.auth == null;
+      }
+
+      // =============================
+      //  픽업 기사 컬렉션 (pickup_drivers)
+      //  • 관리자와 본인 읽기/쓰기 허용
+      //  • collectionGroup 쿼리 지원
+      // =============================
+      match /pickup_drivers/{driverDocId} {
+        // 읽기(read): 관리자이거나, 기사 본인인 경우 허용
+        allow read: if isOfficeAdmin(regionId, officeId) || (isAuthenticated() && resource.data.authUid == request.auth.uid);
+        
+        // 쓰기(write): 관리자이거나, 기사 본인인 경우 허용
+        allow write: if isOfficeAdmin(regionId, officeId) || (isAuthenticated() && resource.data.authUid == request.auth.uid);
       }
 
       // =============================

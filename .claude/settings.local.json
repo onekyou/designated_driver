@@ -37,11 +37,42 @@
       "Bash(npm run deploy:*)",
       "Bash(.gradlew build --stacktrace)",
       "Bash(firebase --version)",
-      "Bash(firebase functions:log:*)"
+      "Bash(firebase functions:log:*)",
+      "Bash(git log:*)",
+      "Bash(.gradlew clean)",
+      "Bash(adb:*)",
+      "Bash(grep:*)",
+      "Bash(fc:*)",
+      "WebSearch",
+      "Bash(timeout:*)",
+      "Bash(firebase functions:secrets:*)",
+      "Bash(pkill:*)",
+      "Bash(taskkill:*)",
+      "Bash(.gradlew build)",
+      "Bash(cmd.exe:*)",
+      "Bash(.gradlew:*)",
+      "Read(/C:\\Users\\onekyou\\Desktop\\새 폴더\\call_manager_ptt완성/**)",
+      "Read(/C:\\Users\\onekyou\\Desktop\\새 폴더\\call_manager_ptt완성/**)",
+      "Read(/C:\\Users\\onekyou\\Desktop\\새 폴더\\call_manager_ptt완성\\app\\src\\main\\java\\com\\designated\\callmanager\\service/**)",
+      "Read(/C:\\Users\\onekyou\\Desktop\\새 폴더\\call_manager_ptt완성\\app\\src\\main\\java\\com\\designated\\callmanager\\service/**)",
+      "Read(/C:\\Users\\onekyou\\Desktop\\새 폴더\\call_manager_ptt완성\\app\\src\\main\\java\\com\\designated\\callmanager\\service/**)",
+      "Bash(git checkout:*)",
+      "Bash(sed:*)",
+      "Read(/C:\\mnt\\c\\app_dev\\designated_driver/**)",
+      "WebFetch(domain:docs.agora.io)",
+      "Bash(gradle build)",
+      "Bash(git restore:*)",
+      "Bash(.\\gradlew.bat:*)",
+      "Bash(cmd /c:*)",
+      "Bash(dir)",
+      "Bash(python3:*)",
+      "Bash(python:*)"
     ],
     "deny": [],
     "additionalDirectories": [
-      "C:\\"
+      "C:\\",
+      "C:\\mnt\\c\\app_dev\\designated_driver",
+      "C:\\c\\app_dev\\designated_driver"
     ]
   }
 }

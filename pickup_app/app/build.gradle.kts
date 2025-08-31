@@ -19,10 +19,8 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
-        // Add NDK abiFilters for Agora
-        ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
-        }
+        // Agora App ID
+        buildConfigField("String", "AGORA_APP_ID", "\"e5aae3aa18484cd2a1fed0018cfb15bd\"")
     }
 
     buildTypes {
@@ -43,6 +41,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.4"
@@ -52,11 +51,6 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
-        // Add packagingOptions for Agora
-        pickFirsts += listOf(
-            "lib/armeabi-v7a/libc++_shared.so",
-            "lib/arm64-v8a/libc++_shared.so"
-        )
     }
 }
 
@@ -88,14 +82,8 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging-ktx")
     implementation("com.google.firebase:firebase-functions-ktx")
     
-    // Coroutines (PTT용)
+    // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
-    
-    // Agora SDK for PTT  
-    implementation("io.agora.rtc:voice-sdk:4.2.6") {
-        exclude(group = "com.google.protobuf", module = "protobuf-java")
-        exclude(group = "com.google.firebase")
-    }
     
     // Google Play Services
     implementation("com.google.android.gms:play-services-base:18.3.0")
@@ -106,11 +94,18 @@ dependencies {
     implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
     ksp("com.google.dagger:hilt-android-compiler:2.48")
     
-    // PTT 최적화 시스템 의존성 (Phase 1+2+3)
-    // Android Security Crypto (보안 토큰 저장)
+    // Android Security Crypto
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
-    // WorkManager (일일 토큰 갱신)
+    // WorkManager
     implementation("androidx.work:work-runtime-ktx:2.9.0")
+    // AppCompat for AlertDialog
+    implementation("androidx.appcompat:appcompat:1.6.1")
+    
+    // Agora RTC SDK
+    implementation("io.agora.rtc:full-sdk:4.2.3")
+    
+    // MediaSession for volume key PTT control
+    implementation("androidx.media:media:1.7.0")
     
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

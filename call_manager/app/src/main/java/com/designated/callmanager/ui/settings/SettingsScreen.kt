@@ -8,6 +8,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.Radio
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,7 +28,7 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToPendingDrivers: (regionId: String, officeId: String) -> Unit,
     onNavigateToSettlement: () -> Unit,
-    onNavigateToPTT: () -> Unit = {}
+    onNavigateToPTT: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val officeStatus by dashboardViewModel.officeStatus.collectAsStateWithLifecycle()
@@ -37,6 +39,25 @@ fun SettingsScreen(
     val prefs = remember { context.getSharedPreferences("call_manager_settings", Context.MODE_PRIVATE) }
     var newCallNotificationEnabled by remember { mutableStateOf(prefs.getBoolean("new_call_notification", true)) }
     var driverEventNotificationEnabled by remember { mutableStateOf(prefs.getBoolean("driver_event_notification", true)) }
+    
+    val callPrefs = remember { context.getSharedPreferences("call_manager_prefs", Context.MODE_PRIVATE) }
+    
+    // ★★★ 콜 디텍터 설정 상태 관리 ★★★
+    var callDetectionEnabled by remember { mutableStateOf(callPrefs.getBoolean("call_detection_enabled", false)) }
+    var callDetectorServiceStatus by remember { mutableStateOf("확인 중...") }
+    
+    // 콜디텍터 서비스 상태 확인
+    LaunchedEffect(callDetectionEnabled) {
+        callDetectorServiceStatus = if (callDetectionEnabled) {
+            if (com.designated.callmanager.service.CallDetectorService.isServiceRunning()) {
+                "실행 중 ✅"
+            } else {
+                "중지됨 ⚠️"
+            }
+        } else {
+            "비활성화됨 ❌"
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -101,9 +122,26 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.width(16.dp))
                 Text("정산 관리", style = MaterialTheme.typography.bodyLarge)
             }
-            // --- ---
 
             Divider()
+
+            // --- PTT 무전 시스템 메뉴 ---
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onNavigateToPTT() }
+                    .padding(vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.RecordVoiceOver,
+                    contentDescription = "PTT 무전 시스템",
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+                Text("PTT 무전 시스템", style = MaterialTheme.typography.bodyLarge)
+            }
+
 
             // --- 기사 가입 승인 메뉴 ---
             Row(
@@ -153,15 +191,78 @@ fun SettingsScreen(
                     prefs.edit().putBoolean("driver_event_notification", isChecked).apply()
                 })
             }
+            
+            Divider()
+            
+            // --- 콜 디텍터 설정 ---
+            Text("콜 디텍터 설정", style = MaterialTheme.typography.titleMedium)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("전화 감지 기능")
+                    Text(
+                        if (callDetectionEnabled) "수신 전화를 자동으로 Firebase에 저장" else "전화 감지 기능이 비활성화됨",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "상태: $callDetectorServiceStatus",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (callDetectorServiceStatus.contains("실행 중")) {
+                            MaterialTheme.colorScheme.primary
+                        } else if (callDetectorServiceStatus.contains("중지됨")) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
+                Switch(
+                    checked = callDetectionEnabled,
+                    onCheckedChange = { isChecked ->
+                        callDetectionEnabled = isChecked
+                        callPrefs.edit().putBoolean("call_detection_enabled", isChecked).apply()
+                        
+                        // 설정 변경 즉시 서비스 시작/중지
+                        if (isChecked) {
+                            // 콜디텍터 서비스 시작
+                            try {
+                                val intent = android.content.Intent(context, com.designated.callmanager.service.CallDetectorService::class.java)
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                    context.startForegroundService(intent)
+                                } else {
+                                    context.startService(intent)
+                                }
+                                callDetectorServiceStatus = "시작 중..."
+                            } catch (e: Exception) {
+                                android.util.Log.e("SettingsScreen", "Failed to start CallDetectorService", e)
+                            }
+                        } else {
+                            // 콜디텍터 서비스 중지
+                            try {
+                                val intent = android.content.Intent(context, com.designated.callmanager.service.CallDetectorService::class.java)
+                                context.stopService(intent)
+                                callDetectorServiceStatus = "중지 중..."
+                            } catch (e: Exception) {
+                                android.util.Log.e("SettingsScreen", "Failed to stop CallDetectorService", e)
+                            }
+                        }
+                    }
+                )
+            }
 
             Divider()
 
             // --- App Info ---
             Text("앱 정보", style = MaterialTheme.typography.titleMedium)
-            Text("버전: 1.0.0 (Beta)", style = MaterialTheme.typography.bodyMedium)
+            Text("버전: 1.0.0 (Beta) - 콜디텍터 내장형", style = MaterialTheme.typography.bodyMedium)
             Text("대리운전 콜 매니저", style = MaterialTheme.typography.bodyMedium)
             Text("지역: ${regionId ?: "미설정"}", style = MaterialTheme.typography.bodySmall)
-            Text("사무실: ${officeId ?: "미설정"}", style = MaterialTheme.typography.bodySmall)
+            Text("사무실 ID: ${officeId ?: "미설정"}", style = MaterialTheme.typography.bodySmall)
+            Text("콜디텍터: ${if (callDetectionEnabled) "활성화" else "비활성화"}", style = MaterialTheme.typography.bodySmall)
 
         }
     }

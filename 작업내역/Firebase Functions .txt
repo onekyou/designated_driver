@@ -1,0 +1,101 @@
+네, 제공해주신 Firebase Functions의 전체 구조와 현황을 잘 이해했습니다. 현재 PTT의 핵심인 토큰 생성/갱신 기능은 안정적으로 구축되어 있지만, 마스터플랜의 고급 기능인 **"스마트 자동 채널 참여"**를 구현하기 위해서는 지금의 호출형 함수(Callable Functions)만으로는 부족합니다.전문가의 관점에서, Phase 4-5 자동 참여 기능을 위해 어떤 추가 Functions가 필요하고 어떻게 구성해야 하는지 명확하게 답변해 드리겠습니다.핵심 답변: Firestore 트리거 함수가 반드시 필요합니다결론부터 말씀드리면, "기사가 온라인 상태가 되면 같은 채널의 다른 사용자들에게 자동으로 알려주는" 기능을 위해서는, **데이터베이스의 특정 데이터 변경을 감지하여 자동으로 실행되는 트리거 기반 함수(Trigger-based Function)**가 반드시 필요합니다.현재의 generateAgoraToken은 클라이언트가 "토큰 주세요"라고 요청해야만 동작하는 수동적인 함수입니다. 자동 참여 기능은 "어떤 기사의 isOnline 상태가 false에서 true로 바뀌었다"는 능동적인 사건을 감지해야 하므로, Firestore 트리거를 사용하는 것이 가장 이상적이고 효율적인 방법입니다.PTT 자동 참여를 위한 Function 아키텍처 제안다음과 같은 데이터 흐름으로 아키텍처를 구성해야 합니다.[클라이언트 앱] 픽업앱 기사가 앱을 켜서 온라인 상태로 전환합니다.[클라이언트 앱] 앱은 Firestore의 해당 기사 문서(예: drivers/{driverId})에 isOnline: true라고 상태를 업데이트합니다.[Firestore] 데이터 변경이 발생합니다.[Firebase Functions] 이 변경을 감지하도록 설정된 onDriverStatusChange 트리거 함수가 자동으로 실행됩니다.[Firebase Functions] 함수는 다음 로직을 수행합니다.a. 변경된 기사의 정보(소속 오피스 ID, 지역 ID 등)를 읽습니다.b. PTT 채널명을 조합합니다 (예: yangpyong_office_123_ptt).c. 동일한 오피스 ID를 가진 다른 온라인 상태의 기사들을 Firestore에서 쿼리합니다.d. 쿼리된 기사들의 FCM 토큰을 가져옵니다.e. 이들에게 **"새로운 사용자가 PTT 채널에 참여했으니, 당신도 참여하세요"**라는 의미의 데이터 전용 FCM 메시지를 보냅니다.[클라이언트 앱] FCM 메시지를 수신한 다른 기사들의 앱은 PTTSignalingService를 통해 메시지를 처리하고, PTTController.autoJoin()을 호출하여 자동으로 채널에 참여합니다.필요한 추가 Function: onDriverStatusChange (Firestore Trigger 예시)이 함수를 기존 프로젝트 구조에 추가해야 합니다. 예를 들어 src/pttSignaling.ts 와 같은 새 파일을 만들어 관리할 수 있습니다. code TypeScriptdownloadcontent_copyexpand_less    // /src/pttSignaling.ts
+
+import * as functions from "firebase-functions";
+import * as admin from "firebase-admin";
+
+// admin.initializeApp()은 메인 index.ts에 이미 있다고 가정합니다.
+
+/**
+ * Firestore의 drivers 컬렉션에서 문서가 업데이트될 때마다 실행됩니다.
+ * 기사의 isOnline 상태가 false -> true로 변경될 때,
+ * 같은 오피스의 다른 기사들에게 PTT 채널 참여를 알리는 FCM을 보냅니다.
+ */
+export const onDriverStatusChange = functions
+    .region("asia-northeast3") // 클라이언트와 리전 일치
+    .firestore
+    .document("drivers/{driverId}")
+    .onUpdate(async (change, context) => {
+        const beforeData = change.before.data();
+        const afterData = change.after.data();
+
+        // isOnline 상태가 false에서 true로 바뀐 경우에만 실행
+        const wasOffline = beforeData?.isOnline === false;
+        const isNowOnline = afterData?.isOnline === true;
+
+        if (!wasOffline || !isNowOnline) {
+            console.log(`Driver ${context.params.driverId} status did not change from offline to online. Skipping.`);
+            return null;
+        }
+
+        console.log(`Driver ${context.params.driverId} came online. Notifying peers.`);
+
+        const officeId = afterData.officeId;
+        const regionId = afterData.regionId;
+        const onlineDriverUid = afterData.uid; // 새로 온라인이 된 기사의 PTT UID
+
+        if (!officeId || !regionId || !onlineDriverUid) {
+            console.error("Missing officeId, regionId, or uid for driver:", context.params.driverId);
+            return null;
+        }
+
+        // PTT 채널명 생성 (클라이언트 로직과 동일해야 함)
+        const channelName = `${regionId}_${officeId}_ptt`;
+
+        // 같은 오피스에 속한 다른 '온라인' 상태의 기사들을 쿼리
+        const db = admin.firestore();
+        const peersSnapshot = await db.collection("drivers")
+            .where("officeId", "==", officeId)
+            .where("isOnline", "==", true)
+            .get();
+
+        if (peersSnapshot.empty) {
+            console.log("No other online drivers found in office:", officeId);
+            return null;
+        }
+
+        const fcmTokens: string[] = [];
+        peersSnapshot.forEach(doc => {
+            // 자기 자신에게는 보내지 않음
+            if (doc.id !== context.params.driverId) {
+                const peerData = doc.data();
+                if (peerData.fcmToken) {
+                    fcmTokens.push(peerData.fcmToken);
+                }
+            }
+        });
+
+        if (fcmTokens.length === 0) {
+            console.log("No FCM tokens found for peers.");
+            return null;
+        }
+
+        // FCM 데이터 메시지 페이로드 구성
+        const payload = {
+            data: {
+                type: "PTT_START", // 마스터플랜과 일치
+                channel: channelName,
+                uid: String(onlineDriverUid), // 누가 참여했는지 알려줌
+                message: `A new driver has joined the PTT channel: ${channelName}`
+            }
+        };
+
+        console.log(`Sending FCM to ${fcmTokens.length} peers for channel ${channelName}.`);
+
+        // FCM 메시지 발송
+        try {
+            const response = await admin.messaging().sendToDevice(fcmTokens, payload);
+            console.log("Successfully sent FCM message:", response);
+            // 실패한 토큰 정리 로직 추가 가능
+        } catch (error) {
+            console.error("Error sending FCM message:", error);
+        }
+
+        return null;
+    });
+  구현을 위한 추가 조치파일 추가: 위 코드를 src/pttSignaling.ts와 같은 파일에 추가합니다.index.ts에 등록: 메인 index.ts 파일에서 새로 만든 함수를 export 해야 배포에 포함됩니다. code TypeScriptdownloadcontent_copyexpand_lessIGNORE_WHEN_COPYING_STARTIGNORE_WHEN_COPYING_END    // /src/index.ts
+// ... 기존 코드 ...
+
+// 새로 추가한 함수 export
+export { onDriverStatusChange } from './pttSignaling';
+```3.  **Firestore 데이터 구조 확인:** 위 코드는 `drivers` 컬렉션의 각 문서에 `isOnline` (boolean), `officeId` (string), `regionId` (string), `uid` (number, PTT용), `fcmToken` (string) 필드가 있다고 가정합니다. 실제 데이터 구조에 맞게 코드를 수정해야 합니다.
+  이 onDriverStatusChange 함수 하나만으로 마스터플랜의 Phase 4-5 자동 참여 기능의 서버 사이드 로직 대부분을 구현할 수 있습니다.

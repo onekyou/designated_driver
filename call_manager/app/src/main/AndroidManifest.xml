@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    package="com.designated.callmanager">
+    xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- 인터넷 권한 (Firebase, Agora 등 네트워크 통신에 필요) -->
+    <!-- 인터넷 권한 (Firebase 등 네트워크 통신에 필요) -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
@@ -26,24 +25,6 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- PTT 관련 권한 -->
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <uses-permission android:name="android.permission.BLUETOOTH" />
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-    
-    <!-- 백그라운드 PTT 통신을 위한 권한 -->
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-    <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
-    <uses-permission android:name="android.permission.ACQUIRE_CAUSES_WAKEUP" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    
-    <!-- 화면 꺼진 상태에서 PTT 사용을 위한 추가 권한 -->
-    <uses-permission android:name="android.permission.DEVICE_POWER" />
-    <uses-permission android:name="android.permission.TURN_SCREEN_ON" />
-    <uses-permission android:name="android.permission.SHOW_WHEN_LOCKED" />
-    <uses-permission android:name="android.permission.MODIFY_PHONE_STATE" />
 
     
     <!-- 전화 감지 권한 (콜 디텍터 기능) -->
@@ -53,9 +34,27 @@
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     
+    <!-- PTT 음성 통신 권한 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    
+    <!-- PTT 접근성 서비스 권한 (볼륨키 감지) -->
+    <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE" 
+        tools:ignore="ProtectedPermissions" />
+    
+    <!-- PTT 백그라운드 서비스 타입 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    
+    <!-- 배터리 최적화 제외 권한 -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    
 
     <application
-        android:allowBackup="true"
+        android:name=".CallManagerApplication"
+        android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules" 
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher" 
@@ -97,28 +96,24 @@
             </intent-filter>
         </activity>
 
+        <!-- PTT Accessibility Guide Activity -->
+        <activity
+            android:name=".ptt.ui.PTTAccessibilityGuideActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CallManager" />
+
+        <!-- Initial Setup Activity -->
+        <activity
+            android:name=".ui.setup.InitialSetupActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CallManager" />
+
         <!-- 백그라운드 서비스 등록 -->
         <service
             android:name=".service.CallManagerService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="dataSync|mediaPlayback"
-            tools:ignore="ForegroundServiceType" />
-            
-        <!-- 백그라운드 PTT 통신 서비스 -->
-        <service
-            android:name=".service.BackgroundPTTService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="mediaPlayback"
-            tools:ignore="ForegroundServiceType" />
-            
-        <!-- MediaSession 기반 PTT 서비스 -->
-        <service
-            android:name=".service.MediaSessionPTTService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="mediaPlayback"
+            android:foregroundServiceType="dataSync|microphone"
             tools:ignore="ForegroundServiceType" />
             
 
@@ -170,24 +165,54 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
             
-        <!-- PTT Accessibility Service (Android 15 호환) -->
+        <!-- PTT Manager Service -->
         <service
-            android:name=".service.PTTAccessibilityService"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:exported="true"
-            android:foregroundServiceType="specialUse"
-            android:directBootAware="true">
+            android:name=".service.PTTManagerService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+            
+        <!-- PTT Foreground Service -->
+        <service
+            android:name=".ptt.service.PTTForegroundService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+            
+        <!-- PTT Accessibility Service (볼륨키 감지용) -->
+        <service
+            android:name=".ptt.service.PTTAccessibilityService"
+            android:enabled="true"
+            android:exported="false"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
             <meta-data
                 android:name="android.accessibilityservice"
                 android:resource="@xml/ptt_accessibility_service_config" />
-            <meta-data
-                android:name="android.accessibilityservice.category"
-                android:value="feedback|control" />
         </service>
 
+        <!-- PTT Quick Settings Tile Service (Android N+) -->
+        <service
+            android:name=".ptt.service.PTTQuickSettingsTileService"
+            android:enabled="true"
+            android:exported="true"
+            android:icon="@drawable/ic_assign"
+            android:label="PTT 무전"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+            
+
+            
+        <!-- Android 15 호환성 -->
+        <meta-data
+            android:name="android.webkit.WebView.EnableSafeBrowsing"
+            android:value="false" />
+            
         <!-- 
         Firebase 초기화를 위한 메타데이터 (Firebase 문서 참고 필요)
         <meta-data

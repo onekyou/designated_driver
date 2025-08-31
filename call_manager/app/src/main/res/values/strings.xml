@@ -65,6 +65,19 @@
     <string name="trip_cancel_notification">운행 취소 알림</string>
     <string name="trip_canceled_message">%1$s 기사님이 %2$s 고객님의 운행을 취소했습니다.</string>
 
-    <!-- PTT Accessibility Service -->
-    <string name="ptt_accessibility_service_description">볼륨키를 PTT(Push-to-Talk)로 사용하기 위한 접근성 서비스입니다. 화면이 꺼진 상태에서도 볼륨키로 무전 통신이 가능합니다.</string>
+    <!-- PTT System -->
+    <string name="ptt_accessibility_service_description">PTT 무전 시스템을 위한 볼륨키 감지 서비스입니다. 이 서비스는 볼륨키를 눌러 음성 송신을 제어하는 데 사용됩니다.</string>
+    <string name="ptt_system">PTT 무전 시스템</string>
+    <string name="ptt_connecting">연결 중...</string>
+    <string name="ptt_connected">연결됨</string>
+    <string name="ptt_disconnected">연결 끊김</string>
+    <string name="ptt_transmitting">송신 중</string>
+    <string name="ptt_receiving">수신 중</string>
+    <string name="ptt_press_to_talk">눌러서 말하기</string>
+    <string name="ptt_release_to_stop">놓아서 중지</string>
+    <string name="ptt_service_disabled">PTT 서비스 비활성화됨</string>
+    <string name="ptt_service_enabled">PTT 서비스 활성화됨</string>
+    <string name="ptt_accessibility_guide_title">PTT 접근성 서비스 설정</string>
+    <string name="ptt_accessibility_guide_description">볼륨키로 PTT를 사용하려면 접근성 서비스를 활성화해야 합니다.</string>
+
 </resources> 

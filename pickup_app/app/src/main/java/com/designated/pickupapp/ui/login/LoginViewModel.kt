@@ -1,6 +1,7 @@
 package com.designated.pickupapp.ui.login
 
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -33,9 +34,34 @@ class LoginViewModel @Inject constructor(
     val loginState: StateFlow<LoginState> = _loginState
 
     init {
+        // Firebase Auth 지속성 설정 (앱 재시작 시에도 로그인 상태 유지)
+        try {
+            com.google.firebase.auth.FirebaseAuth.getInstance().useAppLanguage()
+            Log.i("LoginViewModel", "Firebase Auth 지속성 설정 완료")
+        } catch (e: Exception) {
+            Log.e("LoginViewModel", "Firebase Auth 설정 실패", e)
+        }
+        
         loadSavedCredentials()
-        if (autoLogin && email.isNotBlank() && password.isNotBlank()) {
-            login()
+        
+        // 현재 Firebase 사용자 확인 (Auth 리스너 대신 직접 확인)
+        val currentUser = firebaseAuth.currentUser
+        if (currentUser != null) {
+            // 이미 로그인된 상태
+            if (autoLogin && email.isNotBlank() && password.isNotBlank()) {
+                Log.i("LoginViewModel", "Firebase 사용자 이미 인증됨 - 자동 로그인 진행: ${currentUser.uid}")
+                checkPendingStatusAndProceed(currentUser.uid)
+            } else {
+                Log.i("LoginViewModel", "로그인 상태지만 자동 로그인 정보 없음")
+            }
+        } else {
+            // 로그인 필요
+            if (autoLogin && email.isNotBlank() && password.isNotBlank()) {
+                Log.i("LoginViewModel", "Firebase 사용자 미인증 - 로그인 시도")
+                login()
+            } else {
+                Log.i("LoginViewModel", "자동 로그인 비활성화 또는 정보 부족 - 수동 로그인 대기")
+            }
         }
     }
 
@@ -124,6 +150,12 @@ class LoginViewModel @Inject constructor(
                     saveCredentials()
                 }
 
+                // region/office 정보 저장
+                saveRegionOfficeInfo(regionId, officeId)
+
+                // 성공한 로그인 정보를 SharedPreferences에 저장
+                saveDriverInfo(regionId, officeId, userId)
+                
                 _loginState.value = LoginState.Success(
                     regionId = regionId,
                     officeId = officeId,
@@ -173,5 +205,26 @@ class LoginViewModel @Inject constructor(
             remove(Constants.PREF_AUTO_LOGIN)
             apply()
         }
+    }
+
+    private fun saveRegionOfficeInfo(regionId: String, officeId: String) {
+        // Constants.PREFS_NAME ("pickup_driver_prefs")에 저장 - MainActivity와 동일한 SharedPreferences 사용
+        sharedPreferences.edit().apply {
+            putString(Constants.PREF_KEY_REGION_ID, regionId)
+            putString(Constants.PREF_KEY_OFFICE_ID, officeId)
+            apply()
+        }
+    }
+    
+    private fun saveDriverInfo(regionId: String, officeId: String, driverId: String) {
+        // 로그인 성공 시 모든 필요한 정보 저장
+        sharedPreferences.edit().apply {
+            putString(Constants.PREF_KEY_REGION_ID, regionId)
+            putString(Constants.PREF_KEY_OFFICE_ID, officeId)
+            putString(Constants.PREF_KEY_DRIVER_ID, driverId)
+            putBoolean(Constants.PREF_AUTO_LOGIN, true) // 자동 로그인 활성화
+            apply()
+        }
+        Log.i("LoginViewModel", "✅ 드라이버 정보 저장 완료 - Region: $regionId, Office: $officeId, Driver: $driverId")
     }
 }

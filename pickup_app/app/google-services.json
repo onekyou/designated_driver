@@ -27,9 +27,9 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:60275310305:android:850171808bb7ec359ac1a0",
+        "mobilesdk_app_id": "1:60275310305:android:de8cadaf442e57f09ac1a0",
         "android_client_info": {
-          "package_name": "com.example.calldetector"
+          "package_name": "com.designated.driver"
         }
       },
       "oauth_client": [],
@@ -46,9 +46,47 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:60275310305:android:c1d2e3f4a5b6c7d8e9f0a1b2",
+        "mobilesdk_app_id": "1:60275310305:android:3a9391aa35950fd49ac1a0",
         "android_client_info": {
           "package_name": "com.designated.pickupapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA9x04acmgJozvpz1zpbe27rOwPmHrORXs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:60275310305:android:5b930f22390190cb9ac1a0",
+        "android_client_info": {
+          "package_name": "com.designated.walkietalkie"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA9x04acmgJozvpz1zpbe27rOwPmHrORXs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:60275310305:android:850171808bb7ec359ac1a0",
+        "android_client_info": {
+          "package_name": "com.example.calldetector"
         }
       },
       "oauth_client": [],

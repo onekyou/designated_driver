@@ -6,8 +6,10 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -157,10 +159,14 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             
-            // ⭐️ 기존 채널들을 모두 삭제하고 새로 생성
+            // ⭐️ 기존 채널들을 모두 삭제하고 새로 생성 (Sticky 사운드 적용을 위해)
             try {
                 notificationManager.deleteNotificationChannel("new_call_fcm_channel") // 이전 버전 삭제
                 notificationManager.deleteNotificationChannel(NEW_CALL_CHANNEL_ID) // 현재 버전도 삭제 후 재생성
+                notificationManager.deleteNotificationChannel(STATUS_CHANGE_CHANNEL_ID) // 상태변경 채널 삭제
+                notificationManager.deleteNotificationChannel(DRIVER_UPDATE_CHANNEL_ID) // 기사업데이트 채널 삭제
+                notificationManager.deleteNotificationChannel(SHARED_CALL_CHANNEL_ID) // 공유콜 채널 삭제
+                Log.i(TAG, "🔄 기존 알림 채널들 삭제 완료 - Sticky 사운드로 재생성")
             } catch (e: Exception) {
                 Log.w(TAG, "기존 채널 삭제 중 오류 (무시해도 됨): ${e.message}")
             }
@@ -179,8 +185,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 setShowBadge(true)
                 lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC // ⭐️ 잠금화면 표시
                 setBypassDnd(true) // ⭐️ 방해금지 모드 무시
-                // ⭐️ 기본 알림음 설정
-                setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION), null)
+                // ⭐️ 시스템 설정 기본 알림음 사용 (사용자 설정 반영)
+                setSound(Settings.System.DEFAULT_NOTIFICATION_URI, AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .build())
             }
             
             // 상태 변경 채널
@@ -195,6 +204,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 300, 100, 300, 100, 300)
                 setShowBadge(true)
+                // ⭐️ 시스템 설정 기본 알림음 사용 (사용자 설정 반영)
+                setSound(Settings.System.DEFAULT_NOTIFICATION_URI, AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .build())
             }
             
             // 기사 업데이트 채널
@@ -206,6 +220,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 description = "기사 수락/거절 알림"
                 enableVibration(true)
                 setShowBadge(true)
+                // ⭐️ 시스템 설정 기본 알림음 사용 (사용자 설정 반영)
+                setSound(Settings.System.DEFAULT_NOTIFICATION_URI, AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .build())
             }
             
             // 공유콜 채널
@@ -221,7 +240,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 vibrationPattern = longArrayOf(0, 500, 200, 500, 200, 500)
                 setShowBadge(true)
                 lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
-                setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION), null)
+                // ⭐️ Sticky 알림음 설정 (기존 기본 알림음 대신)
+                val stickyUri = Settings.System.DEFAULT_NOTIFICATION_URI
+                setSound(stickyUri, AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .build())
             }
             
             notificationManager.createNotificationChannels(listOf(

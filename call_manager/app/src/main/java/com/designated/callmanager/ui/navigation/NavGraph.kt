@@ -7,12 +7,14 @@ import androidx.navigation.compose.rememberNavController
 import com.designated.callmanager.ui.login.LoginScreen // 가정: 로그인 화면
 import com.designated.callmanager.ui.main.MainDashboardScreen // 가정: 메인 대시보드 화면
 import com.designated.callmanager.ui.pendingdrivers.PendingDriversScreen
+import com.designated.callmanager.ptt.ui.PTTScreen
 
 // 네비게이션 라우트 정의
 sealed class Screen(val route: String) {
     object Login : Screen("login")
     object MainDashboard : Screen("main_dashboard")
     object PendingDrivers : Screen("pending_drivers")
+    object PTT : Screen("ptt")
     // 다른 화면 라우트 추가...
 }
 
@@ -55,6 +57,12 @@ fun AppNavGraph(
                  // viewModel = hiltViewModel() 또는 viewModel()
                  onNavigateBack = { navController.popBackStack() } // 뒤로가기
              )
+        }
+        composable(Screen.PTT.route) {
+            // PTT 무전 시스템 화면
+            PTTScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
         // 실시간 호출 관리 화면은 제거됨
         // 다른 화면 composable 추가...

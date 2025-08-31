@@ -68,9 +68,16 @@ exports.generateAgoraToken = (0, https_1.onCall)({
     const data = request.data;
     const context = request;
     // 파라미터 검증
-    const { regionId, officeId, userType } = data;
+    logger.info(`Raw request data: ${JSON.stringify(data)}`); // 전체 데이터 로깅
+    const { regionId, officeId, userType, uid } = data;
     if (!regionId || !officeId || !userType) {
         throw new https_1.HttpsError("invalid-argument", "필수 파라미터가 누락되었습니다: regionId, officeId, userType");
+    }
+    // UID 파라미터 확인 (선택적이지만 권장)
+    const clientUID = uid !== undefined ? Number(uid) : 0;
+    logger.info(`[2] Server: Received request for UID: ${clientUID} (raw uid: ${uid})`);
+    if (isNaN(clientUID)) {
+        throw new https_1.HttpsError("invalid-argument", "UID는 숫자여야 합니다");
     }
     // 유효한 사용자 타입 확인
     const validUserTypes = ["call_manager", "pickup_driver", "driver", "media_session_ptt"];
@@ -113,28 +120,30 @@ exports.generateAgoraToken = (0, https_1.onCall)({
             appCertificate = undefined;
         }
         if (!appCertificate) {
-            logger.error("Returning empty token because appCertificate is missing.");
-            logger.error(`appCertificate value: ${appCertificate}`);
-            // 테스트용 빈 토큰 반환
-            const channelName = `${regionId}_${officeId}_ptt`;
-            logger.info(`Returning test mode token - Channel: ${channelName}`);
-            return {
-                token: "", // App Certificate 비활성화 상태에서는 빈 문자열
-                channelName,
-                uid: 0, // 0 = 자동 UID 할당
-                expiresIn: 86400, // 24시간
-                appId: APP_ID,
-                testMode: true
-            };
+            logger.error("CRITICAL ERROR: AGORA_APP_CERTIFICATE is not configured!");
+            logger.error("Please set the secret using: firebase functions:secrets:set AGORA_APP_CERTIFICATE");
+            throw new https_1.HttpsError("failed-precondition", "서버 설정 오류: Agora App Certificate가 구성되지 않았습니다. 관리자에게 문의하세요.");
         }
         // 채널명 생성 (지역_사무실_ptt 형식)
         const channelName = `${regionId}_${officeId}_ptt`;
-        // UID는 0으로 설정 (자동 할당)
-        const uid = 0;
+        // UID 사용 (클라이언트에서 전달받은 값 또는 0)
+        const agoraUID = clientUID;
+        logger.info(`[3] Server: Building token with UID: ${agoraUID}`);
         // 역할 설정 (PTT는 모두 Publisher 권한 필요)
         const role = agora_token_1.RtcRole.PUBLISHER;
-        // 토큰 만료 시간 설정 (24시간)
-        const expireTime = Math.floor(Date.now() / 1000) + 86400;
+        // 시간 진단 추가
+        const dateNow = Date.now();
+        const currentDate = new Date();
+        logger.info("=== SERVER TIME DIAGNOSTICS ===");
+        logger.info(`Date.now(): ${dateNow}`);
+        logger.info(`new Date(): ${currentDate.toISOString()}`);
+        logger.info(`Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`);
+        logger.info(`UTC Offset: ${currentDate.getTimezoneOffset()} minutes`);
+        // 토큰 만료 시간 설정 (24시간) - 상대 시간으로 설정
+        const currentTimeInSeconds = Math.floor(Date.now() / 1000);
+        const tokenExpireInSeconds = 86400; // 24시간 (상대 시간)
+        const privilegeExpireInSeconds = 86400; // 24시간 (상대 시간)
+        const privilegeExpiredTs = currentTimeInSeconds + 86400; // 절대 시간 (로깅/저장용)
         // 파라미터 유효성 검사
         if (!APP_ID || APP_ID.length !== 32) {
             logger.error(`Invalid APP_ID: ${APP_ID}`);
@@ -151,16 +160,23 @@ exports.generateAgoraToken = (0, https_1.onCall)({
         // 토큰 생성 전 파라미터 로깅
         logger.info("=== Token Generation Parameters ===");
         logger.info(`APP_ID: ${APP_ID} (length: ${APP_ID.length})`);
+        logger.info(`🔍 SERVER App ID: ${APP_ID} (Length: ${APP_ID.length})`);
         logger.info(`App Certificate: ${appCertificate.substring(0, 4)}...${appCertificate.substring(appCertificate.length - 4)} (length: ${appCertificate.length})`);
+        logger.info(`Full App Certificate for verification: ${appCertificate}`);
         logger.info(`Channel: ${channelName}`);
-        logger.info(`UID: ${uid} (type: ${typeof uid})`);
+        logger.info(`🔍 SERVER Channel: ${channelName}`);
+        logger.info(`UID: ${agoraUID} (type: ${typeof agoraUID}) - Client provided: ${clientUID !== 0 ? 'YES' : 'NO'}`);
         logger.info(`Role: ${role} (RtcRole.PUBLISHER = ${agora_token_1.RtcRole.PUBLISHER})`);
-        logger.info(`ExpireTime: ${expireTime} (Date: ${new Date(expireTime * 1000).toISOString()})`);
+        logger.info(`Server Time: ${currentTimeInSeconds} (${new Date(currentTimeInSeconds * 1000).toISOString()})`);
+        logger.info(`Token Expire: ${tokenExpireInSeconds} seconds (${tokenExpireInSeconds / 3600} hours) - RELATIVE TIME`);
+        logger.info(`Privilege Expire: ${privilegeExpireInSeconds} seconds (${privilegeExpireInSeconds / 3600} hours) - RELATIVE TIME`);
+        logger.info(`Absolute ExpireTime: ${privilegeExpiredTs} (Date: ${new Date(privilegeExpiredTs * 1000).toISOString()})`);
         logger.info("===================================");
         // 토큰 생성
         let token;
         try {
-            token = agora_token_1.RtcTokenBuilder.buildTokenWithUid(APP_ID, appCertificate, channelName, uid, role, expireTime, expireTime // privilegeExpiredTs 파라미터 추가
+            token = agora_token_1.RtcTokenBuilder.buildTokenWithUid(APP_ID, appCertificate, channelName, agoraUID, role, tokenExpireInSeconds, // 상대 시간 (초)
+            privilegeExpireInSeconds // 상대 시간 (초)
             );
             logger.info(`Token generation result - Length: ${token ? token.length : 0}`);
             if (!token || token === "") {
@@ -184,18 +200,18 @@ exports.generateAgoraToken = (0, https_1.onCall)({
             officeId,
             channelName,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            expiresAt: new Date(expireTime * 1000)
+            expiresAt: new Date(privilegeExpiredTs * 1000)
         });
         // 반환 전 최종 토큰 정보 로그
         logger.info(`Final token details - Channel: ${channelName}, Token length: ${token.length}, Token: ${token ? 'HAS_VALUE' : 'EMPTY'}`);
         const result = {
             token,
             channelName,
-            uid,
-            expiresIn: 86400,
-            appId: APP_ID,
-            testMode: false
+            uid: agoraUID, // 실제 사용된 UID 반환
+            expiresIn: tokenExpireInSeconds, // 상대 시간으로 반환
+            appId: APP_ID
         };
+        logger.info(`[4] Server: Returning token for UID: ${agoraUID}`);
         logger.info(`Returning result: ${JSON.stringify(Object.assign(Object.assign({}, result), { token: token ? 'HAS_VALUE' : 'EMPTY' }))}`);
         return result;
     }
@@ -221,7 +237,7 @@ exports.refreshAgoraToken = (0, https_1.onCall)({
     if (!request.auth) {
         throw new https_1.HttpsError("unauthenticated", "인증되지 않은 사용자입니다.");
     }
-    const { channelName, currentToken } = request.data;
+    const { channelName } = request.data;
     if (!channelName) {
         throw new Error("channelName이 필요합니다.");
     }
@@ -236,28 +252,21 @@ exports.refreshAgoraToken = (0, https_1.onCall)({
     try {
         const appCertificate = AGORA_APP_CERTIFICATE.value();
         if (!appCertificate) {
-            const channelName = `${regionId}_${officeId}_ptt`;
-            return {
-                token: "",
-                channelName,
-                uid: 0,
-                expiresIn: 86400,
-                appId: APP_ID,
-                testMode: true
-            };
+            throw new https_1.HttpsError("failed-precondition", "서버 설정 오류: Agora App Certificate가 구성되지 않았습니다.");
         }
+        // refresh 함수에서는 UID를 받지 않으므로 0 사용 (호환성)
+        const agoraUID = 0;
         const channelName = `${regionId}_${officeId}_ptt`;
-        const uid = 0;
         const role = agora_token_1.RtcRole.PUBLISHER;
-        const expireTime = Math.floor(Date.now() / 1000) + 86400;
-        const token = agora_token_1.RtcTokenBuilder.buildTokenWithUid(APP_ID, appCertificate, channelName, uid, role, expireTime, expireTime);
+        const tokenExpireInSeconds = 86400; // 24시간 (상대 시간)
+        const privilegeExpireInSeconds = 86400; // 24시간 (상대 시간)
+        const token = agora_token_1.RtcTokenBuilder.buildTokenWithUid(APP_ID, appCertificate, channelName, agoraUID, role, tokenExpireInSeconds, privilegeExpireInSeconds);
         return {
             token,
             channelName,
-            uid,
-            expiresIn: 86400,
-            appId: APP_ID,
-            testMode: false
+            uid: agoraUID,
+            expiresIn: tokenExpireInSeconds,
+            appId: APP_ID
         };
     }
     catch (error) {
