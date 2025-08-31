@@ -52,8 +52,17 @@ class InitialSetupActivity : ComponentActivity() {
     
     private val TAG = "InitialSetupActivity"
     
-    companion object {
-        private const val PERMISSION_REQUEST_CODE = 1001
+    // 런타임 권한을 한번에 요청하기 위한 RequestMultiplePermissions 런처.
+    // 모든 권한이 허용되면 배터리 최적화 예외도 요청합니다.
+    private val multiplePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions: Map<String, Boolean> ->
+        // 권한 상태 갱신
+        updatePermissionStates(permissions)
+        // 요청한 권한이 모두 허용되면 배터리 최적화 설정도 이어서 요청
+        if (permissions.values.all { it }) {
+            requestBatteryOptimization()
+        }
     }
     
     // 권한 상태 관리
@@ -134,29 +143,7 @@ class InitialSetupActivity : ComponentActivity() {
         }
     }
     
-    // ActivityCompat.requestPermissions()의 결과를 처리
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        
-        if (requestCode == PERMISSION_REQUEST_CODE) {
-            // 권한 결과를 Map으로 변환
-            val permissionResults = permissions.mapIndexed { index, permission ->
-                permission to (grantResults.getOrNull(index) == PackageManager.PERMISSION_GRANTED)
-            }.toMap()
-            
-            // 상태 업데이트
-            updatePermissionStates(permissionResults)
-            
-            // 모든 권한이 허용되면 배터리 최적화도 자동 요청
-            if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-                requestBatteryOptimization()
-            }
-        }
-    }
+    // ActivityCompat.requestPermissions()를 사용하지 않으므로 onRequestPermissionsResult는 필요하지 않습니다.
     
     private fun initializePermissionStates() {
         val initialStates = mutableMapOf<String, PermissionState>()
@@ -289,13 +276,8 @@ class InitialSetupActivity : ComponentActivity() {
         }
         
         if (ungrantedPermissions.isNotEmpty()) {
-            // ActivityCompat.requestPermissions()를 사용하여 진짜 한번에 요청
-            // 이렇게 하면 Android가 권한들을 최대한 그룹화하여 표시
-            ActivityCompat.requestPermissions(
-                this,
-                ungrantedPermissions.toTypedArray(),
-                PERMISSION_REQUEST_CODE
-            )
+            // RequestMultiplePermissions 런처로 한번에 요청
+            multiplePermissionLauncher.launch(ungrantedPermissions.toTypedArray())
         } else {
             // 모든 기본 권한이 이미 허용됨 - 배터리 최적화로 진행
             requestBatteryOptimization()
