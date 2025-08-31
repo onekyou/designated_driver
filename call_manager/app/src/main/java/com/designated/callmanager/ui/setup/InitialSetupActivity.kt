@@ -70,10 +70,9 @@ class InitialSetupActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { granted: Boolean ->
         // 권한 상태 갱신
-        val desc = getPermissionDescription(Manifest.permission.POST_NOTIFICATIONS)
         updatePermissionStates(mapOf(Manifest.permission.POST_NOTIFICATIONS to granted))
-        // 알림 권한 처리 후 나머지 권한 요청을 이어서 수행
-        requestBasicPermissions()
+        // 알림 권한 처리 후 나머지 권한들을 요청 (알림 권한은 제외)
+        requestRemainingPermissions()
     }
     
     // 권한 상태 관리
@@ -289,7 +288,7 @@ class InitialSetupActivity : ComponentActivity() {
         // Android 13 이상에서는 POST_NOTIFICATIONS를 먼저 요청해야 함
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ungrantedPermissions.contains(Manifest.permission.POST_NOTIFICATIONS)) {
-            // 알림 권한만 먼저 요청하고 이후 다시 requestBasicPermissions()에서 나머지를 요청한다
+            // 알림 권한만 먼저 요청하고 이후 requestRemainingPermissions()에서 나머지를 요청
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             return
         }
@@ -299,6 +298,21 @@ class InitialSetupActivity : ComponentActivity() {
             multiplePermissionLauncher.launch(ungrantedPermissions.toTypedArray())
         } else {
             // 모든 기본 권한이 이미 허용됨 - 배터리 최적화로 진행
+            requestBatteryOptimization()
+        }
+    }
+    
+    private fun requestRemainingPermissions() {
+        // 알림 권한을 제외한 나머지 미승인 권한들 요청
+        val ungrantedPermissions = requiredPermissions.filter { permission ->
+            permission != Manifest.permission.POST_NOTIFICATIONS &&
+            ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (ungrantedPermissions.isNotEmpty()) {
+            multiplePermissionLauncher.launch(ungrantedPermissions.toTypedArray())
+        } else {
+            // 모든 권한이 허용됨 - 배터리 최적화로 진행
             requestBatteryOptimization()
         }
     }
