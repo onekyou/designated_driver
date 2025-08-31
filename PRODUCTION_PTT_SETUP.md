@@ -18,7 +18,7 @@
 cd C:\app_dev\designated_driver\functions
 firebase functions:secrets:set AGORA_APP_CERTIFICATE
 ```
-**입력값**: `d4109290198749419a44bcb23a6a05c5`
+**입력값**: `[YOUR_AGORA_APP_CERTIFICATE]`
 
 ### 2. Firebase Functions 재배포
 ```bash
