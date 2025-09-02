@@ -3,10 +3,14 @@ package com.designated.callmanager.ptt.core
 import android.content.Context
 import android.util.Log
 import com.designated.callmanager.BuildConfig
+import com.designated.callmanager.ptt.manager.SignalingManager
 import com.designated.callmanager.ptt.network.TokenManager
 import com.designated.callmanager.ptt.state.TokenResult
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.withContext
 
 /**
@@ -29,6 +33,94 @@ class PTTController(
     private var defaultRegionId: String = ""
     private var defaultOfficeId: String = ""
     
+    // RTM 시그널링 매니저 (옵셔널)
+    private var signalingManager: SignalingManager? = null
+    private val rtmScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    
+    init {
+        initializeRTMIfPossible()
+    }
+    
+    /**
+     * RTM 초기화 (실패해도 PTT 기능에는 영향 없음)
+     */
+    private fun initializeRTMIfPossible() {
+        rtmScope.launch {
+            try {
+                val userId = FirebaseAuth.getInstance().currentUser?.uid
+                if (userId != null && BuildConfig.AGORA_APP_ID.isNotEmpty()) {
+                    Log.d(TAG, "Initializing RTM for user: $userId")
+                    
+                    signalingManager = SignalingManager(
+                        context = context,
+                        appId = BuildConfig.AGORA_APP_ID,
+                        userId = userId
+                    )
+                    
+                    signalingManager?.initialize { success ->
+                        if (success) {
+                            signalingManager?.login()
+                            Log.i(TAG, "RTM initialized successfully")
+                        } else {
+                            Log.w(TAG, "RTM initialization failed")
+                            signalingManager = null
+                        }
+                    }
+                } else {
+                    Log.w(TAG, "RTM initialization skipped (no user or app ID)")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "RTM initialization error: $e")
+                signalingManager = null
+            }
+        }
+    }
+    
+    /**
+     * RTM 채널 자동 구독 (기본 채널 설정 후 호출)
+     */
+    private fun subscribeToRTMChannelIfReady() {
+        rtmScope.launch {
+            try {
+                val channelName = getDefaultChannel()
+                if (channelName.isNotEmpty() && signalingManager != null) {
+                    signalingManager?.subscribeChannel(channelName)
+                    Log.d(TAG, "RTM auto-subscribed to: $channelName")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "RTM auto-subscribe failed: $e")
+            }
+        }
+    }
+    
+    /**
+     * RTM PTT 시작 신호 전송 (옵셔널)
+     */
+    private fun sendRTMStartSignal(channel: String, uid: Int) {
+        rtmScope.launch {
+            try {
+                signalingManager?.sendPttStart(channel)
+                Log.d(TAG, "RTM PTT start signal sent")
+            } catch (e: Exception) {
+                Log.w(TAG, "RTM start signal failed: $e")
+            }
+        }
+    }
+    
+    /**
+     * RTM PTT 종료 신호 전송 (옵셔널)
+     */
+    private fun sendRTMStopSignal(channel: String, uid: Int) {
+        rtmScope.launch {
+            try {
+                signalingManager?.sendPttEnd(channel)
+                Log.d(TAG, "RTM PTT stop signal sent")
+            } catch (e: Exception) {
+                Log.w(TAG, "RTM stop signal failed: $e")
+            }
+        }
+    }
+
     /**
      * 기본 채널 정보 설정
      */
@@ -36,6 +128,9 @@ class PTTController(
         defaultRegionId = regionId
         defaultOfficeId = officeId
         Log.d(TAG, "Default channel info set: ${regionId}_${officeId}")
+        
+        // RTM 채널 자동 구독
+        subscribeToRTMChannelIfReady()
     }
     
     /**
@@ -104,6 +199,9 @@ class PTTController(
             // 7. 전송 시작
             engine.startTransmit()
             
+            // 8. RTM 시작 신호 전송 (실패해도 PTT는 정상 동작)
+            sendRTMStartSignal(channelName, finalUID)
+            
             Log.i(TAG, "PTT started successfully on channel: $channelName")
             Result.success(Unit)
             
@@ -124,6 +222,10 @@ class PTTController(
             }
             
             Log.d(TAG, "Stopping PTT transmission")
+            
+            // RTM 종료 신호 먼저 전송
+            sendRTMStopSignal(currentChannel!!, currentUID)
+            
             engine.stopTransmit()
             
         } catch (e: Exception) {
@@ -275,11 +377,25 @@ class PTTController(
      */
     fun destroy() {
         try {
+            // RTM 정리
+            rtmScope.launch {
+                try {
+                    signalingManager?.logout()
+                    signalingManager?.release()
+                    signalingManager = null
+                    Log.d(TAG, "RTM cleaned up")
+                } catch (e: Exception) {
+                    Log.w(TAG, "RTM cleanup error: $e")
+                }
+            }
+            
+            // RTC 정리
             engine.destroy()
             currentChannel = null
             currentUID = 0
             isConnected = false
             Log.i(TAG, "PTT Controller destroyed")
+            
         } catch (e: Exception) {
             Log.e(TAG, "Error while destroying controller", e)
         }

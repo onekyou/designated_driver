@@ -655,4 +655,31 @@ class PTTForegroundService : Service() {
         // }
         super.onTaskRemoved(rootIntent)
     }
+    
+    /**
+     * 미디어 세션 볼륨 제어 업데이트
+     */
+    private fun updateMediaSessionVolumeControl() {
+        try {
+            // PTT 모드일 때 볼륨 제어 활성화
+            if (volumeProvider != null) {
+                mediaSession?.setPlaybackToRemote(volumeProvider)
+                Log.d(TAG, "Media session volume control activated")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to update media session volume control", e)
+        }
+    }
+    
+    /**
+     * PTT 모드 토글 처리 (필요시 구현)
+     */
+    private fun handleTogglePTTMode() {
+        try {
+            Log.d(TAG, "PTT mode toggle requested")
+            // TODO: PTT 모드 토글 로직 구현 (필요시)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to toggle PTT mode", e)
+        }
+    }
 }

@@ -2,6 +2,9 @@
 <resources>
     <string name="app_name">픽업앱</string>
     
+    <!-- Accessibility Service -->
+    <string name="accessibility_service_description">PTT 무전 시스템을 위한 볼륨키 감지 서비스입니다. 이 서비스는 볼륨키를 눌러 음성 송신을 제어하는 데 사용됩니다.</string>
+    
     <!-- PTT System -->
     <string name="ptt_accessibility_service_description">PTT 무전 시스템을 위한 볼륨키 감지 서비스입니다. 이 서비스는 볼륨키를 눌러 음성 송신을 제어하는 데 사용됩니다.</string>
     <string name="ptt_system">PTT 무전 시스템</string>
