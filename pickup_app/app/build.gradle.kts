@@ -103,6 +103,8 @@ dependencies {
     
     // Agora RTC SDK
     implementation("io.agora.rtc:full-sdk:4.2.3")
+    // Agora RTM 2.x SDK (Signaling)
+    implementation("io.agora:agora-rtm:2.2.4")
     
     // MediaSession for volume key PTT control
     implementation("androidx.media:media:1.7.0")

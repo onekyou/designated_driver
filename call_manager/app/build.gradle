@@ -124,6 +124,8 @@ dependencies {
 
     // Agora RTC SDK - PTT 기능
     implementation 'io.agora.rtc:full-sdk:4.2.3'
+    // Agora RTM 2.x SDK
+    implementation 'io.agora:agora-rtm:2.2.4'
 
     // Network (Optional, if needed for direct API calls or network checks)
     implementation 'com.squareup.okhttp3:okhttp:4.11.0'
