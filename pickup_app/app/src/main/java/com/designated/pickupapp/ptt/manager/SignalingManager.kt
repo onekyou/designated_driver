@@ -2,6 +2,7 @@ package com.designated.pickupapp.ptt.manager
 
 import android.content.Context
 import android.util.Log
+import com.designated.pickupapp.data.PTTStatus
 import io.agora.rtm.*
 
 /**
@@ -11,7 +12,8 @@ import io.agora.rtm.*
 class SignalingManager(
     private val context: Context,
     private val appId: String,
-    private val userId: String
+    private val userId: String,
+    private val onPTTStatusChanged: ((PTTStatus) -> Unit)? = null
 ) {
     
     private val TAG = "PickupSignalingManager"
@@ -270,16 +272,54 @@ class SignalingManager(
         try {
             // JSON 파싱하여 PTT 이벤트 처리
             if (message.contains("PTT_START")) {
-                val source = if (message.contains("\"source\":\"pickup\"")) "픽업" else "대리"
-                Log.d(TAG, "PTT Started by $publisherId ($source)")
-                // TODO: PTT 시작 UI 업데이트
+                val source = if (message.contains("\"source\":\"pickup\"")) "pickup" else "call_manager"
+                val sourceName = if (source == "pickup") "픽업" else "대리"
+                val timestamp = extractTimestamp(message)
+                
+                Log.d(TAG, "PTT Started by $publisherId ($sourceName)")
+                
+                // UI로 PTT 상태 전달
+                val pttStatus = PTTStatus(
+                    userId = publisherId,
+                    userName = "$sourceName 사용자", // 실제 구현 시 사용자명 매핑 필요
+                    isTransmitting = true,
+                    timestamp = timestamp,
+                    source = source
+                )
+                onPTTStatusChanged?.invoke(pttStatus)
+                
             } else if (message.contains("PTT_END")) {
-                val source = if (message.contains("\"source\":\"pickup\"")) "픽업" else "대리"
-                Log.d(TAG, "PTT Ended by $publisherId ($source)")
-                // TODO: PTT 종료 UI 업데이트
+                val source = if (message.contains("\"source\":\"pickup\"")) "pickup" else "call_manager"
+                val sourceName = if (source == "pickup") "픽업" else "대리"
+                val timestamp = extractTimestamp(message)
+                
+                Log.d(TAG, "PTT Ended by $publisherId ($sourceName)")
+                
+                // UI로 PTT 상태 전달
+                val pttStatus = PTTStatus(
+                    userId = publisherId,
+                    userName = "$sourceName 사용자",
+                    isTransmitting = false,
+                    timestamp = timestamp,
+                    source = source
+                )
+                onPTTStatusChanged?.invoke(pttStatus)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error handling PTT message: $e")
+        }
+    }
+    
+    /**
+     * 메시지에서 타임스탬프 추출
+     */
+    private fun extractTimestamp(message: String): Long {
+        return try {
+            val timestampRegex = "\"timestamp\":(\\d+)".toRegex()
+            val match = timestampRegex.find(message)
+            match?.groups?.get(1)?.value?.toLong() ?: System.currentTimeMillis()
+        } catch (e: Exception) {
+            System.currentTimeMillis()
         }
     }
 }

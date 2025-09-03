@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat
 import com.designated.callmanager.BuildConfig
 import com.designated.callmanager.MainActivity
 import com.designated.callmanager.R
+import com.designated.callmanager.ptt.core.BeepSoundManager
 import com.designated.callmanager.ptt.core.PTTController
 import com.designated.callmanager.ptt.core.SimplePTTEngine
 import com.designated.callmanager.ptt.core.UIDManager
@@ -43,6 +44,7 @@ class PTTForegroundService : Service() {
     private lateinit var pttEngine: SimplePTTEngine
     private lateinit var pttController: PTTController
     private lateinit var tokenManager: TokenManager
+    private lateinit var beepSoundManager: BeepSoundManager
     
     // Notification 관련
     private val NOTIFICATION_ID = 1001
@@ -100,8 +102,9 @@ class PTTForegroundService : Service() {
     private val rtcEventHandler = object : IRtcEngineEventHandler() {
         override fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {
             Log.i(TAG, "Joined channel: $channel with UID: $uid (elapsed: ${elapsed}ms)")
-            _pttState.value = PTTState.Connected(channel ?: "", uid)
-            updateNotification("연결됨: $channel")
+            // handleStartPTT에서 이미 Transmitting 상태로 설정했으므로 여기서는 로그만
+            // _pttState.value = PTTState.Connected(channel ?: "", uid)  // 제거
+            // updateNotification("연결됨: $channel")  // 제거
         }
         
         override fun onUserJoined(uid: Int, elapsed: Int) {
@@ -125,34 +128,40 @@ class PTTForegroundService : Service() {
             speakers: Array<AudioVolumeInfo>?,
             totalVolume: Int
         ) {
+            // 볼륨 표시는 로그만 남기고 상태 변경 제거 (UI 깜빡임 방지)
             speakers?.forEach { speaker ->
                 if (speaker.volume > 0) {
-                    _pttState.value = PTTState.UserSpeaking(speaker.uid, speaker.volume)
+                    Log.v(TAG, "User ${speaker.uid} speaking with volume ${speaker.volume}")
+                    // _pttState.value = PTTState.UserSpeaking(speaker.uid, speaker.volume)  // 제거
                 }
             }
         }
         
         override fun onConnectionStateChanged(state: Int, reason: Int) {
             Log.i(TAG, "Connection state changed: state=$state, reason=$reason")
+            // 상태 변경은 handleStartPTT/handleStopPTT에서만 처리
+            // 여기서는 에러 상황만 처리
             when (state) {
                 Constants.CONNECTION_STATE_DISCONNECTED -> {
-                    _pttState.value = PTTState.Disconnected
-                    updateNotification("연결 해제됨")
+                    // stopPTT에 의한 정상 종료가 아닌 경우만 처리
+                    if (_pttState.value !is PTTState.Disconnected) {
+                        Log.w(TAG, "Unexpected disconnection")
+                    }
                 }
                 Constants.CONNECTION_STATE_CONNECTING -> {
-                    _pttState.value = PTTState.Connecting
-                    updateNotification("연결 중...")
+                    // 로그만
                 }
                 Constants.CONNECTION_STATE_CONNECTED -> {
-                    // Connected state는 onJoinChannelSuccess에서 처리
+                    // 로그만
                 }
                 Constants.CONNECTION_STATE_RECONNECTING -> {
-                    _pttState.value = PTTState.Connecting
+                    Log.w(TAG, "Reconnecting...")
                     updateNotification("재연결 중...")
                 }
                 Constants.CONNECTION_STATE_FAILED -> {
                     _pttState.value = PTTState.Error("연결 실패", reason)
                     updateNotification("연결 실패")
+                    beepSoundManager.playErrorSound()  // 에러음 추가
                 }
             }
         }
@@ -187,6 +196,9 @@ class PTTForegroundService : Service() {
             
             // TokenManager 초기화
             tokenManager = TokenManager(FirebaseFunctions.getInstance("asia-northeast3"))
+            
+            // BeepSoundManager 초기화
+            beepSoundManager = BeepSoundManager(this)
             
             // PTT Engine 초기화
             pttEngine = SimplePTTEngine()
@@ -249,25 +261,36 @@ class PTTForegroundService : Service() {
     }
     
     private fun handleStartPTT() {
+        // 시작 비프음은 AccessibilityService에서 이미 재생했으므로 제거
+        
         serviceScope.launch {
             try {
                 Log.d(TAG, "Starting PTT...")
                 _pttState.value = PTTState.Connecting
+                updateNotification("연결 중...")
                 
                 val uid = getOrCreateUID()
                 val result = pttController.startPTT(uid)
                 
                 if (result.isSuccess) {
+                    // 연결 성공 - 상태만 업데이트
                     _pttState.value = PTTState.Transmitting(true)
                     updateNotification("송신 중...")
+                    Log.i(TAG, "PTT started successfully")
                 } else {
+                    // 연결 실패 - 에러음
+                    beepSoundManager.playErrorSound()
                     val error = result.exceptionOrNull()
                     Log.e(TAG, "PTT start failed", error)
                     _pttState.value = PTTState.Error("PTT 시작 실패: ${error?.message}")
+                    updateNotification("연결 실패")
                 }
             } catch (e: Exception) {
+                // 예외 발생 - 에러음
+                beepSoundManager.playErrorSound()
                 Log.e(TAG, "PTT start failed", e)
                 _pttState.value = PTTState.Error("PTT 시작 실패: ${e.message}")
+                updateNotification("연결 실패")
             }
         }
     }
@@ -279,16 +302,11 @@ class PTTForegroundService : Service() {
                 val result = pttController.stopPTT()
                 
                 if (result.isSuccess) {
+                    beepSoundManager.playEndBeep() // 종료 비프음 재생
                     _pttState.value = PTTState.Transmitting(false)
-                    // 채널 정보 유지
-                    val status = pttController.getStatus()
-                    if (status.isConnected) {
-                        _pttState.value = PTTState.Connected(
-                            status.currentChannel ?: "",
-                            status.currentUID
-                        )
-                        updateNotification("연결됨: ${status.currentChannel}")
-                    }
+                    // 채널에서 완전히 나갔으므로 Disconnected 상태로 변경
+                    _pttState.value = PTTState.Disconnected
+                    updateNotification("PTT 준비됨")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "PTT stop failed", e)
@@ -474,6 +492,7 @@ class PTTForegroundService : Service() {
         // 컴포넌트 정리
         try {
             pttController.destroy()
+            beepSoundManager.release()
         } catch (e: Exception) {
             Log.e(TAG, "Error destroying components", e)
         }

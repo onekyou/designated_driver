@@ -9,18 +9,23 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.designated.pickupapp.data.Constants
 import com.designated.pickupapp.data.DriverInfo
+import com.designated.pickupapp.data.PTTStatus
+import com.designated.pickupapp.data.PTTState
+import com.designated.pickupapp.ptt.core.PTTController
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val firestore: FirebaseFirestore,
-    private val application: Application
+    private val application: Application,
+    private val pttController: PTTController
 ) : AndroidViewModel(application) {
 
     private val _drivers = MutableStateFlow<List<DriverInfo>>(emptyList())
@@ -28,6 +33,9 @@ class HomeViewModel @Inject constructor(
 
     private val _loading = MutableStateFlow(true)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
+
+    private val _pttState = MutableStateFlow(PTTState())
+    val pttState: StateFlow<PTTState> = _pttState.asStateFlow()
     
     
 
@@ -54,6 +62,13 @@ class HomeViewModel @Inject constructor(
         try {
             setupDriversListener(regionId, officeId)
             updateDriverStatus(regionId, officeId, driverId, Constants.STATUS_ONLINE)
+            
+            // PTT 시스템 초기화 및 자동 채널 참여
+            initializePTTSystem(regionId, officeId)
+            
+            // PTT 상태 모니터링 시작
+            startPTTStatusMonitoring()
+            
             android.util.Log.d("HomeViewModel", "✅ 초기화 완료")
         } catch (e: Exception) {
             android.util.Log.e("HomeViewModel", "초기화 중 오류 발생", e)
@@ -129,6 +144,68 @@ class HomeViewModel @Inject constructor(
         }
     }
     
+    /**
+     * PTT 시스템 초기화 및 자동 채널 참여
+     */
+    private fun initializePTTSystem(regionId: String, officeId: String) {
+        viewModelScope.launch {
+            try {
+                // 1. 기본 채널 정보 설정
+                pttController.setDefaultChannelInfo(regionId, officeId)
+                android.util.Log.d("HomeViewModel", "PTT 기본 채널 설정 완료: ${regionId}_${officeId}_ptt")
+                
+                // 2. 자동으로 채널 참여 (듣기 모드)
+                val joinResult = pttController.joinChannel()
+                if (joinResult.isSuccess) {
+                    android.util.Log.i("HomeViewModel", "✅ PTT 채널 자동 참여 성공")
+                } else {
+                    android.util.Log.w("HomeViewModel", "⚠️ PTT 채널 자동 참여 실패: ${joinResult.exceptionOrNull()?.message}")
+                }
+                
+            } catch (e: Exception) {
+                android.util.Log.e("HomeViewModel", "PTT 시스템 초기화 중 오류", e)
+            }
+        }
+    }
+    
+    /**
+     * PTT 상태 모니터링 시작
+     */
+    private fun startPTTStatusMonitoring() {
+        viewModelScope.launch {
+            pttController.pttStatusFlow.collect { pttStatus ->
+                pttStatus?.let { status ->
+                    val currentState = _pttState.value
+                    val updatedUsers = currentState.activePTTUsers.toMutableMap()
+                    
+                    if (status.isTransmitting) {
+                        // PTT 시작
+                        updatedUsers[status.userId] = status
+                        _pttState.value = currentState.copy(
+                            activePTTUsers = updatedUsers,
+                            currentTransmitter = status.userId
+                        )
+                        android.util.Log.d("HomeViewModel", "PTT 상태 업데이트: ${status.userName} 전송 시작")
+                    } else {
+                        // PTT 종료
+                        updatedUsers.remove(status.userId)
+                        val newTransmitter = if (currentState.currentTransmitter == status.userId) {
+                            null
+                        } else {
+                            currentState.currentTransmitter
+                        }
+                        
+                        _pttState.value = currentState.copy(
+                            activePTTUsers = updatedUsers,
+                            currentTransmitter = newTransmitter
+                        )
+                        android.util.Log.d("HomeViewModel", "PTT 상태 업데이트: ${status.userName} 전송 종료")
+                    }
+                }
+            }
+        }
+    }
+    
     override fun onCleared() {
         super.onCleared()
         currentRegionId?.let { regionId ->
@@ -139,6 +216,10 @@ class HomeViewModel @Inject constructor(
             }
         }
         driversListener?.remove()
+        
+        // PTT 시스템 정리
+        pttController.destroy()
+        android.util.Log.d("HomeViewModel", "PTT 시스템 정리 완료")
     }
     
     

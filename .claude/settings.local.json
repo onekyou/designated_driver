@@ -68,7 +68,8 @@
       "Bash(python3:*)",
       "Bash(python:*)",
       "Bash(gh auth:*)",
-      "Bash(git remote get-url:*)"
+      "Bash(git remote get-url:*)",
+      "Bash(dir \"C:\\app_dev\\designated_driver\\call_manager\\app\\src\\main\\res\\raw\")"
     ],
     "deny": [],
     "additionalDirectories": [
