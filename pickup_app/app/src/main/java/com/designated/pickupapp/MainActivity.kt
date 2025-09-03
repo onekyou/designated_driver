@@ -31,7 +31,9 @@ import com.designated.pickupapp.data.Constants
 import com.designated.pickupapp.ui.home.HomeViewModel
 import com.designated.pickupapp.ui.login.LoginScreen
 import com.designated.pickupapp.ui.signup.SignUpScreen
+import com.designated.pickupapp.ui.screens.PermissionScreen
 import com.designated.pickupapp.ui.theme.PickupAppTheme
+import com.designated.pickupapp.utils.PermissionManager
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.compose.runtime.*
 import com.google.firebase.auth.FirebaseAuth
@@ -104,8 +106,15 @@ class MainActivity : ComponentActivity() {
                                     navController.navigate("signup")
                                 },
                                 onLoginSuccess = { regionId: String, officeId: String, driverId: String ->
-                                    navController.navigate("home/$regionId/$officeId/$driverId") {
-                                        popUpTo("login") { inclusive = true }
+                                    // 로그인 성공 후 권한 체크
+                                    if (PermissionManager.hasCriticalPermissions(this@MainActivity)) {
+                                        navController.navigate("home/$regionId/$officeId/$driverId") {
+                                            popUpTo("login") { inclusive = true }
+                                        }
+                                    } else {
+                                        navController.navigate("permissions/$regionId/$officeId/$driverId") {
+                                            popUpTo("login") { inclusive = true }
+                                        }
                                     }
                                 },
                                 onNavigateToPasswordReset = {
@@ -123,6 +132,20 @@ class MainActivity : ComponentActivity() {
                                     // 회원가입 성공 시 로그인 화면으로 이동
                                     navController.navigate("login") {
                                         popUpTo("signup") { inclusive = true }
+                                    }
+                                }
+                            )
+                        }
+                        
+                        composable("permissions/{regionId}/{officeId}/{driverId}") { backStackEntry ->
+                            val regionId = backStackEntry.arguments?.getString("regionId") ?: ""
+                            val officeId = backStackEntry.arguments?.getString("officeId") ?: ""
+                            val driverId = backStackEntry.arguments?.getString("driverId") ?: ""
+                            
+                            PermissionScreen(
+                                onPermissionsGranted = {
+                                    navController.navigate("home/$regionId/$officeId/$driverId") {
+                                        popUpTo("permissions/$regionId/$officeId/$driverId") { inclusive = true }
                                     }
                                 }
                             )

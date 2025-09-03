@@ -18,6 +18,7 @@ import android.support.v4.media.session.PlaybackStateCompat
 import com.designated.pickupapp.BuildConfig
 import com.designated.pickupapp.MainActivity
 import com.designated.pickupapp.R
+import com.designated.pickupapp.ptt.core.BeepSoundManager
 import com.designated.pickupapp.ptt.core.PTTController
 import com.designated.pickupapp.ptt.core.SimplePTTEngine
 import com.designated.pickupapp.ptt.core.UIDManager
@@ -47,6 +48,9 @@ class PTTForegroundService : Service() {
     private lateinit var pttEngine: SimplePTTEngine
     private lateinit var pttController: PTTController
     private lateinit var tokenManager: TokenManager
+    
+    // 비프음 매니저
+    private lateinit var beepSoundManager: BeepSoundManager
     
     // MediaSession 관련
     private lateinit var mediaSession: MediaSessionCompat
@@ -125,6 +129,10 @@ class PTTForegroundService : Service() {
             Log.i(TAG, "Joined channel: $channel with UID: $uid (elapsed: ${elapsed}ms)")
             _pttState.value = PTTState.Connected(channel ?: "", uid)
             updateNotification("연결됨: $channel")
+            
+            // 연결 성공 시 비프음 재생 (콜매니저와 동일한 방식)
+            // 이미 PTTAccessibilityService에서 즉시 비프음을 재생했으므로
+            // 여기서는 추가 비프음 재생하지 않음
         }
         
         override fun onUserJoined(uid: Int, elapsed: Int) {
@@ -146,6 +154,10 @@ class PTTForegroundService : Service() {
             Log.e(TAG, "Agora error: $err")
             val errorMessage = getAgoraErrorMessage(err)
             _pttState.value = PTTState.Error(errorMessage, err)
+            
+            // 연결 실패 시 에러음 재생
+            beepSoundManager.playErrorSound()
+            
             handleAgoraError(err)
         }
         
@@ -215,6 +227,10 @@ class PTTForegroundService : Service() {
     private fun initializeComponents() {
         try {
             Log.d(TAG, "Initializing components...")
+            
+            // BeepSoundManager 초기화
+            beepSoundManager = BeepSoundManager(this)
+            Log.d(TAG, "BeepSoundManager initialized")
             
             // TokenManager 초기화
             tokenManager = TokenManager(FirebaseFunctions.getInstance("asia-northeast3"))
@@ -633,6 +649,9 @@ class PTTForegroundService : Service() {
         
         // 컴포넌트 정리
         try {
+            // BeepSoundManager 리소스 해제
+            beepSoundManager.release()
+            
             pttController.destroy()
         } catch (e: Exception) {
             Log.e(TAG, "Error destroying components", e)
