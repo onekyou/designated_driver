@@ -18,6 +18,9 @@ class SimplePTTEngine {
     private var isInChannel = false
     private var isTransmitting = false
     
+    // 비프음 매니저 (옵션)
+    private var beepSoundManager: BeepSoundManager? = null
+    
     /**
      * 엔진 초기화
      * @param context Android Context
@@ -37,6 +40,9 @@ class SimplePTTEngine {
             }
             
             Log.i(TAG, "Initializing PTT Engine with App ID: ${appId.take(8)}...")
+            
+            // 비프음 매니저 초기화
+            beepSoundManager = BeepSoundManager(context)
             
             val config = RtcEngineConfig().apply {
                 mContext = context.applicationContext

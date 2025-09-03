@@ -37,6 +37,9 @@ class PTTController(
     private var signalingManager: SignalingManager? = null
     private val rtmScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
+    // 비프음 매니저 추가
+    private val beepSoundManager: BeepSoundManager = BeepSoundManager(context)
+    
     init {
         initializeRTMIfPossible()
     }

@@ -242,11 +242,21 @@ fun EmbeddedPTTSection(
     var isPressing by remember { mutableStateOf(false) }
     var isServiceStarted by remember { mutableStateOf(false) }
     
-    // Service 시작
+    // Service 시작 및 접근성 서비스 확인
     LaunchedEffect(Unit) {
         if (!isServiceStarted) {
+            // PTTForegroundService 시작
             com.designated.pickupapp.ptt.service.PTTForegroundService.startService(context, regionId, officeId)
             isServiceStarted = true
+            
+            // 접근성 서비스 활성화 확인 (볼륨키 PTT용)
+            if (!com.designated.pickupapp.utils.PermissionManager.hasAccessibilityPermission(context)) {
+                android.widget.Toast.makeText(
+                    context,
+                    "볼륨키 PTT를 사용하려면 접근성 서비스를 활성화하세요",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
         }
     }
     

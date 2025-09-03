@@ -94,6 +94,19 @@
             </intent-filter>
         </service>
         
+        <!-- PTT Accessibility Service (볼륨키 PTT) -->
+        <service
+            android:name=".ptt.service.PTTAccessibilityService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+        
         
         
         <!-- Firebase 관련 서비스 (자동 초기화) -->
