@@ -631,6 +631,7 @@ fun TestDebugPanel(
 ) {
     var showLogs by remember { mutableStateOf(false) }
     var testResults by remember { mutableStateOf("테스트 결과가 여기에 표시됩니다") }
+    val context = LocalContext.current
     
     Column(
         modifier = modifier
@@ -679,7 +680,6 @@ fun TestDebugPanel(
         ) {
             Button(
                 onClick = {
-                    val context = LocalContext.current
                     com.designated.pickupapp.utils.PTTTestHelper.runAutoTest(context) { result ->
                         testResults = result
                     }
