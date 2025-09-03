@@ -272,7 +272,7 @@ private fun formatTimeAgo(timestamp: Long): String {
 fun EmbeddedPTTSection(
     regionId: String,
     officeId: String,
-    pttState: PTTState
+    pttState: com.designated.pickupapp.data.PTTState
 ) {
     val context = LocalContext.current
     
@@ -306,7 +306,7 @@ fun EmbeddedPTTSection(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // 상태 표시 카드 (콜매니저 스타일)
-        StatusCard(pttState = servicePttState)
+        StatusCard(servicePttState = servicePttState)
         
         Spacer(modifier = Modifier.weight(1f))
         
@@ -333,17 +333,11 @@ fun EmbeddedPTTSection(
             regionId = regionId,
             officeId = officeId
         )
-        
-        // 디버그 모드에서만 테스트 버튼 표시
-        if (BuildConfig.DEBUG) {
-            Spacer(modifier = Modifier.height(8.dp))
-            TestDebugPanel(context = context)
-        }
     }
 }
 
 @Composable
-private fun StatusCard(pttState: com.designated.pickupapp.ptt.state.PTTState) {
+private fun StatusCard(servicePttState: com.designated.pickupapp.ptt.state.PTTState?) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -356,7 +350,22 @@ private fun StatusCard(pttState: com.designated.pickupapp.ptt.state.PTTState) {
                 .fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            when (pttState) {
+            when (servicePttState) {
+                null -> {
+                    Icon(
+                        Icons.Default.MicOff,
+                        contentDescription = null,
+                        tint = Color.Gray,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Text(
+                        "시스템 로딩 중...",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.Gray
+                    )
+                }
+                
                 is com.designated.pickupapp.ptt.state.PTTState.Disconnected -> {
                     Icon(
                         Icons.Default.MicOff,
@@ -396,12 +405,12 @@ private fun StatusCard(pttState: com.designated.pickupapp.ptt.state.PTTState) {
                         modifier = Modifier.size(48.dp)
                     )
                     Text(
-                        "채널: ${pttState.channel}",
+                        "채널: ${servicePttState.channel}",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium
                     )
                     Text(
-                        "UID: ${pttState.uid}",
+                        "UID: ${servicePttState.uid}",
                         fontSize = 14.sp,
                         color = Color.Gray
                     )
@@ -416,14 +425,14 @@ private fun StatusCard(pttState: com.designated.pickupapp.ptt.state.PTTState) {
                     Icon(
                         Icons.Default.Mic,
                         contentDescription = null,
-                        tint = if (pttState.isTransmitting) Color.Red else MaterialTheme.colorScheme.primary,
+                        tint = if (servicePttState.isTransmitting) Color.Red else MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(48.dp)
                     )
                     Text(
-                        if (pttState.isTransmitting) "송신 중..." else "송신 준비",
+                        if (servicePttState.isTransmitting) "송신 중..." else "송신 준비",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (pttState.isTransmitting) Color.Red else MaterialTheme.colorScheme.primary
+                        color = if (servicePttState.isTransmitting) Color.Red else MaterialTheme.colorScheme.primary
                     )
                 }
                 
@@ -435,18 +444,18 @@ private fun StatusCard(pttState: com.designated.pickupapp.ptt.state.PTTState) {
                         modifier = Modifier.size(48.dp)
                     )
                     val userType = when {
-                        pttState.uid in 1000..1999 -> "관리자"
-                        pttState.uid in 2000..2999 -> "픽업"
+                        servicePttState.uid in 1000..1999 -> "관리자"
+                        servicePttState.uid in 2000..2999 -> "픽업"
                         else -> "사용자"
                     }
                     Text(
-                        "$userType ${pttState.uid} 말하는 중",
+                        "$userType ${servicePttState.uid} 말하는 중",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.Green
                     )
                     Text(
-                        "음량: ${pttState.volume}",
+                        "음량: ${servicePttState.volume}",
                         fontSize = 14.sp,
                         color = Color.Gray
                     )
@@ -466,12 +475,12 @@ private fun StatusCard(pttState: com.designated.pickupapp.ptt.state.PTTState) {
                         color = MaterialTheme.colorScheme.error
                     )
                     Text(
-                        pttState.message,
+                        servicePttState.message,
                         fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.error,
                         textAlign = TextAlign.Center
                     )
-                    pttState.code?.let { code ->
+                    servicePttState.code?.let { code ->
                         Text(
                             "코드: $code",
                             fontSize = 12.sp,
@@ -486,7 +495,7 @@ private fun StatusCard(pttState: com.designated.pickupapp.ptt.state.PTTState) {
 
 @Composable
 private fun PTTButton(
-    pttState: com.designated.pickupapp.ptt.state.PTTState,
+    pttState: com.designated.pickupapp.ptt.state.PTTState?,
     isPressing: Boolean,
     onPressStart: () -> Unit,
     onPressEnd: () -> Unit
@@ -552,7 +561,7 @@ private fun PTTButton(
 @Composable
 private fun ChannelControls(
     context: Context,
-    pttState: com.designated.pickupapp.ptt.state.PTTState,
+    pttState: com.designated.pickupapp.ptt.state.PTTState?,
     regionId: String,
     officeId: String
 ) {
@@ -585,7 +594,7 @@ private fun ChannelControls(
             onClick = {
                 sendCommandToService(context, com.designated.pickupapp.ptt.service.PTTForegroundService.ACTION_LEAVE_CHANNEL)
             },
-            enabled = pttState !is com.designated.pickupapp.ptt.state.PTTState.Disconnected,
+            enabled = pttState != null && pttState !is com.designated.pickupapp.ptt.state.PTTState.Disconnected,
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.secondary
             ),
@@ -617,7 +626,7 @@ private fun ChannelControls(
 
 @Composable
 fun TestDebugPanel(
-    pttState: com.designated.pickupapp.ptt.state.PTTState,
+    pttState: com.designated.pickupapp.data.PTTState,
     modifier: Modifier = Modifier
 ) {
     var showLogs by remember { mutableStateOf(false) }
@@ -643,8 +652,14 @@ fun TestDebugPanel(
         
         // 상태 정보
         Text(
-            "PTT 상태: ${pttState.javaClass.simpleName}",
+            "활성 사용자: ${pttState.activePTTUsers.size}명",
             color = Color.Green,
+            fontSize = 12.sp
+        )
+        
+        Text(
+            "현재 전송자: ${pttState.currentTransmitter ?: "없음"}",
+            color = if (pttState.hasActiveTransmitter()) Color.Red else Color.Gray,
             fontSize = 12.sp
         )
         
@@ -693,7 +708,7 @@ fun TestDebugPanel(
                     testResults = "로그가 초기화되었습니다"
                 },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.Orange
+                    containerColor = Color(0xFFFF9800)
                 ),
                 modifier = Modifier.size(width = 70.dp, height = 32.dp)
             ) {
