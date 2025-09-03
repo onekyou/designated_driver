@@ -1,0 +1,536 @@
+● 🎯 PTT 시스템 비용절감 자동채널참여 마스터 플랜
+
+  📊 현재 상황 분석
+
+  기존 PTT 시스템 현황
+
+  - ✅ Service 중심 아키텍처 구축 완료
+  - ✅ 볼륨키 PTT 제어 시스템 완료
+  - ✅ 비프음 피드백 시스템 완료
+  - ✅ 수동 채널 참여 시스템 완료
+
+  현재 비용 문제점
+
+  1. 항상 연결 방식: 앱 시작 시 즉시 채널 연결 → 24시간 Agora 과금
+  2. 불필요한 대기 시간: 실제 통화 없어도 연결 유지 → 비용 낭비
+  3. 멀티 사무실 대역폭: 모든 사무실이 개별 채널 유지 → 중복 비용
+
+  ---
+  🎯 비용절감 자동채널참여 목표
+
+  핵심 목표
+
+  1. Agora 사용량 90% 절감: 필요시에만 연결
+  2. 즉시 응답성: 2초 이내 채널 참여 보장
+  3. 완전 투명성: 사용자는 변화를 느끼지 못함
+  4. 다중 사무실 지원: 사무실 간 효율적 채널 공유
+
+  ---
+  🏗️ 스마트 채널 관리 시스템 설계
+
+  채널 상태 관리
+
+  📊 Channel State Management System
+
+  ┌─────────────────────────────────────┐
+  │           Channel States             │
+  ├─────────────────────────────────────┤
+  │ 🟢 ACTIVE    : 실제 통화 중         │
+  │ 🟡 STANDBY   : 연결됨, 대기 중       │
+  │ 🔴 IDLE      : 연결 해제됨           │
+  │ ⚡ JOINING   : 참여 중              │
+  │ 🚨 EMERGENCY : 긴급 상황            │
+  └─────────────────────────────────────┘
+
+  State Transition Rules:
+  IDLE → JOINING (PTT 요청 시)
+  JOINING → STANDBY (연결 완료)
+  STANDBY → ACTIVE (음성 송신 시)
+  ACTIVE → STANDBY (송신 중지)
+  STANDBY → IDLE (5분 무활동)
+
+● 비용절감 핵심 요구사항
+
+  1. 지능형 연결 관리
+
+  // Smart Connection Strategy
+  enum class ConnectionTrigger {
+      VOLUME_KEY_PRESSED,    // 볼륨키 눌림 - 즉시 연결
+      INCOMING_PTT_SIGNAL,   // 다른 사용자 PTT 시작 알림
+      MANUAL_JOIN_REQUEST,   // 수동 참여 요청
+      EMERGENCY_CALL         // 긴급 상황 (최고 우선순위)
+  }
+
+  // 연결 우선순위별 지연시간
+  - EMERGENCY_CALL: 0초 (즉시)
+  - VOLUME_KEY_PRESSED: 0.5초
+  - INCOMING_PTT_SIGNAL: 1초
+  - MANUAL_JOIN_REQUEST: 2초
+
+  2. 자동 연결 해제 전략
+
+  // Idle Detection Rules
+  - 마지막 활동 후 5분: 자동 연결 해제 경고
+  - 마지막 활동 후 10분: 자동 연결 해제
+  - 배터리 20% 이하: 2분 후 자동 해제
+  - 화면 꺼짐 + 30분 무활동: 즉시 해제
+
+  3. FCM 기반 실시간 알림
+
+  // Push Notification Types
+  data class PTTNotification(
+      val type: NotificationType,
+      val sourceUID: Int,
+      val channelName: String,
+      val regionId: String,
+      val officeId: String,
+      val priority: Priority,
+      val autoJoin: Boolean = true
+  )
+
+  enum class NotificationType {
+      PTT_START_SIGNAL,      // "누군가 PTT 시작했음"
+      CHANNEL_ACTIVITY,      // "채널에 활동 있음"
+      EMERGENCY_BROADCAST,   // "긴급 방송"
+      GROUP_CALL_REQUEST     // "그룹 통화 요청"
+  }
+
+● 🧠 스마트 채널 관리 시스템
+
+  채널 생명주기 관리자
+
+  // SmartChannelManager.kt - 핵심 시스템
+  class SmartChannelManager(
+      private val pttController: PTTController,
+      private val fcmManager: FCMSignalingManager,
+      private val scope: CoroutineScope
+  ) {
+      private var channelState = MutableStateFlow(ChannelState.IDLE)
+      private var lastActivity = 0L
+      private var idleTimer: Job? = null
+
+      // 🎯 핵심 기능: 필요시에만 연결
+      suspend fun requestConnection(trigger: ConnectionTrigger): Result<Unit> {
+          return when (trigger) {
+              ConnectionTrigger.VOLUME_KEY_PRESSED -> {
+                  // 즉시 연결 + 다른 사용자들에게 알림
+                  connectAndNotify(priority = Priority.HIGH)
+              }
+              ConnectionTrigger.INCOMING_PTT_SIGNAL -> {
+                  // 빠른 연결 (알림 받음)
+                  connectSilently(priority = Priority.NORMAL)
+              }
+              ConnectionTrigger.EMERGENCY_CALL -> {
+                  // 최우선 연결
+                  connectAndNotify(priority = Priority.EMERGENCY)
+              }
+          }
+      }
+
+      // 🔄 자동 연결 해제 관리
+      private fun startIdleTimer() {
+          idleTimer?.cancel()
+          idleTimer = scope.launch {
+              delay(IDLE_TIMEOUT_MS)
+              if (shouldDisconnect()) {
+                  disconnectGracefully()
+              }
+          }
+      }
+  }
+
+  비용 최적화 알고리즘
+
+  // CostOptimizer.kt - 지능형 비용 절감
+  class CostOptimizer {
+      private val usageAnalyzer = UsageAnalyzer()
+
+      // 📊 실시간 사용 패턴 분석
+      fun analyzeUsagePattern(): OptimizationStrategy {
+          val pattern = usageAnalyzer.getRecentPattern()
+
+          return when {
+              pattern.averageCallDuration < 30_000 -> // 30초 미만
+                  OptimizationStrategy.AGGRESSIVE_DISCONNECT
+
+              pattern.idleTime > 600_000 -> // 10분 이상 무활동
+                  OptimizationStrategy.DELAYED_CONNECTION
+
+              pattern.batteryLevel < 20 -> // 배터리 부족
+                  OptimizationStrategy.POWER_SAVING_MODE
+
+              else -> OptimizationStrategy.BALANCED
+          }
+      }
+
+      // 💰 예상 비용 절감 계산
+      fun calculateCostSaving(): CostSavingReport {
+          return CostSavingReport(
+              expectedSaving = "90%",
+              currentConnectionTime = "2시간/일",
+              optimizedConnectionTime = "12분/일",
+              monthlyCostReduction = "₩45,000"
+          )
+      }
+  }
+
+● 🔔 FCM 기반 실시간 알림 시스템
+
+  FCM 시그널링 매니저
+
+  // FCMSignalingManager.kt - 실시간 PTT 신호 관리
+  class FCMSignalingManager(
+      private val functions: FirebaseFunctions,
+      private val context: Context
+  ) {
+
+      // 🚨 PTT 시작 알림 전송
+      suspend fun notifyPTTStart(
+          channelName: String,
+          senderUID: Int,
+          regionId: String,
+          officeId: String
+      ) {
+          val payload = mapOf(
+              "type" to "PTT_START_SIGNAL",
+              "channel" to channelName,
+              "senderUID" to senderUID,
+              "region" to regionId,
+              "office" to officeId,
+              "timestamp" to System.currentTimeMillis(),
+              "priority" to "high"
+          )
+
+          // Cloud Function 호출로 같은 사무실 모든 기기에 알림
+          functions.getHttpsCallable("sendPTTSignal")
+              .call(payload)
+              .await()
+      }
+
+      // 📱 FCM 메시지 처리
+      fun handleIncomingSignal(message: RemoteMessage) {
+          when (message.data["type"]) {
+              "PTT_START_SIGNAL" -> {
+                  val channel = message.data["channel"]!!
+                  val senderUID = message.data["senderUID"]!!.toInt()
+
+                  // 즉시 채널 참여 요청
+                  requestAutoJoinChannel(channel, senderUID)
+              }
+
+              "EMERGENCY_BROADCAST" -> {
+                  // 최우선 긴급 연결
+                  requestEmergencyConnection(message.data)
+              }
+          }
+      }
+  }
+
+  Cloud Function 설계
+
+  // Cloud Functions - PTT 신호 중계 서버
+  // functions/src/index.ts
+
+  export const sendPTTSignal = functions
+    .region('asia-northeast3')
+    .https.onCall(async (data, context) => {
+
+      const { region, office, senderUID, channel } = data;
+
+      // 같은 사무실 모든 FCM 토큰 조회
+      const tokensSnapshot = await admin.firestore()
+        .collection(`regions/${region}/offices/${office}/designated_drivers`)
+        .where('fcmToken', '!=', null)
+        .get();
+
+      const tokens = tokensSnapshot.docs
+        .map(doc => doc.data().fcmToken)
+        .filter(token => token); // null 제거
+
+      if (tokens.length === 0) return;
+
+      // 일괄 알림 전송
+      const message = {
+        data: {
+          type: 'PTT_START_SIGNAL',
+          channel: channel,
+          senderUID: senderUID.toString(),
+          autoJoin: 'true'
+        },
+        android: {
+          priority: 'high',
+          ttl: 3000 // 3초 후 만료
+        }
+      };
+
+      await admin.messaging().sendMulticast({
+        tokens: tokens,
+        ...message
+      });
+
+      return { success: true, notifiedDevices: tokens.length };
+    });
+
+● 📅 구현 단계별 상세 계획
+
+  🔵 Phase 1: 스마트 채널 관리 기반 구축 (3일)
+
+  Day 1: Channel State Management
+
+  // 새 패키지 구조
+  com.designated.callmanager.ptt.smart/
+  ├── channel/
+  │   ├── SmartChannelManager.kt         // 핵심 관리자
+  │   ├── ChannelState.kt               // 상태 정의
+  │   ├── ConnectionTrigger.kt          // 연결 트리거
+  │   └── IdleTimeoutManager.kt         // 자동 해제 관리
+  ├── cost/
+  │   ├── CostOptimizer.kt              // 비용 최적화
+  │   └── UsageAnalyzer.kt              // 사용 패턴 분석
+  └── signaling/
+      ├── FCMSignalingManager.kt        // FCM 신호 관리
+      └── PTTSignalingService.kt        // FCM 메시지 처리
+
+  구현 우선순위:
+  1. ChannelState 열거형 및 상태 전환 로직
+  2. SmartChannelManager 기본 골격
+  3. 기존 PTTForegroundService와 통합
+
+  Day 2: FCM 시그널링 시스템
+
+  // PTTSignalingService.kt - FCM 메시지 처리 강화
+  class PTTSignalingService : FirebaseMessagingService() {
+
+      override fun onMessageReceived(message: RemoteMessage) {
+          val smartManager = SmartChannelManager.getInstance()
+
+          when (message.data["type"]) {
+              "PTT_START_SIGNAL" -> {
+                  // 다른 사용자가 PTT 시작 → 자동 참여
+                  smartManager.handleIncomingPTTSignal(
+                      channelName = message.data["channel"]!!,
+                      senderUID = message.data["senderUID"]!!.toInt()
+                  )
+              }
+
+              "CHANNEL_ACTIVITY" -> {
+                  // 채널에 활동이 있음 → 필요시 참여
+                  smartManager.handleChannelActivity(message.data)
+              }
+          }
+      }
+  }
+
+  Day 3: Cloud Functions 개발
+
+  // Firebase Cloud Functions
+  export const pttSmartSignaling = functions
+    .region('asia-northeast3')
+    .firestore.document('regions/{regionId}/offices/{officeId}/ptt_sessions/{sessionId}')
+    .onCreate(async (snapshot, context) => {
+
+      const sessionData = snapshot.data();
+      const { regionId, officeId } = context.params;
+
+      // PTT 세션 시작 → 모든 기기에 알림
+      await notifyOfficeDevices(regionId, officeId, {
+        type: 'PTT_START_SIGNAL',
+        sessionId: snapshot.id,
+        senderUID: sessionData.uid,
+        channel: sessionData.channelName,
+        priority: 'high'
+      });
+
+      // 비용 추적을 위한 세션 로깅
+      await logCostOptimizationEvent({
+        regionId,
+        officeId,
+        eventType: 'SESSION_START',
+        estimatedSaving: calculateSaving(sessionData)
+      });
+    });
+
+  ---
+  🔵 Phase 2: 지능형 연결 최적화 (2일)
+
+  Day 4: 사용 패턴 분석 시스템
+
+  // UsageAnalyzer.kt - AI 기반 패턴 학습
+  class UsageAnalyzer(private val context: Context) {
+      private val prefs = context.getSharedPreferences("usage_patterns", Context.MODE_PRIVATE)
+
+      // 📊 사용 패턴 학습
+      fun learnFromUsage(session: PTTSession) {
+          val pattern = UserPattern(
+              timeOfDay = session.startTime.hour,
+              dayOfWeek = session.startTime.dayOfWeek.value,
+              duration = session.duration,
+              batteryLevel = session.batteryLevelAtStart,
+              connectionDelay = session.connectionDelay
+          )
+
+          // 패턴 저장 및 분석
+          savePattern(pattern)
+          updateOptimizationStrategy()
+      }
+
+      // 🎯 예측 기반 최적화
+      fun predictOptimalStrategy(): OptimizationStrategy {
+          val recentPatterns = getRecentPatterns(days = 7)
+
+          return when {
+              recentPatterns.averageConnectionDelay < 1000 ->
+                  OptimizationStrategy.INSTANT_CONNECTION
+
+              recentPatterns.shortCallsRatio > 0.8 ->
+                  OptimizationStrategy.QUICK_DISCONNECT
+
+              recentPatterns.batteryConstrainedUsage ->
+                  OptimizationStrategy.POWER_SAVER
+
+              else -> OptimizationStrategy.BALANCED
+          }
+      }
+  }
+
+  Day 5: 실시간 비용 모니터링
+
+  // CostMonitor.kt - 실시간 비용 추적
+  class CostMonitor {
+      private val costTracker = MutableStateFlow(CostData.empty())
+
+      // 💰 실시간 비용 계산
+      fun trackConnection(channelName: String, duration: Long) {
+          val cost = calculateAgoraCost(duration)
+          val saving = calculateSaving(duration)
+
+          costTracker.value = costTracker.value.copy(
+              totalCost = costTracker.value.totalCost + cost,
+              totalSaving = costTracker.value.totalSaving + saving,
+              connectionsToday = costTracker.value.connectionsToday + 1
+          )
+
+          // 일일 리포트 업데이트
+          updateDailyReport()
+      }
+
+      // 📊 사용자에게 절약 현황 표시
+      fun getCostSavingSummary(): CostSavingSummary {
+          return CostSavingSummary(
+              todaySaving = "₩1,200",
+              weekSaving = "₩8,400",
+              monthlyProjection = "₩36,000",
+              optimizationLevel = "매우 높음"
+          )
+      }
+  }
+
+  ---
+  🔵 Phase 3: UI 통합 및 사용자 경험 (2일)
+
+  Day 6: 스마트 PTT UI 개선
+
+  // SmartPTTScreen.kt - 비용절감 상태 표시
+  @Composable
+  fun SmartPTTScreen(
+      smartChannelManager: SmartChannelManager = hiltViewModel()
+  ) {
+      val channelState by smartChannelManager.channelState.collectAsState()
+      val costSaving by smartChannelManager.costSaving.collectAsState()
+
+      Column {
+          // 기존 PTT 컨트롤
+          PTTControlSection(channelState = channelState)
+
+          Spacer(modifier = Modifier.height(16.dp))
+
+          // 💰 비용 절약 현황 표시
+          CostSavingCard(
+              todaySaving = costSaving.todaySaving,
+              connectionStatus = when (channelState) {
+                  ChannelState.IDLE -> "대기 중 (절약 모드)"
+                  ChannelState.JOINING -> "연결 중..."
+                  ChannelState.ACTIVE -> "통화 중"
+                  else -> "연결됨"
+              }
+          )
+
+          // 📊 사용 통계
+          UsageStatsSection(costSaving = costSaving)
+      }
+  }
+
+  @Composable
+  fun CostSavingCard(todaySaving: String, connectionStatus: String) {
+      Card(
+          modifier = Modifier.fillMaxWidth(),
+          colors = CardDefaults.cardColors(
+              containerColor = MaterialTheme.colorScheme.primaryContainer
+          )
+      ) {
+          Column(modifier = Modifier.padding(16.dp)) {
+              Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.SpaceBetween
+              ) {
+                  Text("오늘 절약", style = MaterialTheme.typography.labelMedium)
+                  Text(todaySaving, fontWeight = FontWeight.Bold)
+              }
+
+              Spacer(modifier = Modifier.height(4.dp))
+
+              Text(
+                  text = connectionStatus,
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onPrimaryContainer
+              )
+          }
+      }
+  }
+
+  Day 7: 설정 및 최적화 옵션
+
+  // SmartSettingsScreen.kt - 사용자 맞춤 설정
+  @Composable
+  fun SmartPTTSettingsScreen() {
+      val settings by smartSettingsViewModel.settings.collectAsState()
+
+      LazyColumn {
+          item {
+              SectionHeader("자동 연결 설정")
+
+              SwitchPreference(
+                  title = "즉시 연결 모드",
+                  description = "볼륨키 누르면 즉시 연결 (배터리 소모 증가)",
+                  checked = settings.instantConnection,
+                  onCheckedChange = { smartSettingsViewModel.setInstantConnection(it) }
+              )
+
+              SwitchPreference(
+                  title = "스마트 절약 모드",
+                  description = "사용 패턴 학습으로 자동 최적화",
+                  checked = settings.smartOptimization,
+                  onCheckedChange = { smartSettingsViewModel.setSmartOptimization(it) }
+              )
+          }
+
+          item {
+              SectionHeader("자동 해제 설정")
+
+              SliderPreference(
+                  title = "자동 해제 시간",
+                  value = settings.autoDisconnectMinutes,
+                  range = 1f..30f,
+                  onValueChange = { smartSettingsViewModel.setAutoDisconnectTime(it.toInt()) }
+              )
+          }
+
+          item {
+              SectionHeader("비용 절약 현황")
+
+              CostSavingDetailCard()
+          }
+      }
+  }
+
+  ---

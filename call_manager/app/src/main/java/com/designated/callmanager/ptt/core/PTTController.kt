@@ -216,8 +216,19 @@ class PTTController(
      */
     suspend fun stopPTT(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
+            Log.d(TAG, "Stopping PTT - isConnected: $isConnected, currentChannel: $currentChannel, currentUID: $currentUID")
+            
             if (!isConnected) {
-                Log.w(TAG, "Not connected to any channel")
+                Log.w(TAG, "Not connected to any channel - forcing engine check")
+                // 엔진 상태 확인
+                val engineStatus = engine.getStatus()
+                Log.d(TAG, "Engine status - isInChannel: ${engineStatus.isInChannel}, currentChannel: ${engineStatus.currentChannel}")
+                
+                if (engineStatus.isInChannel) {
+                    Log.w(TAG, "Engine still in channel, forcing leave")
+                    val leaveResult = engine.leaveChannel()
+                    Log.d(TAG, "Force leave result: ${leaveResult.isSuccess}")
+                }
                 return@withContext Result.success(Unit)
             }
             
@@ -226,7 +237,24 @@ class PTTController(
             // RTM 종료 신호 먼저 전송
             sendRTMStopSignal(currentChannel!!, currentUID)
             
-            engine.stopTransmit()
+            // 전송 중지
+            val stopResult = engine.stopTransmit()
+            Log.d(TAG, "Stop transmit result: ${stopResult.isSuccess}")
+            
+            // 채널 완전히 나가기 (볼륨키를 뗄 때 채널 해제)
+            val leaveResult = engine.leaveChannel()
+            Log.d(TAG, "Leave channel result: ${leaveResult.isSuccess}")
+            
+            if (leaveResult.isSuccess) {
+                currentChannel = null
+                currentUID = 0
+                isConnected = false
+                Log.i(TAG, "Left channel completely on PTT stop")
+            } else {
+                Log.e(TAG, "Failed to leave channel: ${leaveResult.exceptionOrNull()}")
+            }
+            
+            Result.success(Unit)
             
         } catch (e: Exception) {
             Log.e(TAG, "Failed to stop PTT", e)
