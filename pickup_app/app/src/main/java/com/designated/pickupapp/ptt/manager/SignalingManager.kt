@@ -270,13 +270,18 @@ class SignalingManager(
      */
     private fun handlePttMessage(publisherId: String, message: String) {
         try {
+            Log.d(TAG, "Processing Pickup PTT message from $publisherId: $message")
+            
             // JSON 파싱하여 PTT 이벤트 처리
             if (message.contains("PTT_START")) {
                 val source = if (message.contains("\"source\":\"pickup\"")) "pickup" else "call_manager"
                 val sourceName = if (source == "pickup") "픽업" else "대리"
                 val timestamp = extractTimestamp(message)
                 
-                Log.d(TAG, "PTT Started by $publisherId ($sourceName)")
+                Log.i(TAG, "PTT Started by $publisherId ($sourceName) - Triggering auto-join")
+                
+                // 자동 채널 참여 트리거
+                triggerAutoJoin(publisherId, message)
                 
                 // UI로 PTT 상태 전달
                 val pttStatus = PTTStatus(
@@ -307,6 +312,44 @@ class SignalingManager(
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error handling PTT message: $e")
+        }
+    }
+    
+    /**
+     * 자동 채널 참여 트리거 (픽업앱용)
+     */
+    private fun triggerAutoJoin(publisherId: String, message: String) {
+        try {
+            // message에서 채널명 및 UID 추출
+            val channelPattern = """"channel":\s*"([^"]+)"""".toRegex()
+            val uidPattern = """"uid":\s*(\d+)""".toRegex()
+            
+            val channelMatch = channelPattern.find(message)
+            val uidMatch = uidPattern.find(message)
+            
+            val channel = channelMatch?.groupValues?.get(1) ?: return
+            val senderUid = uidMatch?.groupValues?.get(1)?.toIntOrNull() ?: return
+            
+            Log.i(TAG, "Pickup auto-join trigger: Channel=$channel, SenderUID=$senderUid")
+            
+            // PTTForegroundService에 자동 참여 요청
+            val intent = android.content.Intent(context, com.designated.pickupapp.ptt.service.PTTForegroundService::class.java).apply {
+                action = com.designated.pickupapp.ptt.service.PTTForegroundService.ACTION_AUTO_JOIN
+                putExtra(com.designated.pickupapp.ptt.service.PTTForegroundService.EXTRA_CHANNEL, channel)
+                putExtra(com.designated.pickupapp.ptt.service.PTTForegroundService.EXTRA_SENDER_UID, senderUid)
+            }
+            
+            // Foreground Service 시작
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+            
+            Log.i(TAG, "Pickup auto-join request sent to PTTForegroundService")
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to trigger pickup auto-join", e)
         }
     }
     
