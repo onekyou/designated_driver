@@ -363,15 +363,27 @@ class PTTController(
             
             // 송신자가 같은 타입의 사용자인지 확인
             val senderType = uidManager.getUserTypeFromUID(senderUID)
-            if (senderType != "call_manager" && senderType != "pickup_driver") {
-                Log.w(TAG, "Unknown sender type for UID: $senderUID")
+            Log.d(TAG, "Sender UID: $senderUID, Type: $senderType")
+            
+            // 자신이 보낸 신호는 무시
+            if (senderUID == currentUID) {
+                Log.d(TAG, "Ignoring own PTT signal (UID: $senderUID)")
+                return@withContext Result.success(Unit)
             }
             
-            // 채널 참여 (듣기 모드)
-            joinChannel(channel)
+            // 채널 참여 (듣기 모드) - Result 반환
+            val result = joinChannel(channel)
+            
+            if (result.isSuccess) {
+                Log.i(TAG, "Auto-join successful for channel: $channel")
+            } else {
+                Log.e(TAG, "Auto-join failed for channel: $channel")
+            }
+            
+            result
             
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to auto-join channel", e)
+            Log.e(TAG, "Failed to auto-join channel: $channel", e)
             Result.failure(e)
         }
     }

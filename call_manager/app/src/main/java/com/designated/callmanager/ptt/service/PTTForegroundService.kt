@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.designated.callmanager.BuildConfig
@@ -49,6 +50,10 @@ class PTTForegroundService : Service() {
     // Notification 관련
     private val NOTIFICATION_ID = 1001
     private val CHANNEL_ID = "ptt_service_channel"
+    
+    // WakeLock 관련
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var powerManager: PowerManager? = null
     
     // 서비스 상태
     private var isServiceRunning = false
@@ -184,10 +189,77 @@ class PTTForegroundService : Service() {
         // 2. Foreground 시작
         startForeground(NOTIFICATION_ID, createNotification())
         
-        // 3. 컴포넌트 초기화 (Service가 소유)
+        // 3. PowerManager 및 WakeLock 초기화
+        initializePowerManagement()
+        
+        // 4. 컴포넌트 초기화 (Service가 소유)
         initializeComponents()
         
+        // 5. 배터리 최적화 예외 체크
+        checkBatteryOptimization()
+        
         isServiceRunning = true
+    }
+    
+    private fun initializePowerManagement() {
+        try {
+            powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            
+            // Partial WakeLock 생성 - 화면이 꺼져도 CPU는 계속 작동
+            wakeLock = powerManager?.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK or PowerManager.ON_AFTER_RELEASE,
+                "CallManager:PTTWakeLock"
+            )?.apply {
+                setReferenceCounted(false) // 참조 카운트 사용 안함
+            }
+            
+            Log.i(TAG, "PowerManagement initialized - WakeLock ready")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to initialize PowerManagement", e)
+        }
+    }
+    
+    private fun checkBatteryOptimization() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val pm = powerManager ?: return
+            val packageName = packageName
+            
+            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                Log.w(TAG, "App is NOT exempted from battery optimization")
+                // 나중에 UI에서 사용자에게 요청할 수 있도록 상태 저장
+                // SharedPreferences나 다른 방법으로 저장
+            } else {
+                Log.i(TAG, "App is exempted from battery optimization ✓")
+            }
+        }
+    }
+    
+    private fun acquireWakeLock(duration: Long = 10 * 60 * 1000L) {
+        try {
+            wakeLock?.let { lock ->
+                if (!lock.isHeld) {
+                    lock.acquire(duration) // 기본 10분, 최대 시간 제한
+                    Log.i(TAG, "WakeLock acquired for ${duration/1000} seconds")
+                } else {
+                    Log.d(TAG, "WakeLock already held")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to acquire WakeLock", e)
+        }
+    }
+    
+    private fun releaseWakeLock() {
+        try {
+            wakeLock?.let { lock ->
+                if (lock.isHeld) {
+                    lock.release()
+                    Log.i(TAG, "WakeLock released")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to release WakeLock", e)
+        }
     }
     
     private fun initializeComponents() {
@@ -263,6 +335,9 @@ class PTTForegroundService : Service() {
     private fun handleStartPTT() {
         // 시작 비프음은 AccessibilityService에서 이미 재생했으므로 제거
         
+        // PTT 시작 시 WakeLock 획득 (30분 제한)
+        acquireWakeLock(30 * 60 * 1000L)
+        
         serviceScope.launch {
             try {
                 Log.d(TAG, "Starting PTT...")
@@ -278,16 +353,18 @@ class PTTForegroundService : Service() {
                     updateNotification("송신 중...")
                     Log.i(TAG, "PTT started successfully")
                 } else {
-                    // 연결 실패 - 에러음
+                    // 연결 실패 - 에러음 & WakeLock 해제
                     beepSoundManager.playErrorSound()
+                    releaseWakeLock()
                     val error = result.exceptionOrNull()
                     Log.e(TAG, "PTT start failed", error)
                     _pttState.value = PTTState.Error("PTT 시작 실패: ${error?.message}")
                     updateNotification("연결 실패")
                 }
             } catch (e: Exception) {
-                // 예외 발생 - 에러음
+                // 예외 발생 - 에러음 & WakeLock 해제
                 beepSoundManager.playErrorSound()
+                releaseWakeLock()
                 Log.e(TAG, "PTT start failed", e)
                 _pttState.value = PTTState.Error("PTT 시작 실패: ${e.message}")
                 updateNotification("연결 실패")
@@ -303,6 +380,7 @@ class PTTForegroundService : Service() {
                 
                 if (result.isSuccess) {
                     beepSoundManager.playEndBeep() // 종료 비프음 재생
+                    releaseWakeLock() // PTT 종료 시 WakeLock 해제
                     _pttState.value = PTTState.Transmitting(false)
                     // 채널에서 완전히 나갔으므로 Disconnected 상태로 변경
                     _pttState.value = PTTState.Disconnected
@@ -310,6 +388,7 @@ class PTTForegroundService : Service() {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "PTT stop failed", e)
+                releaseWakeLock() // 에러 시에도 WakeLock 해제
             }
         }
     }
@@ -357,6 +436,9 @@ class PTTForegroundService : Service() {
         val channel = intent.getStringExtra(EXTRA_CHANNEL) ?: return
         val senderUid = intent.getIntExtra(EXTRA_SENDER_UID, 0)
         
+        // 자동 참여 시에도 WakeLock 획득 (화면 꺼진 상태에서도 수신 보장)
+        acquireWakeLock(30 * 60 * 1000L)
+        
         serviceScope.launch {
             try {
                 Log.i(TAG, "Auto-joining channel: $channel from UID: $senderUid")
@@ -365,11 +447,16 @@ class PTTForegroundService : Service() {
                 val result = pttController.autoJoinChannel(channel, senderUid)
                 
                 if (result.isFailure) {
+                    releaseWakeLock() // 실패 시 WakeLock 해제
                     val error = result.exceptionOrNull()
                     Log.e(TAG, "Auto-join failed", error)
                     _pttState.value = PTTState.Error("자동 참여 실패: ${error?.message}")
+                } else {
+                    Log.i(TAG, "Auto-join successful - WakeLock held for RTM reception")
+                    updateNotification("수신 중...")
                 }
             } catch (e: Exception) {
+                releaseWakeLock() // 예외 시 WakeLock 해제
                 Log.e(TAG, "Auto-join failed", e)
                 _pttState.value = PTTState.Error("자동 참여 실패: ${e.message}")
             }
@@ -485,6 +572,9 @@ class PTTForegroundService : Service() {
         Log.i(TAG, "Service onDestroy")
         
         isServiceRunning = false
+        
+        // WakeLock 해제
+        releaseWakeLock()
         
         // Coroutine 취소
         serviceScope.cancel()

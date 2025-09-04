@@ -388,19 +388,39 @@ class PTTController(
         senderUID: Int
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            Log.i(TAG, "Auto-joining channel: $channel triggered by UID: $senderUID")
+            Log.i(TAG, "Pickup auto-joining channel: $channel triggered by UID: $senderUID")
             
             // 송신자가 같은 타입의 사용자인지 확인
             val senderType = uidManager.getUserTypeFromUID(senderUID)
-            if (senderType != "call_manager" && senderType != "pickup_driver") {
-                Log.w(TAG, "Unknown sender type for UID: $senderUID")
+            Log.d(TAG, "Sender UID: $senderUID, Type: $senderType")
+            
+            // 자신이 보낸 신호는 무시
+            if (senderUID == currentUID) {
+                Log.d(TAG, "Pickup ignoring own PTT signal (UID: $senderUID)")
+                return@withContext Result.success(Unit)
             }
             
-            // 채널 참여 (듣기 모드)
-            joinChannel(channel)
+            // 콜매니저 우선 처리
+            if (senderType == "call_manager") {
+                Log.i(TAG, "Priority auto-join from Call Manager")
+                beepSoundManager.playStartBeep() // 관리자 신호 시 즉시 비프음
+            }
+            
+            // 채널 참여 (듣기 모드) - Result 반환
+            val result = joinChannel(channel)
+            
+            if (result.isSuccess) {
+                Log.i(TAG, "Pickup auto-join successful for channel: $channel")
+            } else {
+                Log.e(TAG, "Pickup auto-join failed for channel: $channel")
+                beepSoundManager.playErrorSound() // 실패 시 에러음
+            }
+            
+            result
             
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to auto-join channel", e)
+            Log.e(TAG, "Failed to auto-join channel: $channel", e)
+            beepSoundManager.playErrorSound() // 예외 시 에러음
             Result.failure(e)
         }
     }
