@@ -13,6 +13,7 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -79,8 +80,6 @@ import com.designated.callmanager.ui.settings.SettingsScreen
 import com.designated.callmanager.ui.settlement.SettlementTabHost
 import com.designated.callmanager.ui.signup.SignUpScreen
 import com.designated.callmanager.ui.theme.CallManagerTheme
-import com.designated.callmanager.ptt.ui.PTTScreen
-import com.designated.callmanager.ui.setup.InitialSetupActivity
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
@@ -90,6 +89,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import android.net.Uri
+import android.os.PowerManager
 import android.content.BroadcastReceiver
 import android.content.IntentFilter
 
@@ -101,8 +102,7 @@ enum class Screen {
     Dashboard,
     Settings,
     PendingDrivers,
-    Settlement,
-    PTT
+    Settlement
 }
 
 // 화면 전환 시 전달할 데이터를 관리하는 Sealed Class
@@ -116,7 +116,7 @@ class MainActivity : ComponentActivity() {
     private val dashboardViewModel: DashboardViewModel by viewModels { 
         androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory(application) 
     }
-    // isRequestingPermissions은 InitialSetup에서 처리하므로 제거
+    private var isRequestingPermissions = java.util.concurrent.atomic.AtomicBoolean(false)
     
     // --- 사용자 정보 ---
     private var regionId: String? = null
@@ -124,7 +124,15 @@ class MainActivity : ComponentActivity() {
     private var managerId: String? = null
     
     
-    // InitialSetup에서 권한을 처리하므로 기존 런처들은 제거
+    // 권한 요청 런처
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val allGranted = permissions.all { it.value }
+        if (!allGranted) {
+            Toast.makeText(this, "일부 기능을 사용하려면 권한이 필요합니다.", Toast.LENGTH_LONG).show()
+        }
+    }
     
 
     // 현재 보여줄 화면 상태를 Activity의 프로퍼티로 선언
@@ -192,27 +200,60 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_SHARED_CALL_ID = "sharedCallId"
     }
 
-    // 기존 권한 런처들은 InitialSetup으로 이동했으므로 제거
+    // 권한 요청 결과 처리
+    private val requestPermissionsLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        isRequestingPermissions.set(false)
+        val allGranted = permissions.entries.all { it.value }
+        
+        if (allGranted) {
+            // 일반 권한 승인 후, 다시 전체 권한 확인 (overlay 등)
+            checkAndRequestPermissions()
+        } else {
+            val deniedPermissions = permissions.filter { !it.value }.keys
+            Toast.makeText(
+                this,
+                "앱 기능 사용에 필요한 권한이 거부되었습니다.",
+                Toast.LENGTH_LONG
+            ).show()
+            // 권한 거부 시 서비스 시작 시도 안함 (startCallManagerServiceIfNeeded 호출 제거)
+        }
+    }
+
+    // 화면 위에 그리기 권한 결과 처리를 위한 ActivityResultLauncher
+    private val overlayPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        isRequestingPermissions.set(false)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val hasPermission = Settings.canDrawOverlays(this)
+            
+            // SharedPreferences KTX 사용
+            getSharedPreferences("call_manager_prefs", MODE_PRIVATE).edit {
+                putBoolean("overlay_permission_requested", true)
+            }
+            
+            if (hasPermission) {
+                // 권한 승인됨 토스트
+                Toast.makeText(this, "백그라운드 콜 표시 활성화됨", Toast.LENGTH_SHORT).show()
+            } else {
+                // 권한 거부됨 토스트
+                Toast.makeText(this, "백그라운드 콜 표시 비활성화됨", Toast.LENGTH_LONG).show()
+            }
+            
+            // 권한 상태 변경 후 최종 확인 및 서비스 시작 시도
+            checkAndRequestPermissions()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         auth = Firebase.auth
 
-        // 최초 설정 완료 여부 확인
-        val setupPrefs = getSharedPreferences("initial_setup", Context.MODE_PRIVATE)
-        val isSetupCompleted = setupPrefs.getBoolean("completed", false)
-        
-        if (!isSetupCompleted) {
-            // 최초 설정이 완료되지 않았으면 InitialSetupActivity로 이동
-            val intent = Intent(this, InitialSetupActivity::class.java)
-            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            startActivity(intent)
-            finish()
-            return
-        }
 
-        // 배터리 최적화 제외 요청 (한 번만 요청) - 이제 InitialSetup에서 처리하므로 제거
-        // checkAndRequestBatteryOptimizationOnce()
+        // 배터리 최적화 제외 요청 (한 번만 요청)
+        checkAndRequestBatteryOptimizationOnce()
         
         // 내부 콜 다이얼로그 브로드캐스트 수신자 등록
         val internalFilter = IntentFilter("com.designated.callmanager.INTERNAL_SHOW_CALL_DIALOG")
@@ -283,7 +324,7 @@ class MainActivity : ComponentActivity() {
                                 // <<-- Start of edit: Add specific log for logout detection -->>
                                 // <<-- End of edit -->>
                                 stopCallManagerService()
-                                // isRequestingPermissions 플래그는 제거됨
+                                isRequestingPermissions.set(false) // 로그아웃 시 플래그 리셋
                                 screenState = Screen.Login
                             }
                         }
@@ -303,7 +344,7 @@ class MainActivity : ComponentActivity() {
                             Screen.Settings -> {
                                 screenState = Screen.Dashboard
                             }
-                            Screen.Settlement, Screen.PendingDrivers, Screen.PTT -> {
+                            Screen.Settlement, Screen.PendingDrivers -> {
                                 screenState = Screen.Settings
                             }
                             Screen.SignUp, Screen.PasswordReset -> {
@@ -334,9 +375,9 @@ class MainActivity : ComponentActivity() {
                         )
                         Screen.PasswordReset -> { /* TODO: Implement Password Reset Screen */ }
                         Screen.Dashboard -> {
-                            // 이제 InitialSetup에서 권한을 처리하므로 여기서는 바로 서비스 시작
+                            // Check permissions only when navigating to Dashboard
                             LaunchedEffect(Unit) {
-                                startCallManagerServiceIfNeeded()
+                                checkAndRequestPermissions()
                             }
                             DashboardScreen(
                                 viewModel = dashboardViewModel,
@@ -356,9 +397,6 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onNavigateToSettlement = {
                                     screenState = Screen.Settlement
-                                },
-                                onNavigateToPTT = {
-                                    screenState = Screen.PTT
                                 }
                             )
                         }
@@ -382,11 +420,6 @@ class MainActivity : ComponentActivity() {
                             SettlementTabHost(
                                 onBack = { screenState = Screen.Settings },
                                 onHome = { screenState = Screen.Dashboard }
-                            )
-                        }
-                        Screen.PTT -> {
-                            PTTScreen(
-                                onNavigateBack = { screenState = Screen.Settings }
                             )
                         }
                     }
@@ -435,15 +468,18 @@ class MainActivity : ComponentActivity() {
                 }
             }
             ACTION_SHOW_SHARED_CALL -> {
+                Log.d("MainActivity", "🔄 ACTION_SHOW_SHARED_CALL 액션 처리 시작")
                 
                 // 여러 방법으로 sharedCallId 추출 시도
                 val sharedCallId = intent.getStringExtra(EXTRA_SHARED_CALL_ID) 
                     ?: intent.getStringExtra("sharedCallId")
                     ?: intent.extras?.getString(EXTRA_SHARED_CALL_ID)
                     ?: intent.extras?.getString("sharedCallId")
-                    
+                
+                Log.d("MainActivity", "📄 sharedCallId 추출 결과: $sharedCallId")
                 
                 if (sharedCallId != null) {
+                    Log.d("MainActivity", "✅ sharedCallId 유효, 처리 진행: $sharedCallId")
                     // 해당 공유콜 알림 제거
                     val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                     val notificationId = "shared_call_$sharedCallId".hashCode()
@@ -470,8 +506,11 @@ class MainActivity : ComponentActivity() {
                             kotlinx.coroutines.delay(300) // 화면 전환 대기
                         }
                         // 공유콜 데이터를 찾아서 알림 팝업 표시
+                        Log.d("MainActivity", "🎯 dashboardViewModel.showSharedCallNotificationFromId 호출: $sharedCallId")
                         dashboardViewModel.showSharedCallNotificationFromId(sharedCallId)
                     }
+                } else {
+                    Log.w("MainActivity", "❌ sharedCallId가 null입니다. Intent extras: ${intent.extras}")
                 }
             }
             ACTION_SHOW_SHARED_CALL_CANCELLED -> {
@@ -685,18 +724,116 @@ class MainActivity : ComponentActivity() {
         stopService(serviceIntent)
     }
 
-    // InitialSetup에서 모든 권한 처리 완료 후 서비스 시작
     private fun checkAndRequestPermissions() {
+        if (!isRequestingPermissions.compareAndSet(false, true)) { // 함수 진입 시 플래그 설정 시도
+            return
+        }
+        
+
+        // --- 1단계: 일반 권한 확인 및 요청 --- 
+        val requiredPermissions = mutableListOf<String>()
+        // 알림 권한 (Android 13+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requiredPermissions.add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+        // 위치 권한 (서비스 동작에 필요)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            requiredPermissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        // COARSE 위치 권한도 함께 요청하는 것이 좋음
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+             requiredPermissions.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
+        
+        
+        // 전화 감지 권한 추가 (콜 디텍터 기능용)
+        val prefs = getSharedPreferences("call_manager_prefs", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("call_detection_enabled", false)) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
+                requiredPermissions.add(Manifest.permission.READ_PHONE_STATE)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_NUMBERS) != PackageManager.PERMISSION_GRANTED) {
+                    requiredPermissions.add(Manifest.permission.READ_PHONE_NUMBERS)
+                }
+            }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
+                requiredPermissions.add(Manifest.permission.READ_CALL_LOG)
+            }
+            // 연락처 읽기 권한 (고객명과 주소 정보)
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+                requiredPermissions.add(Manifest.permission.READ_CONTACTS)
+            }
+            // Android에서는 PROCESS_OUTGOING_CALLS가 deprecated되었지만 여전히 필요할 수 있음
+            if (ContextCompat.checkSelfPermission(this, "android.permission.PROCESS_OUTGOING_CALLS") != PackageManager.PERMISSION_GRANTED) {
+                requiredPermissions.add("android.permission.PROCESS_OUTGOING_CALLS")
+            }
+            // SMS 발송 권한 (공유콜 시스템에서 마감 시 자동 문자 발송용)
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
+                requiredPermissions.add(Manifest.permission.SEND_SMS)
+            }
+        }
+        
+        if (requiredPermissions.isNotEmpty()) {
+            // isRequestingPermissions는 이미 true 상태
+            requestPermissionsLauncher.launch(requiredPermissions.toTypedArray())
+            // 여기서 return, 결과는 requestPermissionsLauncher 콜백에서 처리 후 checkAndRequestPermissions 재호출
+            return 
+        }
+
+        // --- 2단계: 화면 위에 그리기 권한 확인 및 요청 --- 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+
+            // 항상 다이얼로그를 표시하여 사용자에게 권한의 필요성을 알리고 설정으로 유도합니다.
+            showOverlayPermissionDialog()
+            return // 다이얼로그를 띄우고 나면, 사용자의 선택을 기다려야 하므로 여기서 함수를 종료합니다.
+        }
+
+        // --- 3단계: 모든 권한 확인 완료, 서비스 시작 --- 
         startCallManagerServiceIfNeeded()
+        
+        // 모든 확인/요청 절차 완료 후 플래그 최종 리셋
+        isRequestingPermissions.set(false)
     }
 
-    // 서비스 시작 (권한 체크 없이 - InitialSetup에서 이미 완료)
+    private fun showOverlayPermissionDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("필수 권한 안내")
+            .setMessage("앱의 정상적인 사용을 위해 '다른 앱 위에 표시' 권한이 반드시 필요합니다. 설정 화면으로 이동하여 권한을 허용해주세요.")
+            .setPositiveButton("설정으로 이동") { _, _ ->
+                val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+                overlayPermissionLauncher.launch(intent)
+            }
+            .setNegativeButton("나중에") { dialog, _ ->
+                Toast.makeText(this, "권한이 없어 일부 기능이 제한됩니다.", Toast.LENGTH_LONG).show()
+                isRequestingPermissions.set(false) // 다이얼로그가 닫혔으므로 플래그 리셋
+                dialog.dismiss()
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    // 서비스 시작 로직 분리 (중복 호출 방지 및 명확성)
     private fun startCallManagerServiceIfNeeded() {
-        val serviceIntent = Intent(this, CallManagerService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
+        // 필수 권한 확인 (예: 위치 권한)
+        val hasLocationPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        
+        // 필요한 모든 권한이 부여되었는지 확인 후 서비스 관리
+        if (hasLocationPermission) { // 서비스 시작에 필요한 최소 권한 (여기서는 위치)
+            // ViewModel을 통해 서비스 시작 요청 (중복 실행 방지 로직은 ViewModel 또는 Service 내부에 있어야 함)
+            val serviceIntent = Intent(this, CallManagerService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
         } else {
-            startService(serviceIntent)
+             Toast.makeText(this, "위치 권한이 없어 콜 서비스를 시작할 수 없습니다.", Toast.LENGTH_LONG).show()
+             // 권한 부족 시에도 서비스가 실행 중이면 중지 (선택적, ViewModel에서 처리 가능)
+             val serviceIntent = Intent(this, CallManagerService::class.java)
+             stopService(serviceIntent)
         }
     }
     
@@ -738,7 +875,49 @@ class MainActivity : ComponentActivity() {
         stopService(serviceIntent)
     }
     
-    // 배터리 최적화는 InitialSetupActivity에서 처리
+    private fun checkAndRequestBatteryOptimizationOnce() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val packageName = packageName
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            val prefs = getSharedPreferences("call_manager_prefs", MODE_PRIVATE)
+            val hasRequestedBefore = prefs.getBoolean("battery_optimization_requested", false)
+            
+            if (!powerManager.isIgnoringBatteryOptimizations(packageName) && !hasRequestedBefore) {
+                
+                AlertDialog.Builder(this)
+                    .setTitle("백그라운드 작업 허용")
+                    .setMessage("콜 매니저가 백그라운드에서 정상 작동하려면 배터리 최적화에서 제외해야 합니다.\n\n기사 운행 시작/완료 알림을 받으려면 설정에서 이 앱을 '최적화하지 않음'으로 설정해 주세요.")
+                    .setPositiveButton("설정으로 이동") { _, _ ->
+                        // 요청했음을 기록
+                        prefs.edit {
+                            putBoolean("battery_optimization_requested", true)
+                        }
+                        
+                        try {
+                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                            intent.data = Uri.parse("package:$packageName")
+                            startActivity(intent)
+                        } catch (_: Exception) {
+                            // 대체 방법: 일반 배터리 최적화 설정 화면
+                            try {
+                                val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                startActivity(intent)
+                            } catch (_: Exception) {
+                            }
+                        }
+                    }
+                    .setNegativeButton("나중에") { _, _ -> 
+                        // 나중에 선택해도 요청했음을 기록 (하루 후 다시 요청하려면 이 줄 제거)
+                        prefs.edit {
+                            putBoolean("battery_optimization_requested", true)
+                        }
+                    }
+                    .show()
+            } else if (powerManager.isIgnoringBatteryOptimizations(packageName)) {
+            } else {
+            }
+        }
+    }
     
     
     /**

@@ -33,7 +33,7 @@ data class DetectorConfigUiState(
 )
 
 // 화면 상태를 나타내는 enum 추가
-enum class ScreenState { SETTINGS, STATUS }
+enum class ScreenState { LOGIN, SETTINGS, STATUS }
 
 class DetectorConfigViewModel(application: Application) : AndroidViewModel(application) {
 

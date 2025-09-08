@@ -15,6 +15,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,6 +60,11 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import android.util.Log
 
 
 private const val TAG = "DashboardScreen"
@@ -109,6 +116,7 @@ fun DashboardScreen(
     val sharedCalls by viewModel.sharedCalls.collectAsState()
     val officeName by viewModel.officeName.collectAsStateWithLifecycle()
     val officeId by viewModel.officeId.collectAsStateWithLifecycle()
+    val officeStatus by viewModel.officeStatus.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     var callIdForDriverAssignment by remember { mutableStateOf<String?>(null) }
@@ -133,6 +141,8 @@ fun DashboardScreen(
     // ★★★ 새로운 콜 팝업 상태 추가 ★★★
     val showNewCallPopup by viewModel.showNewCallPopup.collectAsStateWithLifecycle()
     val newCallInfo by viewModel.newCallInfo.collectAsStateWithLifecycle()
+    val showNewSharedCallPopup by viewModel.showNewSharedCallPopup.collectAsStateWithLifecycle()
+    val newSharedCallInfo by viewModel.newSharedCallInfo.collectAsStateWithLifecycle()
 
     // 공유콜 취소 알림 다이얼로그 상태 추가
     val showSharedCallCancelledDialog by viewModel.showSharedCallCancelledDialog.collectAsStateWithLifecycle()
@@ -144,6 +154,72 @@ fun DashboardScreen(
     // State for shared call accept dialog
     var selectedSharedCall by remember { mutableStateOf<SharedCallInfo?>(null) }
     var showSharedAcceptDialog by remember { mutableStateOf(false) }
+
+    // 앱이 백그라운드로 갔던 시간을 기록
+    var backgroundTime by remember { mutableStateOf(0L) }
+    
+    // 앱 생명주기를 관찰하여 오래된 팝업만 닫기
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> {
+                    // 백그라운드로 갈 때 시간 기록
+                    backgroundTime = System.currentTimeMillis()
+                    Log.d(TAG, "App went to background at: $backgroundTime")
+                }
+                Lifecycle.Event.ON_RESUME -> {
+                    val currentTime = System.currentTimeMillis()
+                    val timeDifference = currentTime - backgroundTime
+                    
+                    // 5초 이상 백그라운드에 있었던 경우에만 팝업 닫기
+                    if (timeDifference > 5000) {
+                        Log.d(TAG, "App was in background for ${timeDifference}ms, dismissing old popups")
+                        
+                        if (showNewCallPopup) {
+                            viewModel.dismissNewCallPopup()
+                            Log.d(TAG, "Dismissed old new call popup")
+                        }
+                        if (showNewSharedCallPopup) {
+                            viewModel.dismissNewSharedCallPopup()
+                            Log.d(TAG, "Dismissed old shared call popup")
+                        }
+                        if (showTripStartedPopup) {
+                            viewModel.dismissTripStartedPopup()
+                            Log.d(TAG, "Dismissed old trip started popup")
+                        }
+                        if (showTripCompletedPopup) {
+                            viewModel.dismissTripCompletedPopup()
+                            Log.d(TAG, "Dismissed old trip completed popup")
+                        }
+                        if (showDriverLoginPopup) {
+                            viewModel.dismissDriverLoginPopup()
+                            Log.d(TAG, "Dismissed old driver login popup")
+                        }
+                        if (showApprovalPopup) {
+                            viewModel.dismissApprovalPopup()
+                            Log.d(TAG, "Dismissed old approval popup")
+                        }
+                        if (showDriverLogoutPopup) {
+                            viewModel.dismissDriverLogoutPopup()
+                            Log.d(TAG, "Dismissed old driver logout popup")
+                        }
+                        if (showSharedCallCancelledDialog) {
+                            viewModel.dismissSharedCallCancelledDialog()
+                            Log.d(TAG, "Dismissed old shared call cancelled dialog")
+                        }
+                    } else {
+                        Log.d(TAG, "App was in background for only ${timeDifference}ms, keeping popups")
+                    }
+                }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.startForegroundService(context)
@@ -189,6 +265,17 @@ fun DashboardScreen(
             }
         }
     }
+
+    LaunchedEffect(showNewSharedCallPopup) {
+        if (showNewSharedCallPopup) {
+            val prefs = context.getSharedPreferences("call_manager_settings", Context.MODE_PRIVATE)
+            val newCallNotificationEnabled = prefs.getBoolean("new_call_notification", true)
+            if (newCallNotificationEnabled) {
+                playNotificationSound(context)
+            }
+        }
+    }
+
 
 
 
@@ -318,7 +405,26 @@ fun DashboardScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(text = officeName ?: "사무실 정보 로딩 중...") },
+                title = { 
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(text = officeName ?: "사무실 정보 로딩 중...")
+                        Text(
+                            text = when (officeStatus) {
+                                "CLOSED" -> "🔴 마감"
+                                "AUTO_SHARING" -> "🟡 자동공유중" 
+                                else -> "🟢 운영중"
+                            },
+                            fontSize = 12.sp,
+                            color = when (officeStatus) {
+                                "CLOSED" -> Color.Red
+                                "AUTO_SHARING" -> Color.Yellow
+                                else -> Color.Green
+                            }
+                        )
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onLogout) {
                         Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "로그아웃")
@@ -345,10 +451,10 @@ fun DashboardScreen(
                 modifier = Modifier.fillMaxSize().padding(paddingValues).padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // 4:2:4 비율로 3개 카드 세로 배치
-                // 내부 호출 목록 카드 (비율 4) - 완료된 콜, 취소된 콜, 공유완료된 콜 제외
+                // 4.5:4.5:1 비율로 3개 카드 세로 배치
+                // 내부 호출 목록 카드 (비율 4.5) - 완료된 콜, 취소된 콜, 공유완료된 콜 제외
                 CallListContainer(
-                    modifier = Modifier.fillMaxWidth().weight(4f),
+                    modifier = Modifier.fillMaxWidth().weight(4.5f),
                     calls = calls.filter { call ->
                         val status = CallStatus.fromFirestoreValue(call.status)
                         status != CallStatus.COMPLETED && status != CallStatus.CANCELED && status != CallStatus.SHARED_OUT
@@ -358,9 +464,9 @@ fun DashboardScreen(
                     onAddCallClick = { viewModel.createPlaceholderCall() }
                 )
 
-                // 공유 콜 카드 (비율 2) - 모든 상태 표시
+                // 공유 콜 카드 (비율 4.5) - 모든 상태 표시 (내부 호출 목록과 같은 크기)
                 SharedCallListContainer(
-                    modifier = Modifier.fillMaxWidth().weight(2f),
+                    modifier = Modifier.fillMaxWidth().weight(4.5f),
                     sharedCalls = sharedCalls, // 모든 상태 표시
                     onAccept = { call ->
                         selectedSharedCall = call
@@ -376,9 +482,9 @@ fun DashboardScreen(
                     currentOfficeId = officeId
                 )
 
-                // 기사 상태 카드 (비율 4)
+                // 기사 상태 카드 (비율 1) - 하단에 최소 크기로 배치
                 DriverStatusCard(
-                    modifier = Modifier.fillMaxWidth().weight(4f),
+                    modifier = Modifier.fillMaxWidth().weight(1f),
                     drivers = drivers,
                     calls = calls
                 )
@@ -414,6 +520,32 @@ fun DashboardScreen(
                 )
                 showSharedAcceptDialog = false
                 selectedSharedCall = null
+            }
+        )
+    }
+
+    // ---- FCM 공유콜 알림 팝업 ----
+    if (showNewSharedCallPopup && newSharedCallInfo != null) {
+        val call = newSharedCallInfo!!
+        val waitingDrivers = drivers.filter { driver ->
+            val statusEnum = DriverStatus.fromString(driver.status?.trim() ?: "")
+            statusEnum == DriverStatus.WAITING || statusEnum == DriverStatus.ONLINE
+        }
+        SharedCallAcceptDialog(
+            sharedCall = call,
+            availableDrivers = waitingDrivers,
+            onDismiss = { 
+                viewModel.dismissNewSharedCallPopup()
+            },
+            onConfirm = { dep, dest, fare, driver ->
+                viewModel.claimSharedCallWithDetails(
+                    sharedCallId = call.id,
+                    departure = dep,
+                    destination = dest,
+                    fare = fare,
+                    driverId = driver?.id
+                )
+                viewModel.dismissNewSharedCallPopup()
             }
         )
     }
@@ -571,27 +703,31 @@ fun DriverStatusCard(
     drivers: List<DriverInfo>,
     calls: List<CallInfo>
 ) {
+    val context = LocalContext.current
+    
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A)),
         shape = RoundedCornerShape(8.dp)
     ) {
-        Column {
-            // 타이틀 영역만 패딩 적용
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 기사 현황 타이틀
             Text(
-                text = "기사 현황", 
-                style = MaterialTheme.typography.titleMedium, 
+                text = "기사",
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
-                modifier = Modifier.padding(16.dp)
+                modifier = Modifier.padding(end = 12.dp)
             )
-            // 자식 카드들은 부모 카드의 경계와 일치
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                contentPadding = PaddingValues(bottom = 16.dp) // 하단만 패딩
-            ) {
-                val sortedDrivers = drivers.sortedWith(compareBy<DriverInfo> { driver ->
+            
+            // 기사 상태 리스트 (가로 스크롤)
+            val sortedDrivers = remember(drivers) {
+                drivers.sortedWith(compareBy<DriverInfo> { driver ->
                     val status = DriverStatus.fromString(driver.status)
                     when (status) {
                         DriverStatus.WAITING -> 0  // 대기중 우선
@@ -601,17 +737,69 @@ fun DriverStatusCard(
                         DriverStatus.OFFLINE -> 4   // 오프라인 마지막
                         else -> 5
                     }
-                }.thenBy { it.name }) // 같은 상태 내에서는 이름순
-                
+                }.thenBy { it.name })
+            }
+            
+            LazyRow(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 items(sortedDrivers, key = { it.id }) { driver ->
-                    val driverCall = calls.find { 
-                        it.assignedDriverId == driver.id && 
-                        (it.status == "IN_PROGRESS" || it.status == "ACCEPTED")
-                    }
-                    DriverStatusItem(driver = driver, currentCall = driverCall)
+                    DriverStatusCompactItem(
+                        driver = driver,
+                        onClick = {
+                            // 전화 걸기
+                            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${driver.phoneNumber}"))
+                            try {
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "전화를 걸 수 없습니다", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+fun DriverStatusCompactItem(
+    driver: DriverInfo,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .clickable { onClick() }
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        // 상태 표시 원형
+        Box(
+            modifier = Modifier
+                .size(12.dp)
+                .background(
+                    color = when (DriverStatus.fromString(driver.status)) {
+                        DriverStatus.WAITING -> Color(0xFF4CAF50) // 초록 - 대기중
+                        DriverStatus.ON_TRIP -> Color(0xFFF44336) // 빨강 - 운행중
+                        DriverStatus.PREPARING -> Color(0xFFFFA000) // 주황 - 준비중
+                        DriverStatus.ONLINE -> Color(0xFF2196F3) // 파랑 - 온라인
+                        DriverStatus.OFFLINE -> Color(0xFF9E9E9E) // 회색 - 오프라인
+                        else -> Color.Gray
+                    },
+                    shape = CircleShape
+                )
+        )
+        
+        // 기사 이름
+        Text(
+            text = driver.name,
+            color = Color.White,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
 

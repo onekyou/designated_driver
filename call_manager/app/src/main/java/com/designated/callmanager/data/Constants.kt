@@ -41,8 +41,8 @@ object Constants {
     const val DRIVER_STATUS_WAITING = "WAITING" // This is different from call waiting.
 
     // Office Status
-    const val OFFICE_STATUS_OPERATING = "operating"
-    const val OFFICE_STATUS_CLOSED_SHARING = "closed_sharing"
+    const val OFFICE_STATUS_OPERATING = "OPEN"
+    const val OFFICE_STATUS_CLOSED_SHARING = "CLOSED"
 
     // ViewModel Status
     const val STATUS_LOADING = "loading"

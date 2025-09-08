@@ -159,100 +159,106 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             
-            // ⭐️ 기존 채널들을 모두 삭제하고 새로 생성 (Sticky 사운드 적용을 위해)
+            // 이전 버전 채널 삭제 (한 번만)
             try {
-                notificationManager.deleteNotificationChannel("new_call_fcm_channel") // 이전 버전 삭제
-                notificationManager.deleteNotificationChannel(NEW_CALL_CHANNEL_ID) // 현재 버전도 삭제 후 재생성
-                notificationManager.deleteNotificationChannel(STATUS_CHANGE_CHANNEL_ID) // 상태변경 채널 삭제
-                notificationManager.deleteNotificationChannel(DRIVER_UPDATE_CHANNEL_ID) // 기사업데이트 채널 삭제
-                notificationManager.deleteNotificationChannel(SHARED_CALL_CHANNEL_ID) // 공유콜 채널 삭제
-                Log.i(TAG, "🔄 기존 알림 채널들 삭제 완료 - Sticky 사운드로 재생성")
+                val oldChannel = notificationManager.getNotificationChannel("new_call_fcm_channel")
+                if (oldChannel != null) {
+                    notificationManager.deleteNotificationChannel("new_call_fcm_channel")
+                    Log.i(TAG, "이전 버전 채널 삭제 완료")
+                }
             } catch (e: Exception) {
-                Log.w(TAG, "기존 채널 삭제 중 오류 (무시해도 됨): ${e.message}")
+                Log.w(TAG, "이전 버전 채널 삭제 중 오류 (무시해도 됨): ${e.message}")
             }
             
-            // 새로운 콜 채널 - 최고 우선순위로 설정
-            val newCallChannel = NotificationChannel(
-                NEW_CALL_CHANNEL_ID,
-                "새로운 콜 알림 (긴급)",
-                NotificationManager.IMPORTANCE_MAX // ⭐️ IMPORTANCE_MAX로 변경
-            ).apply {
-                description = "새로운 콜 접수 긴급 알림"
-                enableLights(true)
-                lightColor = Color.RED
-                enableVibration(true)
-                vibrationPattern = longArrayOf(0, 1000, 500, 1000, 500, 1000) // ⭐️ 더 강한 진동
-                setShowBadge(true)
-                lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC // ⭐️ 잠금화면 표시
-                setBypassDnd(true) // ⭐️ 방해금지 모드 무시
-                // ⭐️ 시스템 설정 기본 알림음 사용 (사용자 설정 반영)
-                setSound(Settings.System.DEFAULT_NOTIFICATION_URI, AudioAttributes.Builder()
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                    .build())
+            // 새로운 콜 채널 - 없을 때만 생성
+            if (notificationManager.getNotificationChannel(NEW_CALL_CHANNEL_ID) == null) {
+                val newCallChannel = NotificationChannel(
+                    NEW_CALL_CHANNEL_ID,
+                    "새로운 콜 알림 (긴급)",
+                    NotificationManager.IMPORTANCE_MAX
+                ).apply {
+                    description = "새로운 콜 접수 긴급 알림"
+                    enableLights(true)
+                    lightColor = Color.RED
+                    enableVibration(true)
+                    vibrationPattern = longArrayOf(0, 1000, 500, 1000, 500, 1000)
+                    setShowBadge(true)
+                    lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+                    setBypassDnd(true)
+                    setSound(Settings.System.DEFAULT_NOTIFICATION_URI, AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                        .build())
+                }
+                notificationManager.createNotificationChannel(newCallChannel)
+                Log.i(TAG, "새로운 콜 채널 생성 완료")
             }
             
-            // 상태 변경 채널
-            val statusChangeChannel = NotificationChannel(
-                STATUS_CHANGE_CHANNEL_ID,
-                "운행 상태 변경 알림",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "기사 운행 상태 변경 알림"
-                enableLights(true)
-                lightColor = Color.BLUE
-                enableVibration(true)
-                vibrationPattern = longArrayOf(0, 300, 100, 300, 100, 300)
-                setShowBadge(true)
-                // ⭐️ 시스템 설정 기본 알림음 사용 (사용자 설정 반영)
-                setSound(Settings.System.DEFAULT_NOTIFICATION_URI, AudioAttributes.Builder()
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                    .build())
+            // 상태 변경 채널 - 없을 때만 생성
+            if (notificationManager.getNotificationChannel(STATUS_CHANGE_CHANNEL_ID) == null) {
+                val statusChangeChannel = NotificationChannel(
+                    STATUS_CHANGE_CHANNEL_ID,
+                    "운행 상태 변경 알림",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "기사 운행 상태 변경 알림"
+                    enableLights(true)
+                    lightColor = Color.BLUE
+                    enableVibration(true)
+                    vibrationPattern = longArrayOf(0, 300, 100, 300, 100, 300)
+                    setShowBadge(true)
+                    setSound(Settings.System.DEFAULT_NOTIFICATION_URI, AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                        .build())
+                }
+                notificationManager.createNotificationChannel(statusChangeChannel)
+                Log.i(TAG, "상태 변경 채널 생성 완료")
             }
             
-            // 기사 업데이트 채널
-            val driverUpdateChannel = NotificationChannel(
-                DRIVER_UPDATE_CHANNEL_ID,
-                "기사 응답 알림",
-                NotificationManager.IMPORTANCE_DEFAULT
-            ).apply {
-                description = "기사 수락/거절 알림"
-                enableVibration(true)
-                setShowBadge(true)
-                // ⭐️ 시스템 설정 기본 알림음 사용 (사용자 설정 반영)
-                setSound(Settings.System.DEFAULT_NOTIFICATION_URI, AudioAttributes.Builder()
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                    .build())
+            // 기사 업데이트 채널 - 없을 때만 생성
+            if (notificationManager.getNotificationChannel(DRIVER_UPDATE_CHANNEL_ID) == null) {
+                val driverUpdateChannel = NotificationChannel(
+                    DRIVER_UPDATE_CHANNEL_ID,
+                    "기사 응답 알림",
+                    NotificationManager.IMPORTANCE_DEFAULT
+                ).apply {
+                    description = "기사 수락/거절 알림"
+                    enableVibration(true)
+                    setShowBadge(true)
+                    setSound(Settings.System.DEFAULT_NOTIFICATION_URI, AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                        .build())
+                }
+                notificationManager.createNotificationChannel(driverUpdateChannel)
+                Log.i(TAG, "기사 업데이트 채널 생성 완료")
             }
             
-            // 공유콜 채널
-            val sharedCallChannel = NotificationChannel(
-                SHARED_CALL_CHANNEL_ID,
-                "공유콜 알림",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "새로운 공유콜 도착 알림"
-                enableLights(true)
-                lightColor = Color.YELLOW
-                enableVibration(true)
-                vibrationPattern = longArrayOf(0, 500, 200, 500, 200, 500)
-                setShowBadge(true)
-                lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
-                // ⭐️ Sticky 알림음 설정 (기존 기본 알림음 대신)
-                val stickyUri = Settings.System.DEFAULT_NOTIFICATION_URI
-                setSound(stickyUri, AudioAttributes.Builder()
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                    .build())
+            // 공유콜 채널 - 없을 때만 생성
+            if (notificationManager.getNotificationChannel(SHARED_CALL_CHANNEL_ID) == null) {
+                val sharedCallChannel = NotificationChannel(
+                    SHARED_CALL_CHANNEL_ID,
+                    "공유콜 알림",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "새로운 공유콜 도착 알림"
+                    enableLights(true)
+                    lightColor = Color.YELLOW
+                    enableVibration(true)
+                    vibrationPattern = longArrayOf(0, 500, 200, 500, 200, 500)
+                    setShowBadge(true)
+                    lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+                    setSound(Settings.System.DEFAULT_NOTIFICATION_URI, AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                        .build())
+                }
+                notificationManager.createNotificationChannel(sharedCallChannel)
+                Log.i(TAG, "공유콜 채널 생성 완료")
             }
             
-            notificationManager.createNotificationChannels(listOf(
-                newCallChannel, statusChangeChannel, driverUpdateChannel, sharedCallChannel
-            ))
-            
-            Log.i(TAG, "알림 채널 생성 완료: ${NEW_CALL_CHANNEL_ID}")
+            Log.i(TAG, "알림 채널 확인 완료")
         }
     }
 
@@ -283,13 +289,32 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val departure = remoteMessage.data["departure"] ?: "출발지"
         val destination = remoteMessage.data["destination"] ?: "도착지"
         val fare = remoteMessage.data["fare"] ?: "0"
+        val callType = remoteMessage.data["callType"] ?: ""
+        
+        // 마감콜인지 확인하여 다른 표시
+        val (title, content, description) = when (callType) {
+            "AFTER_HOURS", "MISSED_CALL", "AFTER_HOURS_QUICK" -> {
+                Triple(
+                    "🌙 마감콜 공유",
+                    "마감 후 접수된 콜",
+                    "마감 후 접수된 콜"
+                )
+            }
+            else -> {
+                Triple(
+                    "🔄 새로운 공유콜!",
+                    "$departure → $destination",
+                    "출발지: $departure\n도착지: $destination\n요금: ${fare}원\n\n다른 사무실에서 공유한 콜입니다."
+                )
+            }
+        }
         
         showNotification(
             channelId = SHARED_CALL_CHANNEL_ID,
             notificationId = "shared_call_$sharedCallId".hashCode(),
-            title = "🔄 새로운 공유콜!",
-            content = "$departure → $destination",
-            bigText = "출발지: $departure\n도착지: $destination\n요금: ${fare}원\n\n다른 사무실에서 공유한 콜입니다.",
+            title = title,
+            content = content,
+            bigText = description,
             callId = sharedCallId,
             color = ContextCompat.getColor(this, android.R.color.holo_orange_dark),
             autoCancel = true,

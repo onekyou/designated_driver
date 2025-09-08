@@ -84,9 +84,14 @@ class CallDetectorApplication : Application() {
     private fun setupFirebaseAuth() {
         val auth = FirebaseAuth.getInstance()
         
-        android.util.Log.d("Firebase", "현재 인증 상태: ${auth.currentUser}")
+        // 로그아웃 상태 확인
+        val prefs = getSharedPreferences("app_state", MODE_PRIVATE)
+        val isLoggedOut = prefs.getBoolean("is_logged_out", false)
         
-        if (auth.currentUser == null) {
+        android.util.Log.d("Firebase", "현재 인증 상태: ${auth.currentUser}, 로그아웃 상태: $isLoggedOut")
+        
+        // 사용자가 명시적으로 로그아웃한 경우 자동 재로그인 하지 않음
+        if (auth.currentUser == null && !isLoggedOut) {
             android.util.Log.d("Firebase", "익명 인증 시작...")
             
             auth.signInAnonymously()
@@ -101,8 +106,21 @@ class CallDetectorApplication : Application() {
                         android.util.Log.e("Firebase", "❌ 익명 인증 실패: ${task.exception?.message}", task.exception)
                     }
                 }
+        } else if (isLoggedOut) {
+            android.util.Log.d("Firebase", "🚫 로그아웃 상태이므로 자동 인증 건너뜀")
         } else {
             android.util.Log.d("Firebase", "✅ 이미 인증됨: ${auth.currentUser?.uid}")
+        }
+    }
+    
+    companion object {
+        /**
+         * 로그아웃 상태 설정
+         */
+        fun setLogoutState(context: Context, isLoggedOut: Boolean) {
+            val prefs = context.getSharedPreferences("app_state", Context.MODE_PRIVATE)
+            prefs.edit().putBoolean("is_logged_out", isLoggedOut).apply()
+            android.util.Log.d("Firebase", "로그아웃 상태 변경: $isLoggedOut")
         }
     }
 }
