@@ -26,6 +26,9 @@
     <color name="on_error">#000000</color>
     <color name="disabled">#404040</color>
     
+    <!-- Material Design Colors -->
+    <color name="purple_500">#9C27B0</color>
+    
     <!-- Basic Colors -->
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>

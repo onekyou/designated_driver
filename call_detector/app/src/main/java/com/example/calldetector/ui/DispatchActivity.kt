@@ -85,9 +85,9 @@ class DispatchActivity : ComponentActivity() {
     private suspend fun loadAvailableDrivers(regionId: String, officeId: String): List<DriverInfo> {
         return try {
             val db = FirebaseFirestore.getInstance()
-            val driversPath = "regions/$regionId/offices/$officeId/drivers"
+            val driversPath = "regions/$regionId/offices/$officeId/designated_drivers"
             val snapshot = db.collection(driversPath)
-                .whereEqualTo("status", "WAITING")
+                .whereEqualTo("status", "ONLINE")
                 .get()
                 .await()
             
@@ -141,10 +141,10 @@ class DispatchActivity : ComponentActivity() {
         // 콜 문서 생성
         db.collection(callPath).add(callData)
         
-        // 기사 상태를 BUSY로 변경
-        val driverPath = "regions/$regionId/offices/$officeId/drivers"
+        // 기사 상태를 ON_TRIP으로 변경
+        val driverPath = "regions/$regionId/offices/$officeId/designated_drivers"
         db.collection(driverPath).document(driver.id)
-            .update("status", "BUSY")
+            .update("status", "ON_TRIP")
     }
     
     private fun createCallOnHold(

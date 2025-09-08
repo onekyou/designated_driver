@@ -34,6 +34,8 @@ import com.example.calldetector.data.RegionItem
 import com.example.calldetector.ui.DetectorConfigViewModel
 import com.example.calldetector.ui.DetectorConfigViewModelFactory
 import com.example.calldetector.ui.ScreenState
+import com.example.calldetector.ui.login.LoginScreen
+import com.google.firebase.auth.FirebaseAuth
 import android.util.Log
 
 class MainActivity : ComponentActivity() {
@@ -45,13 +47,15 @@ class MainActivity : ComponentActivity() {
             Manifest.permission.READ_PHONE_STATE,
             Manifest.permission.READ_CALL_LOG,
             Manifest.permission.READ_CONTACTS,
-            Manifest.permission.POST_NOTIFICATIONS
+            Manifest.permission.POST_NOTIFICATIONS,
+            Manifest.permission.SEND_SMS
         )
     } else {
         arrayOf(
             Manifest.permission.READ_PHONE_STATE,
             Manifest.permission.READ_CALL_LOG,
-            Manifest.permission.READ_CONTACTS
+            Manifest.permission.READ_CONTACTS,
+            Manifest.permission.SEND_SMS
         )
     }
 
@@ -81,7 +85,39 @@ class MainActivity : ComponentActivity() {
                     factory = DetectorConfigViewModelFactory(application)
                 )
                 
-                var currentScreen by remember { mutableStateOf(ScreenState.SETTINGS) }
+                // 자동 로그인 체크
+                val isLoggedIn = remember { 
+                    val prefs = getSharedPreferences("call_detector_auth", Context.MODE_PRIVATE)
+                    prefs.getBoolean("is_logged_in", false) && 
+                    prefs.getString("region_id", null) != null &&
+                    prefs.getString("office_id", null) != null
+                }
+                
+                var currentScreen by remember { 
+                    mutableStateOf(if (isLoggedIn) ScreenState.STATUS else ScreenState.LOGIN) 
+                }
+                
+                // 자동 로그인된 경우 detector_config 복원 및 서비스 시작
+                LaunchedEffect(isLoggedIn) {
+                    if (isLoggedIn) {
+                        val authPrefs = getSharedPreferences("call_detector_auth", Context.MODE_PRIVATE)
+                        val regionId = authPrefs.getString("region_id", null)
+                        val officeId = authPrefs.getString("office_id", null)
+                        
+                        if (regionId != null && officeId != null) {
+                            // detector_config에도 복원 (서비스에서 사용)
+                            val detectorPrefs = getSharedPreferences("detector_config", Context.MODE_PRIVATE)
+                            detectorPrefs.edit().apply {
+                                putString("regionId", regionId)
+                                putString("officeId", officeId)
+                                putString("deviceName", android.os.Build.MODEL)
+                                apply()
+                            }
+                        }
+                        
+                        startCallDetectorServiceIfNeeded()
+                    }
+                }
 
                 LaunchedEffect(key1 = viewModel) {
                     viewModel.onSettingsSaved.collect { savedSuccessfully: Boolean ->
@@ -97,9 +133,49 @@ class MainActivity : ComponentActivity() {
                 }
 
                 when (currentScreen) {
+                    ScreenState.LOGIN -> LoginScreen(
+                        onLoginComplete = { regionId, officeId -> 
+                            // 로그인 성공시 자동 로그인 정보 저장
+                            val authPrefs = getSharedPreferences("call_detector_auth", Context.MODE_PRIVATE)
+                            authPrefs.edit().apply {
+                                putBoolean("is_logged_in", true)
+                                putString("region_id", regionId)
+                                putString("office_id", officeId)
+                                putLong("login_timestamp", System.currentTimeMillis())
+                                apply()
+                            }
+                            
+                            // 콜디텍터 설정에도 저장 (서비스에서 사용)
+                            val detectorPrefs = getSharedPreferences("detector_config", Context.MODE_PRIVATE)
+                            detectorPrefs.edit().apply {
+                                putString("regionId", regionId)
+                                putString("officeId", officeId)
+                                putString("deviceName", android.os.Build.MODEL) // 기기 모델명을 deviceName으로 사용
+                                apply()
+                            }
+                            
+                            currentScreen = ScreenState.STATUS
+                            startCallDetectorServiceIfNeeded() // 서비스 시작
+                        },
+                        onNavigateToPasswordReset = { /* 비밀번호 리셋 기능은 나중에 구현 */ }
+                    )
                     ScreenState.SETTINGS -> MainScreen(viewModel = viewModel)
                     ScreenState.STATUS -> StatusScreen(
-                        onNavigateToSettings = { currentScreen = ScreenState.SETTINGS }
+                        onNavigateToSettings = { currentScreen = ScreenState.SETTINGS },
+                        onLogout = {
+                            // 로그아웃 처리
+                            val authPrefs = getSharedPreferences("call_detector_auth", Context.MODE_PRIVATE)
+                            authPrefs.edit().clear().apply()
+                            
+                            val detectorPrefs = getSharedPreferences("detector_config", Context.MODE_PRIVATE)
+                            detectorPrefs.edit().clear().apply()
+                            
+                            // Firebase 로그아웃 및 자동 재로그인 방지
+                            FirebaseAuth.getInstance().signOut()
+                            CallDetectorApplication.setLogoutState(this@MainActivity, true)
+                            
+                            currentScreen = ScreenState.LOGIN
+                        }
                     )
                 }
             }
@@ -431,7 +507,10 @@ fun MainScreen(viewModel: DetectorConfigViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StatusScreen(onNavigateToSettings: () -> Unit) {
+fun StatusScreen(
+    onNavigateToSettings: () -> Unit,
+    onLogout: () -> Unit
+) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -499,6 +578,38 @@ fun StatusScreen(onNavigateToSettings: () -> Unit) {
                         textAlign = TextAlign.Center
                     )
                 }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // 개인번호 관리 버튼 추가
+            val context = LocalContext.current
+            Button(
+                onClick = {
+                    val intent = Intent(context, ExcludeNumberActivity::class.java)
+                    context.startActivity(intent)
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF2196F3), // 파란색
+                    contentColor = Color.White
+                )
+            ) {
+                Text("📱 개인번호 관리", style = MaterialTheme.typography.titleMedium)
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // 로그아웃 버튼 추가
+            Button(
+                onClick = onLogout,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFD32F2F), // 빨간색
+                    contentColor = Color.White
+                )
+            ) {
+                Text("로그아웃", style = MaterialTheme.typography.titleMedium)
             }
         }
     }

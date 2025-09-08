@@ -9,7 +9,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Radio
-import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,7 +27,6 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToPendingDrivers: (regionId: String, officeId: String) -> Unit,
     onNavigateToSettlement: () -> Unit,
-    onNavigateToPTT: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val officeStatus by dashboardViewModel.officeStatus.collectAsStateWithLifecycle()
@@ -122,26 +120,11 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.width(16.dp))
                 Text("정산 관리", style = MaterialTheme.typography.bodyLarge)
             }
+            // --- ---
 
             Divider()
 
-            // --- PTT 무전 시스템 메뉴 ---
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onNavigateToPTT() }
-                    .padding(vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.RecordVoiceOver,
-                    contentDescription = "PTT 무전 시스템",
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(16.dp))
-                Text("PTT 무전 시스템", style = MaterialTheme.typography.bodyLarge)
-            }
-
+            Divider()
 
             // --- 기사 가입 승인 메뉴 ---
             Row(

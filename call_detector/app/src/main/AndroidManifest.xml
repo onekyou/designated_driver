@@ -34,6 +34,9 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    
+    <!-- SMS 발송 권한 (공유콜 시스템용) -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
 
     <application
         android:allowBackup="true"
@@ -57,6 +60,28 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        
+        <!-- 기사 배차 액티비티 -->
+        <activity
+            android:name=".ui.DispatchActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CallDetector"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true" />
+        
+        <!-- 개인번호 관리 액티비티 -->
+        <activity
+            android:name=".ExcludeNumberActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CallDetector.AppCompat"
+            android:label="개인번호 관리" />
+            
+        <!-- 연락처 선택 액티비티 -->
+        <activity
+            android:name=".ContactSelectionActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CallDetector.AppCompat"
+            android:label="연락처 선택" />
         
         <!-- 전화 상태 변경 브로드캐스트 리시버 -->
         <receiver

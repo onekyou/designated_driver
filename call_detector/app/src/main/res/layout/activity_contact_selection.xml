@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- 검색 영역 -->
+    <EditText
+        android:id="@+id/contactSearchEditText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="연락처 이름 또는 번호로 검색"
+        android:inputType="text"
+        android:background="@drawable/search_background"
+        android:drawableLeft="@android:drawable/ic_menu_search"
+        android:drawablePadding="8dp"
+        android:layout_marginBottom="8dp" />
+
+    <!-- 카운트 및 컨트롤 영역 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:id="@+id/contactCountTextView"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="연락처 0개 중 0개 선택"
+            android:textSize="14sp"
+            android:textColor="@android:color/darker_gray" />
+
+        <Button
+            android:id="@+id/selectAllButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="전체 선택"
+            android:textSize="12sp"
+            android:backgroundTint="@color/secondary"
+            android:textColor="@android:color/white"
+            android:minWidth="80dp" />
+
+    </LinearLayout>
+
+    <!-- 연락처 목록 -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/contactRecyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:scrollbars="vertical" />
+
+    <!-- 확인 버튼 -->
+    <Button
+        android:id="@+id/confirmButton"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="선택 완료 (0개)"
+        android:textSize="16sp"
+        android:backgroundTint="@color/primary"
+        android:textColor="@android:color/black"
+        android:layout_marginTop="16dp" />
+
+</LinearLayout>

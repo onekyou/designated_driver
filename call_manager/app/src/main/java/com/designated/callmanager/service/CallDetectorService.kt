@@ -20,6 +20,7 @@ import android.os.IBinder
 import android.provider.CallLog
 import android.provider.ContactsContract
 import android.telephony.TelephonyManager
+import android.telephony.SmsManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -31,6 +32,7 @@ import com.google.firebase.Timestamp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 class CallDetectorService : Service() {
     private var lastProcessedPhoneNumber: String? = null
@@ -109,8 +111,11 @@ class CallDetectorService : Service() {
             
             // 1. Handle call termination (IDLE state) - 통화 종료 시 팝업 생성
             if (callState == TelephonyManager.CALL_STATE_IDLE) {
-                if (phoneNumber == lastProcessedPhoneNumber) {
-                    Log.i(TAG, "📞 Call with $phoneNumber ended (IDLE state received). Processing call data and showing popup.")
+                // phoneNumber가 null일 경우 마지막 처리된 번호 사용
+                val finalPhoneNumber = phoneNumber ?: lastProcessedPhoneNumber
+                
+                if (finalPhoneNumber != null && finalPhoneNumber == lastProcessedPhoneNumber) {
+                    Log.i(TAG, "📞 Call with $finalPhoneNumber ended (IDLE state received). Processing call data and showing popup.")
                     
                     // 수신전화 종료 시 Firestore 저장 + 팝업 생성
                     if (isIncomingCall) {
@@ -126,51 +131,26 @@ class CallDetectorService : Service() {
                         }
                         
                         // 연락처 정보 조회
-                        val (contactName, contactAddress) = getContactInfo(applicationContext, phoneNumber)
+                        val (contactName, contactAddress) = getContactInfo(applicationContext, finalPhoneNumber)
                         
-                        // Firestore에 콜 데이터 저장
+                        // 사무실 상태에 따라 일반 콜 또는 공유 콜 생성
                         val regionId = sharedPreferences.getString("regionId", null)
                         val officeId = sharedPreferences.getString("officeId", null)
                         
                         if (regionId != null && officeId != null) {
-                            Log.i(TAG, "📝 Saving call to Firestore - Region: $regionId, Office: $officeId")
+                            Log.i(TAG, "📝 Processing call with office status check - Region: $regionId, Office: $officeId")
                             
                             val deviceName = sharedPreferences.getString("deviceName", android.os.Build.MODEL) ?: android.os.Build.MODEL
                             
-                            val callData = hashMapOf<String, Any>(
-                                "phoneNumber" to phoneNumber,
-                                "customerName" to (contactName ?: ""),
-                                "customerAddress" to (contactAddress ?: ""),
-                                "status" to CallStatus.WAITING.firestoreValue,
-                                "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                                "detectedTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                                "regionId" to regionId,
-                                "officeId" to officeId,
-                                "deviceName" to deviceName,
-                                "callType" to "수신",
-                                "timestampClient" to System.currentTimeMillis(),
-                                "fromCallManager" to true // 콜매니저에서 생성된 콜임을 표시
+                            // 사무실 상태 확인 후 콜 처리
+                            checkOfficeStatusAndSaveCall(
+                                regionId,
+                                officeId,
+                                finalPhoneNumber,
+                                contactName,
+                                contactAddress,
+                                deviceName
                             )
-                            
-                            val targetPath = "regions/$regionId/offices/$officeId/calls"
-                            val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                            
-                            firestore.collection(targetPath)
-                                .add(callData)
-                                .addOnSuccessListener { documentReference ->
-                                    Log.i(TAG, "✅ Call data saved to Firestore with ID: ${documentReference.id}")
-                                    
-                                    // 통화 종료 시 포그라운드 전환 + 팝업 생성
-                                    Log.i(TAG, "🎯 Call ended - bringing CallManager to foreground and showing popup for call ID: ${documentReference.id}")
-                                    bringCallManagerToForegroundForNewCall(documentReference.id, phoneNumber, contactName, contactAddress)
-                                    
-                                    Log.i(TAG, "✅ Call end processing and popup trigger completed")
-                                }
-                                .addOnFailureListener { e ->
-                                    Log.e(TAG, "❌ Failed to save call data to Firestore: ${e.message}", e)
-                                    // 실패해도 포그라운드 전환은 수행
-                                    bringCallManagerToForeground()
-                                }
                         } else {
                             Log.w(TAG, "⚠️ RegionId or OfficeId not configured - only bringing to foreground")
                             bringCallManagerToForeground()
@@ -180,6 +160,10 @@ class CallDetectorService : Service() {
                     // 처리 완료 후 리셋
                     lastProcessedPhoneNumber = null
                     lastProcessedCallTime = 0L
+                } else if (finalPhoneNumber == null) {
+                    Log.w(TAG, "⚠️ Both phoneNumber and lastProcessedPhoneNumber are null in IDLE state")
+                } else {
+                    Log.d(TAG, "📞 IDLE state for different number ($finalPhoneNumber vs $lastProcessedPhoneNumber) - ignoring")
                 }
             }
             // 2. Handle incoming call answered (OFFHOOK state) - 단순히 기록만
@@ -196,10 +180,29 @@ class CallDetectorService : Service() {
                 lastProcessedCallTime = currentTime
 
                 // OFFHOOK 상태에서는 단순히 기록만 하고, 실제 처리는 IDLE 상태에서 수행
+            }
+            // 3. Handle incoming call ringing (RINGING state) - 마감 시 빠른 SMS 발송
+            else if (callState == TelephonyManager.CALL_STATE_RINGING && isIncomingCall) {
+                Log.i(TAG, "📞 CallManager: Incoming call ringing from: $phoneNumber")
+                
+                // 마감 상태인지 확인 후 2-3초 후 SMS 발송
+                serviceScope.launch {
+                    val regionId = sharedPreferences.getString("regionId", null)
+                    val officeId = sharedPreferences.getString("officeId", null)
+                    
+                    Log.i(TAG, "🔍 CallManager RINGING - regionId: $regionId, officeId: $officeId")
+                    
+                    if (regionId != null && officeId != null) {
+                        checkOfficeStatusForQuickResponse(regionId, officeId, phoneNumber)
+                    } else {
+                        Log.w(TAG, "⚠️ CallManager RINGING - regionId or officeId is null, cannot send SMS")
+                        // null인 경우 Firebase에서 직접 가져오기 시도
+                        tryGetOfficeInfoFromFirebase(phoneNumber)
+                    }
+                }
             } else {
-                // 수신 전화가 아니거나, OFFHOOK 상태가 아닌 경우 (예: RINGING 중, 또는 IDLE - 거절/부재중)
-                // 이 경우에는 아무 작업도 하지 않음 (CallManager 실행 안 함, Firestore 저장 안 함)
-                Log.i(TAG, "ℹ️ Call is not an answered incoming call (State: $callState, Incoming: $isIncomingCall). Expected OFFHOOK state is ${TelephonyManager.CALL_STATE_OFFHOOK}. No action taken.")
+                // 기타 상태들
+                Log.i(TAG, "ℹ️ Other call state (State: $callState, Incoming: $isIncomingCall). No action taken.")
             }
         } else {
             Log.w(TAG, "⚠️ Phone number is null. Cannot process call. State: $callState, Incoming: $isIncomingCall")
@@ -296,7 +299,153 @@ class CallDetectorService : Service() {
     inner class CallLogObserver(handler: Handler) : ContentObserver(handler) {
         override fun onChange(change: Boolean) {
             super.onChange(change)
+            Log.i(TAG, "📞 CallLog 변경 감지 - 최근 통화 확인 중...")
+            checkLastCallLog()
         }
+    }
+    
+    /**
+     * CallLog에서 최근 부재중 전화 확인
+     */
+    private fun checkLastCallLog() {
+        serviceScope.launch {
+            try {
+                // READ_CALL_LOG 권한 확인
+                if (ContextCompat.checkSelfPermission(this@CallDetectorService, Manifest.permission.READ_CALL_LOG) 
+                    != PackageManager.PERMISSION_GRANTED) {
+                    Log.w(TAG, "READ_CALL_LOG 권한이 없습니다.")
+                    return@launch
+                }
+                
+                val projection = arrayOf(
+                    CallLog.Calls.NUMBER,
+                    CallLog.Calls.TYPE,
+                    CallLog.Calls.DATE,
+                    CallLog.Calls.CACHED_NAME
+                )
+                
+                val cursor = contentResolver.query(
+                    CallLog.Calls.CONTENT_URI,
+                    projection,
+                    null,
+                    null,
+                    "${CallLog.Calls.DATE} DESC"
+                )
+                
+                cursor?.use {
+                    if (it.moveToFirst()) {
+                        val number = it.getString(it.getColumnIndexOrThrow(CallLog.Calls.NUMBER))
+                        val type = it.getInt(it.getColumnIndexOrThrow(CallLog.Calls.TYPE))
+                        val date = it.getLong(it.getColumnIndexOrThrow(CallLog.Calls.DATE))
+                        val cachedName = it.getString(it.getColumnIndexOrThrow(CallLog.Calls.CACHED_NAME))
+                        
+                        Log.d(TAG, "📞 CallManager 최근 통화 - 번호: $number, 타입: $type, 시간: $date, 이름: $cachedName")
+                        
+                        // 부재중 전화이고, 최근 5초 이내이며, 서비스 시작 이후인지 확인
+                        if (type == CallLog.Calls.MISSED_TYPE && 
+                            (System.currentTimeMillis() - date) < 5000 &&
+                            date > serviceStartTime) {
+                            
+                            Log.i(TAG, "📞 CallManager 부재중 전화 감지: $number")
+                            
+                            // 사무실 상태 확인 후 처리
+                            val regionId = sharedPreferences.getString("regionId", null)
+                            val officeId = sharedPreferences.getString("officeId", null)
+                            
+                            if (regionId != null && officeId != null) {
+                                checkOfficeStatusForMissedCall(regionId, officeId, number, cachedName)
+                            } else {
+                                Log.w(TAG, "❌ CallManager RegionId 또는 OfficeId가 설정되지 않음")
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ CallManager CallLog 확인 실패", e)
+            }
+        }
+    }
+    
+    /**
+     * 부재중 전화에 대한 사무실 상태 확인 및 처리
+     */
+    private suspend fun checkOfficeStatusForMissedCall(
+        regionId: String,
+        officeId: String,
+        phoneNumber: String,
+        contactName: String?
+    ) {
+        try {
+            val firestore = FirebaseFirestore.getInstance()
+            val document = firestore.collection("regions").document(regionId)
+                .collection("offices").document(officeId)
+                .get()
+                .await()
+            
+            val officeStatus = document.getString("status") ?: "OPEN"
+            val officeName = document.getString("name") ?: "사무실"
+            
+            Log.i(TAG, "📞 CallManager 부재중 전화 - 사무실 상태: $officeStatus")
+            
+            if (officeStatus == "CLOSED") {
+                Log.i(TAG, "🌙 CallManager 마감 상태에서 부재중 전화 처리 시작")
+                
+                val (fullContactName, contactAddress) = getContactInfo(applicationContext, phoneNumber)
+                val deviceName = sharedPreferences.getString("deviceName", android.os.Build.MODEL) ?: android.os.Build.MODEL
+                val finalContactName = fullContactName ?: contactName
+                
+                // 공유콜 생성
+                createSharedCallFromMissed(regionId, officeId, phoneNumber, finalContactName, contactAddress, deviceName)
+                
+                // SMS 발송
+                sendAutoSMS(phoneNumber, officeName)
+                
+                Log.i(TAG, "✅ CallManager 부재중 전화 처리 완료 - 공유콜 생성 및 SMS 발송")
+            } else {
+                Log.i(TAG, "🏢 CallManager 운영중 - 부재중 전화 무시")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ CallManager 부재중 전화 처리 실패", e)
+        }
+    }
+    
+    /**
+     * 부재중 전화에서 공유 콜 생성 (CallManager용)
+     */
+    private fun createSharedCallFromMissed(
+        regionId: String,
+        officeId: String,
+        phoneNumber: String,
+        contactName: String?,
+        contactAddress: String?,
+        deviceName: String
+    ) {
+        val sharedCallData = hashMapOf<String, Any>(
+            "phoneNumber" to phoneNumber,
+            "sourceRegionId" to regionId,
+            "sourceOfficeId" to officeId,
+            "targetRegionId" to regionId, // 해당 지역 모든 사무실에 공유
+            "deviceName" to deviceName,
+            "status" to "OPEN",
+            "timestamp" to FieldValue.serverTimestamp(),
+            "callType" to "MISSED_CALL", // 부재중 전화
+            "timestampClient" to System.currentTimeMillis(),
+            "fromMissedCall" to true, // 부재중 전화에서 생성됨을 표시
+            "fromCallManager" to true // 콜매니저에서 생성된 콜임을 표시
+        )
+        
+        contactName?.let { sharedCallData["customerName"] = it }
+        contactAddress?.let { sharedCallData["customerAddress"] = it }
+        
+        val firestore = FirebaseFirestore.getInstance()
+        firestore.collection("shared_calls")
+            .add(sharedCallData)
+            .addOnSuccessListener { documentReference ->
+                Log.i(TAG, "✅ CallManager 부재중 전화 공유콜 생성 완료 - ID: ${documentReference.id}")
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "❌ CallManager 부재중 전화 공유콜 생성 실패: ${e.message}", e)
+            }
     }
 
     private fun bringCallManagerToForeground() {
@@ -439,6 +588,339 @@ class CallDetectorService : Service() {
         
         notificationManager.notify(999, notification)
         Log.i(TAG, "🚀 Full-screen intent notification posted - should bring app to foreground")
+    }
+    
+    /**
+     * 사무실 상태 확인 후 일반 콜 또는 공유 콜 생성
+     */
+    private fun checkOfficeStatusAndSaveCall(
+        regionId: String,
+        officeId: String,
+        phoneNumber: String,
+        contactName: String?,
+        contactAddress: String?,
+        deviceName: String
+    ) {
+        Log.i(TAG, "🔍 CallManager 사무실 상태 확인 시작 - Region: $regionId, Office: $officeId, Phone: $phoneNumber")
+        
+        // 사무실 상태 확인
+        val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        firestore.collection("regions").document(regionId)
+            .collection("offices").document(officeId)
+            .get()
+            .addOnSuccessListener { document ->
+                if (!document.exists()) {
+                    Log.e(TAG, "❌ CallManager 사무실 문서가 존재하지 않음: regions/$regionId/offices/$officeId")
+                    createNormalCall(regionId, officeId, phoneNumber, contactName, contactAddress, deviceName)
+                    return@addOnSuccessListener
+                }
+                
+                val officeStatus = document.getString("status") ?: "OPEN"
+                val officeName = document.getString("name") ?: "사무실"
+                
+                Log.i(TAG, "📊 CallManager 사무실 상태 확인 완료 - 상태: $officeStatus, 이름: $officeName")
+                
+                when (officeStatus) {
+                    "CLOSED" -> {
+                        Log.i(TAG, "🌙 CallManager 사무실 마감 상태 - 공유콜 생성 및 SMS 발송 진행")
+                        // 마감 상태: shared_calls에 저장 및 자동 SMS 발송
+                        createSharedCall(regionId, officeId, phoneNumber, contactName, contactAddress, deviceName)
+                        sendAutoSMS(phoneNumber, officeName)
+                    }
+                    else -> {
+                        Log.i(TAG, "🏢 CallManager 사무실 운영중 - 일반 콜 생성 및 팝업 표시")
+                        // 운영중: 기존대로 calls에 저장 + 팝업 생성
+                        createNormalCall(regionId, officeId, phoneNumber, contactName, contactAddress, deviceName)
+                    }
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "❌ CallManager 사무실 상태 확인 실패: ${e.message}", e)
+                // 실패시 기본적으로 calls에 저장
+                createNormalCall(regionId, officeId, phoneNumber, contactName, contactAddress, deviceName)
+            }
+    }
+    
+    /**
+     * 일반 콜 생성 (운영중)
+     */
+    private fun createNormalCall(
+        regionId: String,
+        officeId: String,
+        phoneNumber: String,
+        contactName: String?,
+        contactAddress: String?,
+        deviceName: String
+    ) {
+        val callData = hashMapOf<String, Any>(
+            "phoneNumber" to phoneNumber,
+            "customerName" to (contactName ?: ""),
+            "customerAddress" to (contactAddress ?: ""),
+            "status" to CallStatus.WAITING.firestoreValue,
+            "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+            "detectedTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+            "regionId" to regionId,
+            "officeId" to officeId,
+            "deviceName" to deviceName,
+            "callType" to "수신",
+            "timestampClient" to System.currentTimeMillis(),
+            "fromCallManager" to true // 콜매니저에서 생성된 콜임을 표시
+        )
+        
+        val targetPath = "regions/$regionId/offices/$officeId/calls"
+        val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        
+        firestore.collection(targetPath)
+            .add(callData)
+            .addOnSuccessListener { documentReference ->
+                Log.i(TAG, "✅ Call data saved to Firestore with ID: ${documentReference.id}")
+                
+                // 통화 종료 시 포그라운드 전환 + 팝업 생성
+                Log.i(TAG, "🎯 Call ended - bringing CallManager to foreground and showing popup for call ID: ${documentReference.id}")
+                bringCallManagerToForegroundForNewCall(documentReference.id, phoneNumber, contactName, contactAddress)
+                
+                Log.i(TAG, "✅ Call end processing and popup trigger completed")
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "❌ Failed to save call data to Firestore: ${e.message}", e)
+                // 실패해도 포그라운드 전환은 수행
+                bringCallManagerToForeground()
+            }
+    }
+    
+    /**
+     * 공유 콜 생성 (마감 상태)
+     */
+    private fun createSharedCall(
+        regionId: String,
+        officeId: String,
+        phoneNumber: String,
+        contactName: String?,
+        contactAddress: String?,
+        deviceName: String
+    ) {
+        val sharedCallData = hashMapOf<String, Any>(
+            "phoneNumber" to phoneNumber,
+            "sourceRegionId" to regionId,
+            "sourceOfficeId" to officeId,
+            "targetRegionId" to regionId, // 같은 지역 내 공유
+            "deviceName" to deviceName,
+            "status" to "OPEN",
+            "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+            "callType" to "AFTER_HOURS", // 퇴근 후 콜
+            "timestampClient" to System.currentTimeMillis(),
+            "fromCallManager" to true // 콜매니저에서 생성된 콜임을 표시
+        )
+        
+        contactName?.let { sharedCallData["customerName"] = it }
+        contactAddress?.let { sharedCallData["customerAddress"] = it }
+        
+        val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        firestore.collection("shared_calls")
+            .add(sharedCallData)
+            .addOnSuccessListener { documentReference ->
+                Log.i(TAG, "✅ Shared call created with ID: ${documentReference.id}")
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "❌ Failed to create shared call: ${e.message}", e)
+            }
+    }
+    
+    /**
+     * 자동 SMS 발송
+     */
+    private fun sendAutoSMS(phoneNumber: String, officeName: String) {
+        try {
+            Log.i(TAG, "🔔 CallManager SMS 발송 시작 - 번호: $phoneNumber, 사무실: $officeName")
+            
+            // SMS 권한 체크
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.SEND_SMS) 
+                != PackageManager.PERMISSION_GRANTED) {
+                Log.e(TAG, "❌ CallManager SMS 권한이 없습니다. SEND_SMS 권한을 확인하세요.")
+                // 권한이 없을 때 토스트 메시지 표시
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    android.widget.Toast.makeText(this, "SMS 권한이 없어 문자를 보낼 수 없습니다", android.widget.Toast.LENGTH_LONG).show()
+                }
+                return
+            }
+            
+            Log.i(TAG, "✅ CallManager SMS 권한 확인 완료")
+            
+            val message = "[$officeName] 운영시간이 종료되었습니다. 잠시 후 다시 연락드리겠습니다."
+            
+            Log.i(TAG, "📝 CallManager SMS 메시지 내용: $message")
+            
+            val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                getSystemService(SmsManager::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                SmsManager.getDefault()
+            }
+            
+            Log.i(TAG, "📱 CallManager SmsManager 획득 완료, 발송 시도 중...")
+            
+            smsManager.sendTextMessage(phoneNumber, null, message, null, null)
+            
+            Log.i(TAG, "✅ CallManager 자동 SMS 발송 완료: $phoneNumber")
+            
+            // 성공 시 토스트 메시지 표시
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                android.widget.Toast.makeText(this, "마감 안내 문자 전송 완료", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ CallManager SMS 발송 실패 - 예외: ${e.message}", e)
+            // 실패 시 토스트 메시지 표시
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                android.widget.Toast.makeText(this, "SMS 발송 실패: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    
+    /**
+     * Firebase에서 관리자 정보를 가져와서 SMS 발송 시도
+     */
+    private suspend fun tryGetOfficeInfoFromFirebase(phoneNumber: String) {
+        try {
+            val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+            val currentUser = auth.currentUser
+            
+            if (currentUser == null) {
+                Log.e(TAG, "❌ No authenticated user, cannot get office info")
+                return
+            }
+            
+            val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            
+            // admins 컬렉션에서 현재 사용자 정보 조회
+            val adminDoc = firestore.collection("admins")
+                .document(currentUser.uid)
+                .get()
+                .await()
+            
+            if (!adminDoc.exists()) {
+                Log.e(TAG, "❌ Admin document not found for user: ${currentUser.uid}")
+                return
+            }
+            
+            val regionId = adminDoc.getString("associatedRegionId")
+            val officeId = adminDoc.getString("associatedOfficeId")
+            
+            Log.i(TAG, "✅ Got office info from Firebase - regionId: $regionId, officeId: $officeId")
+            
+            if (regionId != null && officeId != null) {
+                // SharedPreferences에 저장
+                sharedPreferences.edit().apply {
+                    putString("regionId", regionId)
+                    putString("officeId", officeId)
+                    apply()
+                }
+                
+                // SMS 발송 진행
+                checkOfficeStatusForQuickResponse(regionId, officeId, phoneNumber)
+            } else {
+                Log.e(TAG, "❌ Region or Office ID is null in admin document")
+            }
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to get office info from Firebase", e)
+        }
+    }
+    
+    /**
+     * 마감 상태 확인 후 빠른 SMS 발송 (RINGING 상태용)
+     */
+    private suspend fun checkOfficeStatusForQuickResponse(
+        regionId: String,
+        officeId: String,
+        phoneNumber: String
+    ) {
+        try {
+            Log.i(TAG, "🔔 CallManager RINGING - 사무실 상태 확인 시작 (Region: $regionId, Office: $officeId)")
+            
+            val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            val document = firestore.collection("regions").document(regionId)
+                .collection("offices").document(officeId)
+                .get()
+                .await()
+            
+            if (!document.exists()) {
+                Log.e(TAG, "❌ CallManager RINGING - 사무실 문서가 존재하지 않음")
+                return
+            }
+            
+            val officeStatus = document.getString("status") ?: "OPEN"
+            val officeName = document.getString("name") ?: "사무실"
+            
+            Log.i(TAG, "📞 CallManager RINGING 상태에서 사무실 상태 확인 완료: $officeStatus (사무실명: $officeName)")
+            
+            if (officeStatus == "CLOSED") {
+                Log.i(TAG, "🌙 CallManager 마감 상태 확인 - 2초 후 SMS 발송 예정")
+                
+                // 2초 대기 후 SMS 발송
+                kotlinx.coroutines.delay(2000)
+                
+                Log.i(TAG, "⏰ CallManager 2초 대기 완료 - 연락처 정보 조회 중...")
+                
+                val (contactName, contactAddress) = getContactInfo(applicationContext, phoneNumber)
+                val deviceName = sharedPreferences.getString("deviceName", android.os.Build.MODEL) ?: android.os.Build.MODEL
+                
+                Log.i(TAG, "📝 CallManager 공유콜 생성 시작...")
+                
+                // 공유콜 생성 (RINGING에서)
+                createSharedCallFromRinging(regionId, officeId, phoneNumber, contactName, contactAddress, deviceName)
+                
+                Log.i(TAG, "📨 CallManager SMS 발송 함수 호출...")
+                
+                // SMS 발송
+                sendAutoSMS(phoneNumber, officeName)
+                
+                Log.i(TAG, "✅ CallManager 마감 시 빠른 응답 완료 (RINGING → SMS)")
+            } else {
+                Log.i(TAG, "🏢 CallManager 사무실 운영중 (상태: $officeStatus) - SMS 발송 안함")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ CallManager 빠른 응답 처리 실패: ${e.message}", e)
+        }
+    }
+    
+    /**
+     * RINGING 상태에서 공유 콜 생성 (콜매니저용)
+     */
+    private fun createSharedCallFromRinging(
+        regionId: String,
+        officeId: String,
+        phoneNumber: String,
+        contactName: String?,
+        contactAddress: String?,
+        deviceName: String
+    ) {
+        val sharedCallData = hashMapOf<String, Any>(
+            "phoneNumber" to phoneNumber,
+            "sourceRegionId" to regionId,
+            "sourceOfficeId" to officeId,
+            "targetRegionId" to regionId, // 해당 지역 모든 사무실에 공유
+            "deviceName" to deviceName,
+            "status" to "OPEN",
+            "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+            "callType" to "AFTER_HOURS_QUICK", // 마감 후 빠른 응답
+            "timestampClient" to System.currentTimeMillis(),
+            "fromRinging" to true, // RINGING 상태에서 생성됨을 표시
+            "fromCallManager" to true // 콜매니저에서 생성된 콜임을 표시
+        )
+        
+        contactName?.let { sharedCallData["customerName"] = it }
+        contactAddress?.let { sharedCallData["customerAddress"] = it }
+        
+        val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        firestore.collection("shared_calls")
+            .add(sharedCallData)
+            .addOnSuccessListener { documentReference ->
+                Log.i(TAG, "✅ CallManager Quick response shared call created with ID: ${documentReference.id}")
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "❌ CallManager Failed to create quick response shared call: ${e.message}", e)
+            }
     }
 
     override fun onDestroy() {

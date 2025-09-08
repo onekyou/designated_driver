@@ -226,6 +226,7 @@ export const onSharedCallCreated = onDocumentCreated(
           departure: sharedCallData.departure || "",
           destination: sharedCallData.destination || "",
           fare: (sharedCallData.fare || 0).toString(),
+          callType: sharedCallData.callType || "",
           click_action: "ACTION_SHOW_SHARED_CALL",
         },
         android: {

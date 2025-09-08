@@ -137,6 +137,10 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     val showNewCallPopup: StateFlow<Boolean> = _showNewCallPopup
     private val _newCallInfo = MutableStateFlow<CallInfo?>(null)
     val newCallInfo: StateFlow<CallInfo?> = _newCallInfo
+    private val _showNewSharedCallPopup = MutableStateFlow(false)
+    val showNewSharedCallPopup: StateFlow<Boolean> = _showNewSharedCallPopup
+    private val _newSharedCallInfo = MutableStateFlow<com.designated.callmanager.data.SharedCallInfo?>(null)
+    val newSharedCallInfo: StateFlow<com.designated.callmanager.data.SharedCallInfo?> = _newSharedCallInfo
 
     private var callsListener: ListenerRegistration? = null
     private var driversListener: ListenerRegistration? = null
@@ -178,6 +182,30 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         stopListening()
         val officeRef = firestore.collection("regions").document(regionId)
             .collection("offices").document(officeId)
+        
+        // 사무실 상태 리스닝 추가
+        officeRef.addSnapshotListener { snapshot, e ->
+            if (e != null) {
+                Log.e(TAG, "사무실 상태 리스닝 오류", e)
+                return@addSnapshotListener
+            }
+            
+            if (snapshot != null && snapshot.exists()) {
+                val status = snapshot.getString("status") ?: "OPEN"
+                _officeStatus.value = status
+                Log.d(TAG, "사무실 상태 업데이트: $status")
+            } else {
+                // 사무실 문서가 없거나 status 필드가 없으면 기본값으로 초기화
+                _officeStatus.value = "OPEN"
+                Log.d(TAG, "사무실 상태 기본값으로 설정: OPEN")
+                
+                // 기본 status 필드 생성
+                officeRef.set(mapOf("status" to "OPEN"), com.google.firebase.firestore.SetOptions.merge())
+                    .addOnSuccessListener {
+                        Log.d(TAG, "기본 status 필드 생성 완료")
+                    }
+            }
+        }
 
         callsListener = officeRef.collection("calls")
             .orderBy("timestamp", Query.Direction.DESCENDING)
@@ -309,18 +337,21 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             _sharedCalls.value = sharedMap.values.sortedByDescending { it.timestamp?.seconds ?: 0 }
         }
 
-        // Listener A: region 내 OPEN 콜만 표시 (CLAIMED는 내부콜로 이동하므로 숨김)
+        // Listener A: 같은 지역 내 다른 사무실에서 생성된 OPEN 공유콜 표시
+        Log.d(TAG, "[SharedCalls] 🔍 Setting up listener for sourceRegionId=$regionId, status=OPEN")
         val listenerA = firestore.collection("shared_calls")
-            .whereEqualTo("targetRegionId", regionId)
+            .whereEqualTo("sourceRegionId", regionId)
             .whereEqualTo("status", "OPEN")
             .addSnapshotListener { snapshots, e ->
                 if (e != null) {
-                    Log.w(TAG, "[SharedCalls] Listener failed.", e)
+                    Log.w(TAG, "[SharedCalls] ❌ Listener failed.", e)
                     return@addSnapshotListener
                 }
-                Log.d(TAG, "[SharedCalls] Received ${snapshots?.size()} documents")
+                Log.d(TAG, "[SharedCalls] 📥 Received ${snapshots?.size()} documents")
                 snapshots?.documentChanges?.forEach { dc ->
                     val doc = dc.document
+                    val docData = doc.data
+                    Log.d(TAG, "[SharedCalls] 📄 Document ${doc.id}: targetRegionId=${docData["targetRegionId"]}, sourceRegionId=${docData["sourceRegionId"]}, status=${docData["status"]}")
                     val data = doc.toObject(com.designated.callmanager.data.SharedCallInfo::class.java)
                         ?.copy(id = doc.id)
 
@@ -553,11 +584,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         _callInfoForDialog.value = callInfo
     }
 
-    fun updateOfficeStatus(newStatus: String) {
-        getOfficeRef()?.update("status", newStatus)
-            ?.addOnSuccessListener { Log.d(TAG, "Office status updated to $newStatus") }
-            ?.addOnFailureListener { e -> Log.e(TAG, "Error updating office status", e) }
-    }
 
     private fun getOfficeRef() = regionId.value?.let { rId ->
         officeId.value?.let { oId ->
@@ -711,6 +737,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         _newCallInfo.value = null
     }
 
+    fun dismissNewSharedCallPopup() {
+        _showNewSharedCallPopup.value = false
+        _newSharedCallInfo.value = null
+    }
+
     fun assignNewCall(driverId: String) {
         val callInfo = _newCallInfo.value
         if (callInfo != null) {
@@ -723,6 +754,39 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
      * '+' 아이콘 클릭 시 호출: 기본값으로 WAITING 상태의 콜 문서를 먼저 생성하여
      * 기존 대기 호출 흐름(NewCallPopup)과 동일하게 처리되도록 한다.
      */
+    /**
+     * 설정 페이지에서 사용하는 사무실 상태 업데이트 함수
+     */
+    fun updateOfficeStatus(newStatus: String) {
+        val region = _regionId.value ?: return
+        val office = _officeId.value ?: return
+        
+        viewModelScope.launch {
+            try {
+                val officeRef = firestore.collection("regions").document(region)
+                    .collection("offices").document(office)
+                
+                val currentStatus = _officeStatus.value
+                
+                // 즉시 로컬 상태 업데이트 (UI 반응성 향상)
+                _officeStatus.value = newStatus
+                
+                // Firebase 업데이트 (set with merge를 사용하여 필드가 없어도 생성)
+                officeRef.set(mapOf("status" to newStatus), com.google.firebase.firestore.SetOptions.merge())
+                    .addOnSuccessListener {
+                        Log.d(TAG, "사무실 상태 업데이트 성공: $currentStatus -> $newStatus")
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e(TAG, "사무실 상태 업데이트 실패", e)
+                        // 실패시 원래 상태로 롤백
+                        _officeStatus.value = currentStatus
+                    }
+            } catch (e: Exception) {
+                Log.e(TAG, "사무실 상태 업데이트 중 오류", e)
+            }
+        }
+    }
+
     fun createPlaceholderCall() {
         val region = _regionId.value ?: return
         val office = _officeId.value ?: return
@@ -863,8 +927,16 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     "originalCallId" to callInfo.id, // 원본 콜 ID 저장
                     "timestamp" to Timestamp.now()
                 )
+                
+                Log.d(TAG, "🚀 [SharedCall-Create] Creating shared call:")
+                Log.d(TAG, "   📍 sourceRegionId: $region")
+                Log.d(TAG, "   📍 sourceOfficeId: $office") 
+                Log.d(TAG, "   🎯 targetRegionId: $region")
+                Log.d(TAG, "   📞 phoneNumber: ${callInfo.phoneNumber}")
+                Log.d(TAG, "   📄 originalCallId: ${callInfo.id}")
                 docRef.set(data).await()
-                Log.d(TAG, "Shared call uploaded: ${docRef.id}")
+                Log.d(TAG, "✅ [SharedCall-Create] Shared call uploaded successfully: ${docRef.id}")
+                Log.d(TAG, "🔔 [SharedCall-Create] Cloud Functions should now notify other offices in region: $region")
 
                 // 원본 콜을 공유콜로 표시하고 내부 목록에 유지
                 val origCallRef = firestore.collection("regions").document(region)
@@ -1034,9 +1106,34 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
 
 
-    fun showSharedCallNotificationFromId(callId: String) {
-        Log.d(TAG, "showSharedCallNotificationFromId called with callId: $callId")
-        // 공유콜 알림 표시 로직
+    fun showSharedCallNotificationFromId(sharedCallId: String) {
+        Log.d(TAG, "showSharedCallNotificationFromId called with sharedCallId: $sharedCallId")
+        viewModelScope.launch {
+            try {
+                // Firestore에서 공유콜 정보 가져오기
+                val sharedCallDoc = firestore.collection("shared_calls").document(sharedCallId).get().await()
+                
+                if (sharedCallDoc.exists()) {
+                    val sharedCallData = sharedCallDoc.toObject(com.designated.callmanager.data.SharedCallInfo::class.java)
+                        ?.copy(id = sharedCallDoc.id)
+                    
+                    if (sharedCallData != null) {
+                        Log.d(TAG, "공유콜 데이터 로드 성공: ${sharedCallData.departure} → ${sharedCallData.destination}")
+                        
+                        // 공유콜 팝업 표시를 위해 상태 업데이트
+                        _showNewSharedCallPopup.value = true
+                        _newSharedCallInfo.value = sharedCallData
+                        Log.d(TAG, "공유콜 팝업 상태 업데이트 완료")
+                    } else {
+                        Log.w(TAG, "공유콜 데이터 파싱 실패")
+                    }
+                } else {
+                    Log.w(TAG, "공유콜 문서가 존재하지 않음: $sharedCallId")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "공유콜 데이터 로드 오류", e)
+            }
+        }
     }
 
 

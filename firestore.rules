@@ -61,6 +61,13 @@ service cloud.firestore {
     // --- Nested Collections under Regions/Offices ---
     match /regions/{regionId}/offices/{officeId} {
       allow read: if isAuthenticated(); // Allow basic office/region info reading
+      
+      // 사무실 상태(status) 필드 업데이트 허용 - 관리자만
+      allow update: if isOfficeAdmin(regionId, officeId) && 
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+      
+      // 사무실 기본 정보 생성/업데이트 허용 (status 필드 포함)
+      allow write: if isOfficeAdmin(regionId, officeId);
 
       match /designated_drivers/{driverDocId} {
         // 읽기(read): 관리자이거나, 기사 본인인 경우 허용
