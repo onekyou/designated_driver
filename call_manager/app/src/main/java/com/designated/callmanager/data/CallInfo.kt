@@ -8,7 +8,7 @@ import com.google.firebase.firestore.PropertyName
  * Firestore의 콜 정보를 나타내는 데이터 클래스
  */
 data class CallInfo(
-    var id: String = "", // Firestore document ID
+    var id: String = "",
     @get:PropertyName("phoneNumber") @set:PropertyName("phoneNumber") var phoneNumber: String = "",
     @get:PropertyName("customerAddress") @set:PropertyName("customerAddress") var customerAddress: String? = null,
 
@@ -38,12 +38,10 @@ data class CallInfo(
     @PropertyName("cashAmount") var cashAmount: Long? = null,
     @PropertyName("isSummaryConfirmed") var isSummaryConfirmed: Boolean? = false,
     @PropertyName("summaryConfirmedTimestamp") var summaryConfirmedTimestamp: Timestamp? = null,
-    
-    // 공유콜 관련 필드 추가
+
     @PropertyName("departure") var departure: String? = null,
     @PropertyName("destination") var destination: String? = null,
     @PropertyName("cancelReason") var cancelReason: String? = null
 ) {
-    // Firestore에서 객체 매핑 시 빈 생성자 필요 -> 모든 파라미터에 기본값이 있으므로 자동 생성됨. 명시적 정의 불필요.
     // constructor() : this("", "", "", Timestamp.now(), CallStatus.PENDING.value)
-} 
+}

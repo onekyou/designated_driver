@@ -1,7 +1,7 @@
 package com.designated.callmanager.ui.signup
 
 import android.app.Application
-import android.util.Log
+import android.util.Patterns
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -21,16 +21,14 @@ import kotlinx.coroutines.tasks.await
 
 // TODO: Implement SignUpViewModel logic
 
-// Data classes for dropdown items
 data class RegionItem(val id: String, val name: String)
 data class OfficeItem(val id: String, val name: String)
 
-// State for the sign-up process
 sealed class SignUpState {
     object Idle : SignUpState()
-    object LoadingRegions : SignUpState() // 지역 로딩 중 상태 추가
-    object LoadingOffices : SignUpState() // 사무실 로딩 중 상태 추가
-    object Loading : SignUpState() // 회원가입 진행 중
+    object LoadingRegions : SignUpState()
+    object LoadingOffices : SignUpState()
+    object Loading : SignUpState()
     object Success : SignUpState()
     data class Error(val message: String) : SignUpState()
 }
@@ -40,13 +38,11 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
     private val auth: FirebaseAuth = Firebase.auth
     private val db = Firebase.firestore
 
-    // --- Input States --- 
     var email by mutableStateOf("")
     var password by mutableStateOf("")
     var confirmPassword by mutableStateOf("")
-    var adminName by mutableStateOf("") // 관리자 이름 상태 추가
+    var adminName by mutableStateOf("")
 
-    // --- Region/Office Selection States --- 
     private val _regions = MutableStateFlow<List<RegionItem>>(emptyList())
     val regions: StateFlow<List<RegionItem>> = _regions.asStateFlow()
 
@@ -54,12 +50,11 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
     val offices: StateFlow<List<OfficeItem>> = _offices.asStateFlow()
 
     var selectedRegion by mutableStateOf<RegionItem?>(null)
-        private set // 외부에서는 변경 불가
+        private set
 
     var selectedOffice by mutableStateOf<OfficeItem?>(null)
         private set
 
-    // --- Sign-Up Process State --- 
     private val _signUpState = MutableStateFlow<SignUpState>(SignUpState.Idle)
     val signUpState: StateFlow<SignUpState> = _signUpState.asStateFlow()
 
@@ -69,7 +64,7 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
 
     fun onRegionSelected(region: RegionItem) {
         selectedRegion = region
-        selectedOffice = null // 지역 변경 시 사무실 선택 초기화
+        selectedOffice = null
         fetchOffices(region.id)
     }
 
@@ -87,15 +82,12 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
                     if (name != null) {
                         RegionItem(id = doc.id, name = name)
                     } else {
-                        Log.w("SignUpViewModel", "Region document ${doc.id} is missing 'name' field.")
                         null
                     }
-                }.sortedBy { it.name } // 이름순 정렬
+                }.sortedBy { it.name }
                 _regions.value = regionList
-                _signUpState.value = SignUpState.Idle // 로딩 완료 후 Idle 상태로
-                 Log.d("SignUpViewModel", "Regions fetched: ${regionList.size}")
+                _signUpState.value = SignUpState.Idle
             } catch (e: Exception) {
-                Log.e("SignUpViewModel", "Error fetching regions", e)
                 _signUpState.value = SignUpState.Error("지역 목록을 불러오는데 실패했습니다: ${e.message}")
             }
         }
@@ -103,7 +95,7 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun fetchOffices(regionId: String) {
         _signUpState.value = SignUpState.LoadingOffices
-        _offices.value = emptyList() // 사무실 목록 초기화
+        _offices.value = emptyList()
         viewModelScope.launch {
             try {
                 val snapshot = db.collection("regions").document(regionId)
@@ -113,27 +105,23 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
                     if (name != null) {
                         OfficeItem(id = doc.id, name = name)
                     } else {
-                        Log.w("SignUpViewModel", "Office document ${doc.id} in region $regionId is missing 'name' field.")
                         null
                     }
                 }.sortedBy { it.name }
                 _offices.value = officeList
                 _signUpState.value = SignUpState.Idle
-                Log.d("SignUpViewModel", "Offices fetched for region $regionId: ${officeList.size}")
             } catch (e: Exception) {
-                Log.e("SignUpViewModel", "Error fetching offices for region $regionId", e)
                 _signUpState.value = SignUpState.Error("사무실 목록을 불러오는데 실패했습니다: ${e.message}")
             }
         }
     }
 
     fun signUp() {
-        // --- Input Validation --- 
-        if (email.isBlank() || !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+        if (email.isBlank() || !Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
             _signUpState.value = SignUpState.Error("올바른 이메일 주소를 입력해주세요.")
             return
         }
-        if (password.length < 6) { // Firebase 최소 비밀번호 길이
+        if (password.length < 6) {
             _signUpState.value = SignUpState.Error("비밀번호는 6자 이상 입력해주세요.")
             return
         }
@@ -145,75 +133,60 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
             _signUpState.value = SignUpState.Error("이름을 입력해주세요.")
             return
         }
-        val currentSelectedRegion = selectedRegion // Null check용 로컬 변수
+        val currentSelectedRegion = selectedRegion
         if (currentSelectedRegion == null) {
             _signUpState.value = SignUpState.Error("지역을 선택해주세요.")
             return
         }
-        val currentSelectedOffice = selectedOffice // Null check용 로컬 변수
+        val currentSelectedOffice = selectedOffice
         if (currentSelectedOffice == null) {
             _signUpState.value = SignUpState.Error("사무실을 선택해주세요.")
             return
         }
-        // --- --- 
 
-        _signUpState.value = SignUpState.Loading // 회원가입 시작
+        _signUpState.value = SignUpState.Loading
         viewModelScope.launch {
             try {
-                // 0. 선택된 사무실에 이미 관리자가 있는지 확인
                 val officeIdToCheck = currentSelectedOffice.id
                 val existingAdminQuery = db.collection("admins")
                     .whereEqualTo("associatedOfficeId", officeIdToCheck)
-                    .limit(1) // 하나만 찾으면 됨
+                    .limit(1)
                     .get()
                     .await()
 
                 if (!existingAdminQuery.isEmpty) {
-                    // 이미 해당 사무실에 관리자가 존재함
-                    Log.w("SignUpViewModel", "Sign up failed: Admin already exists for office ID $officeIdToCheck")
                     _signUpState.value = SignUpState.Error("선택하신 사무실에는 이미 관리자가 등록되어 있습니다.")
                     return@launch // 코루틴 종료
                 }
 
-                // 1. Firebase Authentication 사용자 생성
                 val authResult = auth.createUserWithEmailAndPassword(email, password).await()
                 val newUser = authResult.user
 
                 if (newUser != null) {
-                    Log.d("SignUpViewModel", "Firebase Auth user created: ${newUser.uid}")
-                    // 2. Firestore '/admins' 컬렉션에 관리자 정보 저장
                     val adminData = hashMapOf(
                         "email" to email,
                         "name" to adminName,
-                        "associatedRegionId" to currentSelectedRegion.id, // 로컬 변수 사용
-                        "associatedOfficeId" to officeIdToCheck, // 확인된 사무실 ID 사용
-                        "createdAt" to com.google.firebase.Timestamp.now() // 생성 시간 기록
-                        // 필요시 추가 정보 (예: role)
+                        "associatedRegionId" to currentSelectedRegion.id,
+                        "associatedOfficeId" to officeIdToCheck,
+                        "createdAt" to com.google.firebase.Timestamp.now()
                     )
                     db.collection("admins").document(newUser.uid).set(adminData).await()
-                    Log.d("SignUpViewModel", "Admin data saved to Firestore for UID: ${newUser.uid}")
-                    
-                    _signUpState.value = SignUpState.Success // 최종 성공
+
+                    _signUpState.value = SignUpState.Success
                 } else {
-                     Log.e("SignUpViewModel", "Error: Firebase Auth user creation returned null user.")
                     _signUpState.value = SignUpState.Error("사용자 생성에 실패했습니다.")
                 }
 
             } catch (e: Exception) {
-                 Log.e("SignUpViewModel", "Error during sign up process", e)
-                // Firebase 관련 예외 처리 등
-                 // Firestore 쿼리 실패 또는 Auth 생성 실패 등 모든 예외 포함
                 _signUpState.value = SignUpState.Error("회원가입 중 오류 발생: ${e.message}")
             }
         }
     }
-    
-    // 회원가입 상태 초기화 (오류 메시지 확인 후 등)
+
     fun resetSignUpState(){
         _signUpState.value = SignUpState.Idle
     }
 
-    // Factory class
     class Factory(private val application: Application) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(SignUpViewModel::class.java)) {
@@ -223,4 +196,4 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
             throw IllegalArgumentException("Unknown ViewModel class")
         }
     }
-} 
+}

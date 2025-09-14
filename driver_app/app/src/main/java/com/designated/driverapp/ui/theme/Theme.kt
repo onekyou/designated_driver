@@ -3,7 +3,7 @@ package com.designated.driverapp.ui.theme
 import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.* // Import Material 3 components
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
@@ -14,7 +14,6 @@ import androidx.core.view.WindowCompat
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 
-// Define Light Color Scheme using design system colors
 private val LightColorScheme = lightColorScheme(
     primary = Primary,
     secondary = Secondary,
@@ -30,7 +29,6 @@ private val LightColorScheme = lightColorScheme(
     onError = OnError
 )
 
-// Define Dark Color Scheme using design system colors
 private val DarkColorScheme = darkColorScheme(
     primary = Primary,
     secondary = Secondary,
@@ -50,19 +48,14 @@ private val DarkColorScheme = darkColorScheme(
 
 @Composable
 fun DriverAppTheme(
-    darkTheme: Boolean = true, // 기본값을 true로 변경
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = false, // 다이나믹 컬러는 비활성화 유지
+    darkTheme: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
-        // dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-        //     val context = LocalContext.current
-        //     if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        // } // 다이나믹 컬러 로직 주석 처리 또는 제거
 
-        darkTheme -> DarkColorScheme // darkTheme이 true일 때 DarkColorScheme 사용
-        else -> LightColorScheme     // 그 외에는 LightColorScheme 사용
+        darkTheme -> DarkColorScheme
+        else -> LightColorScheme
     }
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -74,8 +67,8 @@ fun DriverAppTheme(
     }
 
     MaterialTheme(
-        colorScheme = colorScheme, // 위에서 결정된 colorScheme 사용
+        colorScheme = colorScheme,
         typography = Typography,
         content = content
     )
-} 
+}

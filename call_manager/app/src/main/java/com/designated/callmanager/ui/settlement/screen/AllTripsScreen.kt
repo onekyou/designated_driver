@@ -27,11 +27,9 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
     var selectedTrip by remember { mutableStateOf<SettlementData?>(null) }
     var showCreditDialog by remember { mutableStateOf(false) }
 
-    // 비율 조정 다이얼로그 상태 및 현재 비율
     var showRatioDialog by remember { mutableStateOf(false) }
     val ratio by vm.officeShareRatio.collectAsState()
 
-    // 결제별 상세 다이얼로그 state (label, list)
     var paymentDialog by remember { mutableStateOf<Pair<String, List<SettlementData>>?>(null) }
 
     var phoneForDialog by remember { mutableStateOf("") }
@@ -39,7 +37,6 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text("전체 운행 ${trips.size}건", style = MaterialTheme.typography.titleMedium, color = Color.White)
 
-        // ▶ 요약 카드
         val totalFare = trips.sumOf { it.fare }
         val cashTrips   = trips.filter { it.paymentMethod == "현금" }
         val bankTrips   = trips.filter { it.paymentMethod == "이체" }
@@ -53,7 +50,6 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
 
         Spacer(Modifier.height(8.dp))
 
-        // 결제별 간단 카드 Row
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PaymentStatCard(label="현금", amount=cashSum, color=Color(0xFF4CAF50), modifier=Modifier.weight(1f)) { paymentDialog = "현금" to cashTrips }
             PaymentStatCard(label="이체", amount=bankSum, color=Color(0xFF03A9F4), modifier=Modifier.weight(1f)) { paymentDialog = "이체" to bankTrips }
@@ -96,14 +92,10 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
         ) { Text("업무 마감", color = Color.White) }
     }
 
-    // 상세 다이얼로그
     selectedTrip?.let { trip ->
         TripDetailDialog(settlement = trip, onDismiss = { selectedTrip = null })
-        // For external credit dialog fetch phone
         vm.fetchPhoneForCall(trip.callId) { ph -> phoneForDialog = ph ?: "" }
-        // TripDetailDialog 는 단순 정보 표시이므로 외상 등록 버튼은 AllTripsScreen 의 버튼 유지
         if (!creditedIds.contains(trip.callId)) {
-            // 외상 등록 버튼 – 클릭 시 전화번호 fetch 후 다이얼로그
             vm.fetchPhoneForCall(trip.callId) { ph ->
                 phoneForDialog = ph ?: ""
                 showCreditDialog = true
@@ -135,7 +127,6 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
         )
     }
 
-    // 결제별 상세 다이얼로그
     paymentDialog?.let { pair ->
         val label = pair.first
         val listData = pair.second
@@ -185,4 +176,4 @@ private fun PaymentStatCard(label: String, amount: Int, color: Color, modifier: 
             Text("%,d".format(amount), color = Color.White)
         }
     }
-} 
+}

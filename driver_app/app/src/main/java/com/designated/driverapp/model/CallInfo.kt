@@ -8,7 +8,6 @@ import com.google.firebase.firestore.PropertyName
 import kotlinx.parcelize.Parcelize
 import kotlinx.parcelize.RawValue
 
-// 호출 상태를 나타내는 열거형 클래스
 enum class CallStatus(val firestoreValue: String, val displayName: String) {
     WAITING(Constants.STATUS_WAITING, "대기중"),
     ASSIGNED(Constants.STATUS_ASSIGNED, "배차완료"),
@@ -25,7 +24,6 @@ enum class CallStatus(val firestoreValue: String, val displayName: String) {
     }
 }
 
-// 호출 정보를 담는 데이터 클래스
 @Parcelize
 data class CallInfo(
     var id: String = "",
@@ -40,10 +38,6 @@ data class CallInfo(
     val assignedDriverId: String? = null,
     val assignedDriverName: String? = null,
     val assignedDriverPhone: String? = null,
-    // Firestore documents created before 2025-07-08 saved this field as a Long (epoch millis)
-    // while newer documents use a proper Timestamp.  We accept either type by deserialising into Any?.
-    // The app never writes to this property directly and only orders by this field inside Firestore queries,
-    // so keeping it as a raw value is sufficient and avoids ClassCastExceptions during toObject().
     @get:PropertyName("assignedTimestamp")
     val assignedTimestamp: @RawValue Any? = null,
     val assignedPickupDriverId: String? = null,
@@ -64,15 +58,13 @@ data class CallInfo(
     val isSummaryConfirmed: Boolean = false,
     val summaryConfirmedTimestamp: Timestamp? = null,
 
-    // 정산 관련 필드
     var settlementStatus: String = Constants.SETTLEMENT_STATUS_PENDING,
     var settlementId: String? = null,
 
-    // 선택 필드: 공유콜에서 사용
     var claimedDriverId: String? = null,
     var sourceSharedCallId: String? = null
 ) : Parcelable {
     @get:Exclude
     val statusEnum: CallStatus
         get() = CallStatus.fromFirestoreValue(status)
-} 
+}

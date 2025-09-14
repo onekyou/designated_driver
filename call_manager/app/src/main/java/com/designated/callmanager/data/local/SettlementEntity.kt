@@ -39,4 +39,4 @@ data class SettlementEntity(
             d.completedAt, d.driverId, d.regionId, d.officeId, d.workDate
         )
     }
-} 
+}

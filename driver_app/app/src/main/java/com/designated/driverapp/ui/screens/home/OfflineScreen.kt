@@ -28,4 +28,4 @@ fun OfflineScreen(onGoOnline: () -> Unit) {
             Text("온라인으로 전환")
         }
     }
-} 
+}

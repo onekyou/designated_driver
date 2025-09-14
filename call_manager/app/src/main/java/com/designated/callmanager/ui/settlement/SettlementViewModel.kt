@@ -2,7 +2,6 @@ package com.designated.callmanager.ui.settlement
 
 import android.app.Application
 import android.content.Context
-import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import com.designated.callmanager.data.Constants
 import com.designated.callmanager.data.SettlementData
@@ -43,23 +42,18 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
     private var lastClearedMillisCache: Long = 0L
     private val prefs = getApplication<Application>().getSharedPreferences("settlement_prefs", Context.MODE_PRIVATE)
 
-    // 일일정산 탭에서 초기화된 날짜 목록 (로컬에만 반영)
     private val _clearedDates = MutableStateFlow<Set<String>>(emptySet())
     val clearedDates: StateFlow<Set<String>> = _clearedDates
 
-    // 전체내역 탭을 초기화한 여부 (로컬 세션)
     private val _allTripsCleared = MutableStateFlow(false)
     val allTripsCleared: StateFlow<Boolean> = _allTripsCleared
 
-    // 사무실 수익 비율 (퍼센트) - 기본 60
     private val _officeShareRatio = MutableStateFlow(40)
     val officeShareRatio: StateFlow<Int> = _officeShareRatio
 
-    // 업무 마감 세션 카드 리스트
     private val _sessionList = MutableStateFlow<List<SessionInfo>>(emptyList())
     val sessionList: StateFlow<List<SessionInfo>> = _sessionList
 
-    // 세션 리스너
     private var sessionsListener: ListenerRegistration? = null
     private var callsListener: ListenerRegistration? = null
 
@@ -77,7 +71,6 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             repository.flowSessions().collect { sess ->
                 _sessionList.value = sess.map { SessionInfo(it.sessionId, null, it.totalFare, it.totalTrips) }
-                Log.d("SettlementViewModel", "📋 Sessions list size=${_sessionList.value.size}")
             }
         }
         viewModelScope.launch {
@@ -89,12 +82,11 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                         phone = entity.phone,
                         memo = entity.memo,
                         amount = entity.totalAmount,
-                        entries = emptyList() // 초기에는 빈 리스트
+                        entries = emptyList()
                     )
                 }
                 _creditPersons.value = creditPersonsWithEntries
-                
-                // 각 person의 entries를 별도로 로드
+
                 entities.forEach { entity ->
                     launch {
                         val entries = creditDao.getCreditEntriesByPerson(entity.id).map { entryEntity ->
@@ -105,7 +97,6 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                                 amount = entryEntity.amount
                             )
                         }
-                        // 해당 person의 entries 업데이트
                         _creditPersons.value = _creditPersons.value.map { person ->
                             if (person.id == entity.id) {
                                 person.copy(entries = entries)
@@ -116,7 +107,6 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
             }
         }
 
-        // 로그인 정보에서 regionId/officeId 를 읽어 초기 로드
         val loginPrefs = getApplication<Application>().getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
         val region = loginPrefs.getString("regionId", null)
         val office = loginPrefs.getString("officeId", null)
@@ -129,7 +119,6 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
         _officeShareRatio.value = newRatio.coerceIn(30, 90)
     }
 
-    // 외상인 관리 데이터
     data class CreditEntry(
         val date: String,
         val departure: String,
@@ -158,16 +147,14 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                     name = name,
                     phone = phone,
                     amount = addAmount,
-                    customerName = name, // 외상 관리에서는 name이 고객명
-                    driverName = "미지정", // 기사명이 없는 경우
+                    customerName = name,
+                    driverName = "미지정",
                     date = detail.date,
                     departure = detail.departure,
                     destination = detail.destination
                 )
-                Log.d("SettlementViewModel", "💾 외상 데이터베이스 저장: $name - ${addAmount}원 (${detail.departure}→${detail.destination})")
             } else {
                 creditDao.addOrIncrementCredit(name, phone, addAmount)
-                Log.d("SettlementViewModel", "💾 외상 데이터베이스 저장: $name - ${addAmount}원 (상세정보 없음)")
             }
         }
     }
@@ -175,7 +162,6 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
     fun reduceCredit(id: String, reduceAmount: Int) {
         viewModelScope.launch {
             creditDao.decrementCreditAmount(id, reduceAmount)
-            // 금액이 0이 된 경우 삭제
             val person = creditDao.getAllCreditPersons().first().find { it.id == id }
             if (person?.totalAmount == 0) {
                 creditDao.deleteCreditPersonById(id)
@@ -183,45 +169,36 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    // 대리운전 업무일 계산 함수 (오전 6시 기준으로 날짜 구분)
     private fun calculateWorkDate(timestamp: Long): String {
         val calendar = Calendar.getInstance()
         calendar.timeInMillis = timestamp
-        
-        // 오전 6시 이전이면 전날 업무일로 계산
+
         if (calendar.get(Calendar.HOUR_OF_DAY) < 6) {
             calendar.add(Calendar.DAY_OF_MONTH, -1)
         }
-        
+
         return SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.time)
     }
 
     fun loadSettlementData(regionId: String, officeId: String) {
         currentRegionId = regionId
         currentOfficeId = officeId
-        // Load local pref
         val localKey = "${regionId}_${officeId}_lastCleared"
         lastClearedMillisCache = prefs.getLong(localKey, 0L)
 
         _isLoading.value = true
         _error.value = null
-        
-        Log.d("SettlementViewModel", "🔍 Loading settlement data for region: $regionId, office: $officeId")
-        
-        // 1) Get lastCleared timestamp
+
         firestore.collection("regions").document(regionId)
             .collection("offices").document(officeId)
             .get()
             .addOnSuccessListener { officeDoc ->
                 val lastClearedMillis = officeDoc.getTimestamp("settlementLastCleared")?.toDate()?.time ?: 0L
 
-                // 2) Fetch completed calls
                 fetchCompletedCalls(regionId, officeId, lastClearedMillis)
 
-                // 실시간 세션 리스너는 로컬 DB로 대체 (Firebase 호출 제거)
             }
             .addOnFailureListener { e ->
-                Log.e("SettlementViewModel", "💥 Error loading office info", e)
                 _error.value = e.localizedMessage
                 _isLoading.value = false
             }
@@ -236,17 +213,16 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
             .whereEqualTo("status", "COMPLETED")
             .get()
             .addOnSuccessListener { result ->
-                Log.d("SettlementViewModel", "📊 Found ${result.documents.size} completed calls (raw)")
                 val trips = result.documents.mapNotNull { doc ->
                     try {
-                        val completedTimestamp = doc.getTimestamp("completedAt")?.toDate()?.time 
-                            ?: doc.getTimestamp("updatedAt")?.toDate()?.time 
+                        val completedTimestamp = doc.getTimestamp("completedAt")?.toDate()?.time
+                            ?: doc.getTimestamp("updatedAt")?.toDate()?.time
                             ?: System.currentTimeMillis()
 
                         if (completedTimestamp <= effectiveLastCleared) return@mapNotNull null // 필터링
 
-                        val fareAmount = doc.getLong("fareFinal")?.toInt() 
-                            ?: doc.getLong("fare_set")?.toInt() 
+                        val fareAmount = doc.getLong("fareFinal")?.toInt()
+                            ?: doc.getLong("fare_set")?.toInt()
                             ?: 0
 
                         val cashReceived = doc.getLong("cashReceived")?.toInt()
@@ -271,21 +247,17 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                             workDate = calculateWorkDate(completedTimestamp)
                         )
                     } catch (e: Exception) {
-                        Log.e("SettlementViewModel", "❌ Error mapping document ${doc.id}", e)
                         null
                     }
                 }
 
-                // ➡ Room 캐시에 저장하여 오프라인/재사용 지원 (중복 방지)
                 viewModelScope.launch {
                     val newTrips = trips.filter { trip ->
                         repository.dao.existsById(trip.callId) == 0
                     }
                     if (newTrips.isNotEmpty()) {
                         repository.insertAll(newTrips.map { SettlementEntity.fromData(it) })
-                        Log.d("SettlementViewModel", "💾 저장된 새로운 정산 데이터: ${newTrips.size}건")
-                        
-                        // 외상이 있는 콜들을 외상 관리에 추가
+
                         newTrips.forEach { trip ->
                             if (trip.creditAmount > 0) {
                                 val creditDetail = CreditEntry(
@@ -296,15 +268,13 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                                 )
                                 addOrIncrementCredit(
                                     name = trip.customerName,
-                                    phone = "", // 전화번호 정보가 없는 경우
+                                    phone = "",
                                     addAmount = trip.creditAmount,
                                     detail = creditDetail
                                 )
-                                Log.d("SettlementViewModel", "💳 외상 추가: ${trip.customerName} - ${trip.creditAmount}원 (${trip.departure}→${trip.destination})")
                             }
                         }
                     } else {
-                        Log.d("SettlementViewModel", "✅ 모든 데이터가 이미 캐시에 존재함")
                     }
                 }
                 // 만약 사용자가 "전체내역 초기화" 후 새 콜이 도착하면 자동으로 리스트를 다시 보여주기 위해 플래그 해제
@@ -312,14 +282,11 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                     _allTripsCleared.value = false
                 }
                 _isLoading.value = false
-                Log.d("SettlementViewModel", "🎉 Loaded ${trips.size} settlement records after filter")
             }
             .addOnSuccessListener {
-                // After initial load, start realtime listener for new completed calls
                 startCallsListener(regionId, officeId, effectiveLastCleared)
             }
             .addOnFailureListener { e ->
-                Log.e("SettlementViewModel", "💥 Error loading settlement data", e)
                 _error.value = e.localizedMessage
                 _isLoading.value = false
             }
@@ -328,21 +295,16 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
     /** 신규 COMPLETED 콜에 대한 실시간 리스너 */
     private fun startCallsListener(regionId: String, officeId: String, sinceMillis: Long) {
         callsListener?.remove()
-        // 1차 시도: updatedAt 필드 기반 리스너 (일반적으로 항상 존재)
         val baseQuery = firestore.collection("regions").document(regionId)
             .collection("offices").document(officeId)
             .collection("calls")
             .whereEqualTo("status", "COMPLETED")
-
-        // Firestore는 range 필터 필드에 orderBy가 필요하다.
-        // 일부 문서는 updatedAt 이 null 인 경우가 있어 completedAt 로 다시 시도할 수 있도록 두 단계 리스너를 설정한다.
 
         callsListener = baseQuery
             .orderBy("updatedAt", Query.Direction.ASCENDING)
             .whereGreaterThan("updatedAt", Date(sinceMillis))
             .addSnapshotListener { snapshots, e ->
                 if (e != null) {
-                    Log.e("SettlementViewModel", "💥 Calls listener error", e)
                     return@addSnapshotListener
                 }
                 val newEntities = snapshots?.documentChanges?.mapNotNull { dc ->
@@ -374,7 +336,6 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                             workDate = calculateWorkDate(completedTimestamp)
                         )
                     } catch (ex: Exception) {
-                        Log.e("SettlementViewModel", "❌ Error mapping new completed call", ex)
                         null
                     }
                 } ?: emptyList()
@@ -387,8 +348,6 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                 }
             }
 
-        // 2차 시도: updatedAt 이 없는 문서 대비용 completedAt 기반 리스너 (필요 시만 실행)
-        // Firestore snapshotListener 중첩은 비용 크지 않음. 두 리스너 모두 중복 insert 시 onConflict=REPLACE 로 해결.
         firestore.collection("regions").document(regionId)
             .collection("offices").document(officeId)
             .collection("calls")
@@ -397,7 +356,6 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
             .whereGreaterThan("completedAt", Date(sinceMillis))
             .addSnapshotListener { snapshots, e ->
                 if (e != null) {
-                    Log.e("SettlementViewModel", "💥 Calls listener(2) error", e)
                     return@addSnapshotListener
                 }
 
@@ -429,23 +387,19 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                             workDate = calculateWorkDate(completedTimestamp)
                         )
                     } catch (ex: Exception) {
-                        Log.e("SettlementViewModel", "❌ Error mapping new completed call(2)", ex)
                         null
                     }
                 } ?: emptyList()
 
                 if (newEntities.isNotEmpty()) {
                     viewModelScope.launch {
-                        // 중복 방지: 이미 존재하지 않는 것만 삽입
                         val reallyNewEntities = newEntities.filter { entity ->
                             repository.dao.existsById(entity.callId) == 0
                         }
                         if (reallyNewEntities.isNotEmpty()) {
                             repository.insertAll(reallyNewEntities)
                             _allTripsCleared.value = false
-                            Log.d("SettlementViewModel", "🔄 실시간으로 추가된 정산 데이터: ${reallyNewEntities.size}건")
-                            
-                            // 실시간으로 들어온 외상 데이터 처리
+
                             reallyNewEntities.forEach { entity ->
                                 if (entity.creditAmount > 0) {
                                     val creditDetail = CreditEntry(
@@ -456,11 +410,10 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                                     )
                                     addOrIncrementCredit(
                                         name = entity.customerName,
-                                        phone = "", 
+                                        phone = "",
                                         addAmount = entity.creditAmount,
                                         detail = creditDetail
                                     )
-                                    Log.d("SettlementViewModel", "🔄💳 실시간 외상 추가: ${entity.customerName} - ${entity.creditAmount}원")
                                 }
                             }
                         }
@@ -484,11 +437,9 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
         _allTripsCleared.value = true
         viewModelScope.launch {
             repository.deleteAll()
-            Log.d("SettlementViewModel", "🗑️ 모든 정산 데이터 삭제됨")
         }
     }
 
-    // 특정 업무일(workDate)에 해당하는 내역만 초기화 (로컬 목록에서 제거)
     fun clearSettlementForDate(workDate: String) {
         _clearedDates.value = _clearedDates.value + workDate
         viewModelScope.launch {
@@ -497,15 +448,14 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun clearAllTrips() {
-        val trips = _settlementList.value          // 현재 ‘전체내역’에 보이는 트립
-        if (trips.isEmpty()) return                // 0건이면 그대로 종료
+        val trips = _settlementList.value
+        if (trips.isEmpty()) return
 
         val totalTrips = trips.size
         val totalFare  = trips.sumOf { it.fare }.toLong()
         val newSessionId = System.currentTimeMillis().toString()
 
         viewModelScope.launch {
-            // 2-① 세션 카드 Room 저장
             repository.insertSession(
                 SessionEntity(
                     sessionId   = newSessionId,
@@ -514,11 +464,9 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                     totalFare   = totalFare
                 )
             )
-            // 2-② 해당 콜들을 isFinalized=1 로 마킹(→ flowActive 에서 제외)
             repository.markTripsFinalized(trips.map { it.callId }, newSessionId)
         }
 
-        // UI 플래그 갱신
         _allTripsCleared.value = true
         _clearedDates.value    = emptySet()
     }

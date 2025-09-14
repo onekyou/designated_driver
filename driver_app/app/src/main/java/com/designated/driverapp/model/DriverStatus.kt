@@ -26,4 +26,4 @@ enum class DriverStatus(val value: String) {
             return entries.find { it.value.equals(value, ignoreCase = true) } ?: UNKNOWN
         }
     }
-} 
+}

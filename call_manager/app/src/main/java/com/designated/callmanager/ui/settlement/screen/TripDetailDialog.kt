@@ -80,4 +80,4 @@ fun DateDetailDialog(date: String, settlements: List<SettlementData>, onDismiss:
         confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } },
         containerColor = Color(0xFF2A2A2A)
     )
-} 
+}

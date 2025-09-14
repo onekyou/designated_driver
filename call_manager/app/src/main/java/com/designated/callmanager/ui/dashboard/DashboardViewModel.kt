@@ -18,7 +18,6 @@ import com.designated.callmanager.service.CallManagerService
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
-import android.util.Log
 import com.google.firebase.firestore.DocumentChange
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
@@ -42,7 +41,6 @@ sealed class DriverApprovalActionState {
     data class Success(val driverId: String, val action: String) : DriverApprovalActionState()
     data class Error(val message: String) : DriverApprovalActionState()
 }
-
 
 class DashboardViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -106,7 +104,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _callInfoForDialog = MutableStateFlow<CallInfo?>(null)
     val callInfoForDialog: StateFlow<CallInfo?> = _callInfoForDialog.asStateFlow()
 
-    // Popups states
     private val _showDriverLoginPopup = MutableStateFlow(false)
     val showDriverLoginPopup: StateFlow<Boolean> = _showDriverLoginPopup
     private val _loggedInDriverName = MutableStateFlow<String?>(null)
@@ -182,27 +179,20 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         stopListening()
         val officeRef = firestore.collection("regions").document(regionId)
             .collection("offices").document(officeId)
-        
-        // 사무실 상태 리스닝 추가
+
         officeRef.addSnapshotListener { snapshot, e ->
             if (e != null) {
-                Log.e(TAG, "사무실 상태 리스닝 오류", e)
                 return@addSnapshotListener
             }
-            
+
             if (snapshot != null && snapshot.exists()) {
                 val status = snapshot.getString("status") ?: "OPEN"
                 _officeStatus.value = status
-                Log.d(TAG, "사무실 상태 업데이트: $status")
             } else {
-                // 사무실 문서가 없거나 status 필드가 없으면 기본값으로 초기화
                 _officeStatus.value = "OPEN"
-                Log.d(TAG, "사무실 상태 기본값으로 설정: OPEN")
-                
-                // 기본 status 필드 생성
+
                 officeRef.set(mapOf("status" to "OPEN"), com.google.firebase.firestore.SetOptions.merge())
                     .addOnSuccessListener {
-                        Log.d(TAG, "기본 status 필드 생성 완료")
                     }
             }
         }
@@ -211,14 +201,14 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             .orderBy("timestamp", Query.Direction.DESCENDING)
             .limit(100)
             .addSnapshotListener { snapshots, e ->
-                if (e != null) { 
-                    return@addSnapshotListener 
+                if (e != null) {
+                    return@addSnapshotListener
                 }
-                
+
                 if (snapshots == null) {
                     return@addSnapshotListener
                 }
-                
+
                 for (dc in snapshots.documentChanges) {
                     val doc = dc.document
                     val callInfo = parseCallDocument(doc)
@@ -228,10 +218,10 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
                     when (dc.type) {
                         DocumentChange.Type.ADDED, DocumentChange.Type.MODIFIED -> {
-                            if (dc.type == DocumentChange.Type.ADDED && 
+                            if (dc.type == DocumentChange.Type.ADDED &&
                                 callInfo.status == CallStatus.WAITING.firestoreValue) {
-                                
-                                if (callInfo.callType != "SHARED") { // 공유콜인 경우 팝업 표시 안함
+
+                                if (callInfo.callType != "SHARED") {
                                     _newCallInfo.value = callInfo
                                     _showNewCallPopup.value = true
                                 }
@@ -312,7 +302,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                             }
                         }
                     } catch (parseEx: Exception) {
-                        // Ignore parse errors
                     }
                 }
                 _drivers.value = driverCache.values.toList().sortedBy { it.name }
@@ -327,53 +316,38 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
 
-        // -- 공유 콜 리스너 --
-        // 내가 수락할 수 있는 OPEN/CLAIMED(내 사무실) 콜만 수신 (내가 올린 콜은 제외)
-
-        // Map cache for shared calls (excluding calls from my office)
         val sharedMap = mutableMapOf<String, com.designated.callmanager.data.SharedCallInfo>()
 
         fun emitSharedCalls() {
             _sharedCalls.value = sharedMap.values.sortedByDescending { it.timestamp?.seconds ?: 0 }
         }
 
-        // Listener A: 같은 지역 내 다른 사무실에서 생성된 OPEN 공유콜 표시
-        Log.d(TAG, "[SharedCalls] 🔍 Setting up listener for sourceRegionId=$regionId, status=OPEN")
         val listenerA = firestore.collection("shared_calls")
             .whereEqualTo("sourceRegionId", regionId)
             .whereEqualTo("status", "OPEN")
             .addSnapshotListener { snapshots, e ->
                 if (e != null) {
-                    Log.w(TAG, "[SharedCalls] ❌ Listener failed.", e)
                     return@addSnapshotListener
                 }
-                Log.d(TAG, "[SharedCalls] 📥 Received ${snapshots?.size()} documents")
                 snapshots?.documentChanges?.forEach { dc ->
                     val doc = dc.document
                     val docData = doc.data
-                    Log.d(TAG, "[SharedCalls] 📄 Document ${doc.id}: targetRegionId=${docData["targetRegionId"]}, sourceRegionId=${docData["sourceRegionId"]}, status=${docData["status"]}")
                     val data = doc.toObject(com.designated.callmanager.data.SharedCallInfo::class.java)
                         ?.copy(id = doc.id)
 
-                    Log.d(TAG, "[SharedCalls] Processing: ${doc.id}, source=${data?.sourceOfficeId}, claimed=${data?.claimedOfficeId}, status=${data?.status}")
-
-                    // 필터: 내가 올린 콜이거나 다른 사무실이 수락한 콜 제외
                     val shouldInclude = when {
                         data == null -> false
-                        data.sourceOfficeId == officeId -> false // 내가 올린 콜 제외
-                        data.status == "CLAIMED" && data.claimedOfficeId != officeId -> false // 다른 사무실이 수락한 콜 제외
-                        data.status == "COMPLETED" -> false // 완료된 콜은 제외 (목록 정리)
+                        data.sourceOfficeId == officeId -> false
+                        data.status == "CLAIMED" && data.claimedOfficeId != officeId -> false
+                        data.status == "COMPLETED" -> false
                         else -> true
                     }
-                    
-                    Log.d(TAG, "[SharedCalls] shouldInclude: $shouldInclude")
 
                     when (dc.type) {
                         com.google.firebase.firestore.DocumentChange.Type.ADDED, com.google.firebase.firestore.DocumentChange.Type.MODIFIED -> {
                             if (shouldInclude) {
                                 data?.let { sharedMap[doc.id] = it }
                             } else {
-                                // 필터 조건에 맞지 않으면 맵에서 제거
                                 sharedMap.remove(doc.id)
                             }
                         }
@@ -385,52 +359,38 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 emitSharedCalls()
             }
 
-        // Store listener to remove later
         sharedCallsListener = listenerA
 
-        // -- 모든 공유콜 리스너 (관리 페이지용) --
-        Log.d(TAG, "[AllSharedCalls] Setting up listener for region=$regionId")
         allSharedCallsListener = firestore.collection("shared_calls")
-            .whereEqualTo("sourceRegionId", regionId) // 내 지역의 모든 공유콜
+            .whereEqualTo("sourceRegionId", regionId)
             .addSnapshotListener { snapshots, e ->
                 if (e != null) {
-                    Log.w(TAG, "[AllSharedCalls] Listener failed.", e)
                     return@addSnapshotListener
                 }
-                Log.d(TAG, "[AllSharedCalls] Received ${snapshots?.size()} documents")
-                
+
                 val allCalls = snapshots?.documents?.mapNotNull { doc ->
                     doc.toObject(com.designated.callmanager.data.SharedCallInfo::class.java)
                         ?.copy(id = doc.id)
-                        ?.also { 
-                            Log.d(TAG, "[AllSharedCalls] Loaded: ${doc.id}, source=${it.sourceOfficeId}, claimed=${it.claimedOfficeId}, status=${it.status}")
+                        ?.also {
                         }
                 } ?: emptyList()
-                
-                Log.d(TAG, "[AllSharedCalls] Setting ${allCalls.size} shared calls")
+
                 _allSharedCalls.value = allCalls.sortedByDescending { it.timestamp?.seconds ?: 0 }
             }
 
-        // -- 포인트 잔액 리스너 --
         pointsListener = officeRef.collection("points").document("points")
             .addSnapshotListener { snapshot, e ->
                 if (e != null) {
-                    Log.w(TAG, "Points listener failed.", e)
                     return@addSnapshotListener
                 }
-                Log.d(TAG, "[Points] Snapshot exists: ${snapshot?.exists()}")
                 if (snapshot != null && snapshot.exists()) {
                     val pointsInfo = snapshot.toObject(PointsInfo::class.java)
-                    Log.d(TAG, "[Points] Loaded points: ${pointsInfo?.balance}")
                     _pointsInfo.value = pointsInfo
                 } else {
-                    Log.d(TAG, "[Points] No points document found, setting default")
                     _pointsInfo.value = PointsInfo(0, null)
                 }
             }
 
-        // -- 포인트 거래내역 리스너 --
-        Log.d(TAG, "[PointTransactions] Setting up listener for region=$regionId, office=$officeId")
         pointTransactionsListener = firestore.collection("point_transactions")
             .whereEqualTo("regionId", regionId)
             .whereEqualTo("officeId", officeId)
@@ -438,16 +398,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             .limit(50)
             .addSnapshotListener { snapshots, e ->
                 if (e != null) {
-                    Log.w(TAG, "[PointTransactions] Listener failed.", e)
                     return@addSnapshotListener
                 }
-                Log.d(TAG, "[PointTransactions] Received ${snapshots?.size()} documents")
                 if (snapshots != null) {
                     val transactions = snapshots.documents.mapNotNull { doc ->
-                        Log.d(TAG, "[PointTransactions] Processing doc: ${doc.id}")
                         doc.toObject(PointTransaction::class.java)?.apply { id = doc.id }
                     }
-                    Log.d(TAG, "[PointTransactions] Parsed ${transactions.size} transactions")
                     _pointTransactions.value = transactions
                 }
             }
@@ -461,14 +417,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         return try {
             doc.toObject(CallInfo::class.java)?.apply { id = doc.id }
         } catch (e: Exception) {
-            Log.e(TAG, "Error parsing call document: ${doc.id}", e)
             null
         }
     }
 
     fun assignCallToDriver(callInfo: CallInfo, driverId: String) {
         if (_regionId.value == null || _officeId.value == null) {
-            Log.e(TAG, "Region or Office ID is null. Cannot assign call.")
             return
         }
         val officePath = firestore.collection("regions").document(_regionId.value!!)
@@ -476,39 +430,30 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
         viewModelScope.launch {
             try {
-                // 1. Get Driver Info first
                 val driverSnapshot = officePath.collection("designated_drivers").document(driverId).get().await()
                 val driverInfo = driverSnapshot.toObject(DriverInfo::class.java)
                 if (driverInfo == null) {
-                    Log.e(TAG, "Driver info not found for ID: $driverId")
                     return@launch
                 }
 
-                // ★★★ 중요: assignedDriverId는 기사의 Firebase Auth UID여야 함 ★★★
                 val driverAuthUid = driverInfo.authUid
                 if (driverAuthUid.isNullOrBlank()) {
-                    Log.e(TAG, "Driver authUid is missing for driver: $driverId")
                     return@launch
                 }
 
-                // 2. Update Call Document
                 val callRef = officePath.collection("calls").document(callInfo.id)
                 val callUpdates = mapOf(
-                    "assignedDriverId" to driverAuthUid, // Firebase Auth UID 사용
+                    "assignedDriverId" to driverAuthUid,
                     "assignedDriverName" to driverInfo.name,
                     "status" to CallStatus.ASSIGNED.firestoreValue,
                     "updatedAt" to Timestamp.now()
                 )
                 callRef.update(callUpdates).await()
 
-
-                // 3. Update Driver Document
                 val driverRef = officePath.collection("designated_drivers").document(driverId)
                 driverRef.update("status", DriverStatus.ASSIGNED.value).await()
-                Log.d(TAG, "Step 2/2 SUCCESS: Driver $driverId status updated to ASSIGNED.")
 
             } catch (e: Exception) {
-                Log.e(TAG, "Error during sequential assignment", e)
                 // TODO: Add user-facing error message
             }
         }
@@ -516,7 +461,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun updateCallStatus(callId: String, newStatus: CallStatus) {
         if (_regionId.value == null || _officeId.value == null) {
-            Log.e(TAG, "Region or Office ID is null. Cannot update call status.")
             return
         }
         viewModelScope.launch {
@@ -526,9 +470,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     .collection("calls").document(callId)
                     .update("status", newStatus.firestoreValue)
                     .await()
-                Log.d(TAG, "Successfully updated call $callId to status $newStatus")
             } catch (e: Exception) {
-                Log.e(TAG, "Error updating call status", e)
             }
         }
     }
@@ -546,16 +488,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     .collection("offices").document(_officeId.value!!)
                     .collection("calls").document(callId)
 
-                // 1. 먼저 콜 정보를 가져와서 assignedDriverId(Firebase Auth UID) 확인
                 val callSnapshot = callRef.get().await()
                 val assignedDriverAuthUid = callSnapshot.getString("assignedDriverId")
 
-                // 2. 콜 상태를 COMPLETED로 업데이트
                 callRef.update("status", CallStatus.COMPLETED.firestoreValue).await()
 
-                // 3. 배정된 기사가 있다면 해당 기사의 상태를 WAITING으로 업데이트
                 if (!assignedDriverAuthUid.isNullOrBlank()) {
-                    // authUid로 기사 문서 찾기
                     val driversQuery = firestore.collection("regions").document(_regionId.value!!)
                         .collection("offices").document(_officeId.value!!)
                         .collection("designated_drivers")
@@ -567,15 +505,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     if (!driversQuery.isEmpty) {
                         val driverDoc = driversQuery.documents[0]
                         driverDoc.reference.update("status", "WAITING").await()
-                        Log.d(TAG, "Driver ${driverDoc.id} status updated to WAITING")
                     } else {
-                        Log.w(TAG, "No driver found with authUid: $assignedDriverAuthUid")
                     }
                 }
 
-                Log.d(TAG, "Call $callId completed successfully.")
             } catch (e: Exception) {
-                Log.e(TAG, "Error completing call $callId", e)
             }
         }
     }
@@ -583,7 +517,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun showCallDetails(callInfo: CallInfo) {
         _callInfoForDialog.value = callInfo
     }
-
 
     private fun getOfficeRef() = regionId.value?.let { rId ->
         officeId.value?.let { oId ->
@@ -605,17 +538,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun showCallDialog(callId: String) {
         viewModelScope.launch {
             try {
-                // 이미 로드된 calls 리스트에서 찾기
                 val callFromCache = _calls.value.find { it.id == callId }
                 if (callFromCache != null) {
-                    Log.d(TAG, "showCallDialog: Found call in cache. ID: $callId")
                     _newCallInfo.value = callFromCache
                     _showNewCallPopup.value = true
                     return@launch
                 }
 
-                // 캐시에 없으면 Firestore에서 직접 가져오기
-                Log.d(TAG, "showCallDialog: Call not in cache. Fetching from Firestore. ID: $callId")
                 val region = _regionId.value ?: return@launch
                 val office = _officeId.value ?: return@launch
 
@@ -627,17 +556,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 if (callDocument.exists()) {
                     val callInfo = parseCallDocument(callDocument)
                     if (callInfo != null) {
-                        Log.d(TAG, "showCallDialog: Successfully fetched call from Firestore. ID: $callId")
                         _newCallInfo.value = callInfo
                         _showNewCallPopup.value = true
                     } else {
-                        Log.w(TAG, "showCallDialog: Failed to parse call document. ID: $callId")
                     }
                 } else {
-                    Log.w(TAG, "showCallDialog: Call document does not exist in Firestore. ID: $callId")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "showCallDialog: Error fetching call info for ID: $callId", e)
             }
         }
     }
@@ -646,18 +571,15 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         _callInfoForDialog.value = null
     }
 
-    // 공유콜 취소 알림 다이얼로그 관련 상태 및 메서드
     private val _showSharedCallCancelledDialog = MutableStateFlow(false)
     val showSharedCallCancelledDialog: StateFlow<Boolean> = _showSharedCallCancelledDialog.asStateFlow()
 
     private val _cancelledCallInfo = MutableStateFlow<CallInfo?>(null)
     val cancelledCallInfo: StateFlow<CallInfo?> = _cancelledCallInfo.asStateFlow()
 
-
     fun showSharedCallCancelledDialog(callId: String) {
         viewModelScope.launch {
             try {
-                Log.d(TAG, "showSharedCallCancelledDialog: callId = $callId")
                 val region = _regionId.value ?: return@launch
                 val office = _officeId.value ?: return@launch
 
@@ -669,17 +591,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 if (callDocument.exists()) {
                     val callInfo = parseCallDocument(callDocument)
                     if (callInfo != null) {
-                        Log.d(TAG, "showSharedCallCancelledDialog: 콜 정보 로드 성공")
                         _cancelledCallInfo.value = callInfo
                         _showSharedCallCancelledDialog.value = true
                     } else {
-                        Log.w(TAG, "showSharedCallCancelledDialog: 콜 문서 파싱 실패")
                     }
                 } else {
-                    Log.w(TAG, "showSharedCallCancelledDialog: 콜 문서가 존재하지 않음")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "showSharedCallCancelledDialog: 오류 발생", e)
             }
         }
     }
@@ -689,14 +607,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         _cancelledCallInfo.value = null
     }
 
-
     fun approveDriver(driverId: String) {
         getOfficeRef()?.collection("designated_drivers")?.document(driverId)?.update("status", "대기중")
         dismissApprovalPopup()
     }
 
     fun rejectDriver(driverId: String) {
-        // 거절 시 문서를 삭제하는 대신 상태를 변경하여 기록을 남깁니다.
         getOfficeRef()?.collection("designated_drivers")?.document(driverId)?.update("status", "거절됨")
         dismissApprovalPopup()
     }
@@ -760,29 +676,23 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun updateOfficeStatus(newStatus: String) {
         val region = _regionId.value ?: return
         val office = _officeId.value ?: return
-        
+
         viewModelScope.launch {
             try {
                 val officeRef = firestore.collection("regions").document(region)
                     .collection("offices").document(office)
-                
+
                 val currentStatus = _officeStatus.value
-                
-                // 즉시 로컬 상태 업데이트 (UI 반응성 향상)
+
                 _officeStatus.value = newStatus
-                
-                // Firebase 업데이트 (set with merge를 사용하여 필드가 없어도 생성)
+
                 officeRef.set(mapOf("status" to newStatus), com.google.firebase.firestore.SetOptions.merge())
                     .addOnSuccessListener {
-                        Log.d(TAG, "사무실 상태 업데이트 성공: $currentStatus -> $newStatus")
                     }
                     .addOnFailureListener { e ->
-                        Log.e(TAG, "사무실 상태 업데이트 실패", e)
-                        // 실패시 원래 상태로 롤백
                         _officeStatus.value = currentStatus
                     }
             } catch (e: Exception) {
-                Log.e(TAG, "사무실 상태 업데이트 중 오류", e)
             }
         }
     }
@@ -810,9 +720,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 )
 
                 val docRef = officeRef.collection("calls").add(data).await()
-                Log.d(TAG, "Placeholder call created: ${docRef.id}")
             } catch (e: Exception) {
-                Log.e(TAG, "Error creating placeholder call", e)
             }
         }
     }
@@ -826,32 +734,23 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
         viewModelScope.launch {
             try {
-                // Firebase에서 콜 삭제
                 firestore.collection("regions").document(region)
                     .collection("offices").document(office)
                     .collection("calls").document(callId)
                     .delete()
                     .await()
-                
-                Log.d(TAG, "Call deleted successfully: $callId")
-                
-                // 로컬 캐시에서도 제거
+
                 callsCache.remove(callId)
                 previousStatusMap.remove(callId)
                 _calls.value = callsCache.values.toList()
-                
-                // 새로운 콜 팝업이 열려있다면 닫기
+
                 if (_newCallInfo.value?.id == callId) {
                     dismissNewCallPopup()
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error deleting call", e)
             }
         }
     }
-
-    // 기존 수동 배차 로직은 보류 상태로 두고 사용하지 않음.
-    // fun createManualCall(driverId: String) { ... }
 
     private fun fetchOfficeName(regionId: String, officeId: String) {
         viewModelScope.launch {
@@ -876,13 +775,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         _regionId.value = regionId
         _officeId.value = officeId
 
-        // 콜디텍터를 위한 지역/사무실 정보 자동 동기화
         syncCallDetectorSettings(regionId, officeId)
 
         startListening(regionId, officeId)
         fetchOfficeName(regionId, officeId)
-        
-        // 콜디텍터가 활성화되어 있으면 서비스 시작
+
         startCallDetectorIfEnabled()
     }
 
@@ -921,42 +818,30 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     "fare" to fare,
                     "sourceRegionId" to region,
                     "sourceOfficeId" to office,
-                    "targetRegionId" to region, // 동일 지역 한정
+                    "targetRegionId" to region,
                     "createdBy" to (auth.currentUser?.uid ?: ""),
                     "phoneNumber" to callInfo.phoneNumber,
-                    "originalCallId" to callInfo.id, // 원본 콜 ID 저장
+                    "originalCallId" to callInfo.id,
                     "timestamp" to Timestamp.now()
                 )
-                
-                Log.d(TAG, "🚀 [SharedCall-Create] Creating shared call:")
-                Log.d(TAG, "   📍 sourceRegionId: $region")
-                Log.d(TAG, "   📍 sourceOfficeId: $office") 
-                Log.d(TAG, "   🎯 targetRegionId: $region")
-                Log.d(TAG, "   📞 phoneNumber: ${callInfo.phoneNumber}")
-                Log.d(TAG, "   📄 originalCallId: ${callInfo.id}")
-                docRef.set(data).await()
-                Log.d(TAG, "✅ [SharedCall-Create] Shared call uploaded successfully: ${docRef.id}")
-                Log.d(TAG, "🔔 [SharedCall-Create] Cloud Functions should now notify other offices in region: $region")
 
-                // 원본 콜을 공유콜로 표시하고 내부 목록에 유지
+                docRef.set(data).await()
+
                 val origCallRef = firestore.collection("regions").document(region)
                     .collection("offices").document(office)
                     .collection("calls").document(callInfo.id)
-                
+
                 val callUpdates = mapOf(
                     "callType" to "SHARED",
-                    "status" to "SHARED_WAITING", // 공유 대기 상태로 명확히 구분
+                    "status" to "SHARED_WAITING",
                     "sourceSharedCallId" to docRef.id,
                     "departure_set" to departure,
                     "destination_set" to destination,
                     "fare_set" to fare,
                     "updatedAt" to Timestamp.now()
                 )
-                Log.d(TAG, "Updating original call with: $callUpdates")
                 origCallRef.update(callUpdates).await()
-                Log.d(TAG, "Original call updated successfully")
             } catch (e: Exception) {
-                Log.e(TAG, "Error sharing call", e)
             }
         }
     }
@@ -977,12 +862,10 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                         "status" to "CLAIMED",
                         "claimedOfficeId" to office,
                         "claimedAt" to Timestamp.now(),
-                        "targetRegionId" to region // 타겟 지역 업데이트(다지역 지원 대비)
+                        "targetRegionId" to region
                     ))
                 }.await()
-                Log.d(TAG, "Shared call claimed: $sharedCallId")
             } catch (e: Exception) {
-                Log.e(TAG, "Error claiming shared call", e)
             }
         }
     }
@@ -994,17 +877,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         fare: Int,
         driverId: String? = null
     ) {
-        Log.d(TAG, "▶ claimSharedCallWithDetails called. sharedCallId=$sharedCallId, driverId=$driverId")
-        
-        // 디버깅: 현재 드라이버 캐시의 ID들을 확인
+
         driverCache.values.forEach { driver ->
-            Log.d(TAG, "▶ Driver in cache: ${driver.name} -> docId=${driver.id}, authUid=${driver.authUid}")
         }
         viewModelScope.launch {
             try {
                 val region = _regionId.value ?: return@launch
                 val office = _officeId.value ?: return@launch
-                Log.d(TAG, "▶ TX START. driverId=$driverId")
                 firestore.runTransaction { tx ->
                     val docRef = firestore.collection("shared_calls").document(sharedCallId)
                     val snap = tx.get(docRef)
@@ -1012,7 +891,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                         throw Exception("공유콜 문서가 존재하지 않습니다: $sharedCallId")
                     }
                     val status = snap.getString("status")
-                    Log.d(TAG, "▶ Current shared call status: $status")
                     if (status != "OPEN") {
                         throw Exception("이미 수락된 콜입니다. 현재 상태: $status")
                     }
@@ -1023,59 +901,49 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                         "departure" to departure,
                         "destination" to destination,
                         "fare" to fare,
-                        "targetRegionId" to region // 다지역 확장 대비
+                        "targetRegionId" to region
                     )
-                    driverId?.let { 
-                        updateMap["claimedDriverId"] = it 
-                        Log.d(TAG, "▶ Setting claimedDriverId: $it")
-                        
-                        // 기사의 authUid도 함께 저장
+                    driverId?.let {
+                        updateMap["claimedDriverId"] = it
+
                         val driver = driverCache[it]
                         driver?.authUid?.let { authUid ->
                             updateMap["claimedDriverAuthUid"] = authUid
-                            Log.d(TAG, "▶ Setting claimedDriverAuthUid: $authUid")
                         }
                     }
-                    Log.d(TAG, "▶ Updating shared call with map: $updateMap")
                     tx.update(docRef, updateMap)
                 }.await()
-                Log.d(TAG, "✅ Shared call claimed with details: $sharedCallId")
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Error claiming shared call with details: ${e.message}", e)
             }
         }
     }
 
-    // 테스트용 포인트 문서 생성 함수
     fun createTestPointsDocument() {
         val region = _regionId.value ?: return
         val office = _officeId.value ?: return
-        
+
         viewModelScope.launch {
             try {
                 val pointsRef = firestore.collection("regions").document(region)
                     .collection("offices").document(office)
                     .collection("points").document("points")
-                
+
                 val testPointsData = hashMapOf(
                     "balance" to 1000,
                     "updatedAt" to Timestamp.now()
                 )
-                
+
                 pointsRef.set(testPointsData).await()
-                Log.d(TAG, "Test points document created successfully")
             } catch (e: Exception) {
-                Log.e(TAG, "Error creating test points document", e)
             }
         }
     }
 
-    // 취소된 공유콜을 재공유로 전환
     fun reopenSharedCall(sharedCallId: String) {
         viewModelScope.launch {
             try {
                 val sharedCallRef = firestore.collection("shared_calls").document(sharedCallId)
-                
+
                 sharedCallRef.update(
                     mapOf(
                         "status" to "OPEN",
@@ -1084,124 +952,92 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                         "updatedAt" to Timestamp.now()
                     )
                 ).await()
-                
-                Log.d(TAG, "Shared call reopened: $sharedCallId")
+
             } catch (e: Exception) {
-                Log.e(TAG, "Error reopening shared call", e)
             }
         }
     }
 
-    // 취소된 공유콜을 삭제
     fun deleteSharedCall(sharedCallId: String) {
         viewModelScope.launch {
             try {
                 firestore.collection("shared_calls").document(sharedCallId).delete().await()
-                Log.d(TAG, "Shared call deleted: $sharedCallId")
             } catch (e: Exception) {
-                Log.e(TAG, "Error deleting shared call", e)
             }
         }
     }
 
-
-
     fun showSharedCallNotificationFromId(sharedCallId: String) {
-        Log.d(TAG, "showSharedCallNotificationFromId called with sharedCallId: $sharedCallId")
         viewModelScope.launch {
             try {
-                // Firestore에서 공유콜 정보 가져오기
                 val sharedCallDoc = firestore.collection("shared_calls").document(sharedCallId).get().await()
-                
+
                 if (sharedCallDoc.exists()) {
                     val sharedCallData = sharedCallDoc.toObject(com.designated.callmanager.data.SharedCallInfo::class.java)
                         ?.copy(id = sharedCallDoc.id)
-                    
+
                     if (sharedCallData != null) {
-                        Log.d(TAG, "공유콜 데이터 로드 성공: ${sharedCallData.departure} → ${sharedCallData.destination}")
-                        
-                        // 공유콜 팝업 표시를 위해 상태 업데이트
+
                         _showNewSharedCallPopup.value = true
                         _newSharedCallInfo.value = sharedCallData
-                        Log.d(TAG, "공유콜 팝업 상태 업데이트 완료")
                     } else {
-                        Log.w(TAG, "공유콜 데이터 파싱 실패")
                     }
                 } else {
-                    Log.w(TAG, "공유콜 문서가 존재하지 않음: $sharedCallId")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "공유콜 데이터 로드 오류", e)
             }
         }
     }
 
-
     fun showTripStartedPopup(driverName: String, driverPhone: String?, tripSummary: String, customerName: String) {
-        Log.d(TAG, "showTripStartedPopup called")
         _tripStartedInfo.value = Triple(driverName, driverPhone, tripSummary)
         _showTripStartedPopup.value = true
     }
 
     fun showTripCompletedPopup(driverName: String, customerName: String) {
-        Log.d(TAG, "showTripCompletedPopup called")
         _tripCompletedInfo.value = Pair(driverName, customerName)
         _showTripCompletedPopup.value = true
     }
 
     fun showCancelledCallPopup(driverName: String, customerName: String) {
-        Log.d(TAG, "showCancelledCallPopup called")
         _canceledCallInfo.value = Pair(driverName, customerName)
         _showCanceledCallPopup.value = true
     }
-    
-    // ===== 콜 디텍터 관리 =====
+
     fun syncCallDetectorSettings(regionId: String, officeId: String) {
         val prefs = getApplication<Application>().getSharedPreferences("call_manager_prefs", Context.MODE_PRIVATE)
-        
-        // 콜디텍터를 위한 설정 자동 동기화
+
         prefs.edit().apply {
             putString("regionId", regionId)
-            putString("officeId", officeId) 
-            putString("deviceName", android.os.Build.MODEL) // 디바이스명은 자동으로 모델명 사용
-            // 최초 로그인 시 콜디텍터를 기본적으로 활성화
+            putString("officeId", officeId)
+            putString("deviceName", android.os.Build.MODEL)
             if (!prefs.contains("call_detection_enabled")) {
                 putBoolean("call_detection_enabled", true)
-                Log.i(TAG, "🔧 First time setup: Enabling call detection by default")
             }
             apply()
         }
-        
-        Log.i(TAG, "✅ CallDetector settings synced - Region: $regionId, Office: $officeId, Device: ${android.os.Build.MODEL}")
+
     }
-    
-    // 수동으로 콜디텍터 설정 동기화 (디버깅용)
+
     fun forceSyncCallDetectorSettings() {
         val currentRegionId = _regionId.value
         val currentOfficeId = _officeId.value
-        
+
         if (currentRegionId != null && currentOfficeId != null) {
             syncCallDetectorSettings(currentRegionId, currentOfficeId)
-            Log.i(TAG, "🔧 Manual sync triggered for Region: $currentRegionId, Office: $currentOfficeId")
         } else {
-            Log.w(TAG, "❌ Cannot sync: regionId or officeId is null")
         }
     }
-    
+
     private fun startCallDetectorIfEnabled() {
         val prefs = getApplication<Application>().getSharedPreferences("call_manager_prefs", Context.MODE_PRIVATE)
         val isCallDetectionEnabled = prefs.getBoolean("call_detection_enabled", false)
-        
-        Log.d(TAG, "Call detection enabled: $isCallDetectionEnabled")
-        
+
         if (isCallDetectionEnabled) {
-            // 이미 실행 중인지 확인
             if (com.designated.callmanager.service.CallDetectorService.isServiceRunning()) {
-                Log.d(TAG, "CallDetectorService already running, skipping start")
                 return
             }
-            
-            // 콜디텍터 서비스 시작
+
             try {
                 val intent = Intent(getApplication(), com.designated.callmanager.service.CallDetectorService::class.java)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -1209,18 +1045,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 } else {
                     getApplication<Application>().startService(intent)
                 }
-                Log.i(TAG, "✅ CallDetectorService started successfully")
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Failed to start CallDetectorService", e)
             }
         } else {
-            // 콜디텍터 서비스 중지 (이미 실행 중인 경우)
             try {
                 val intent = Intent(getApplication(), com.designated.callmanager.service.CallDetectorService::class.java)
                 getApplication<Application>().stopService(intent)
-                Log.i(TAG, "CallDetectorService stopped (disabled)")
             } catch (e: Exception) {
-                Log.w(TAG, "CallDetectorService stop failed (may not be running)", e)
             }
         }
     }

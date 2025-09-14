@@ -7,12 +7,12 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [
-        SettlementEntity::class, 
+        SettlementEntity::class,
         SessionEntity::class,
         CreditPersonEntity::class,
         CreditEntryEntity::class
-    ], 
-    version = 6, 
+    ],
+    version = 6,
     exportSchema = false
 )
 abstract class CallManagerDatabase : RoomDatabase() {
@@ -31,9 +31,8 @@ abstract class CallManagerDatabase : RoomDatabase() {
                     CallManagerDatabase::class.java,
                     "callmanager.db"
                 )
-                    .fallbackToDestructiveMigration()
                     .build().also { INSTANCE = it }
             }
         }
     }
-} 
+}

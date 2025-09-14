@@ -21,7 +21,7 @@ import com.designated.driverapp.ui.login.LoginViewModel
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.designated.driverapp.viewmodel.DriverViewModel
 import com.google.firebase.messaging.FirebaseMessaging
-import android.util.Log
+import Log
 
 @Composable
 fun LoginScreen(
@@ -29,7 +29,7 @@ fun LoginScreen(
     driverViewModel: DriverViewModel,
     onLoginSuccess: (regionId: String, officeId: String, driverId: String) -> Unit,
     onNavigateToPasswordReset: () -> Unit,
-    onNavigateToSignUp: () -> Unit 
+    onNavigateToSignUp: () -> Unit
 ) {
     val loginState by loginViewModel.loginState.collectAsState()
     var showPassword by remember { mutableStateOf(false) }
@@ -48,15 +48,13 @@ fun LoginScreen(
             }
             is LoginState.Success -> {
                 errorMessage = null
-                
+
                 if (state.needsTokenUpdate) {
-                    Log.d("LoginScreen", "Token update required. Fetching and setting token.")
                     FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
                         if (task.isSuccessful) {
                             val token = task.result
                             driverViewModel.setFcmToken(token)
                         } else {
-                            Log.w("LoginScreen", "Fetching FCM token failed for update.", task.exception)
                         }
                     }
                 }
@@ -134,7 +132,7 @@ fun LoginScreen(
                         onCheckedChange = { loginViewModel.toggleAutoLogin(it) },
                         enabled = loginState !is LoginState.Loading,
                         colors = CheckboxDefaults.colors(
-                            checkedColor = MaterialTheme.colorScheme.primary, 
+                            checkedColor = MaterialTheme.colorScheme.primary,
                             uncheckedColor = MaterialTheme.colorScheme.onBackground,
                             checkmarkColor = MaterialTheme.colorScheme.background
                         )
@@ -157,8 +155,8 @@ fun LoginScreen(
                     enabled = loginState !is LoginState.Loading,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.onBackground, 
-                        contentColor = MaterialTheme.colorScheme.background 
+                        containerColor = MaterialTheme.colorScheme.onBackground,
+                        contentColor = MaterialTheme.colorScheme.background
                     )
                 ) {
                     if (loginState == LoginState.Loading) {
@@ -182,7 +180,7 @@ fun LoginScreen(
                     onClick = onNavigateToPasswordReset,
                     enabled = loginState !is LoginState.Loading,
                     colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.primary 
+                        contentColor = MaterialTheme.colorScheme.primary
                     )
                 ) {
                     Text("비밀번호를 잊으셨나요?")
@@ -198,4 +196,4 @@ fun LoginScreen(
             }
         }
     }
-} 
+}

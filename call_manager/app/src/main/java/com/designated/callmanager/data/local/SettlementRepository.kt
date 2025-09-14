@@ -3,7 +3,7 @@ package com.designated.callmanager.data.local
 import kotlinx.coroutines.flow.Flow
 
 class SettlementRepository(private val db: CallManagerDatabase) {
-    
+
     val dao = db.settlementDao() // dao에 직접 접근할 수 있도록
 
     fun flowActive(): Flow<List<SettlementEntity>> = dao.flowActive()
@@ -20,4 +20,4 @@ class SettlementRepository(private val db: CallManagerDatabase) {
     fun flowTripsBySession(sessionId: String) = db.settlementDao().getTripsBySession(sessionId)
 
     suspend fun insertSession(session: SessionEntity) = db.sessionDao().insert(session)
-} 
+}

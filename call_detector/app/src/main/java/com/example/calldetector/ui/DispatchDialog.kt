@@ -12,7 +12,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
-// 기사 정보 데이터 클래스
 data class DriverInfo(
     val id: String,
     val name: String,
@@ -20,7 +19,6 @@ data class DriverInfo(
     val phone: String = ""
 )
 
-// 콜 정보 데이터 클래스
 data class CallInfo(
     val phoneNumber: String,
     val customerName: String? = null,
@@ -42,7 +40,6 @@ fun DispatchDialog(
         title = { Text("새로운 호출 접수", fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                // 호출 정보 표시
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
@@ -53,22 +50,21 @@ fun DispatchDialog(
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
-                        callInfo.customerName?.let { 
+                        callInfo.customerName?.let {
                             Text(
                                 text = it,
                                 color = Color.White
-                            ) 
+                            )
                         }
-                        callInfo.customerAddress?.let { 
+                        callInfo.customerAddress?.let {
                             Text(
                                 text = it,
                                 color = Color.White
-                            ) 
+                            )
                         }
                     }
                 }
-                
-                // 대기중인 기사 목록
+
                 if (availableDrivers.isNotEmpty()) {
                     Text("대기중인 기사 선택:", fontWeight = FontWeight.Medium)
                     LazyColumn(
@@ -116,21 +112,21 @@ fun DispatchDialog(
         },
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onHold) { 
-                    Text("보류") 
+                TextButton(onClick = onHold) {
+                    Text("보류")
                 }
 
-                TextButton(onClick = onShare) { 
-                    Text("공유") 
+                TextButton(onClick = onShare) {
+                    Text("공유")
                 }
-                
+
                 TextButton(
                     onClick = onDelete,
                     colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.error
                     )
-                ) { 
-                    Text("삭제") 
+                ) {
+                    Text("삭제")
                 }
             }
         }

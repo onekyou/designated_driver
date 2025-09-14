@@ -59,8 +59,8 @@ fun HistorySettlementScreen(
 
     SideEffect {
         systemUiController.setStatusBarColor(
-            color = Color(0xFF222222), // 어두운 배경
-            darkIcons = false // 밝은 아이콘
+            color = Color(0xFF222222),
+            darkIcons = false
         )
     }
     val sortedCalls = completedCalls.sortedByDescending { it.timestamp }
@@ -106,7 +106,6 @@ fun HistorySettlementScreen(
         val fare = parts[2].replace("원", "").replace(",", "").trim().toIntOrNull() ?: 0
         val payment = parts[3]
         return if (payment.startsWith("현금+포인트")) {
-            // 쉼표가 포함된 현금 금액도 처리하도록 정규식 수정
             val cashRegex = Regex("\\(([\\d,]+)원 현금\\)")
             val cashMatch = cashRegex.find(payment)
             val cash = cashMatch?.groupValues?.getOrNull(1)?.replace(",", "")?.toIntOrNull() ?: 0
@@ -222,7 +221,7 @@ fun HistorySettlementScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { 
+                    IconButton(onClick = {
                         navController.navigate("home") {
                             popUpTo("home") { inclusive = false }
                         }
@@ -439,4 +438,4 @@ fun HistorySettlementScreen(
             )
         }
     }
-} 
+}

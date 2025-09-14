@@ -32,23 +32,21 @@ fun PendingDriversScreen(
 
     val context = LocalContext.current
 
-    // 승인/거절 결과 메시지 처리
     LaunchedEffect(approvalState) {
         when (val state = approvalState) {
             is DriverApprovalState.Success -> {
                 val message = if (state.approved) "${state.driverName} 기사님을 승인했습니다." else "${state.driverName} 기사님의 가입 요청을 거절했습니다."
                 Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                viewModel.resetApprovalState() // 상태 초기화
+                viewModel.resetApprovalState()
             }
             is DriverApprovalState.Error -> {
                 Toast.makeText(context, "오류: ${state.message}", Toast.LENGTH_LONG).show()
                 viewModel.resetApprovalState()
             }
-            else -> Unit // Idle 또는 Loading 상태
+            else -> Unit
         }
     }
 
-    // 승인 다이얼로그 상태
     var showApprovalDialog by remember { mutableStateOf(false) }
     var driverToApprove by remember { mutableStateOf<PendingDriverInfo?>(null) }
 
@@ -86,7 +84,7 @@ fun PendingDriversScreen(
                                         showApprovalDialog = true
                                     },
                                     onRejectClick = { viewModel.rejectDriver(it) },
-                                    isProcessing = approvalState is DriverApprovalState.Loading // 처리 중일 때 버튼 비활성화
+                                    isProcessing = approvalState is DriverApprovalState.Loading
                                 )
                             }
                         }
@@ -99,7 +97,6 @@ fun PendingDriversScreen(
         }
     }
 
-    // --- 승인 확인 다이얼로그 ---
     if (showApprovalDialog && driverToApprove != null) {
         AlertDialog(
             onDismissRequest = { showApprovalDialog = false },
@@ -120,7 +117,7 @@ fun PendingDriversScreen(
                         viewModel.approveDriver(driverToApprove!!)
                         showApprovalDialog = false
                     },
-                    enabled = approvalState !is DriverApprovalState.Loading // 로딩 중 아닐 때만 활성화
+                    enabled = approvalState !is DriverApprovalState.Loading
                 ) {
                     if (approvalState is DriverApprovalState.Loading && driverToApprove != null) { // 특정 기사 처리 중 표시 - TODO: 이게 정확히 동작할지 확인 필요
                          CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -136,7 +133,6 @@ fun PendingDriversScreen(
             }
         )
     }
-    // --- ---
 }
 
 @Composable
@@ -144,7 +140,7 @@ fun PendingDriverCard(
     driverInfo: PendingDriverInfo,
     onApproveClick: (PendingDriverInfo) -> Unit,
     onRejectClick: (PendingDriverInfo) -> Unit,
-    isProcessing: Boolean // 승인/거절 처리 중 여부
+    isProcessing: Boolean
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -156,7 +152,7 @@ fun PendingDriverCard(
             Text("연락처: ${driverInfo.phoneNumber}", style = MaterialTheme.typography.bodyMedium)
             Text("이메일: ${driverInfo.email}", style = MaterialTheme.typography.bodyMedium)
             Text("요청 유형: ${driverInfo.driverType}", style = MaterialTheme.typography.bodyMedium)
-             driverInfo.requestedAt?.toDate()?.let { // Timestamp를 Date로 변환하여 표시
+             driverInfo.requestedAt?.toDate()?.let {
                  Text("신청일시: ${DateFormat.format("yyyy-MM-dd hh:mm a", it)}", style = MaterialTheme.typography.bodySmall)
              }
             Spacer(modifier = Modifier.height(12.dp))
@@ -167,7 +163,7 @@ fun PendingDriverCard(
             ) {
                 Button(
                     onClick = { onApproveClick(driverInfo) },
-                    enabled = !isProcessing, // 처리 중 아닐 때 활성화
+                    enabled = !isProcessing,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                 ) {
                     Icon(Icons.Filled.Check, contentDescription = "승인", modifier = Modifier.size(18.dp))
@@ -179,7 +175,7 @@ fun PendingDriverCard(
                     onClick = { onRejectClick(driverInfo) },
                     enabled = !isProcessing,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error) // 빨간색 텍스트
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
                     Icon(Icons.Filled.Close, contentDescription = "거절", modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
@@ -188,4 +184,4 @@ fun PendingDriverCard(
             }
         }
     }
-} 
+}

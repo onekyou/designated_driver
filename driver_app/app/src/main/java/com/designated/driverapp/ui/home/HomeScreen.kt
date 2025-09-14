@@ -1,6 +1,6 @@
 package com.designated.driverapp.ui.home
 
-import android.util.Log
+import Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -37,15 +37,12 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Handle error messages
     LaunchedEffect(uiState.errorMessage) {
         uiState.errorMessage?.let {
             snackbarHostState.showSnackbar(it)
             viewModel.onErrorMessageHandled()
         }
     }
-
-    // ★★★ 네비게이션은 AppNavigation에서 전역 처리하므로 여기서는 제거 ★★★
 
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
@@ -56,9 +53,7 @@ fun HomeScreen(
                 .padding(paddingValues),
             contentAlignment = Alignment.Center
         ) {
-            // Main content based on state
             when {
-                // 새로운 콜 팝업이 있는 경우
                 uiState.newCallPopup != null -> {
                     val newCallPopup = uiState.newCallPopup!!
                     NewCallPopup(
@@ -67,7 +62,6 @@ fun HomeScreen(
                         onDismiss = { viewModel.dismissNewCallPopup() }
                     )
                 }
-                // 활성 콜이 있는 경우 상태에 따라 화면 분기
                 uiState.activeCall != null -> {
                     val activeCall = uiState.activeCall!!
                     when (activeCall.statusEnum) {
@@ -85,7 +79,6 @@ fun HomeScreen(
                                 },
                                 onCancel = { cancelReason ->
                                     viewModel.cancelTrip(activeCall.id, cancelReason)
-                                    // 취소 후 홈 화면에 머무르며 자동으로 대기 화면이 표시됨
                                 }
                             )
                         }
@@ -96,7 +89,6 @@ fun HomeScreen(
                             )
                         }
                         else -> {
-                            // ★★★ 기타 상태는 단순한 대기 화면 표시 ★★★
                             WaitingScreen(
                                 driverStatus = uiState.driverStatus,
                                 onGoOnline = { viewModel.updateDriverStatus(DriverStatus.ONLINE) },
@@ -105,7 +97,6 @@ fun HomeScreen(
                         }
                     }
                 }
-                // 오프라인 상태
                 uiState.driverStatus == DriverStatus.OFFLINE -> {
                     Column(
                         modifier = Modifier.fillMaxSize(),
@@ -121,7 +112,6 @@ fun HomeScreen(
                         }
                     }
                 }
-                // ★★★ 온라인 상태 (OnlineScreen 제거하고 단순한 대기 화면) ★★★
                 else -> {
                     WaitingScreen(
                         driverStatus = uiState.driverStatus,
@@ -131,12 +121,10 @@ fun HomeScreen(
                 }
             }
 
-            // Loading indicator overlay
             if (uiState.isLoading) {
                 CircularProgressIndicator()
             }
 
-            // Settlement popup
             uiState.callForSettlement?.let { call ->
                 SettlementSummaryPopup(
                     callInfo = call,
@@ -145,7 +133,7 @@ fun HomeScreen(
                             callId = call.id,
                             paymentMethod = paymentMethod,
                             cashAmount = cashAmount,
-                            fareToSet = finalFare, // 수정된 요금 사용
+                            fareToSet = finalFare,
                             tripSummaryToSet = call.trip_summary ?: ""
                         )
                     },
@@ -179,7 +167,7 @@ fun CompletedScreen(callInfo: CallInfo, onRequestSettlement: () -> Unit) {
 @Composable
 fun SettlementSummaryPopup(
     callInfo: CallInfo,
-    onConfirm: (String, Int?, Int) -> Unit, // 수정된 요금 추가
+    onConfirm: (String, Int?, Int) -> Unit,
     onDismiss: () -> Unit
 ) {
     var paymentMethod by remember { mutableStateOf("현금") }
@@ -190,7 +178,7 @@ fun SettlementSummaryPopup(
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(16.dp),
-            color = Color(0xFF1A1A1A) // 다크 배경
+            color = Color(0xFF1A1A1A)
         ) {
             Column(
                 modifier = Modifier
@@ -200,56 +188,51 @@ fun SettlementSummaryPopup(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    "정산 확인", 
-                    style = MaterialTheme.typography.titleLarge, 
+                    "정산 확인",
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFFFFB000) // 딥 옐로우
+                    color = Color(0xFFFFB000)
                 )
-                
-                // 운행 정보 카드
+
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A))
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Text(
-                            "운행 정보", 
-                            style = MaterialTheme.typography.titleMedium, 
+                            "운행 정보",
+                            style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFFFFB000) // 딥 옐로우
+                            color = Color(0xFFFFB000)
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        
-                        // 고객 정보
+
                         callInfo.customerName?.let { name ->
                             Text(
-                                "고객명: $name", 
+                                "고객명: $name",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Color.White
                             )
                         }
-                        
-                        // 출발지 → 도착지
+
                         val departure = callInfo.departure_set ?: "출발지"
                         val destination = callInfo.destination_set ?: "도착지"
                         Text(
-                            "경로: $departure → $destination", 
+                            "경로: $departure → $destination",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.White
                         )
-                        
-                        // 경유지
+
                         callInfo.waypoints_set?.takeIf { it.isNotBlank() }?.let { waypoints ->
                             Text(
-                                "경유지: $waypoints", 
+                                "경유지: $waypoints",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Color.White
                             )
                         }
-                        
+
                         Spacer(modifier = Modifier.height(4.dp))
-                        
-                        // 요금 수정 기능
+
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth()
@@ -270,7 +253,7 @@ fun SettlementSummaryPopup(
                                     modifier = Modifier.weight(1f)
                                 )
                                 IconButton(
-                                    onClick = { 
+                                    onClick = {
                                         isEditingFare = false
                                     }
                                 ) {
@@ -282,14 +265,14 @@ fun SettlementSummaryPopup(
                                 }
                             } else {
                                 Text(
-                                    "요금: ${String.format("%,d", editableFare.toIntOrNull() ?: 0)}원", 
+                                    "요금: ${String.format("%,d", editableFare.toIntOrNull() ?: 0)}원",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFFFB000), // 딥 옐로우
+                                    color = Color(0xFFFFB000),
                                     modifier = Modifier.weight(1f)
                                 )
                                 IconButton(
-                                    onClick = { 
+                                    onClick = {
                                         isEditingFare = true
                                     }
                                 ) {
@@ -304,16 +287,14 @@ fun SettlementSummaryPopup(
                     }
                 }
 
-                // 결제 방법 선택
                 Text(
-                    "결제 방법", 
-                    style = MaterialTheme.typography.titleMedium, 
+                    "결제 방법",
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFFFFB000) // 딥 옐로우
+                    color = Color(0xFFFFB000)
                 )
-                
+
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // 현금
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
@@ -327,13 +308,12 @@ fun SettlementSummaryPopup(
                             )
                         )
                         Text(
-                            "현금", 
+                            "현금",
                             modifier = Modifier.weight(1f),
                             color = Color.White
                         )
                     }
-                    
-                    // 외상 (새로 추가)
+
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
@@ -347,13 +327,12 @@ fun SettlementSummaryPopup(
                             )
                         )
                         Text(
-                            "외상", 
+                            "외상",
                             modifier = Modifier.weight(1f),
                             color = Color.White
                         )
                     }
-                    
-                    // 카드
+
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
@@ -367,13 +346,12 @@ fun SettlementSummaryPopup(
                             )
                         )
                         Text(
-                            "카드 (외상)", 
+                            "카드 (외상)",
                             modifier = Modifier.weight(1f),
                             color = Color.White
                         )
                     }
-                    
-                    // 현금+포인트
+
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
@@ -387,13 +365,12 @@ fun SettlementSummaryPopup(
                             )
                         )
                         Text(
-                            "현금+포인트 (일부 외상)", 
+                            "현금+포인트 (일부 외상)",
                             modifier = Modifier.weight(1f),
                             color = Color.White
                         )
                     }
-                    
-                    // 포인트
+
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
@@ -407,23 +384,22 @@ fun SettlementSummaryPopup(
                             )
                         )
                         Text(
-                            "포인트 (외상)", 
+                            "포인트 (외상)",
                             modifier = Modifier.weight(1f),
                             color = Color.White
                         )
                     }
                 }
 
-                // 현금+포인트일 때만 입력 필드 표시
                 if (paymentMethod == "현금+포인트") {
                     OutlinedTextField(
                         value = cashAmount,
                         onValueChange = { cashAmount = it.filter { c -> c.isDigit() } },
-                        label = { 
+                        label = {
                             Text(
                                 "받은 현금 (원) - 나머지는 포인트",
                                 color = Color.Gray
-                            ) 
+                            )
                         },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color(0xFFFFB000),
@@ -435,7 +411,7 @@ fun SettlementSummaryPopup(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth()
                     )
-                    
+
                     if (cashAmount.isNotEmpty()) {
                         val cash = cashAmount.toIntOrNull() ?: 0
                         val totalFare = editableFare.toIntOrNull() ?: 0
@@ -466,7 +442,7 @@ fun SettlementSummaryPopup(
                         Text("취소")
                     }
                     Button(
-                        onClick = { 
+                        onClick = {
                             if (!confirmEnabled) return@Button
                             val finalFare = editableFare.toIntOrNull() ?: (callInfo.fare_set ?: 0)
                             val amount = when (paymentMethod) {

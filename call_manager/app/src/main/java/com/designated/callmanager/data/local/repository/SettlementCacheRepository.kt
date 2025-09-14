@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.Flow
 class SettlementCacheRepository(
     private val dao: SettlementDao
 ) {
-    // 정산대기 관련
     suspend fun addWaitingSettlement(callId: String) {
         dao.insertSettlement(
             SettlementEntity(
@@ -18,20 +17,19 @@ class SettlementCacheRepository(
             )
         )
     }
-    
+
     suspend fun removeWaitingSettlement(callId: String) {
         dao.deleteSettlementById(callId)
     }
-    
+
     fun getWaitingSettlements(): Flow<List<SettlementEntity>> {
         return dao.getSettlementsByStatus("WAITING")
     }
-    
+
     suspend fun clearAllWaitingSettlements() {
         dao.clearAllSettlements()
     }
-    
-    // 외상 관련
+
     suspend fun addCredit(
         driverId: String,
         driverName: String,
@@ -51,19 +49,19 @@ class SettlementCacheRepository(
             )
         )
     }
-    
+
     suspend fun markCreditAsPaid(creditId: String) {
         dao.markCreditAsPaid(creditId)
     }
-    
+
     fun getUnpaidCredits(): Flow<List<CreditEntity>> {
         return dao.getUnpaidCredits()
     }
-    
+
     fun getUnpaidCreditsByDriver(driverId: String): Flow<List<CreditEntity>> {
         return dao.getUnpaidCreditsByDriver(driverId)
     }
-    
+
     suspend fun deletePaidCredits() {
         dao.deletePaidCredits()
     }

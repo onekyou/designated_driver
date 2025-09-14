@@ -35,10 +35,8 @@ import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.util.*
-// **Log import 추가**
-import android.util.Log // 이 줄을 추가하세요!
+import Log
 
-// 딥 옐로우 컬러 정의
 private val DeepYellow = Color(0xFFFFB000)
 private val DarkBackground = Color(0xFF1A1A1A)
 private val CardBackground = Color(0xFF2A2A2A)
@@ -55,11 +53,10 @@ fun TripPreparationScreen(
     val geocoder = remember { Geocoder(context, Locale.getDefault()) }
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
-    // 초기값을 callInfo로부터 즉시 설정하여 첫 렌더링에 반영
     var departure by remember(callInfo.id) {
         mutableStateOf(
             if (callInfo.departure_set.isNotBlank()) callInfo.departure_set
-            else "" // 빈 상태로 시작 (도착지와 동일)
+            else ""
         )
     }
 
@@ -86,13 +83,10 @@ fun TripPreparationScreen(
     val scrollState = rememberScrollState()
     var showCancelDialog by remember { mutableStateOf(false) }
 
-
-    // 위치 권한 요청 런처
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            // 권한이 허용되면 현재 위치 가져오기
             coroutineScope.launch {
                 isLoadingLocation = true
                 try {
@@ -101,7 +95,6 @@ fun TripPreparationScreen(
                         val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 1)
                         if (!addresses.isNullOrEmpty()) {
                             val address = addresses[0]
-                            // 간단한 주소만 표시 (예: 용문면 다문리 211-1)
                             val simpleAddress = buildString {
                                 address.subLocality?.let { append("$it ") }
                                 address.thoroughfare?.let { append("$it ") }
@@ -119,7 +112,6 @@ fun TripPreparationScreen(
         }
     }
 
-    // 현재 위치 가져오기 함수
     fun getCurrentLocation() {
         when (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)) {
             PackageManager.PERMISSION_GRANTED -> {
@@ -131,7 +123,6 @@ fun TripPreparationScreen(
                             val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 1)
                             if (!addresses.isNullOrEmpty()) {
                                 val address = addresses[0]
-                                // 간단한 주소만 표시 (예: 용문면 다문리 211-1)
                                 val simpleAddress = buildString {
                                     address.subLocality?.let { append("$it ") }
                                     address.thoroughfare?.let { append("$it ") }
@@ -153,7 +144,6 @@ fun TripPreparationScreen(
         }
     }
 
-    // Scaffold 구성 (상단 AppBar + 내용)
     Scaffold(
         topBar = {
             TopAppBar(
@@ -166,8 +156,6 @@ fun TripPreparationScreen(
         containerColor = DarkBackground
     ) { paddingValues ->
 
-        // LaunchedEffect 제거 (초기화는 remember 블록에서 처리)
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -176,8 +164,7 @@ fun TripPreparationScreen(
                 .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            
-            // 공유콜 정보 카드
+
             if (callInfo.callType == "SHARED") {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -213,7 +200,6 @@ fun TripPreparationScreen(
                 }
             }
 
-            // 출발지 입력
             OutlinedTextField(
                 value = departure,
                 onValueChange = { departure = it },
@@ -238,7 +224,6 @@ fun TripPreparationScreen(
                 singleLine = true
             )
 
-            // 도착지 입력
             OutlinedTextField(
                 value = destination,
                 onValueChange = { destination = it },
@@ -261,7 +246,6 @@ fun TripPreparationScreen(
                 singleLine = true
             )
 
-            // 경유지 입력
             OutlinedTextField(
                 value = waypoints,
                 onValueChange = { waypoints = it },
@@ -270,7 +254,6 @@ fun TripPreparationScreen(
                 singleLine = true
             )
 
-            // 요금 입력
             OutlinedTextField(
                 value = fare,
                 onValueChange = { fare = it.filter { ch -> ch.isDigit() } },
@@ -280,10 +263,9 @@ fun TripPreparationScreen(
                 singleLine = true
             )
 
-            // 고객 전화 걸기 버튼
             if (callInfo.phoneNumber.isNotBlank()) {
                 val isSharedCall = callInfo.callType == "SHARED"
-                
+
                 Button(
                     onClick = {
                         val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${callInfo.phoneNumber}"))
@@ -291,9 +273,9 @@ fun TripPreparationScreen(
                     },
                     modifier = Modifier.fillMaxWidth(),
                     colors = if (isSharedCall) {
-                        ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)) // 공유콜은 초록색
+                        ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
                     } else {
-                        ButtonDefaults.buttonColors() // 기본 색상
+                        ButtonDefaults.buttonColors()
                     }
                 ) {
                     Icon(Icons.Default.Phone, contentDescription = null)
@@ -306,12 +288,10 @@ fun TripPreparationScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 버튼 영역 - 운행 시작과 취소 버튼
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // 취소 버튼
                 OutlinedButton(
                     onClick = { showCancelDialog = true },
                     modifier = Modifier
@@ -324,8 +304,7 @@ fun TripPreparationScreen(
                 ) {
                     Text("취소", fontWeight = FontWeight.Bold)
                 }
-                
-                // 운행 시작 버튼
+
                 Button(
                     onClick = {
                         val fareInt = fare.toIntOrNull() ?: 0
@@ -341,21 +320,19 @@ fun TripPreparationScreen(
             }
         }
     }
-    
-    // 취소 확인 다이얼로그
+
     if (showCancelDialog) {
         var selectedReason by remember { mutableStateOf("운행취소") }
         var isDropdownExpanded by remember { mutableStateOf(false) }
         val cancelReasons = listOf("운행취소", "통화불가", "보류")
-        
+
         AlertDialog(
             onDismissRequest = { showCancelDialog = false },
             title = { Text("운행 취소", fontWeight = FontWeight.Bold) },
-            text = { 
+            text = {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text("운행을 취소하시겠습니까?\n취소 시 호출이 보류 상태로 변경되며, 다른 기사가 배정받을 수 있습니다.")
-                    
-                    // 취소 사유 선택 드롭다운
+
                     ExposedDropdownMenuBox(
                         expanded = isDropdownExpanded,
                         onExpandedChange = { isDropdownExpanded = it }

@@ -10,13 +10,13 @@ interface SettlementDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAll(items: List<SettlementEntity>)
-    
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(item: SettlementEntity)
-    
+
     @Query("SELECT COUNT(*) FROM settlements WHERE callId = :callId")
     suspend fun existsById(callId: String): Int
-    
+
     @Query("SELECT * FROM settlements WHERE callId = :callId LIMIT 1")
     suspend fun getById(callId: String): SettlementEntity?
 
@@ -34,4 +34,4 @@ interface SettlementDao {
 
     @Query("SELECT * FROM settlements WHERE sessionId = :sessionId")
     fun getTripsBySession(sessionId: String): Flow<List<SettlementEntity>>
-} 
+}

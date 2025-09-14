@@ -24,15 +24,14 @@ fun LoginScreen(
     viewModel: LoginViewModel = viewModel(
         factory = LoginViewModel.Factory(LocalContext.current.applicationContext as Application)
     ),
-    onLoginComplete: (regionId: String, officeId: String) -> Unit, // 새로운 콜백 추가
-    onNavigateToSignUp: () -> Unit, // 회원가입 화면 이동 콜백
-    onNavigateToPasswordReset: () -> Unit // 비밀번호 찾기 화면 이동 콜백
+    onLoginComplete: (regionId: String, officeId: String) -> Unit,
+    onNavigateToSignUp: () -> Unit,
+    onNavigateToPasswordReset: () -> Unit
 ) {
     val loginState by viewModel.loginState.collectAsState()
     var showPassword by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // 로그인 상태 변경 감지 (오류 표시, 성공 시 콜백 호출)
     LaunchedEffect(loginState) {
         when (val state = loginState) {
             is LoginState.Error -> {
@@ -40,11 +39,11 @@ fun LoginScreen(
                     message = state.message,
                     duration = SnackbarDuration.Short
                 )
-                viewModel.resetLoginState() // 오류 표시 후 상태 초기화
+                viewModel.resetLoginState()
             }
             is LoginState.Success -> {
-                onLoginComplete(state.regionId, state.officeId) // 콜백 호출
-                viewModel.resetLoginState() // 성공 처리 후 상태 초기화 추가!
+                onLoginComplete(state.regionId, state.officeId)
+                viewModel.resetLoginState()
             }
             else -> { /* Idle, Loading */ }
         }
@@ -62,10 +61,10 @@ fun LoginScreen(
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp) // Reduced spacing slightly
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text("관리자 로그인", style = MaterialTheme.typography.headlineMedium)
-                Spacer(modifier = Modifier.height(8.dp)) // Add some space after title
+                Spacer(modifier = Modifier.height(8.dp))
 
                 OutlinedTextField(
                     value = viewModel.email,
@@ -92,7 +91,6 @@ fun LoginScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Add auto-login checkbox (align to left)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Start,
@@ -102,7 +100,7 @@ fun LoginScreen(
                         checked = viewModel.autoLogin,
                         onCheckedChange = { viewModel.toggleAutoLogin(it) },
                         colors = CheckboxDefaults.colors(
-                            checkedColor = MaterialTheme.colorScheme.primary, // DeepYellow from theme
+                            checkedColor = MaterialTheme.colorScheme.primary,
                             uncheckedColor = MaterialTheme.colorScheme.onBackground,
                             checkmarkColor = MaterialTheme.colorScheme.background
                         )
@@ -113,14 +111,13 @@ fun LoginScreen(
                     )
                 }
 
-                // Login Button (White background)
                 Button(
                     onClick = { viewModel.login() },
                     enabled = loginState != LoginState.Loading,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.onBackground, // Use light grey from theme
-                        contentColor = MaterialTheme.colorScheme.background // Use dark text color
+                        containerColor = MaterialTheme.colorScheme.onBackground,
+                        contentColor = MaterialTheme.colorScheme.background
                     )
                 ) {
                     if (loginState == LoginState.Loading) {
@@ -130,7 +127,6 @@ fun LoginScreen(
                     }
                 }
 
-                // Sign Up Button (White background)
                 Button(
                     onClick = onNavigateToSignUp,
                     modifier = Modifier.fillMaxWidth(),
@@ -142,11 +138,10 @@ fun LoginScreen(
                     Text("회원가입")
                 }
 
-                // Password Reset Text Button
                 TextButton(
                     onClick = onNavigateToPasswordReset,
                     colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.primary // DeepYellow from theme
+                        contentColor = MaterialTheme.colorScheme.primary
                     )
                 ) {
                     Text("비밀번호를 잊으셨나요?")

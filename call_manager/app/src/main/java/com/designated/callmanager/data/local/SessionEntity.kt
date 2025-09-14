@@ -19,4 +19,4 @@ data class SessionEntity(
             return SessionEntity(id, System.currentTimeMillis(), totalTrips, totalFare)
         }
     }
-} 
+}

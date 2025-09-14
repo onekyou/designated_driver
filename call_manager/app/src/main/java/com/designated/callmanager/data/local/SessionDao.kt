@@ -13,4 +13,4 @@ interface SessionDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(session: SessionEntity)
-} 
+}

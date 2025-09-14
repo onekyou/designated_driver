@@ -1,6 +1,5 @@
 package com.example.calldetector
 
-import android.app.Application
 import android.content.Context
 import android.os.Build
 import com.google.firebase.auth.FirebaseAuth
@@ -9,6 +8,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FieldValue
 import com.google.android.gms.tasks.Tasks
 import kotlinx.coroutines.CoroutineScope
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -81,33 +81,24 @@ class CrashReportService(private val context: Context) {
      * Firebase 연결 테스트 및 준비 상태 확인
      */
     private fun testFirebaseConnection() {
-        android.util.Log.d("CrashReport", "=== Firebase 연결 테스트 시작 ===")
-        android.util.Log.d("CrashReport", "Device ID: $deviceId")
-        android.util.Log.d("CrashReport", "Region ID: $regionId")
-        android.util.Log.d("CrashReport", "Office ID: $officeId")
         
         crashlytics.log("Testing Firebase connection...")
         
         // 0. Firebase 인증 상태 확인 (🔥 핵심!)
         val auth = FirebaseAuth.getInstance()
         val currentUser = auth.currentUser
-        android.util.Log.d("CrashReport", "🔐 Firebase 인증 상태: ${if (currentUser != null) "인증됨 (${currentUser.uid})" else "인증되지 않음"}")
         
         if (currentUser == null) {
-            android.util.Log.e("CrashReport", "❌ Firebase 인증이 되어있지 않음! Firestore 쓰기 실패 예상")
             crashlytics.log("❌ Firebase user not authenticated - Firestore writes may fail")
         } else {
-            android.util.Log.d("CrashReport", "✅ Firebase 인증 완료 - Firestore 쓰기 가능")
             crashlytics.log("✅ Firebase user authenticated - Firestore writes should work")
         }
         
         // 1. Firebase 인스턴스 상태 확인
         try {
-            val firestoreSettings = firestore.firestoreSettings
-            android.util.Log.d("CrashReport", "Firestore Settings: ${firestoreSettings}")
+            firestore.firestoreSettings
             crashlytics.log("Firestore settings loaded successfully")
         } catch (e: Exception) {
-            android.util.Log.e("CrashReport", "Firestore 설정 확인 실패: ${e.message}", e)
             crashlytics.log("Firestore settings check failed: ${e.message}")
         }
         
@@ -124,8 +115,6 @@ class CrashReportService(private val context: Context) {
         )
         
         val docId = "test_${deviceId}_${System.currentTimeMillis()}"
-        android.util.Log.d("CrashReport", "문서 ID: $docId")
-        android.util.Log.d("CrashReport", "전송 데이터: $testData")
         
         // 3. 동기적 테스트 (초기화 시점에서 확실히 확인)
         try {
@@ -134,15 +123,13 @@ class CrashReportService(private val context: Context) {
                 .set(testData)
             
             // 3초 내에 완료되어야 함
-            com.google.android.gms.tasks.Tasks.await(testTask, 3, java.util.concurrent.TimeUnit.SECONDS)
-            android.util.Log.d("CrashReport", "✅ Firebase 동기 연결 테스트 성공!")
+            Tasks.await(testTask, 3, TimeUnit.SECONDS)
             crashlytics.log("✅ Firebase sync connection test successful")
             
             // 테스트 문서 즉시 삭제
             firestore.collection("device_alerts").document(docId).delete()
             
         } catch (syncException: Exception) {
-            android.util.Log.e("CrashReport", "❌ Firebase 동기 연결 테스트 실패: ${syncException.message}", syncException)
             crashlytics.log("❌ Firebase sync connection test failed: ${syncException.message}")
         }
         
@@ -159,12 +146,10 @@ class CrashReportService(private val context: Context) {
                 .document(deviceId)
                 .set(statusTestData)
             
-            com.google.android.gms.tasks.Tasks.await(statusTask, 3, java.util.concurrent.TimeUnit.SECONDS)
-            android.util.Log.d("CrashReport", "✅ device_status 컬렉션 접근 테스트 성공!")
+            Tasks.await(statusTask, 3, TimeUnit.SECONDS)
             crashlytics.log("✅ device_status collection access test successful")
             
         } catch (statusException: Exception) {
-            android.util.Log.e("CrashReport", "❌ device_status 접근 테스트 실패: ${statusException.message}", statusException)
             crashlytics.log("❌ device_status access test failed: ${statusException.message}")
         }
     }
@@ -192,9 +177,6 @@ class CrashReportService(private val context: Context) {
      */
     private fun reportCrashToFirestore(exception: Throwable) {
         try {
-            android.util.Log.d("CrashReport", "=== 크래시 발생! Crashlytics 기반 리포팅 시작 ===")
-            android.util.Log.d("CrashReport", "크래시 메시지: ${exception.message}")
-            android.util.Log.d("CrashReport", "Device ID: $deviceId")
             
             val crashTime = System.currentTimeMillis()
             
@@ -223,7 +205,7 @@ class CrashReportService(private val context: Context) {
                 val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
                 crashlytics.setCustomKey("app_version", packageInfo.versionName ?: "1.0")
                 crashlytics.setCustomKey("app_version_code", packageInfo.versionCode)
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 crashlytics.setCustomKey("app_version", "unknown")
             }
             
@@ -269,17 +251,13 @@ class CrashReportService(private val context: Context) {
                     "requiresImmediateAction" to true
                 )
                 
-                android.util.Log.d("CrashReport", "🔄 device_status 저장 시작...")
-                android.util.Log.d("CrashReport", "데이터: $crashStatusData")
                 
                 // 🔥 크래시 시점 인증 상태 재확인
                 val auth = FirebaseAuth.getInstance()
                 val currentUser = auth.currentUser
-                android.util.Log.d("CrashReport", "🔐 크래시 시점 인증 상태: ${if (currentUser != null) "인증됨 (${currentUser.uid})" else "❌ 인증되지 않음"}")
                 crashlytics.log("Crash time auth status: ${if (currentUser != null) "authenticated" else "NOT authenticated"}")
                 
                 if (currentUser == null) {
-                    android.util.Log.e("CrashReport", "❌ 크래시 시점에 Firebase 인증이 없음! 저장 실패 가능성 높음")
                     crashlytics.log("❌ No Firebase auth at crash time - storage likely to fail")
                 }
                 
@@ -290,24 +268,19 @@ class CrashReportService(private val context: Context) {
                         .set(crashStatusData)
                     
                     // 5초 내에 완료 대기
-                    com.google.android.gms.tasks.Tasks.await(saveTask, 5, java.util.concurrent.TimeUnit.SECONDS)
-                    android.util.Log.d("CrashReport", "✅ 크래시 정보 저장 성공!")
+                    Tasks.await(saveTask, 5, TimeUnit.SECONDS)
                     crashlytics.log("✅ Crash info saved to device_status")
                     
                 } catch (saveException: Exception) {
-                    android.util.Log.e("CrashReport", "❌ 크래시 정보 저장 실패: ${saveException.message}", saveException)
                     crashlytics.log("❌ Crash info save failed: ${saveException.message}")
                 }
                 
             } catch (e: Exception) {
-                android.util.Log.e("CrashReport", "💥 전체 저장 프로세스 실패: ${e.message}", e)
                 crashlytics.log("💥 Complete save process failed: ${e.message}")
             }
             
-            android.util.Log.d("CrashReport", "✅ 크래시 리포팅 완료 - Crashlytics + device_status 모두 처리됨")
             
         } catch (e: Exception) {
-            android.util.Log.e("CrashReport", "Error in reportCrashToFirestore: ${e.message}", e)
             crashlytics.log("Error in crash reporting: ${e.message}")
         }
     }

@@ -8,7 +8,7 @@ import com.google.firebase.firestore.PropertyName
  * Firestore의 기사 정보를 나타내는 데이터 클래스 (Firestore 구조 기준)
  */
 data class DriverInfo(
-    var id: String = "", // Firestore 문서 ID (수동으로 설정, PropertyName 매핑 안함)
+    var id: String = "",
     @PropertyName("authUid") var authUid: String? = null, // Firestore 'authUid' 필드 매핑 (로그 기준)
     @PropertyName("name") var name: String = "",
     @PropertyName("status") var status: String = Constants.DRIVER_STATUS_OFFLINE, // enum 대신 상수 사용
@@ -22,12 +22,11 @@ data class DriverInfo(
     @PropertyName("approvedAt") var approvedAt: Timestamp? = null,
     @PropertyName("approvalStatus") var approvalStatus: String = Constants.APPROVAL_STATUS_PENDING // String 타입 및 상수 사용
 ) {
-    // Firestore에서 객체 매핑 시 빈 생성자 필요 - 모든 필드에 기본값을 제공하여 명시적 빈 생성자의 복잡성을 줄임
     constructor() : this(
         id = "",
         authUid = null,
         name = "",
-        status = Constants.DRIVER_STATUS_OFFLINE, // enum 대신 상수 사용
+        status = Constants.DRIVER_STATUS_OFFLINE,
         phoneNumber = "",
         createdAt = null,
         updatedAt = null,
@@ -36,6 +35,6 @@ data class DriverInfo(
         email = null,
         driverType = null,
         approvedAt = null,
-        approvalStatus = Constants.APPROVAL_STATUS_PENDING // String 타입 및 상수 사용
+        approvalStatus = Constants.APPROVAL_STATUS_PENDING
     )
 }

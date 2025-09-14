@@ -79,4 +79,4 @@ private fun TripRowWithIndex(index: Int, settlement: SettlementData, onShowDetai
             }
         }
     }
-} 
+}

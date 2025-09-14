@@ -33,7 +33,6 @@ import android.content.pm.ServiceInfo
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import android.media.RingtoneManager
-import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 
 class CallManagerService : Service() {
@@ -51,11 +50,6 @@ class CallManagerService : Service() {
 
     private val firestore = FirebaseFirestore.getInstance()
     private lateinit var sharedPreferences: SharedPreferences
-    
-
-    // ⚠️ FCM 토큰 방식 전환으로 리스너 관련 변수들 제거됨
-    // private var callsListener, connectionListener, isListenerAttached 등
-    // 모든 알림은 MyFirebaseMessagingService를 통해 처리됨
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -64,7 +58,7 @@ class CallManagerService : Service() {
         sharedPreferences = getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
         isServiceRunning = true
         val notification = createForegroundServiceNotification("서비스 실행 중", "콜 데이터를 실시간으로 수신하고 있습니다.")
-        
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 FOREGROUND_NOTIFICATION_ID,
@@ -74,10 +68,7 @@ class CallManagerService : Service() {
         } else {
             startForeground(FOREGROUND_NOTIFICATION_ID, notification)
         }
-        
-        
-        // FCM 토큰 방식 사용으로 리스너 비활성화
-        // setupCallListener() // 제거됨 - FCM 토큰 방식으로 대체
+
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -116,8 +107,6 @@ class CallManagerService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         isServiceRunning = false
-        Log.i(TAG, "CallManagerService destroyed")
-        // stopFirebaseListeners() 제거됨 - FCM 토큰 방식에서는 불필요
     }
 
     private fun createForegroundServiceNotification(title: String = "대리운전 콜 관리", text: String = "서비스 실행 중"): Notification {
@@ -147,13 +136,6 @@ class CallManagerService : Service() {
             .build()
     }
 
-    // ⚠️ 리스너 방식 제거 - FCM 토큰 방식으로 완전 대체됨
-    // setupCallListener() 함수는 더 이상 사용하지 않음
-    // 모든 알림은 Firebase Functions + FCM을 통해 처리됨
-
-    // ⚠️ FCM 토큰 방식 전환으로 stopFirebaseListeners() 함수 제거됨
-    // Firebase 리스너가 없으므로 정리할 것이 없음
-
     private fun broadcastCallUpdate(callId: String, status: String, summary: String? = null) {
         val intent = Intent(ACTION_CALL_UPDATED).apply {
             putExtra(EXTRA_CALL_ID, callId)
@@ -168,9 +150,5 @@ class CallManagerService : Service() {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(FOREGROUND_NOTIFICATION_ID, notification)
     }
-    
-    
-    // ⚠️ 로컬 알림 함수들 제거 - FCM을 통해 서버에서 처리됨
-    // showStatusChangeNotification() 및 showNewCallNotification() 함수는
-    // MyFirebaseMessagingService.kt에서 FCM 메시지로 처리됨
+
 }

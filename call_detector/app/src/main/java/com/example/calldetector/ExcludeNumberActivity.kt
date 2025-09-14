@@ -23,7 +23,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 class ExcludeNumberActivity : AppCompatActivity() {
-    
+
     private lateinit var excludeNumberManager: ExcludeNumberManager
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: ExcludeNumberAdapter
@@ -31,29 +31,27 @@ class ExcludeNumberActivity : AppCompatActivity() {
     private lateinit var countTextView: TextView
     private lateinit var addButton: FloatingActionButton
     private lateinit var contactsButton: Button
-    
+
     private var allNumbers = mutableListOf<ExcludeNumberItem>()
     private var filteredNumbers = mutableListOf<ExcludeNumberItem>()
-    
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_exclude_number)
-        
+
         excludeNumberManager = ExcludeNumberManager(this)
-        
+
         setupViews()
         loadExcludeNumbers()
     }
-    
+
     private fun setupViews() {
-        // Initialize views
         recyclerView = findViewById(R.id.recyclerView)
         searchEditText = findViewById(R.id.searchEditText)
         countTextView = findViewById(R.id.countTextView)
         addButton = findViewById(R.id.addButton)
         contactsButton = findViewById(R.id.contactsButton)
-        
-        // Setup RecyclerView
+
         adapter = ExcludeNumberAdapter(
             onDeleteClick = { item ->
                 showDeleteConfirmDialog(item)
@@ -61,8 +59,7 @@ class ExcludeNumberActivity : AppCompatActivity() {
         )
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
-        
-        // Setup search
+
         searchEditText.addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) {
                 filterNumbers(s.toString())
@@ -70,36 +67,33 @@ class ExcludeNumberActivity : AppCompatActivity() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
         })
-        
-        // Setup buttons
+
         addButton.setOnClickListener {
             showAddNumberDialog()
         }
-        
+
         contactsButton.setOnClickListener {
             openContactSelection()
         }
-        
-        // Back button
+
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.title = "개인번호 관리"
     }
-    
+
     private fun loadExcludeNumbers() {
         allNumbers.clear()
-        
-        // ExcludeNumberManager에서 이미 이름 정보와 함께 가져옴
+
         allNumbers.addAll(excludeNumberManager.getExcludeNumberItems())
-        
+
         filteredNumbers.clear()
         filteredNumbers.addAll(allNumbers)
-        
+
         updateUI()
     }
-    
+
     private fun filterNumbers(query: String) {
         filteredNumbers.clear()
-        
+
         if (query.isEmpty()) {
             filteredNumbers.addAll(allNumbers)
         } else {
@@ -110,19 +104,19 @@ class ExcludeNumberActivity : AppCompatActivity() {
                 item.name?.lowercase()?.contains(lowerQuery) == true
             })
         }
-        
+
         updateUI()
     }
-    
+
     private fun updateUI() {
         adapter.submitList(filteredNumbers.toList())
         countTextView.text = "총 ${allNumbers.size}개의 개인번호"
     }
-    
+
     private fun showAddNumberDialog() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_add_number, null)
         val editText = dialogView.findViewById<EditText>(R.id.phoneNumberEditText)
-        
+
         AlertDialog.Builder(this)
             .setTitle("개인번호 추가")
             .setView(dialogView)
@@ -137,14 +131,14 @@ class ExcludeNumberActivity : AppCompatActivity() {
             .setNegativeButton("취소", null)
             .show()
     }
-    
+
     private fun showDeleteConfirmDialog(item: ExcludeNumberItem) {
         val displayText = if (item.name != null) {
             "${item.name} (${item.displayNumber})"
         } else {
             item.displayNumber
         }
-        
+
         AlertDialog.Builder(this)
             .setTitle("삭제 확인")
             .setMessage("$displayText 를 개인번호에서 제거하시겠습니까?")
@@ -154,49 +148,48 @@ class ExcludeNumberActivity : AppCompatActivity() {
             .setNegativeButton("취소", null)
             .show()
     }
-    
+
     private fun addExcludeNumber(phoneNumber: String) {
         excludeNumberManager.addExcludeNumber(phoneNumber)
         Toast.makeText(this, "개인번호로 추가되었습니다", Toast.LENGTH_SHORT).show()
         loadExcludeNumbers()
     }
-    
+
     private fun removeExcludeNumber(item: ExcludeNumberItem) {
         excludeNumberManager.removeExcludeNumber(item.phoneNumber)
         Toast.makeText(this, "개인번호에서 제거되었습니다", Toast.LENGTH_SHORT).show()
         loadExcludeNumbers()
     }
-    
+
     private fun openContactSelection() {
         if (!hasContactPermission()) {
             requestContactPermission()
             return
         }
-        
+
         val intent = Intent(this, ContactSelectionActivity::class.java)
         startActivityForResult(intent, REQUEST_CONTACT_SELECTION)
     }
-    
+
     private fun hasContactPermission(): Boolean {
         return ContextCompat.checkSelfPermission(
             this,
             Manifest.permission.READ_CONTACTS
         ) == PackageManager.PERMISSION_GRANTED
     }
-    
+
     private fun requestContactPermission() {
         requestPermissions(
             arrayOf(Manifest.permission.READ_CONTACTS),
             PERMISSION_REQUEST_CONTACTS
         )
     }
-    
-    
+
     override fun onSupportNavigateUp(): Boolean {
         finish()
         return true
     }
-    
+
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -205,20 +198,19 @@ class ExcludeNumberActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == PERMISSION_REQUEST_CONTACTS) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                loadExcludeNumbers() // 권한 획득 후 이름 다시 로드
+                loadExcludeNumbers()
                 openContactSelection()
             }
         }
     }
-    
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_CONTACT_SELECTION && resultCode == RESULT_OK) {
-            // 연락처 선택 완료 - 목록 새로고침
             loadExcludeNumbers()
         }
     }
-    
+
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
         menu?.add(0, MENU_BACKUP, 0, "백업")
         menu?.add(0, MENU_RESTORE, 0, "복원")
@@ -226,7 +218,7 @@ class ExcludeNumberActivity : AppCompatActivity() {
         menu?.add(0, MENU_DELETE_ALL, 0, "전체 삭제 (테스트)")
         return true
     }
-    
+
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             MENU_BACKUP -> {
@@ -248,7 +240,7 @@ class ExcludeNumberActivity : AppCompatActivity() {
         }
         return super.onOptionsItemSelected(item)
     }
-    
+
     private fun performManualBackup() {
         Thread {
             val success = excludeNumberManager.backupToFile()
@@ -262,13 +254,13 @@ class ExcludeNumberActivity : AppCompatActivity() {
             }
         }.start()
     }
-    
+
     private fun performRestore() {
         if (!excludeNumberManager.hasBackupFile()) {
             Toast.makeText(this, "백업 파일이 존재하지 않습니다", Toast.LENGTH_SHORT).show()
             return
         }
-        
+
         AlertDialog.Builder(this)
             .setTitle("데이터 복원")
             .setMessage("백업 파일에서 개인번호 목록을 복원하시겠습니까?\n현재 데이터와 병합됩니다.")
@@ -279,8 +271,8 @@ class ExcludeNumberActivity : AppCompatActivity() {
                         when (result) {
                             is RestoreResult.Success -> {
                                 Toast.makeText(
-                                    this, 
-                                    "복원 완료: ${result.totalCount}개 번호 (새로운 번호: ${result.newCount}개)", 
+                                    this,
+                                    "복원 완료: ${result.totalCount}개 번호 (새로운 번호: ${result.newCount}개)",
                                     Toast.LENGTH_LONG
                                 ).show()
                                 loadExcludeNumbers()
@@ -301,27 +293,27 @@ class ExcludeNumberActivity : AppCompatActivity() {
             .setNegativeButton("취소", null)
             .show()
     }
-    
+
     private fun showBackupInfo() {
         val hasBackup = excludeNumberManager.hasBackupFile()
         val lastBackupTime = excludeNumberManager.getLastBackupTime()
-        
+
         val message = if (hasBackup && lastBackupTime > 0) {
             val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
             val backupTimeStr = dateFormat.format(Date(lastBackupTime))
-            
+
             "백업 파일: 존재함\n마지막 백업: $backupTimeStr\n현재 개인번호: ${excludeNumberManager.getExcludeCount()}개\n\n자동 백업은 개인번호 추가/삭제 시 자동으로 수행됩니다."
         } else {
             "백업 파일: 없음\n현재 개인번호: ${excludeNumberManager.getExcludeCount()}개\n\n개인번호를 추가하면 자동으로 백업이 생성됩니다."
         }
-        
+
         AlertDialog.Builder(this)
             .setTitle("백업 정보")
             .setMessage(message)
             .setPositiveButton("확인", null)
             .show()
     }
-    
+
     private fun showDeleteAllConfirmDialog() {
         val count = excludeNumberManager.getExcludeCount()
         AlertDialog.Builder(this)
@@ -335,7 +327,7 @@ class ExcludeNumberActivity : AppCompatActivity() {
             .setNegativeButton("취소", null)
             .show()
     }
-    
+
     companion object {
         private const val PERMISSION_REQUEST_CONTACTS = 100
         private const val REQUEST_CONTACT_SELECTION = 101
@@ -346,35 +338,34 @@ class ExcludeNumberActivity : AppCompatActivity() {
     }
 }
 
-// RecyclerView Adapter
 class ExcludeNumberAdapter(
     private val onDeleteClick: (ExcludeNumberItem) -> Unit
 ) : RecyclerView.Adapter<ExcludeNumberAdapter.ViewHolder>() {
-    
+
     private var items = listOf<ExcludeNumberItem>()
-    
+
     fun submitList(newItems: List<ExcludeNumberItem>) {
         items = newItems
         notifyDataSetChanged()
     }
-    
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_exclude_number, parent, false)
         return ViewHolder(view)
     }
-    
+
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         holder.bind(items[position])
     }
-    
+
     override fun getItemCount() = items.size
-    
+
     inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val nameTextView: TextView = itemView.findViewById(R.id.nameTextView)
         private val phoneTextView: TextView = itemView.findViewById(R.id.phoneTextView)
         private val deleteButton: ImageButton = itemView.findViewById(R.id.deleteButton)
-        
+
         fun bind(item: ExcludeNumberItem) {
             if (item.name != null) {
                 nameTextView.text = item.name
@@ -384,7 +375,7 @@ class ExcludeNumberAdapter(
                 nameTextView.visibility = View.GONE
                 phoneTextView.text = item.displayNumber
             }
-            
+
             deleteButton.setOnClickListener {
                 onDeleteClick(item)
             }

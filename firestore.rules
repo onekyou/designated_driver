@@ -28,6 +28,15 @@ service cloud.firestore {
     }
 
     // --- Top-Level Collections ---
+    
+    // 🔥 회원가입 시 지역/사무실 목록 조회를 위한 regions 컬렉션 읽기 허용
+    match /regions/{regionId} {
+      // 지역 정보는 회원가입 시 필요하므로 모든 사용자에게 읽기 허용
+      allow read: if true;
+      
+      // 지역 생성/수정/삭제는 서버(Cloud Functions)만 허용
+      allow write: if request.auth == null;
+    }
 
     match /admins/{adminId} { // adminId is the document ID, should be user's UID
       allow read, write: if isOwner(adminId);
@@ -68,6 +77,10 @@ service cloud.firestore {
       
       // 사무실 기본 정보 생성/업데이트 허용 (status 필드 포함)
       allow write: if isOfficeAdmin(regionId, officeId);
+      
+      // 🔥 회원가입 시 새로운 사무실 생성 허용 - 인증된 사용자면 새 사무실 생성 가능
+      allow create: if isAuthenticated() && 
+        request.resource.data.createdBy == request.auth.uid;
 
       match /designated_drivers/{driverDocId} {
         // 읽기(read): 관리자이거나, 기사 본인인 경우 허용

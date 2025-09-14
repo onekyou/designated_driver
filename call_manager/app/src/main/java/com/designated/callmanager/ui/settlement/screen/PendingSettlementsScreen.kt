@@ -91,7 +91,7 @@ private fun PendingRow(item: SettlementData, onCredit: () -> Unit, onConfirm: ()
         Column(Modifier.padding(12.dp)) {
             Row(modifier = Modifier.fillMaxWidth()) {
                 Text(item.customerName, Modifier.weight(1f), color = Color.White)
-                Text(item.paymentMethod, color = Color.Yellow)
+                Text("기사 선택: ${item.paymentMethod}", color = Color.Yellow)
             }
             Spacer(Modifier.height(4.dp))
             Row(modifier = Modifier.fillMaxWidth()) {
@@ -105,17 +105,20 @@ private fun PendingRow(item: SettlementData, onCredit: () -> Unit, onConfirm: ()
             }
             Spacer(Modifier.height(8.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (item.paymentMethod == "이체") {
-                    Button(onClick = onConfirm, modifier = Modifier.weight(1f)) {
-                        Text("정산 확인")
-                    }
+                Button(
+                    onClick = onConfirm,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                ) {
+                    Text("이체 확인", color = Color.White)
                 }
-                if (item.paymentMethod == "외상") {
-                    OutlinedButton(onClick = onCredit, modifier = Modifier.weight(1f)) {
-                        Text("외상 등록")
-                    }
+                OutlinedButton(
+                    onClick = onCredit,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("외상 처리", color = Color(0xFFFF9800))
                 }
             }
         }
     }
-} 
+}

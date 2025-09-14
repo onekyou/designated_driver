@@ -41,8 +41,9 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.migratePickupDrivers = exports.onDesignatedDriverStatusChange = exports.onPickupDriverStatusChange = exports.refreshAgoraToken = exports.generateAgoraToken = exports.finalizeWorkDay = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.sendNewCallNotification = exports.onCallStatusChanged = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.onSharedCallCreated = exports.oncallassigned = void 0;
+exports.testFcmMessage = exports.migratePickupDrivers = exports.onDesignatedDriverStatusChange = exports.onPickupDriverStatusChange = exports.refreshAgoraToken = exports.generateAgoraToken = exports.finalizeWorkDay = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.sendNewCallNotification = exports.onCallStatusChanged = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.onSharedCallCreated = exports.oncallassigned = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
+const https_1 = require("firebase-functions/v2/https");
 const admin = __importStar(require("firebase-admin"));
 const logger = __importStar(require("firebase-functions/logger"));
 // Firebase Admin SDK 초기화
@@ -179,40 +180,69 @@ exports.onSharedCallCreated = (0, firestore_1.onDocumentCreated)({
             logger.warn(`[shared-created:${callId}] 알림을 보낼 관리자 토큰이 없습니다.`);
             return;
         }
-        // FCM 알림 전송
+        // FCM 알림 전송 (notification 필드 제거로 Android 자동 알림 방지)
         const message = {
-            notification: {
-                title: "새로운 공유콜이 도착했습니다!",
-                body: `${sharedCallData.departure || "출발지"} → ${sharedCallData.destination || "도착지"} / ${sharedCallData.fare || 0}원`,
-            },
+            // notification 필드 완전 제거 - Android에서 직접 처리
             data: {
                 type: "NEW_SHARED_CALL",
                 sharedCallId: callId,
                 departure: sharedCallData.departure || "",
                 destination: sharedCallData.destination || "",
                 fare: (sharedCallData.fare || 0).toString(),
+                callType: sharedCallData.callType || "",
+                phoneNumber: sharedCallData.phoneNumber || "",
                 click_action: "ACTION_SHOW_SHARED_CALL",
+                showPopup: "true", // 팝업 표시 플래그
+                // 알림 제목과 내용을 완전히 다른 키로 전송
+                alertTitle: "🚨 새로운 공유콜이 도착했습니다! 🚨",
+                alertMessage: `${sharedCallData.departure || "출발지"} → ${sharedCallData.destination || "도착지"}\n요금: ${sharedCallData.fare || 0}원\n📞 ${sharedCallData.phoneNumber || "전화번호"}`,
             },
             android: {
                 priority: "high",
-                notification: {
-                    sound: "content://media/internal/audio/media/28",
-                    channelId: "shared_call_fcm_channel",
-                    priority: "high",
-                    clickAction: "ACTION_SHOW_SHARED_CALL", // click_action → clickAction
-                },
+                // notification 필드 완전 제거 - Android가 자동 알림 생성하지 않도록
             },
             tokens,
         };
+        // 🚨 실제 전송되는 페이로드 확인
+        logger.info(`[shared-created:${callId}] 🔍 Final FCM Payload:`, JSON.stringify(message, null, 2));
         const response = await admin.messaging().sendEachForMulticast(message);
         logger.info(`[shared-created:${callId}] FCM 알림 전송 완료. 성공: ${response.successCount}, 실패: ${response.failureCount}`);
-        // 실패한 토큰들 로그
+        // 실패한 토큰들 로그 및 자동 정리
+        const batch = admin.firestore().batch();
+        let invalidTokensFound = 0;
         response.responses.forEach((resp, idx) => {
             var _a;
             if (!resp.success) {
-                logger.warn(`[shared-created:${callId}] 토큰 ${idx} 전송 실패: ${(_a = resp.error) === null || _a === void 0 ? void 0 : _a.message}`);
+                const error = resp.error;
+                logger.warn(`[shared-created:${callId}] 토큰 ${idx} 전송 실패: ${error === null || error === void 0 ? void 0 : error.message}`);
+                // 무효한 토큰인 경우 (만료, 등록 취소 등)
+                if ((error === null || error === void 0 ? void 0 : error.code) === 'messaging/registration-token-not-registered' ||
+                    (error === null || error === void 0 ? void 0 : error.code) === 'messaging/invalid-registration-token' ||
+                    ((_a = error === null || error === void 0 ? void 0 : error.message) === null || _a === void 0 ? void 0 : _a.includes('Requested entity was not found'))) {
+                    const invalidToken = tokens[idx];
+                    logger.info(`[shared-created:${callId}] 무효한 FCM 토큰 발견, 자동 정리 예정: ${invalidToken === null || invalidToken === void 0 ? void 0 : invalidToken.substring(0, 20)}...`);
+                    // 해당 토큰을 가진 관리자 문서에서 fcmToken 필드 제거
+                    adminQuery.docs.forEach((doc) => {
+                        const adminData = doc.data();
+                        if (adminData.fcmToken === invalidToken) {
+                            batch.update(doc.ref, { fcmToken: admin.firestore.FieldValue.delete() });
+                            invalidTokensFound++;
+                            logger.info(`[shared-created:${callId}] 관리자 ${adminData.associatedOfficeId}의 무효한 토큰 제거 예정`);
+                        }
+                    });
+                }
             }
         });
+        // 배치 업데이트 실행
+        if (invalidTokensFound > 0) {
+            try {
+                await batch.commit();
+                logger.info(`[shared-created:${callId}] ${invalidTokensFound}개의 무효한 FCM 토큰 자동 정리 완료`);
+            }
+            catch (batchError) {
+                logger.error(`[shared-created:${callId}] 무효한 토큰 정리 중 오류:`, batchError);
+            }
+        }
     }
     catch (error) {
         logger.error(`[shared-created:${callId}] 알림 전송 중 오류 발생:`, error);
@@ -279,22 +309,18 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
             });
             if (tokens.length > 0) {
                 const message = {
-                    notification: {
-                        title: "공유콜이 취소되었습니다",
-                        body: `${afterData.cancelReason || "사유 없음"} - 콜이 대기 상태로 복구되었습니다.`,
-                    },
+                    // notification 필드 완전 제거 - Android가 자동 알림 생성하지 않도록
                     data: {
                         type: "SHARED_CALL_CANCELLED",
                         callId: callId,
                         cancelReason: afterData.cancelReason || "",
+                        // 알림 제목과 내용을 완전히 다른 키로 전송
+                        alertTitle: "공유콜이 취소되었습니다",
+                        alertMessage: `${afterData.cancelReason || "사유 없음"} - 콜이 대기 상태로 복구되었습니다.`,
                     },
                     android: {
                         priority: "high",
-                        notification: {
-                            sound: "content://media/internal/audio/media/28",
-                            channelId: "call_manager_fcm_channel",
-                            priority: "high",
-                        },
+                        // notification 필드 완전 제거
                     },
                     tokens,
                 };
@@ -432,13 +458,17 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
                 });
                 if (tokens.length > 0) {
                     const msg = {
-                        notification: {
-                            title: "공유 콜 수락됨",
-                            body: `${(_a = afterData.departure) !== null && _a !== void 0 ? _a : "출발"} → ${(_b = afterData.destination) !== null && _b !== void 0 ? _b : "도착"} / 요금 ${(_c = afterData.fare) !== null && _c !== void 0 ? _c : 0}원`,
-                        },
+                        // notification 필드 완전 제거 - Android가 자동 알림 생성하지 않도록
                         data: {
                             sharedCallId: callId,
                             type: "SHARED_CALL_CLAIMED",
+                            // 알림 제목과 내용을 data로 전송
+                            alertTitle: "공유 콜 수락됨",
+                            alertMessage: `${(_a = afterData.departure) !== null && _a !== void 0 ? _a : "출발"} → ${(_b = afterData.destination) !== null && _b !== void 0 ? _b : "도착"} / 요금 ${(_c = afterData.fare) !== null && _c !== void 0 ? _c : 0}원`,
+                        },
+                        android: {
+                            priority: "high",
+                            // notification 필드 완전 제거
                         },
                         tokens,
                     };
@@ -579,10 +609,7 @@ exports.onSharedCallCancelledByDriver = (0, firestore_1.onDocumentUpdated)({
             });
             if (tokens.length > 0) {
                 const message = {
-                    notification: {
-                        title: "🚫 공유콜이 취소되었습니다!",
-                        body: `${sharedCallData.departure || "출발지"} → ${sharedCallData.destination || "도착지"}\n취소사유: ${afterData.cancelReason || "사유 없음"}\n콜이 대기상태로 복구되었습니다.`,
-                    },
+                    // notification 필드 완전 제거 - Android가 자동 알림 생성하지 않도록
                     data: {
                         type: "SHARED_CALL_CANCELLED_POPUP",
                         sharedCallId: sourceSharedCallId,
@@ -591,17 +618,15 @@ exports.onSharedCallCancelledByDriver = (0, firestore_1.onDocumentUpdated)({
                         destination: sharedCallData.destination || "",
                         fare: (sharedCallData.fare || 0).toString(),
                         cancelReason: afterData.cancelReason || "사유 없음",
+                        // 알림 제목과 내용을 완전히 다른 키로 전송
+                        alertTitle: "🚫 공유콜이 취소되었습니다!",
+                        alertMessage: `${sharedCallData.departure || "출발지"} → ${sharedCallData.destination || "도착지"}\n취소사유: ${afterData.cancelReason || "사유 없음"}\n콜이 대기상태로 복구되었습니다.`,
                         phoneNumber: sharedCallData.phoneNumber || "",
                         showPopup: "true" // 팝업 표시 플래그
                     },
                     android: {
                         priority: "high",
-                        notification: {
-                            sound: "content://media/internal/audio/media/28",
-                            channelId: "call_manager_fcm_channel",
-                            priority: "high",
-                            clickAction: "FLUTTER_NOTIFICATION_CLICK"
-                        },
+                        // notification 필드 완전 제거
                     },
                     tokens,
                 };
@@ -661,47 +686,25 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
             logger.warn(`[onCallStatusChanged:${callId}] No admin tokens found.`);
             return;
         }
-        let notificationData = {
-            type: "",
-            callId: callId,
-            timestamp: Date.now().toString(),
-        };
+        // notificationData 변수 제거 - 더 이상 사용하지 않음
         if (afterData.status === "IN_PROGRESS") {
-            // 운행 시작 알림
-            const tripSummary = `출발: ${afterData.departure_set || afterData.customerAddress || "정보없음"}, 도착: ${afterData.destination_set || "정보없음"}, 요금: ${afterData.fare_set || afterData.fare || 0}원`;
+            // 운행 시작 로직 - FCM 알림만 제거하고 로직 유지
             const driverName = afterData.assignedDriverName || "기사";
             // 공유콜인 경우: 원사무실(sourceOfficeId)에만 (공유기사) 표시, 수락사무실에는 실제 기사 이름만 표시
             const isSourceOffice = afterData.callType === "SHARED" && afterData.sourceOfficeId === officeId;
             const driverDisplayName = isSourceOffice ? `${driverName} (공유기사)` : driverName;
             logger.info(`[onCallStatusChanged:${callId}] 기사 이름 표시 로직 - callType: ${afterData.callType}, sourceOfficeId: ${afterData.sourceOfficeId}, currentOfficeId: ${officeId}, isSourceOffice: ${isSourceOffice}, driverDisplayName: ${driverDisplayName}`);
-            notificationData = Object.assign(Object.assign({}, notificationData), { type: "TRIP_STARTED", driverName: driverDisplayName, driverPhone: afterData.assignedDriverPhone || "", customerName: afterData.customerName || "고객", tripSummary: tripSummary, departure: afterData.departure_set || "", destination: afterData.destination_set || "", fare: (afterData.fare_set || afterData.fare || 0).toString(), showPopup: "true" });
-            // notification 필드 제거 - 앱에서 커스텀 알림 처리
-            await admin.messaging().sendEachForMulticast({
-                data: Object.assign(Object.assign({}, notificationData), { title: "🚗 운행이 시작되었습니다", body: `${driverName} - ${tripSummary}` }),
-                android: {
-                    priority: "high",
-                },
-                tokens,
-            });
-            logger.info(`[onCallStatusChanged:${callId}] Trip started notification sent.`);
+            // FCM 알림만 제거 - 다른 로직은 유지
+            logger.info(`[onCallStatusChanged:${callId}] Trip started - FCM 알림 생략 (리스너로 처리)`);
         }
         else if (afterData.status === "COMPLETED") {
-            // 정산 완료 알림
+            // 운행 완료 로직 - FCM 알림만 제거하고 로직 유지
             const basedriverName = afterData.assignedDriverName || "기사";
             const isSourceOffice = afterData.callType === "SHARED" && afterData.sourceOfficeId === officeId;
             const driverName = isSourceOffice ? `${basedriverName} (공유기사)` : basedriverName;
             logger.info(`[onCallStatusChanged:${callId}] 운행완료 기사 이름 표시 로직 - callType: ${afterData.callType}, sourceOfficeId: ${afterData.sourceOfficeId}, currentOfficeId: ${officeId}, isSourceOffice: ${isSourceOffice}, driverName: ${driverName}`);
-            const customerName = afterData.customerName || "고객";
-            notificationData = Object.assign(Object.assign({}, notificationData), { type: "TRIP_COMPLETED", driverName: driverName, customerName: customerName, showPopup: "true" });
-            // notification 필드 제거 - 앱에서 커스텀 알림 처리
-            await admin.messaging().sendEachForMulticast({
-                data: Object.assign(Object.assign({}, notificationData), { title: "✅ 운행이 완료되었습니다", body: `${driverName}님이 ${customerName}님의 운행을 완료했습니다` }),
-                android: {
-                    priority: "high",
-                },
-                tokens,
-            });
-            logger.info(`[onCallStatusChanged:${callId}] Trip completed notification sent.`);
+            // FCM 알림만 제거 - 다른 로직은 유지
+            logger.info(`[onCallStatusChanged:${callId}] Trip completed - FCM 알림 생략 (리스너로 처리)`);
         }
     }
 });
@@ -711,21 +714,25 @@ exports.sendNewCallNotification = (0, firestore_1.onDocumentCreated)({
     document: "regions/{regionId}/offices/{officeId}/calls/{callId}",
 }, async (event) => {
     var _a;
-    logger.info(`[sendNewCallNotification:${event.params.callId}] START - New call received.`);
+    logger.info(`[sendNewCallNotification:${event.params.callId}] 🚨🚨🚨 START - New call received. VERSION: 2025-09-09-v3-FINAL 🚨🚨🚨`);
     const data = (_a = event.data) === null || _a === void 0 ? void 0 : _a.data();
     if (!data) {
-        logger.warn("[sendNewCallNotification] No data in document.");
+        logger.warn("[sendNewCallNotification] 🚨 No data in document.");
         return;
     }
+    logger.info(`[sendNewCallNotification] 🚨 Data received: status=${data.status}, fromCallManager=${data.fromCallManager}, fromCallDetector=${data.fromCallDetector}`);
     if (data.status !== "WAITING") {
-        logger.info("[sendNewCallNotification] Call is not in WAITING status. Skip.");
+        logger.info("[sendNewCallNotification] 🚨 Call is not in WAITING status. Skip.");
         return;
     }
-    // 콜매니저에서 생성된 콜인지 확인 (콜매니저에서 생성된 콜은 FCM 알림 생략)
-    if (data.fromCallManager === true) {
-        logger.info("[sendNewCallNotification] Call created from CallManager app. Skipping FCM notification to avoid duplicate.");
+    // 콜매니저나 콜디텍터에서 생성된 콜인지 확인 (FCM 알림 생략)
+    logger.info(`[sendNewCallNotification] Checking call source - fromCallManager: ${data.fromCallManager}, fromCallDetector: ${data.fromCallDetector}`);
+    if (data.fromCallManager === true || data.fromCallDetector !== undefined) {
+        const source = data.fromCallManager ? "CallManager" : "CallDetector";
+        logger.info(`[sendNewCallNotification] Call created from ${source} app. Skipping FCM notification to avoid duplicate.`);
         return;
     }
+    logger.info(`[sendNewCallNotification] Call source check passed. Proceeding with FCM notification.`);
     // 1) 관리자 FCM 토큰 조회
     const adminQuery = await admin
         .firestore()
@@ -742,24 +749,25 @@ exports.sendNewCallNotification = (0, firestore_1.onDocumentCreated)({
         return;
     }
     // 2) 알림 + 데이터 메시지 전송
-    await admin.messaging().sendEachForMulticast({
-        notification: {
-            title: "새로운 콜이 접수되었습니다.",
-        },
+    const newCallMessage = {
+        // notification 필드 완전 제거 - Android가 자동 알림 생성하지 않도록
         data: {
             type: "NEW_CALL_WAITING",
             callId: event.params.callId,
             customerPhone: data.phoneNumber || "",
+            // 알림 제목과 내용을 완전히 다른 키로 전송
+            alertTitle: "새로운 콜이 접수되었습니다.",
+            alertMessage: `새로운 콜이 접수되었습니다.`,
         },
         android: {
             priority: "high",
-            notification: {
-                sound: "default",
-                channelId: "new_call_fcm_channel_v2",
-            },
+            // notification 필드 완전 제거
         },
         tokens,
-    });
+    };
+    // 🚨 실제 전송되는 페이로드 확인
+    logger.info(`[sendNewCallNotification:${event.params.callId}] 🔍 Final FCM Payload:`, JSON.stringify(newCallMessage, null, 2));
+    await admin.messaging().sendEachForMulticast(newCallMessage);
     logger.info("[sendNewCallNotification] sendEachForMulticast with notification sent.");
 });
 // =============================
@@ -969,8 +977,8 @@ var pttSignaling_1 = require("./pttSignaling");
 Object.defineProperty(exports, "onPickupDriverStatusChange", { enumerable: true, get: function () { return pttSignaling_1.onPickupDriverStatusChange; } });
 Object.defineProperty(exports, "onDesignatedDriverStatusChange", { enumerable: true, get: function () { return pttSignaling_1.onDesignatedDriverStatusChange; } });
 // 픽업 기사 데이터 마이그레이션 함수 (한 번만 실행)
-const https_1 = require("firebase-functions/v2/https");
-exports.migratePickupDrivers = (0, https_1.onCall)({
+const https_2 = require("firebase-functions/v2/https");
+exports.migratePickupDrivers = (0, https_2.onCall)({
     region: "asia-northeast3",
 }, async (request) => {
     logger.info("픽업 기사 데이터 마이그레이션 시작");
@@ -1031,6 +1039,47 @@ exports.migratePickupDrivers = (0, https_1.onCall)({
         };
     }
 });
-const _forceDeploy = Date.now() + 1; // 배포 강제용 더미 변수
+// =============================
+// 🚨 FCM 테스트 함수 (HTTP 트리거)
+// =============================
+exports.testFcmMessage = (0, https_1.onRequest)({ region: "asia-northeast3" }, async (req, res) => {
+    logger.info("🚨 [testFcmMessage] FCM 테스트 함수 호출됨");
+    const message = {
+        data: {
+            type: "NEW_SHARED_CALL",
+            alertTitle: "🚨 테스트 공유콜입니다! 🚨",
+            alertMessage: "테스트출발지 → 테스트도착지\n요금: 15000원\n📞 01087654321",
+            departure: "테스트출발지",
+            destination: "테스트도착지",
+            phoneNumber: "01087654321",
+            fare: "15000",
+            sharedCallId: "test_shared_call_" + Date.now()
+        },
+        android: {
+            priority: "high",
+            // notification 필드 완전 제거 - 순수 data-only
+        },
+        token: "eA4imumxSBiEKbbh6KkjDF:APA91bF3ATavoruXmXL-FVK6_noFvKLvVlZsV4jgR3xxclv4OKJA52t96x9jZBKcfX_Oizg8j06iChliQKa0yfXr7oJKI_jwo_wXTTYGZD4vQ-GOsa_X9qQ",
+    };
+    // 🔍 실제 전송되는 페이로드 확인
+    logger.info("🔍 [testFcmMessage] Final FCM Payload:", JSON.stringify(message, null, 2));
+    try {
+        const response = await admin.messaging().send(message);
+        logger.info("✅ [testFcmMessage] FCM 메시지 전송 성공:", response);
+        res.json({
+            success: true,
+            messageId: response,
+            payload: message
+        });
+    }
+    catch (error) {
+        logger.error("❌ [testFcmMessage] FCM 메시지 전송 실패:", error);
+        res.status(500).json({
+            success: false,
+            error: error
+        });
+    }
+});
+const _forceDeploy = Date.now() + 2; // 배포 강제용 더미 변수
 void _forceDeploy; // 사용해서 컴파일 경고 해소
 //# sourceMappingURL=index.js.map

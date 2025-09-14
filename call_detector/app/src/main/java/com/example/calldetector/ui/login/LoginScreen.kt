@@ -51,14 +51,13 @@ fun LoginScreen(
     viewModel: LoginViewModel = viewModel(
         factory = LoginViewModel.Factory(LocalContext.current.applicationContext as Application)
     ),
-    onLoginComplete: (regionId: String, officeId: String) -> Unit, // 로그인 완료 콜백
-    onNavigateToPasswordReset: () -> Unit // 비밀번호 찾기 화면 이동 콜백
+    onLoginComplete: (regionId: String, officeId: String) -> Unit,
+    onNavigateToPasswordReset: () -> Unit
 ) {
     val loginState by viewModel.loginState.collectAsState()
     var showPassword by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // 로그인 상태 변경 감지 (오류 표시, 성공 시 콜백 호출)
     LaunchedEffect(loginState) {
         when (val state = loginState) {
             is LoginState.Error -> {
@@ -66,11 +65,11 @@ fun LoginScreen(
                     message = state.message,
                     duration = SnackbarDuration.Short
                 )
-                viewModel.resetLoginState() // 오류 표시 후 상태 초기화
+                viewModel.resetLoginState()
             }
             is LoginState.Success -> {
-                onLoginComplete(state.regionId, state.officeId) // 콜백 호출
-                viewModel.resetLoginState() // 성공 처리 후 상태 초기화
+                onLoginComplete(state.regionId, state.officeId)
+                viewModel.resetLoginState()
             }
             else -> { /* Idle, Loading */ }
         }
@@ -118,7 +117,6 @@ fun LoginScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // 자동 로그인 체크박스
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Start,
@@ -139,7 +137,6 @@ fun LoginScreen(
                     )
                 }
 
-                // 로그인 버튼
                 Button(
                     onClick = { viewModel.login() },
                     enabled = loginState != LoginState.Loading,
@@ -151,8 +148,8 @@ fun LoginScreen(
                 ) {
                     if (loginState == LoginState.Loading) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp), 
-                            color = MaterialTheme.colorScheme.background, 
+                            modifier = Modifier.size(24.dp),
+                            color = MaterialTheme.colorScheme.background,
                             strokeWidth = 2.dp
                         )
                     } else {
@@ -160,9 +157,6 @@ fun LoginScreen(
                     }
                 }
 
-                // 회원가입 버튼 제거됨
-
-                // 비밀번호 찾기 버튼
                 TextButton(
                     onClick = onNavigateToPasswordReset,
                     colors = ButtonDefaults.textButtonColors(

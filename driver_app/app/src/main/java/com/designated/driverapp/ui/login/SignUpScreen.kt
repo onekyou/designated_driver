@@ -1,7 +1,7 @@
 package com.designated.driverapp.ui.login
 
 import android.app.Application
-import android.util.Log
+import Log
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -48,8 +48,6 @@ fun SignUpScreen(
     val isLoadingRegions = signUpState == SignUpState.LoadingRegions
     val isLoadingOffices = signUpState == SignUpState.LoadingOffices
     val isSigningUp = signUpState == SignUpState.Loading
-
-    Log.d("SignUpScreen", "Recomposing - State: $signUpState, isLoadingRegions: $isLoadingRegions, isSigningUp: $isSigningUp")
 
     LaunchedEffect(signUpState) {
         when (val state = signUpState) {
@@ -105,15 +103,11 @@ fun SignUpScreen(
             ExposedDropdownMenuBox(
                 expanded = regionExpanded,
                 onExpandedChange = { shouldExpand ->
-                    Log.d("SignUpScreen", "Region onExpandedChange triggered. Current expanded: $regionExpanded, Should change to: $shouldExpand")
                     val currentState = viewModel.signUpState.value
                     val canChange = currentState !is SignUpState.LoadingRegions && currentState !is SignUpState.Loading
-                    Log.d("SignUpScreen", "Region canChange based on CURRENT VM state ($currentState): $canChange")
                     if (canChange) {
                         regionExpanded = shouldExpand
-                        Log.d("SignUpScreen", "Region expanded state changed to: $regionExpanded")
                     } else {
-                        Log.d("SignUpScreen", "Region expansion change blocked by loading state.")
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
@@ -131,7 +125,7 @@ fun SignUpScreen(
                     modifier = Modifier
                         .menuAnchor()
                         .fillMaxWidth()
-                        .also { Log.d("SignUpScreen", "Region Dropdown Enabled: ${!isLoadingRegions && !isSigningUp}") }
+                        .also { }
                 )
                 ExposedDropdownMenu(
                     expanded = regionExpanded && !isLoadingRegions,
@@ -210,4 +204,4 @@ fun SignUpScreen(
             }
         }
     }
-} 
+}

@@ -15,33 +15,27 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 
 class DispatchActivity : ComponentActivity() {
-    
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        android.util.Log.d("DispatchActivity", "=== onCreate 시작 ===")
-        
+
         val phoneNumber = intent.getStringExtra("EXTRA_PHONE_NUMBER") ?: ""
         val contactName = intent.getStringExtra("EXTRA_CONTACT_NAME")
         val contactAddress = intent.getStringExtra("EXTRA_CONTACT_ADDRESS")
         val regionId = intent.getStringExtra("EXTRA_REGION_ID") ?: ""
         val officeId = intent.getStringExtra("EXTRA_OFFICE_ID") ?: ""
         val deviceName = intent.getStringExtra("EXTRA_DEVICE_NAME") ?: ""
-        
-        android.util.Log.d("DispatchActivity", "전화번호: $phoneNumber")
-        android.util.Log.d("DispatchActivity", "지역ID: $regionId, 사무실ID: $officeId")
-        android.util.Log.d("DispatchActivity", "디바이스: $deviceName")
-        
+
         setContent {
             CallDetectorAppTheme {
                 var drivers by remember { mutableStateOf<List<DriverInfo>>(emptyList()) }
                 var isLoading by remember { mutableStateOf(true) }
-                
+
                 LaunchedEffect(Unit) {
                     drivers = loadAvailableDrivers(regionId, officeId)
                     isLoading = false
                 }
-                
+
                 if (isLoading) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
@@ -66,7 +60,6 @@ class DispatchActivity : ComponentActivity() {
                             finish()
                         },
                         onDelete = {
-                            // 삭제 - Firestore 업로드 안함
                             finish()
                         },
                         onShare = {
@@ -81,7 +74,7 @@ class DispatchActivity : ComponentActivity() {
             }
         }
     }
-    
+
     private suspend fun loadAvailableDrivers(regionId: String, officeId: String): List<DriverInfo> {
         return try {
             val db = FirebaseFirestore.getInstance()
@@ -90,12 +83,12 @@ class DispatchActivity : ComponentActivity() {
                 .whereEqualTo("status", "ONLINE")
                 .get()
                 .await()
-            
+
             snapshot.documents.mapNotNull { doc ->
                 val name = doc.getString("name") ?: return@mapNotNull null
                 val status = doc.getString("status") ?: "UNKNOWN"
                 val phone = doc.getString("phone") ?: ""
-                
+
                 DriverInfo(
                     id = doc.id,
                     name = name,
@@ -107,19 +100,19 @@ class DispatchActivity : ComponentActivity() {
             emptyList()
         }
     }
-    
+
     private fun createCallWithDriver(
-        phoneNumber: String, 
-        contactName: String?, 
+        phoneNumber: String,
+        contactName: String?,
         contactAddress: String?,
-        driver: DriverInfo, 
-        regionId: String, 
+        driver: DriverInfo,
+        regionId: String,
         officeId: String,
         deviceName: String
     ) {
         val db = FirebaseFirestore.getInstance()
         val callPath = "regions/$regionId/offices/$officeId/calls"
-        
+
         val callData = hashMapOf<String, Any>(
             "phoneNumber" to phoneNumber,
             "customerName" to (contactName ?: phoneNumber),
@@ -135,18 +128,16 @@ class DispatchActivity : ComponentActivity() {
             "assignedDriverName" to driver.name,
             "assignedTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
         )
-        
+
         contactAddress?.let { callData["customerAddress"] = it }
-        
-        // 콜 문서 생성
+
         db.collection(callPath).add(callData)
-        
-        // 기사 상태를 ON_TRIP으로 변경
+
         val driverPath = "regions/$regionId/offices/$officeId/designated_drivers"
         db.collection(driverPath).document(driver.id)
             .update("status", "ON_TRIP")
     }
-    
+
     private fun createCallOnHold(
         phoneNumber: String,
         contactName: String?,
@@ -157,7 +148,7 @@ class DispatchActivity : ComponentActivity() {
     ) {
         val db = FirebaseFirestore.getInstance()
         val callPath = "regions/$regionId/offices/$officeId/calls"
-        
+
         val callData = hashMapOf<String, Any>(
             "phoneNumber" to phoneNumber,
             "customerName" to (contactName ?: phoneNumber),
@@ -170,12 +161,12 @@ class DispatchActivity : ComponentActivity() {
             "callType" to "수신",
             "timestampClient" to System.currentTimeMillis()
         )
-        
+
         contactAddress?.let { callData["customerAddress"] = it }
-        
+
         db.collection(callPath).add(callData)
     }
-    
+
     private fun createSharedCall(
         phoneNumber: String,
         contactName: String?,
@@ -186,7 +177,7 @@ class DispatchActivity : ComponentActivity() {
     ) {
         val db = FirebaseFirestore.getInstance()
         val sharedCallsPath = "regions/$regionId/offices/$officeId/shared_calls"
-        
+
         val sharedCallData = hashMapOf<String, Any>(
             "phoneNumber" to phoneNumber,
             "customerName" to (contactName ?: phoneNumber),
@@ -198,12 +189,12 @@ class DispatchActivity : ComponentActivity() {
             "callType" to "수신",
             "timestampClient" to System.currentTimeMillis()
         )
-        
+
         contactAddress?.let { sharedCallData["customerAddress"] = it }
-        
+
         db.collection(sharedCallsPath).add(sharedCallData)
     }
-    
+
     companion object {
         fun startDispatchDialog(
             context: Context,
@@ -247,7 +238,7 @@ fun CallDetectorAppTheme(content: @Composable () -> Unit) {
         error = androidx.compose.ui.graphics.Color(0xFFCF6679),
         onError = androidx.compose.ui.graphics.Color.Black
     )
-    
+
     MaterialTheme(
         colorScheme = darkColorScheme,
         content = content
