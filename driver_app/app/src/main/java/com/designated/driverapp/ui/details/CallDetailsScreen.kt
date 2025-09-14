@@ -35,12 +35,10 @@ fun CallDetailsScreen(
     viewModel: DriverViewModel,
     callId: String
 ) {
-    // 화면이 시작될 때 한 번만 상세 정보를 로드하도록 LaunchedEffect 사용
     LaunchedEffect(callId) {
         viewModel.loadCallDetails(callId)
     }
 
-    // ViewModel의 callDetails 상태를 관찰
     val callInfo by viewModel.callDetails.collectAsState()
 
     Scaffold(
@@ -56,11 +54,9 @@ fun CallDetailsScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (callInfo == null) {
-                // 로딩 중이거나 데이터가 없을 경우
                 CircularProgressIndicator()
                 Text("콜 정보를 불러오는 중입니다...")
             } else {
-                // 데이터가 있을 경우
                 CallDetailsContent(callInfo!!, viewModel, navController)
             }
         }
@@ -75,7 +71,6 @@ private fun CallDetailsContent(
 ) {
     var fee by remember { mutableStateOf("") }
 
-    // 콜 정보 표시
     Text(text = "상태: ${callInfo.status}")
     Text(text = "고객 전화번호: ${callInfo.phoneNumber ?: "정보 없음"}")
     val departure = if (callInfo.departure_set.isNotBlank()) callInfo.departure_set else callInfo.customerAddress
@@ -85,19 +80,16 @@ private fun CallDetailsContent(
     Text(text = "출발지: ${departure ?: "정보 없음"}")
     Text(text = "도착지: ${destination ?: "정보 없음"}")
     Text(text = "요금: ${fareDisplay ?: 0}원")
-    
+
     Spacer(modifier = Modifier.height(32.dp))
 
-    // 상태에 따라 다른 UI 표시
     when (callInfo.status) {
         Constants.STATUS_ASSIGNED -> {
-            // 배차됨 상태: 수락/거절 버튼 표시
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 Button(onClick = {
-                    // 거절 로직 (필요 시 ViewModel에 추가)
                     navController.popBackStack()
                 }) {
                     Text("거절")
@@ -110,7 +102,6 @@ private fun CallDetailsContent(
             }
         }
         Constants.STATUS_ACCEPTED -> {
-            // 수락됨 상태: 운행 정보 입력 및 운행 시작 버튼 표시
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 OutlinedTextField(
                     value = fee,
@@ -122,7 +113,6 @@ private fun CallDetailsContent(
                 Button(
                     onClick = {
                         // "운행 시작" 로직 (ViewModel에 추가 필요)
-                        // viewModel.startDriving(callInfo.id, fee.toIntOrNull() ?: 0)
                     },
                     enabled = fee.isNotBlank()
                 ) {
@@ -130,9 +120,8 @@ private fun CallDetailsContent(
                 }
             }
         }
-        // 다른 상태들에 대한 UI 처리 (예: 운행 중)
         else -> {
             Text("현재 상태: ${callInfo.status}")
         }
     }
-} 
+}

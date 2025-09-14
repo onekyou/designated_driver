@@ -36,7 +36,6 @@ fun DailySessionScreen(vm: SettlementViewModel = viewModel()) {
         Text("일일 정산", style = MaterialTheme.typography.titleMedium, color = Color.White)
         Spacer(Modifier.height(8.dp))
         if(sessions.isNotEmpty()) {
-            // 세션 카드(업무 마감 카드)
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(sessions) { s ->
                     Card(modifier=Modifier.fillMaxWidth().clickable {
@@ -60,4 +59,4 @@ fun DailySessionScreen(vm: SettlementViewModel = viewModel()) {
     if(showDialog) {
         DateDetailDialog(date = selectedSession ?: "세션", settlements = sessionTrips, onDismiss={ showDialog=false })
     }
-} 
+}

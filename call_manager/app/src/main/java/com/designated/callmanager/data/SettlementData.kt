@@ -17,4 +17,4 @@ data class SettlementData(
     val regionId: String = "",
     val officeId: String = "",
     val workDate: String = ""
-) 
+)

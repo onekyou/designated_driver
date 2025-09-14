@@ -1,6 +1,5 @@
 package com.designated.callmanager.ui.shared
 
-import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -38,28 +37,17 @@ fun SharedCallSettingsScreen(
 
     val myPublished = allSharedCalls.filter { it.sourceOfficeId == myOfficeId }
     val myClaimed   = allSharedCalls.filter { it.claimedOfficeId == myOfficeId }
-    
-    // 시스템 뒤로가기 버튼 처리
+
     BackHandler {
         onNavigateBack()
     }
-    
-    // 디버깅 로그
+
     LaunchedEffect(allSharedCalls, pointsInfo, pointTransactions, myOfficeId) {
-        Log.d("SharedCallSettings", "=== Debug Info ===")
-        Log.d("SharedCallSettings", "myOfficeId: $myOfficeId")
-        Log.d("SharedCallSettings", "pointsInfo: ${pointsInfo?.balance}")
-        Log.d("SharedCallSettings", "allSharedCalls size: ${allSharedCalls.size}")
-        Log.d("SharedCallSettings", "myPublished size: ${myPublished.size}")
-        Log.d("SharedCallSettings", "myClaimed size: ${myClaimed.size}")
-        Log.d("SharedCallSettings", "pointTransactions size: ${pointTransactions.size}")
-        
+
         allSharedCalls.forEach { call ->
-            Log.d("SharedCallSettings", "SharedCall: id=${call.id}, source=${call.sourceOfficeId}, claimed=${call.claimedOfficeId}, status=${call.status}")
         }
-        
+
         pointTransactions.forEach { transaction ->
-            Log.d("SharedCallSettings", "PointTransaction: id=${transaction.id}, type=${transaction.type}, amount=${transaction.amount}")
         }
     }
 
@@ -69,7 +57,6 @@ fun SharedCallSettingsScreen(
         })
     }) { padding ->
         Column(Modifier.padding(padding)) {
-            // 포인트 현황 카드
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -112,7 +99,7 @@ fun SharedCallSettingsScreen(
                 Tab(selected = tabIndex==1, onClick={setTabIndex(1)}, text={Text("내가 수락")})
                 Tab(selected = tabIndex==2, onClick={setTabIndex(2)}, text={Text("포인트 내역")})
             }
-            
+
             LazyColumn(Modifier.fillMaxSize()) {
                 when (tabIndex) {
                     0 -> {
@@ -191,9 +178,9 @@ private fun SharedCallRow(call: SharedCallInfo, isPublished: Boolean) {
                 )
                 StatusChip(call.status)
             }
-            
+
             Spacer(modifier = Modifier.height(4.dp))
-            
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -210,7 +197,7 @@ private fun SharedCallRow(call: SharedCallInfo, isPublished: Boolean) {
                     )
                 }
             }
-            
+
             if (call.status == "COMPLETED") {
                 val pointAmount = ((call.fare ?: 0) * 0.1).toInt()
                 Text(
@@ -232,7 +219,7 @@ private fun StatusChip(status: String) {
         "COMPLETED" -> Color(0xFF4CAF50) to "완료"
         else -> Color.Gray to status
     }
-    
+
     Card(
         colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.1f)),
         modifier = Modifier.padding(0.dp)
@@ -272,7 +259,7 @@ private fun PointTransactionRow(transaction: PointTransaction) {
                     color = if (transaction.amount >= 0) Color(0xFF4CAF50) else Color(0xFFF44336)
                 )
             }
-            
+
             if (transaction.description.isNotBlank()) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
@@ -281,7 +268,7 @@ private fun PointTransactionRow(transaction: PointTransaction) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            
+
             transaction.timestamp?.let { timestamp ->
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
@@ -301,4 +288,4 @@ private fun getTransactionTypeText(type: String): String {
         "SHARED_CALL_RECEIVE" -> "공유콜 수익"
         else -> type
     }
-} 
+}

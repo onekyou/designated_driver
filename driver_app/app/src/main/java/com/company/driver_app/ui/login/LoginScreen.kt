@@ -14,15 +14,12 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 fun LoginScreen() {
-    // 다크모드 색상 설정
-    val backgroundColor = Color(0xFF121212) // 다크모드 배경색
-    val deepYellow = Color(0xFFFFD700) // 딥엘로우 색상
+    val backgroundColor = Color(0xFF121212)
+    val deepYellow = Color(0xFFFFD700)
 
-    // 상태 변수
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
-    // UI 구성
     Box(
         modifier = Modifier
             .fillMaxSize()

@@ -29,8 +29,8 @@ fun SignUpScreen(
     viewModel: SignUpViewModel = viewModel(
         factory = SignUpViewModel.Factory(LocalContext.current.applicationContext as Application)
     ),
-    onSignUpSuccess: () -> Unit, // Callback for successful sign-up
-    onNavigateBack: () -> Unit // Callback to navigate back (e.g., to login)
+    onSignUpSuccess: () -> Unit,
+    onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
     val signUpState by viewModel.signUpState.collectAsStateWithLifecycle()
@@ -47,12 +47,11 @@ fun SignUpScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
-    // Handle SignUpState changes (show messages, navigate on success)
     LaunchedEffect(signUpState) {
         when (val state = signUpState) {
             is SignUpState.Success -> {
                 Toast.makeText(context, "회원가입 성공!", Toast.LENGTH_SHORT).show()
-                onSignUpSuccess() // Navigate after success
+                onSignUpSuccess()
             }
             is SignUpState.Error -> {
                 coroutineScope.launch {
@@ -61,7 +60,7 @@ fun SignUpScreen(
                         duration = SnackbarDuration.Short
                     )
                 }
-                viewModel.resetSignUpState() // Reset state after showing error
+                viewModel.resetSignUpState()
             }
             else -> { /* Idle, Loading, etc. Handled by UI elements */ }
         }
@@ -85,7 +84,7 @@ fun SignUpScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(16.dp)
-                .verticalScroll(rememberScrollState()), // Make column scrollable
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -96,7 +95,7 @@ fun SignUpScreen(
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                 modifier = Modifier.fillMaxWidth(),
-                enabled = signUpState !is SignUpState.Loading // Disable when loading
+                enabled = signUpState !is SignUpState.Loading
             )
 
             OutlinedTextField(
@@ -144,7 +143,6 @@ fun SignUpScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Region Dropdown
             ExposedDropdownMenuBox(
                 expanded = expandedRegion,
                 onExpandedChange = { expandedRegion = !expandedRegion },
@@ -152,11 +150,11 @@ fun SignUpScreen(
             ) {
                 OutlinedTextField(
                     value = viewModel.selectedRegion?.name ?: "지역 선택",
-                    onValueChange = {}, // Read only
+                    onValueChange = {},
                     readOnly = true,
                     label = { Text("지역") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedRegion) },
-                    modifier = Modifier.menuAnchor().fillMaxWidth(), // Important for menu positioning
+                    modifier = Modifier.menuAnchor().fillMaxWidth(),
                     enabled = signUpState !is SignUpState.Loading && signUpState !is SignUpState.LoadingRegions
                 )
                 ExposedDropdownMenu(
@@ -184,15 +182,14 @@ fun SignUpScreen(
                 }
             }
 
-            // Office Dropdown (Enabled only when region is selected)
              ExposedDropdownMenuBox(
                 expanded = expandedOffice,
-                onExpandedChange = { if (viewModel.selectedRegion != null) expandedOffice = !expandedOffice }, // Enable only if region selected
+                onExpandedChange = { if (viewModel.selectedRegion != null) expandedOffice = !expandedOffice },
                  modifier = Modifier.fillMaxWidth()
             ) {
                 OutlinedTextField(
                     value = viewModel.selectedOffice?.name ?: "사무실 선택",
-                    onValueChange = {}, // Read only
+                    onValueChange = {},
                     readOnly = true,
                     label = { Text("사무실") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedOffice) },
@@ -243,7 +240,7 @@ fun SignUpScreen(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = signUpState != SignUpState.Loading &&
                           signUpState != SignUpState.LoadingRegions &&
-                          signUpState != SignUpState.LoadingOffices // Disable while any loading
+                          signUpState != SignUpState.LoadingOffices
             ) {
                 if (signUpState == SignUpState.Loading) {
                      CircularProgressIndicator(modifier = Modifier.size(24.dp))
@@ -253,4 +250,4 @@ fun SignUpScreen(
             }
         }
     }
-} 
+}

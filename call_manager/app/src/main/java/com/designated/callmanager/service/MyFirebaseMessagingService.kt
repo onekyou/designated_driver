@@ -10,167 +10,295 @@ import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
 import android.provider.Settings
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.designated.callmanager.MainActivity
 import com.designated.callmanager.R
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import android.util.Log
 
 class MyFirebaseMessagingService : FirebaseMessagingService() {
-    
+
     companion object {
         private const val TAG = "CallManager_FCM"
-        
-        // 알림 채널 ID들
+
         private const val NEW_CALL_CHANNEL_ID = "new_call_fcm_channel_v2"
         private const val STATUS_CHANGE_CHANNEL_ID = "status_change_fcm_channel"
         private const val DRIVER_UPDATE_CHANNEL_ID = "driver_update_fcm_channel"
-        private const val SHARED_CALL_CHANNEL_ID = "shared_call_fcm_channel"
+        private const val SHARED_CALL_CHANNEL_ID = "shared_call_fcm_channel_v3"  // v3로 변경하여 새 채널 생성
     }
 
     override fun onCreate() {
         super.onCreate()
+        Log.d("TEST_ORIGINAL", "🚨🚨🚨 MyFirebaseMessagingService onCreate 호출됨!!! 🚨🚨🚨")
+        println("🚨🚨🚨 MyFirebaseMessagingService onCreate 호출됨!!! 🚨🚨🚨")
+        Log.d(TAG, "========== MyFirebaseMessagingService onCreate 시작 ==========")
+        Log.d(TAG, "🔍 [DEBUG] 서비스 생성 시각: ${System.currentTimeMillis()}")
+        Log.d(TAG, "🔍 [DEBUG] 프로세스 ID: ${android.os.Process.myPid()}")
+        Log.d(TAG, "🔍 [DEBUG] 스레드 ID: ${Thread.currentThread().id}")
+
         createNotificationChannels()
+
+        // 서비스 시작 시 기존 토큰 확인 및 동기화
+        Log.d(TAG, "토큰 동기화 시작...")
+
+        // FCM 토큰 즉시 확인
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (!task.isSuccessful) {
+                Log.w(TAG, "🔑❌ FCM 토큰 가져오기 실패", task.exception)
+                println("🔑❌ FCM 토큰 가져오기 실패: ${task.exception}")
+                return@addOnCompleteListener
+            }
+
+            val token = task.result
+            Log.d(TAG, "🔑✅ 현재 FCM 토큰: $token")
+            println("🔑✅ 현재 FCM 토큰: $token")
+        }
+
+        checkAndSyncExistingToken()
+
+        Log.d(TAG, "========== MyFirebaseMessagingService onCreate 완료 ==========")
     }
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
-        super.onMessageReceived(remoteMessage)
-        
-        Log.d(TAG, "🔔 FCM 메시지 수신: ${remoteMessage.from}")
+        // super.onMessageReceived(remoteMessage) 제거 - 이중알림 방지
+        Log.d("TEST_ORIGINAL", "🚨🚨🚨 MyFirebaseMessagingService onMessageReceived 호출됨!!! 🚨🚨🚨")
+        println("🚨🚨🚨 MyFirebaseMessagingService onMessageReceived 호출됨!!! 🚨🚨🚨")
+        Log.d(TAG, "========== 🚨🚨🚨 FCM 메시지 수신됨 🚨🚨🚨 ==========")
+        Log.d(TAG, "🔍 [DEBUG] 수신 시각: ${System.currentTimeMillis()}")
+        Log.d(TAG, "🔍 [DEBUG] 스레드 ID: ${Thread.currentThread().id}")
+        Log.d(TAG, "🔔 FCM 메시지 from: ${remoteMessage.from}")
+        Log.d(TAG, "🔔 FCM 메시지 messageId: ${remoteMessage.messageId}")
+        Log.d(TAG, "🔔 FCM 메시지 messageType: ${remoteMessage.messageType}")
         Log.d(TAG, "데이터: ${remoteMessage.data}")
+        Log.d(TAG, "알림: ${remoteMessage.notification}")
 
-        val messageType = remoteMessage.data["type"] ?: return
-        
-        // SHARED_CALL_CANCELLED_POPUP은 포그라운드에서도 처리해야 함
-        val shouldProcessInForeground = messageType == "SHARED_CALL_CANCELLED_POPUP"
-        
-        // 앱이 포그라운드라면 시스템 알림을 띄우지 않고 종료 (리스너가 처리)
-        // 단, SHARED_CALL_CANCELLED_POPUP은 예외
-        if (isAppInForeground() && !shouldProcessInForeground) {
-            Log.d(TAG, "앱이 포그라운드 상태이므로 FCM 알림을 무시합니다.")
+        val messageType = remoteMessage.data["type"] ?: run {
+            Log.w(TAG, "⚠️ [DEBUG] messageType이 null입니다 - 메시지 처리 중단")
             return
         }
-        
-        // 공유콜의 경우 callId 대신 sharedCallId 사용
-        val callId = remoteMessage.data["callId"] 
-            ?: remoteMessage.data["sharedCallId"] 
+        Log.d(TAG, "메시지 타입: $messageType")
+
+        // 포그라운드에서 처리할 메시지 타입들 (테스트를 위해 모든 공유콜 허용)
+        val sharedCallTypes = setOf(
+            "NEW_SHARED_CALL",
+            "SHARED_CALL_CANCELLED_POPUP",
+            "SHARED_CALL_CLAIMED"
+        )
+        val shouldProcessInForeground = sharedCallTypes.contains(messageType)
+
+        val isInForeground = isAppInForeground()
+        Log.d(TAG, "앱 포그라운드 상태: $isInForeground, shouldProcessInForeground: $shouldProcessInForeground")
+
+        if (isInForeground && !shouldProcessInForeground) {
+            Log.d(TAG, "포그라운드에서 처리하지 않음 (공유콜 외) - return")
+            return
+        }
+
+        val callId = remoteMessage.data["callId"]
+            ?: remoteMessage.data["sharedCallId"]
             ?: return
 
-        // 필요 없는 알림 타입 필터링
         val ignoredTypes = setOf("DRIVER_ACCEPT", "DRIVER_REJECT", "SETTLED", "AWAITING_SETTLEMENT")
         if (ignoredTypes.contains(messageType)) {
-            Log.d(TAG, "무시되는 메시지 타입: $messageType")
             return
         }
 
+        Log.d(TAG, "🔔 [DEBUG] 메시지 타입에 따른 처리 시작: $messageType")
+
         when (messageType) {
-            "NEW_CALL" -> handleNewCall(remoteMessage, callId)
-            "NEW_SHARED_CALL" -> handleNewSharedCall(remoteMessage, callId)
-            "STATUS_CHANGE" -> handleStatusChange(remoteMessage, callId)  // 운행 시작(IN_PROGRESS)만 실 알림
-            "DRIVER_STATUS_UPDATE" -> handleDriverStatusUpdate(remoteMessage, callId)
-            "SHARED_CALL_CANCELLED_POPUP" -> handleSharedCallCancelled(remoteMessage, callId)
-            else -> Log.w(TAG, "알 수 없는 메시지 타입: $messageType")
+            "NEW_CALL" -> {
+                Log.d(TAG, "🔔 [DEBUG] NEW_CALL 처리 시작")
+                handleNewCall(remoteMessage, callId)
+                Log.d(TAG, "🔔 [DEBUG] NEW_CALL 처리 완료")
+            }
+            "call_assigned" -> {
+                Log.d(TAG, "🔔 [DEBUG] call_assigned (일반 콜 배정) 처리 시작")
+                handleNewCall(remoteMessage, callId)
+                Log.d(TAG, "🔔 [DEBUG] call_assigned 처리 완료")
+            }
+            "NEW_SHARED_CALL" -> {
+                Log.d(TAG, "🔔 [DEBUG] NEW_SHARED_CALL 처리 시작")
+                handleNewSharedCall(remoteMessage, callId)
+                Log.d(TAG, "🔔 [DEBUG] NEW_SHARED_CALL 처리 완료")
+            }
+            "STATUS_CHANGE" -> {
+                Log.d(TAG, "🔔 [DEBUG] STATUS_CHANGE 처리 시작")
+                handleStatusChange(remoteMessage, callId)
+                Log.d(TAG, "🔔 [DEBUG] STATUS_CHANGE 처리 완료")
+            }
+            "DRIVER_STATUS_UPDATE" -> {
+                Log.d(TAG, "🔔 [DEBUG] DRIVER_STATUS_UPDATE 처리 시작")
+                handleDriverStatusUpdate(remoteMessage, callId)
+                Log.d(TAG, "🔔 [DEBUG] DRIVER_STATUS_UPDATE 처리 완료")
+            }
+            "SHARED_CALL_CANCELLED_POPUP" -> {
+                Log.d(TAG, "🔔 [DEBUG] SHARED_CALL_CANCELLED_POPUP 처리 시작")
+                handleSharedCallCancelled(remoteMessage, callId)
+                Log.d(TAG, "🔔 [DEBUG] SHARED_CALL_CANCELLED_POPUP 처리 완료")
+            }
+            else -> {
+                Log.w(TAG, "⚠️ [DEBUG] 알 수 없는 메시지 타입: $messageType")
+            }
         }
+
+        Log.d(TAG, "🔔 [DEBUG] onMessageReceived 완전 종료")
     }
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        Log.d(TAG, "새로운 FCM 토큰 발급: $token")
-        
-        // SharedPreferences에 저장
+        Log.d(TAG, "========== onNewToken 호출됨 ==========")
+        Log.d(TAG, "[새로운 FCM 토큰]: $token")
+
         getSharedPreferences("fcm_prefs", Context.MODE_PRIVATE)
             .edit()
             .putString("fcm_token", token)
             .apply()
-        
-        // 🔥 Firestore에도 저장 (관리자 컬렉션)
+        Log.d(TAG, "[onNewToken] SharedPreferences에 새 토큰 저장 완료")
+
         saveTokenToFirestore(token)
     }
-    
+
     private fun saveTokenToFirestore(token: String) {
-        Log.d(TAG, "🔥 saveTokenToFirestore 함수 호출됨")
-        
+        Log.d(TAG, "[saveTokenToFirestore] 시작 - 토큰: $token")
+
         val auth = FirebaseAuth.getInstance()
         val currentUser = auth.currentUser
-        
-        Log.d(TAG, "  현재 사용자: ${currentUser?.email ?: "null"}")
-        
+
         if (currentUser == null) {
-            Log.w(TAG, "❌ 사용자가 로그인되지 않아 FCM 토큰을 Firestore에 저장할 수 없습니다.")
+            Log.w(TAG, "[saveTokenToFirestore] 현재 사용자 null - 저장 취소")
             return
         }
-        
-        // SharedPreferences에서 regionId, officeId 가져오기
+        Log.d(TAG, "[saveTokenToFirestore] 현재 사용자 UID: ${currentUser.uid}")
+
         val sharedPreferences = getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
         val regionId = sharedPreferences.getString("regionId", null)
         val officeId = sharedPreferences.getString("officeId", null)
-        
-        Log.d(TAG, "  SharedPreferences - regionId: '$regionId', officeId: '$officeId'")
-        
+
+        Log.d(TAG, "[saveTokenToFirestore] regionId: $regionId, officeId: $officeId")
+
         if (regionId.isNullOrBlank() || officeId.isNullOrBlank()) {
-            Log.w(TAG, "❌ regionId 또는 officeId가 없어 FCM 토큰을 Firestore에 저장할 수 없습니다.")
-            Log.w(TAG, "     regionId: '$regionId', officeId: '$officeId'")
-            
-            // SharedPreferences 전체 내용 로그 출력
+            Log.e(TAG, "[saveTokenToFirestore] regionId 또는 officeId 비어있음 - 저장 취소")
             val allPrefs = sharedPreferences.all
-            Log.w(TAG, "     SharedPreferences 전체 내용: $allPrefs")
+            Log.d(TAG, "[saveTokenToFirestore] login_prefs 전체 내용: $allPrefs")
             return
         }
-        
+
         val adminId = currentUser.uid
         val firestore = FirebaseFirestore.getInstance()
-        
-        Log.d(TAG, "🚀 FCM 토큰 Firestore 저장 시도")
-        Log.d(TAG, "     AdminId: $adminId")
-        Log.d(TAG, "     RegionId: $regionId")
-        Log.d(TAG, "     OfficeId: $officeId")
-        Log.d(TAG, "     Token: ${token.take(20)}...")
-        
-        // set with merge=true로 변경 (문서가 없어도 생성됨)
+
         val tokenData = hashMapOf(
             "fcmToken" to token,
             "lastUpdated" to System.currentTimeMillis(),
             "associatedRegionId" to regionId,
             "associatedOfficeId" to officeId
         )
-        
+
+        Log.d(TAG, "[saveTokenToFirestore] Firestore에 토큰 저장 시도...")
+        Log.d(TAG, "[saveTokenToFirestore] adminId: $adminId")
+        Log.d(TAG, "[saveTokenToFirestore] tokenData: $tokenData")
+
         firestore.collection("admins").document(adminId)
             .set(tokenData, com.google.firebase.firestore.SetOptions.merge())
-            .addOnSuccessListener { 
-                Log.i(TAG, "✅ 관리자 FCM 토큰 Firestore 저장 성공!")
-                Log.i(TAG, "     Admin: $adminId")
-                Log.i(TAG, "     경로: admins/$adminId")
+            .addOnSuccessListener {
+                Log.d(TAG, "[saveTokenToFirestore] ✅ Firestore에 토큰 저장 성공")
             }
-            .addOnFailureListener { e -> 
-                Log.e(TAG, "❌ 관리자 FCM 토큰 Firestore 저장 실패!")
-                Log.e(TAG, "     Admin: $adminId")
-                Log.e(TAG, "     경로: admins/$adminId")
-                Log.e(TAG, "     실패 원인: ${e.message}")
-                Log.e(TAG, "     예외 타입: ${e.javaClass.simpleName}")
+            .addOnFailureListener { e ->
+                Log.e(TAG, "[saveTokenToFirestore] ❌ Firestore에 토큰 저장 실패: ${e.message}")
                 e.printStackTrace()
+            }
+    }
+
+    // 기존 토큰 확인 및 Firestore 동기화 (정석적 방법)
+    private fun checkAndSyncExistingToken() {
+        Log.d(TAG, "[checkAndSyncExistingToken] 시작")
+
+        // 현재 유효한 토큰 가져오기 (캐시된 토큰 사용)
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+            .addOnCompleteListener { task ->
+                if (!task.isSuccessful) {
+                    Log.e(TAG, "[checkAndSyncExistingToken] 토큰 가져오기 실패: ${task.exception?.message}")
+                    return@addOnCompleteListener
+                }
+
+                val currentToken = task.result
+                Log.d(TAG, "[checkAndSyncExistingToken] 현재 FCM 토큰: $currentToken")
+
+                // SharedPreferences의 토큰과 비교
+                val sharedPrefs = getSharedPreferences("fcm_prefs", Context.MODE_PRIVATE)
+                val savedToken = sharedPrefs.getString("fcm_token", null)
+                Log.d(TAG, "[checkAndSyncExistingToken] 저장된 토큰: $savedToken")
+
+                when {
+                    savedToken == null -> {
+                        Log.d(TAG, "[checkAndSyncExistingToken] SharedPreferences에 토큰 없음 - 새로 저장")
+                        sharedPrefs.edit().putString("fcm_token", currentToken).apply()
+                        saveTokenToFirestore(currentToken)
+                    }
+                    savedToken != currentToken -> {
+                        Log.d(TAG, "[checkAndSyncExistingToken] 토큰 변경됨 - 업데이트 필요")
+                        Log.d(TAG, "[checkAndSyncExistingToken] 이전 토큰: $savedToken")
+                        Log.d(TAG, "[checkAndSyncExistingToken] 새 토큰: $currentToken")
+                        sharedPrefs.edit().putString("fcm_token", currentToken).apply()
+                        saveTokenToFirestore(currentToken)
+                    }
+                    else -> {
+                        Log.d(TAG, "[checkAndSyncExistingToken] 토큰 동일 - Firestore 확인 필요")
+                        verifyTokenInFirestore(currentToken)
+                    }
+                }
+            }
+    }
+
+    // Firestore에 토큰이 저장되어 있는지 확인
+    private fun verifyTokenInFirestore(token: String) {
+        Log.d(TAG, "[verifyTokenInFirestore] 시작 - 토큰: $token")
+
+        val auth = FirebaseAuth.getInstance()
+        val currentUser = auth.currentUser
+
+        if (currentUser == null) {
+            Log.w(TAG, "[verifyTokenInFirestore] 현재 사용자 null - 로그인 필요")
+            return
+        }
+        Log.d(TAG, "[verifyTokenInFirestore] 현재 사용자 UID: ${currentUser.uid}")
+
+        val firestore = FirebaseFirestore.getInstance()
+        firestore.collection("admins").document(currentUser.uid)
+            .get()
+            .addOnSuccessListener { document ->
+                val firestoreToken = document.getString("fcmToken")
+                Log.d(TAG, "[verifyTokenInFirestore] Firestore 토큰: $firestoreToken")
+
+                if (firestoreToken != token) {
+                    Log.d(TAG, "[verifyTokenInFirestore] Firestore 토큰 불일치 - 업데이트 필요")
+                    saveTokenToFirestore(token)
+                } else {
+                    Log.d(TAG, "[verifyTokenInFirestore] 토큰 일치 - 업데이트 불필요")
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "[verifyTokenInFirestore] Firestore 토큰 확인 실패: ${e.message}")
+                saveTokenToFirestore(token)
             }
     }
 
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            
-            // 이전 버전 채널 삭제 (한 번만)
+
             try {
                 val oldChannel = notificationManager.getNotificationChannel("new_call_fcm_channel")
                 if (oldChannel != null) {
                     notificationManager.deleteNotificationChannel("new_call_fcm_channel")
-                    Log.i(TAG, "이전 버전 채널 삭제 완료")
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "이전 버전 채널 삭제 중 오류 (무시해도 됨): ${e.message}")
             }
-            
-            // 새로운 콜 채널 - 없을 때만 생성
+
             if (notificationManager.getNotificationChannel(NEW_CALL_CHANNEL_ID) == null) {
                 val newCallChannel = NotificationChannel(
                     NEW_CALL_CHANNEL_ID,
@@ -191,10 +319,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                         .build())
                 }
                 notificationManager.createNotificationChannel(newCallChannel)
-                Log.i(TAG, "새로운 콜 채널 생성 완료")
             }
-            
-            // 상태 변경 채널 - 없을 때만 생성
+
             if (notificationManager.getNotificationChannel(STATUS_CHANGE_CHANNEL_ID) == null) {
                 val statusChangeChannel = NotificationChannel(
                     STATUS_CHANGE_CHANNEL_ID,
@@ -213,10 +339,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                         .build())
                 }
                 notificationManager.createNotificationChannel(statusChangeChannel)
-                Log.i(TAG, "상태 변경 채널 생성 완료")
             }
-            
-            // 기사 업데이트 채널 - 없을 때만 생성
+
             if (notificationManager.getNotificationChannel(DRIVER_UPDATE_CHANNEL_ID) == null) {
                 val driverUpdateChannel = NotificationChannel(
                     DRIVER_UPDATE_CHANNEL_ID,
@@ -232,43 +356,70 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                         .build())
                 }
                 notificationManager.createNotificationChannel(driverUpdateChannel)
-                Log.i(TAG, "기사 업데이트 채널 생성 완료")
             }
-            
-            // 공유콜 채널 - 없을 때만 생성
+
             if (notificationManager.getNotificationChannel(SHARED_CALL_CHANNEL_ID) == null) {
+                Log.d(TAG, "🔧 [CHANNEL] SHARED_CALL_CHANNEL 새로 생성 시작 - ID: $SHARED_CALL_CHANNEL_ID")
+
+                val alarmSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                Log.d(TAG, "🔧 [CHANNEL] 알람 소리 URI: $alarmSoundUri")
+
                 val sharedCallChannel = NotificationChannel(
                     SHARED_CALL_CHANNEL_ID,
-                    "공유콜 알림",
-                    NotificationManager.IMPORTANCE_HIGH
+                    "공유콜 알림 (긴급)",
+                    NotificationManager.IMPORTANCE_MAX
                 ).apply {
                     description = "새로운 공유콜 도착 알림"
                     enableLights(true)
                     lightColor = Color.YELLOW
                     enableVibration(true)
-                    vibrationPattern = longArrayOf(0, 500, 200, 500, 200, 500)
+                    vibrationPattern = longArrayOf(0, 1000, 500, 1000, 500, 1000)
                     setShowBadge(true)
                     lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
-                    setSound(Settings.System.DEFAULT_NOTIFICATION_URI, AudioAttributes.Builder()
+                    setBypassDnd(true)
+                    setSound(alarmSoundUri, AudioAttributes.Builder()
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                        .setUsage(AudioAttributes.USAGE_ALARM)
                         .build())
                 }
+
                 notificationManager.createNotificationChannel(sharedCallChannel)
-                Log.i(TAG, "공유콜 채널 생성 완료")
+                Log.d(TAG, "🔧✅ [CHANNEL] SHARED_CALL_CHANNEL 생성 완료")
+
+                // 생성된 채널 정보 확인
+                val createdChannel = notificationManager.getNotificationChannel(SHARED_CALL_CHANNEL_ID)
+                createdChannel?.let { channel ->
+                    Log.d(TAG, "🔧 [CHANNEL] 생성된 채널 정보:")
+                    Log.d(TAG, "🔧 [CHANNEL] - ID: ${channel.id}")
+                    Log.d(TAG, "🔧 [CHANNEL] - Name: ${channel.name}")
+                    Log.d(TAG, "🔧 [CHANNEL] - Importance: ${channel.importance}")
+                    Log.d(TAG, "🔧 [CHANNEL] - Sound: ${channel.sound}")
+                    Log.d(TAG, "🔧 [CHANNEL] - VibrationEnabled: ${channel.shouldVibrate()}")
+                    Log.d(TAG, "🔧 [CHANNEL] - CanBypassDnd: ${channel.canBypassDnd()}")
+                }
+            } else {
+                Log.d(TAG, "🔧 [CHANNEL] SHARED_CALL_CHANNEL 이미 존재함 - 기존 설정 사용")
+                val existingChannel = notificationManager.getNotificationChannel(SHARED_CALL_CHANNEL_ID)
+                existingChannel?.let { channel ->
+                    Log.d(TAG, "🔧 [CHANNEL] 기존 채널 정보:")
+                    Log.d(TAG, "🔧 [CHANNEL] - ID: ${channel.id}")
+                    Log.d(TAG, "🔧 [CHANNEL] - Name: ${channel.name}")
+                    Log.d(TAG, "🔧 [CHANNEL] - Importance: ${channel.importance}")
+                    Log.d(TAG, "🔧 [CHANNEL] - Sound: ${channel.sound}")
+                    Log.d(TAG, "🔧 [CHANNEL] - VibrationEnabled: ${channel.shouldVibrate()}")
+                    Log.d(TAG, "🔧 [CHANNEL] - CanBypassDnd: ${channel.canBypassDnd()}")
+                }
             }
-            
-            Log.i(TAG, "알림 채널 확인 완료")
+
         }
     }
 
     private fun handleNewCall(remoteMessage: RemoteMessage, callId: String) {
-        Log.i(TAG, "🚨 새로운 콜 FCM 알림 처리: $callId")
-        
+
         val customerName = remoteMessage.data["customerName"] ?: "신규 고객"
         val customerPhone = remoteMessage.data["customerPhone"] ?: "-"
         val pickupLocation = remoteMessage.data["pickupLocation"] ?: "위치 미확인"
-        
+
         showNotification(
             channelId = NEW_CALL_CHANNEL_ID,
             notificationId = "new_call_$callId".hashCode(),
@@ -279,19 +430,17 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             color = ContextCompat.getColor(this, android.R.color.holo_red_dark),
             autoCancel = true,
             isNewCall = true,
-            timeoutAfter = 60000 // 1분
+            timeoutAfter = 60000
         )
     }
 
     private fun handleNewSharedCall(remoteMessage: RemoteMessage, sharedCallId: String) {
-        Log.i(TAG, "🔄 새로운 공유콜 FCM 알림 처리: $sharedCallId")
-        
+
         val departure = remoteMessage.data["departure"] ?: "출발지"
         val destination = remoteMessage.data["destination"] ?: "도착지"
         val fare = remoteMessage.data["fare"] ?: "0"
         val callType = remoteMessage.data["callType"] ?: ""
-        
-        // 마감콜인지 확인하여 다른 표시
+
         val (title, content, description) = when (callType) {
             "AFTER_HOURS", "MISSED_CALL", "AFTER_HOURS_QUICK" -> {
                 Triple(
@@ -308,7 +457,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 )
             }
         }
-        
+
         showNotification(
             channelId = SHARED_CALL_CHANNEL_ID,
             notificationId = "shared_call_$sharedCallId".hashCode(),
@@ -319,24 +468,23 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             color = ContextCompat.getColor(this, android.R.color.holo_orange_dark),
             autoCancel = true,
             isSharedCall = true,
-            timeoutAfter = 120000 // 2분
+            timeoutAfter = 120000
         )
     }
 
     private fun handleStatusChange(remoteMessage: RemoteMessage, callId: String) {
-        Log.i(TAG, "🚗 운행 상태 변경 FCM 알림 처리: $callId")
-        
+
         val statusText = remoteMessage.data["statusText"] ?: "상태 변경"
         val customerName = remoteMessage.data["customerName"] ?: "고객"
         val customerPhone = remoteMessage.data["customerPhone"] ?: "-"
         val driverName = remoteMessage.data["driverName"] ?: "기사"
-        
+
         val (emoji, color) = when (statusText) {
             "운행 시작" -> "🚗" to ContextCompat.getColor(this, android.R.color.holo_green_dark)
             "운행 완료" -> "✅" to ContextCompat.getColor(this, android.R.color.holo_blue_dark)
             else -> "📢" to ContextCompat.getColor(this, android.R.color.holo_orange_dark)
         }
-        
+
         showNotification(
             channelId = STATUS_CHANGE_CHANNEL_ID,
             notificationId = callId.hashCode(),
@@ -346,16 +494,15 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             callId = callId,
             color = color,
             autoCancel = true,
-            timeoutAfter = 30000 // 30초
+            timeoutAfter = 30000
         )
     }
 
     private fun handleDriverStatusUpdate(remoteMessage: RemoteMessage, callId: String) {
-        Log.i(TAG, "📍 기사 상태 업데이트 FCM 알림 처리: $callId")
-        
+
         val driverName = remoteMessage.data["driverName"] ?: "기사"
         val newStatus = remoteMessage.data["newStatus"] ?: "상태 변경"
-        
+
         showNotification(
             channelId = DRIVER_UPDATE_CHANNEL_ID,
             notificationId = "driver_status_$callId".hashCode(),
@@ -365,18 +512,17 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             callId = callId,
             color = ContextCompat.getColor(this, android.R.color.holo_blue_light),
             autoCancel = true,
-            timeoutAfter = 10000 // 10초
+            timeoutAfter = 10000
         )
     }
 
     private fun handleSharedCallCancelled(remoteMessage: RemoteMessage, callId: String) {
-        Log.i(TAG, "🚫 공유콜 취소 FCM 알림 처리: $callId")
-        
+
         val departure = remoteMessage.data["departure"] ?: "출발지"
         val destination = remoteMessage.data["destination"] ?: "도착지"
         val cancelReason = remoteMessage.data["cancelReason"] ?: "사유 없음"
         val phoneNumber = remoteMessage.data["phoneNumber"] ?: ""
-        
+
         showNotification(
             channelId = SHARED_CALL_CHANNEL_ID,
             notificationId = "shared_call_cancelled_$callId".hashCode(),
@@ -387,7 +533,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             color = ContextCompat.getColor(this, android.R.color.holo_red_dark),
             autoCancel = true,
             isSharedCallCancelled = true,
-            timeoutAfter = 60000 // 1분
+            timeoutAfter = 60000
         )
     }
 
@@ -405,9 +551,15 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         isSharedCallCancelled: Boolean = false,
         timeoutAfter: Long? = null
     ) {
+        Log.d(TAG, "🔔🔔🔔 [NOTIFICATION] showNotification 호출 시작 🔔🔔🔔")
+        Log.d(TAG, "🔔 [NOTIFICATION] channelId: $channelId")
+        Log.d(TAG, "🔔 [NOTIFICATION] notificationId: $notificationId")
+        Log.d(TAG, "🔔 [NOTIFICATION] title: $title")
+        Log.d(TAG, "🔔 [NOTIFICATION] callId: $callId")
+        Log.d(TAG, "🔔 [NOTIFICATION] isNewCall: $isNewCall, isSharedCall: $isSharedCall")
+
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // ⭐️ 클릭 시 실행될 인텐트 생성
         val intent = Intent(this, MainActivity::class.java).apply {
             when {
                 isNewCall -> {
@@ -423,7 +575,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     putExtra("callId", callId)
                 }
             }
-            // ⭐️ 앱을 새로 시작하거나 기존의 것을 맨 위로 올림
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
 
@@ -438,7 +589,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             }
         )
 
-        // ⭐️ 전체 화면 인텐트 (헤드업 알림용)
         val fullScreenIntent = Intent(this, MainActivity::class.java).apply {
             when {
                 isNewCall -> {
@@ -473,21 +623,40 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             .setContentTitle(title)
             .setContentText(content)
             .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
-            .setPriority(NotificationCompat.PRIORITY_MAX) // ⭐️ 최고 우선순위
-            .setCategory(NotificationCompat.CATEGORY_CALL) // ⭐️ 통화 카테고리로 설정
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
             .setColor(color)
             .setAutoCancel(autoCancel)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setContentIntent(pendingIntent)
-            .setOngoing(!autoCancel) // ⭐️ 새로운 콜은 지속적으로 표시
+            .setOngoing(!autoCancel)
 
-        // ⭐️ 새로운 콜이나 공유콜, 공유콜 취소인 경우 전체 화면 인텐트 및 사운드 추가
         if (isNewCall || isSharedCall || isSharedCallCancelled) {
             notificationBuilder.setFullScreenIntent(fullScreenPendingIntent, true)
-            // ⭐️ 알림 소리 명시적 설정
-            val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            notificationBuilder.setSound(soundUri)
+
+            if (channelId == SHARED_CALL_CHANNEL_ID) {
+                Log.d(TAG, "🔔 [BUILDER] 공유콜 알림 Builder 설정 시작")
+                val alarmSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                val notificationSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+
+                Log.d(TAG, "🔔 [BUILDER] 알람 소리 URI: $alarmSoundUri")
+                Log.d(TAG, "🔔 [BUILDER] 기본 알림 소리 URI: $notificationSoundUri")
+                Log.d(TAG, "🔔 [BUILDER] 채널 ID: $channelId")
+
+                notificationBuilder.setSound(alarmSoundUri)
+                notificationBuilder.setVibrate(longArrayOf(0, 1000, 500, 1000, 500, 1000))
+                notificationBuilder.setPriority(NotificationCompat.PRIORITY_MAX)
+                notificationBuilder.setDefaults(0)
+
+                Log.d(TAG, "🔔 [BUILDER] 공유콜 알림 Builder 설정 완료 - 알람음 적용")
+            } else {
+                Log.d(TAG, "🔔 [BUILDER] 일반 알림 Builder 설정")
+                val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                Log.d(TAG, "🔔 [BUILDER] 일반 알림 소리 URI: $soundUri")
+                notificationBuilder.setSound(soundUri)
+                Log.d(TAG, "🔔 [BUILDER] 일반 알림 Builder 설정 완료")
+            }
         }
 
         if (timeoutAfter != null) {
@@ -495,11 +664,28 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         try {
-            notificationManager.notify(notificationId, notificationBuilder.build())
-            Log.i(TAG, "알림 표시 완료: $title (ID: $notificationId, 채널: $channelId)")
+            val notification = notificationBuilder.build()
+            Log.d(TAG, "🔔 [NOTIFICATION] 실제 알림 생성 완료 - notificationId: $notificationId")
+            Log.d(TAG, "🔔 [NOTIFICATION] 알림 내용: ${notification.tickerText}")
+            Log.d(TAG, "🔔 [NOTIFICATION] Android SDK: ${android.os.Build.VERSION.SDK_INT}")
+            Log.d(TAG, "🔔 [NOTIFICATION] Android 버전: ${android.os.Build.VERSION.RELEASE}")
+
+            // 실제 생성된 알림의 정보 확인
+            Log.d(TAG, "🔔 [NOTIFICATION] 생성된 알림 정보:")
+            Log.d(TAG, "🔔 [NOTIFICATION] - Channel ID: ${notification.channelId}")
+            Log.d(TAG, "🔔 [NOTIFICATION] - Sound URI: ${notification.sound}")
+            Log.d(TAG, "🔔 [NOTIFICATION] - Priority: ${notification.priority}")
+            Log.d(TAG, "🔔 [NOTIFICATION] - Defaults: ${notification.defaults}")
+            Log.d(TAG, "🔔 [NOTIFICATION] - Vibrate Pattern: ${notification.vibrate?.joinToString()}")
+
+            notificationManager.notify(notificationId, notification)
+            Log.d(TAG, "🔔✅ [NOTIFICATION] notificationManager.notify() 호출 완료")
         } catch (e: Exception) {
-            Log.e(TAG, "알림 표시 실패: ${e.message}")
+            Log.e(TAG, "🔔❌ [NOTIFICATION] 알림 생성 실패: ${e.message}")
+            e.printStackTrace()
         }
+
+        Log.d(TAG, "🔔🔔🔔 [NOTIFICATION] showNotification 완전 종료 🔔🔔🔔")
     }
 
     private fun isAppInForeground(): Boolean {
@@ -513,4 +699,4 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         }
         return false
     }
-} 
+}

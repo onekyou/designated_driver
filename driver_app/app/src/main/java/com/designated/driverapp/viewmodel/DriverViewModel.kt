@@ -9,7 +9,7 @@ import android.location.Address
 import android.location.Geocoder
 import android.os.Build
 import android.os.IBinder
-import android.util.Log
+import Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.designated.driverapp.data.Constants
@@ -60,13 +60,11 @@ class DriverViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(DriverScreenUiState())
     val uiState: StateFlow<DriverScreenUiState> = _uiState.asStateFlow()
 
-    // StateFlow for individual call details
     private val _callDetailsState = MutableStateFlow<CallInfo?>(null)
     val callDetails: StateFlow<CallInfo?> = _callDetailsState.asStateFlow()
 
     private var assignedCallsListener: ListenerRegistration? = null
     private var driverStatusListener: ListenerRegistration? = null
-    // private var callDetailsListener: ListenerRegistration? = null // Replaced by loadCallDetails updating _callDetailsState
     private var completedCallsListener: ListenerRegistration? = null
 
     private val fusedLocationClient: FusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(appContext)
@@ -74,7 +72,6 @@ class DriverViewModel @Inject constructor(
 
     private var boundService: DriverForegroundService? = null
     private var isBound = false
-    // --- Popup duplication 방지용 (운행 완료 정산) ---
     private val popupPrefs = appContext.getSharedPreferences("driver_popup_prefs", Context.MODE_PRIVATE)
     private val handledSettlementIds: MutableSet<String> = popupPrefs.getStringSet("handled_settlement_ids", mutableSetOf())?.toMutableSet() ?: mutableSetOf()
     private var fcmTokenToRegister: String? = null
@@ -84,69 +81,54 @@ class DriverViewModel @Inject constructor(
             val binder = service as DriverForegroundService.LocalBinder
             boundService = binder.getService()
             isBound = true
-            Log.d(TAG, "DriverForegroundService connected.")
         }
 
         override fun onServiceDisconnected(arg0: ComponentName) {
             boundService = null
             isBound = false
-            Log.d(TAG, "DriverForegroundService disconnected.")
         }
     }
 
     private val authStateListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
         val user = firebaseAuth.currentUser
         if (user == null) {
-            Log.d(TAG, "AuthStateListener: User logged out. Stopping listeners and clearing state.")
             stopListeners()
-            _uiState.value = DriverScreenUiState() // Reset to initial state
+            _uiState.value = DriverScreenUiState()
         } else {
-            Log.d(TAG, "AuthStateListener: User logged in (${user.uid}).")
             tryAutoInitializeListeners(user.uid)
         }
     }
 
     init {
-        Log.d(TAG, "ViewModel initialized.")
         auth.addAuthStateListener(authStateListener)
         bindDriverService()
     }
 
     override fun onCleared() {
         super.onCleared()
-        Log.d(TAG, "ViewModel cleared. Removing listeners and unbinding service.")
         auth.removeAuthStateListener(authStateListener)
         stopListeners()
         unbindDriverService()
     }
 
     private fun stopListeners() {
-        Log.d(TAG, "Stopping Firestore listeners.")
         assignedCallsListener?.remove()
         assignedCallsListener = null
         driverStatusListener?.remove()
         driverStatusListener = null
-        // callDetailsListener?.remove() // Listener is no longer used
-        // callDetailsListener = null
         completedCallsListener?.remove()
         completedCallsListener = null
 
-        // ★★★ SharedPreferences는 지우지 않음 - 자동 초기화를 위해 보존 ★★★
-        // sharedPreferences.edit().clear().apply()
-        Log.d(TAG, "Stopped Firestore listeners (SharedPreferences preserved for auto-initialization).")
     }
 
     fun initializeListenersWithInfo(regionId: String, officeId: String, driverId: String) {
-        Log.d(TAG, "Initializing listeners with Info: regionId=$regionId, officeId=$officeId, driverId=$driverId")
 
         sharedPreferences.edit()
             .putString(Constants.PREF_KEY_REGION_ID, regionId)
             .putString(Constants.PREF_KEY_OFFICE_ID, officeId)
             .apply()
-        Log.d(TAG, "Saved regionId and officeId to SharedPreferences.")
 
         fcmTokenToRegister?.let { token ->
-            Log.d(TAG, "Found a pending FCM token. Registering now.")
             registerFcmToken(token)
         }
 
@@ -155,7 +137,6 @@ class DriverViewModel @Inject constructor(
             startListeningForAssignedCalls(regionId, officeId, driverId)
             startListeningForCompletedCalls(regionId, officeId, driverId)
         } else {
-            Log.e(TAG, "InitializeListenersWithInfo: Mismatch between auth.currentUser.uid and passed driverId. Listeners not started.")
             _uiState.update { it.copy(errorMessage = "인증 정보가 일치하지 않습니다.") }
         }
     }
@@ -168,10 +149,7 @@ class DriverViewModel @Inject constructor(
 
         driverStatusListener = driverDocRef.addSnapshotListener { snapshot, e ->
             if (e != null) {
-                Log.w(TAG, "Driver status listener error", e)
-                // ★★★ PERMISSION_DENIED 오류 시 리스너 제거하여 중복 오류 방지 ★★★
                 if (e.message?.contains("PERMISSION_DENIED") == true) {
-                    Log.w(TAG, "Permission denied, removing driver status listener")
                     driverStatusListener?.remove()
                     driverStatusListener = null
                 }
@@ -182,7 +160,6 @@ class DriverViewModel @Inject constructor(
                 val statusString = snapshot.getString(Constants.FIELD_STATUS)
                 val status = DriverStatus.entries.find { it.value == statusString } ?: DriverStatus.OFFLINE
                 _uiState.update { it.copy(driverStatus = status) }
-                Log.d(TAG, "Driver status updated: $status")
             } else {
                 _uiState.update { it.copy(driverStatus = DriverStatus.OFFLINE) }
             }
@@ -204,10 +181,7 @@ class DriverViewModel @Inject constructor(
 
         assignedCallsListener = callsQuery.addSnapshotListener { snapshot, e ->
             if (e != null) {
-                Log.e(TAG, "Assigned calls listener error", e)
-                // ★★★ PERMISSION_DENIED 오류 시 리스너 제거하여 중복 오류 방지 ★★★
                 if (e.message?.contains("PERMISSION_DENIED") == true) {
-                    Log.w(TAG, "Permission denied, removing assigned calls listener")
                     assignedCallsListener?.remove()
                     assignedCallsListener = null
                 }
@@ -219,7 +193,6 @@ class DriverViewModel @Inject constructor(
                 try {
                     doc.toObject<CallInfo>()?.apply { id = doc.id }
                 } catch (parseEx: Exception) {
-                    Log.e(TAG, "Malformed call document ${'$'}{doc.id}, skipping", parseEx)
                     null
                 }
             } ?: emptyList()
@@ -228,17 +201,13 @@ class DriverViewModel @Inject constructor(
                 val activeCall = calls.firstOrNull { it.statusEnum != CallStatus.ASSIGNED && it.statusEnum != CallStatus.AWAITING_SETTLEMENT }
                 val settlementCall = calls.firstOrNull { it.statusEnum == CallStatus.AWAITING_SETTLEMENT && !handledSettlementIds.contains(it.id) }
 
-                // ★★★ 새 배차 팝업 로직 개선 - 중복 방지 ★★★
                 val currentCallIds = currentState.assignedCalls.map { it.id }.toSet()
                 val newAssignedCall = calls.find {
                     it.statusEnum == CallStatus.ASSIGNED && !currentCallIds.contains(it.id)
                 }
 
-                // 새 콜이 있고, 현재 팝업이 없을 때만 팝업 표시
-                // 팝업이 이미 있으면 유지 (사용자가 수락/거절할 때까지)
                 val shouldShowNewPopup = newAssignedCall != null && currentState.newCallPopup == null
 
-                // 현재 팝업이 있는데 해당 콜이 더 이상 ASSIGNED 상태가 아니면 팝업 제거
                 val currentPopupStillValid = currentState.newCallPopup?.let { popup ->
                     calls.any { it.id == popup.id && it.statusEnum == CallStatus.ASSIGNED }
                 } ?: false
@@ -249,15 +218,13 @@ class DriverViewModel @Inject constructor(
                     else -> null
                 }
 
-                Log.d(TAG, "New call popup logic: newCall=${newAssignedCall?.id}, currentPopup=${currentState.newCallPopup?.id}, shouldShow=$shouldShowNewPopup, popupValid=$currentPopupStillValid, finalPopup=${finalNewCallPopup?.id}")
-
                 currentState.copy(
                     assignedCalls = calls,
                     activeCall = activeCall,
                     callForSettlement = settlementCall,
                     newCallPopup = finalNewCallPopup,
                     navigateToHome = shouldShowNewPopup && !currentState.navigateToHome,
-                    isLoading = false // 로딩 상태 해제
+                    isLoading = false
                 )
             }
         }
@@ -275,7 +242,6 @@ class DriverViewModel @Inject constructor(
 
         completedCallsListener = query.addSnapshotListener { snapshots, e ->
             if (e != null) {
-                Log.e(TAG, "Completed calls listener failed.", e)
                 _uiState.update { it.copy(errorMessage = "완료된 콜 목록을 불러오는 데 실패했습니다.") }
                 return@addSnapshotListener
             }
@@ -283,7 +249,6 @@ class DriverViewModel @Inject constructor(
                 try {
                     doc.toObject<CallInfo>()?.apply { id = doc.id }
                 } catch (parseEx: Exception) {
-                    Log.e(TAG, "Malformed completed call document ${'$'}{doc.id}, skipping", parseEx)
                     null
                 }
             } ?: emptyList()
@@ -292,9 +257,8 @@ class DriverViewModel @Inject constructor(
     }
 
     fun loadCallDetails(callId: String) {
-        Log.d(TAG, "Loading details for call: $callId")
         if (callId.isBlank()) {
-            _callDetailsState.value = null // callId가 비어있으면 null로 설정
+            _callDetailsState.value = null
             return
         }
         viewModelScope.launch {
@@ -308,20 +272,16 @@ class DriverViewModel @Inject constructor(
                     .await()
 
                 val callInfo = callDocument.toObject(CallInfo::class.java)?.copy(id = callDocument.id)
-                _callDetailsState.value = callInfo // _callDetailsState 업데이트
+                _callDetailsState.value = callInfo
 
                 if (callInfo == null) {
-                    Log.w(TAG, "Call not found with ID: $callId")
                     _uiState.update { it.copy(errorMessage = "콜 정보를 찾을 수 없습니다.") }
                 } else {
-                    Log.d(TAG, "Call details loaded: ${callInfo.id}")
                 }
             } catch (e: IllegalStateException) {
-                Log.e(TAG, "Failed to get driver location info for call details: ${e.message}", e)
                 _uiState.update { it.copy(errorMessage = "드라이버 정보를 가져올 수 없습니다: ${e.message}") }
                 _callDetailsState.value = null
             } catch (e: Exception) {
-                Log.e(TAG, "Error loading call details for $callId", e)
                 _uiState.update { it.copy(errorMessage = "콜 상세 정보를 불러오는 중 오류 발생: ${e.message}") }
                 _callDetailsState.value = null
             } finally {
@@ -349,7 +309,6 @@ class DriverViewModel @Inject constructor(
                     .collection(Constants.COLLECTION_OFFICES).document(officeId)
                     .collection(Constants.COLLECTION_DRIVERS).document(driverId)
 
-        // 트랜잭션 기반으로 콜 상태와 기사 상태를 동시에 업데이트 (원본 로직 복원)
                 firestore.runTransaction { transaction ->
                     val callSnapshot = transaction.get(callRef)
                     if (!callSnapshot.exists()) {
@@ -362,16 +321,14 @@ class DriverViewModel @Inject constructor(
             }
         }.await()
 
-        // 팝업 즉시 닫기 (리스너가 activeCall 을 곧 업데이트함)
         _uiState.update { current -> current.copy(newCallPopup = null) }
     }
 
     fun rejectCall(callId: String) {
         viewModelScope.launch {
-            // Implementation of rejectCall method
         }
     }
-    
+
     /**
      * 운행 준비 단계에서 운행을 취소하는 함수
      * - 내부콜: 콜 상태를 HOLD로 변경
@@ -380,69 +337,52 @@ class DriverViewModel @Inject constructor(
      * - assignedDriverId를 null로 변경하여 다른 기사가 배정받을 수 있도록 함
      */
     fun cancelTrip(callId: String, cancelReason: String = "운행취소") = performFirestoreUpdate {
-        Log.d(TAG, "cancelTrip called for callId: $callId, cancelReason: $cancelReason")
         val (regionId, officeId) = getDriverLocationInfo()
         val driverId = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
-        
+
         val callRef = firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_CALLS).document(callId)
-            
-        // 콜 정보 먼저 확인
+
         val callSnapshot = callRef.get().await()
         val callInfo = callSnapshot.toObject<CallInfo>()
-        Log.d(TAG, "Retrieved call info: callType=${callInfo?.callType}, sourceSharedCallId=${callInfo?.sourceSharedCallId}, status=${callInfo?.status}")
-        
-        // 공유콜인 경우와 일반콜인 경우 다르게 처리
+
         if (callInfo?.callType == "SHARED") {
-            // 공유콜인 경우: 수락 사무실에서는 콜 삭제하고 취소 알림 표시
-            Log.d(TAG, "Cancelling shared call - deleting from accepting office")
-            
-            // 취소 정보를 포함하여 콜 업데이트 후 삭제
+
             callRef.update(mapOf(
                 Constants.FIELD_STATUS to "CANCELLED_BY_DRIVER",
                 "cancelReason" to cancelReason,
                 "cancelledAt" to FieldValue.serverTimestamp(),
                 "cancelledByDriver" to true
             )).await()
-            
-            Log.d(TAG, "Shared call marked as cancelled by driver")
+
         } else {
-            // 일반콜인 경우: HOLD 상태로 변경
             val callUpdates = mapOf(
-                Constants.FIELD_STATUS to "HOLD", // 보류 상태로 변경
-                "assignedDriverId" to null, // 기사 배정 해제
+                Constants.FIELD_STATUS to "HOLD",
+                "assignedDriverId" to null,
                 "assignedDriverName" to null,
                 "assignedDriverPhone" to null,
-                "cancelReason" to cancelReason, // 취소 사유 추가
+                "cancelReason" to cancelReason,
                 Constants.FIELD_UPDATED_AT to FieldValue.serverTimestamp()
             )
-            Log.d(TAG, "Updating internal call with: $callUpdates")
             callRef.update(callUpdates).await()
-            Log.d(TAG, "Internal call update completed successfully")
         }
-        
-        
-        // 기사 상태를 WAITING(대기중)으로 변경
+
         val driverRef = firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_DRIVERS).document(driverId)
-            
+
         driverRef.update(Constants.FIELD_STATUS, DriverStatus.WAITING.value).await()
-        
-        Log.d(TAG, "Call cancelled successfully, callType=${callInfo?.callType}")
-        
-        // UI 상태 업데이트 - activeCall을 null로 설정하여 대기 화면으로 돌아가도록
+
         _uiState.update { current ->
             current.copy(
                 activeCall = null,
                 isLoading = false,
-                navigateToHistorySettlement = false // 히스토리 페이지로 이동하지 않도록 설정
+                navigateToHistorySettlement = false
             )
         }
     }
 
-    // ★★★ 위치 권한 체크 함수 추가 ★★★
     private fun hasLocationPermission(): Boolean {
         return ContextCompat.checkSelfPermission(
             appContext,
@@ -470,7 +410,6 @@ class DriverViewModel @Inject constructor(
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_CALLS).document(callId)
 
-        // 운행 요약 문자열 (정산 화면에서 사용)
         val tripSummary = "출발: $departure, 도착: $destination, 경유: ${waypoints.ifEmpty { "없음" }}, 요금: $fare 원"
 
         val callUpdates = mapOf(
@@ -483,10 +422,8 @@ class DriverViewModel @Inject constructor(
             Constants.FIELD_UPDATED_AT to FieldValue.serverTimestamp()
         )
 
-        // 콜 문서 업데이트
         callRef.update(callUpdates).await()
 
-        // 기사 상태를 ON_TRIP 으로 변경 (DriverStatus.ON_TRIP 사용)
         firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_DRIVERS).document(driverId)
@@ -501,14 +438,13 @@ class DriverViewModel @Inject constructor(
 
         callRef.update(Constants.FIELD_STATUS, Constants.STATUS_AWAITING_SETTLEMENT).await()
 
-        // 리스너가 상태를 업데이트할 때까지 기다리지 않고 즉시 UI 상태를 변경하여 팝업을 표시
         val updatedCallSnapshot = callRef.get().await()
         val completedCall = updatedCallSnapshot.toObject<CallInfo>()?.copy(id = updatedCallSnapshot.id)
 
         _uiState.update {
             it.copy(
                 callForSettlement = completedCall,
-                activeCall = null, // 진행 중인 콜 정보에서 제거
+                activeCall = null,
                 isLoading = false
             )
         }
@@ -521,10 +457,9 @@ class DriverViewModel @Inject constructor(
                 val (regionId, officeId) = getDriverLocationInfo()
                 val driverId = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
 
-                // 1. Prepare trip data and update call to SETTLED
                 val tripData = hashMapOf<String, Any>(
                     Constants.FIELD_PAYMENT_METHOD to paymentMethod,
-                    Constants.FIELD_STATUS to CallStatus.COMPLETED.firestoreValue, // Use COMPLETED as defined in CallStatus enum
+                    Constants.FIELD_STATUS to CallStatus.COMPLETED.firestoreValue,
                     Constants.FIELD_FARE_FINAL to fareToSet,
                     Constants.FIELD_TRIP_SUMMARY_FINAL to tripSummaryToSet,
                     Constants.FIELD_COMPLETED_AT to FieldValue.serverTimestamp()
@@ -533,7 +468,6 @@ class DriverViewModel @Inject constructor(
                     tripData[Constants.FIELD_CASH_RECEIVED] = cashAmount
                 } else if (paymentMethod == "현금+포인트" && cashAmount != null) {
                     tripData[Constants.FIELD_CASH_RECEIVED] = cashAmount
-                    // 포인트 금액만 외상으로 처리
                     tripData["creditAmount"] = fareToSet - cashAmount
                 }
 
@@ -542,22 +476,19 @@ class DriverViewModel @Inject constructor(
                     .collection(Constants.COLLECTION_CALLS).document(callId)
                     .update(tripData).await()
 
-                // 2. Update driver's status to WAITING in Firestore
                 firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
                     .collection(Constants.COLLECTION_OFFICES).document(officeId)
                     .collection(Constants.COLLECTION_DRIVERS).document(driverId)
-                    .update(Constants.FIELD_STATUS, DriverStatus.WAITING.value).await() // Ensure DriverStatus enum is used
+                    .update(Constants.FIELD_STATUS, DriverStatus.WAITING.value).await()
 
-                // 3. Get latest call info from Firestore and save trip history
                 val callRef = firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
                     .collection(Constants.COLLECTION_OFFICES).document(officeId)
                     .collection(Constants.COLLECTION_CALLS).document(callId)
                 val latestCallSnapshot = callRef.get().await()
                 val latestCallInfo = latestCallSnapshot.toObject<CallInfo>()?.copy(id = latestCallSnapshot.id)
-                
+
                 saveTripToHistory(fareToSet, tripSummaryToSet, paymentMethod, cashAmount, latestCallInfo)
 
-                // 4. Update local UI state comprehensively
                 _uiState.update { currentState ->
                     currentState.copy(
                         activeCall = null,
@@ -567,10 +498,8 @@ class DriverViewModel @Inject constructor(
                         isLoading = false
                     )
                 }
-                Log.d(TAG, "Trip $callId finalized, driver status set to WAITING.")
 
             } catch (e: Exception) {
-                Log.e(TAG, "Error in confirmAndFinalizeTrip for $callId", e)
                 _uiState.update { it.copy(errorMessage = "정산 처리 중 오류: ${e.message}", isLoading = false) }
             }
         }
@@ -581,19 +510,13 @@ class DriverViewModel @Inject constructor(
             val prefs = appContext.getSharedPreferences("trip_history", Context.MODE_PRIVATE)
             val historyJson = prefs.getString("history_list", "[]")
             val historyList = org.json.JSONArray(historyJson)
-            
-            // 현재 운행내역 개수 계산
+
             val tripNumber = historyList.length() + 1
-            
-            // 고객 정보 가져오기 (매개변수로 받은 callInfo에서)
+
             val customerName = callInfo?.customerName ?: "고객"
             val departure = callInfo?.departure_set?.takeIf { it.isNotBlank() } ?: "출발지"
             val destination = callInfo?.destination_set?.takeIf { it.isNotBlank() } ?: "도착지"
-            
-            Log.d(TAG, "saveTripToHistory - callInfo: customerName=${callInfo?.customerName}, departure_set=${callInfo?.departure_set}, destination_set=${callInfo?.destination_set}")
-            Log.d(TAG, "saveTripToHistory - final values: customerName=$customerName, departure=$departure, destination=$destination")
-            
-            // 결제 방법 문자열 생성
+
             val paymentString = when (paymentMethod) {
                 "현금" -> "현금"
                 "외상" -> "외상"
@@ -602,20 +525,15 @@ class DriverViewModel @Inject constructor(
                 "포인트" -> "포인트"
                 else -> paymentMethod
             }
-            
+
             // 운행내역 문자열 생성 (예: "1. 홍길동, 용문면→양평읍, 15,000원, 현금")
             val tripHistoryEntry = "$tripNumber. $customerName, $departure→$destination, ${String.format("%,d", fare)}원, $paymentString|timestamp=${System.currentTimeMillis()}"
-            
-            // 새 운행내역 추가
+
             historyList.put(tripHistoryEntry)
-            
-            // SharedPreferences에 저장
+
             prefs.edit().putString("history_list", historyList.toString()).apply()
-            
-            Log.d(TAG, "Trip history saved: $tripHistoryEntry")
-            
+
         } catch (e: Exception) {
-            Log.e(TAG, "Error saving trip history", e)
         }
     }
 
@@ -626,7 +544,6 @@ class DriverViewModel @Inject constructor(
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_DRIVERS).document(driverId)
             .update(Constants.FIELD_STATUS, newStatus.value).await()
-        // _uiState.update { it.copy(driverStatus = newStatus) } // This is handled by startListeningForDriverStatus
     }
 
     private suspend fun getAddressFromLocation(latitude: Double, longitude: Double): String? = withContext(Dispatchers.IO) {
@@ -646,12 +563,10 @@ class DriverViewModel @Inject constructor(
                 addresses?.firstOrNull()?.getAddressLine(0)
             }
         } catch (e: IOException) {
-            Log.e(TAG, "Geocoder failed", e)
             null
         }
     }
 
-    // UI Event Handlers
     fun dismissNewCallPopup() {
         _uiState.update { it.copy(newCallPopup = null) }
     }
@@ -679,7 +594,6 @@ class DriverViewModel @Inject constructor(
         _uiState.update { it.copy(navigateToHome = false) }
     }
 
-    // ★★★ 히스토리/정산 스크린 네비게이션 처리 함수 추가 ★★★
     fun onNavigateToHistorySettlementHandled() {
         _uiState.update { it.copy(navigateToHistorySettlement = false) }
     }
@@ -688,7 +602,6 @@ class DriverViewModel @Inject constructor(
         _uiState.update { it.copy(errorMessage = null) }
     }
 
-    // Helper Functions
     private fun getDriverLocationInfo(): Pair<String, String> {
         val regionId = sharedPreferences.getString(Constants.PREF_KEY_REGION_ID, null)
         val officeId = sharedPreferences.getString(Constants.PREF_KEY_OFFICE_ID, null)
@@ -704,7 +617,6 @@ class DriverViewModel @Inject constructor(
             try {
                 block()
             } catch (e: Exception) {
-                Log.e(TAG, "Firestore operation failed", e)
                 _uiState.update { it.copy(errorMessage = e.message ?: "알 수 없는 오류가 발생했습니다.") }
             } finally {
                 _uiState.update { it.copy(isLoading = false) }
@@ -732,7 +644,6 @@ class DriverViewModel @Inject constructor(
         fcmTokenToRegister = null
     }
 
-    // Service Handling
     fun startDriverService() {
         val serviceIntent = Intent(appContext, DriverForegroundService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -761,24 +672,19 @@ class DriverViewModel @Inject constructor(
         }
     }
 
-    // ★★★ 자동 리스너 초기화 함수 추가 ★★★
     private fun tryAutoInitializeListeners(driverId: String) {
-        // ★★★ 이미 리스너가 활성화되어 있으면 중복 생성 방지 ★★★
         if (assignedCallsListener != null || driverStatusListener != null) {
-            Log.d(TAG, "Listeners already active, skipping auto-initialization")
             return
         }
-        
+
         val regionId = sharedPreferences.getString(Constants.PREF_KEY_REGION_ID, null)
         val officeId = sharedPreferences.getString(Constants.PREF_KEY_OFFICE_ID, null)
-        
+
         if (!regionId.isNullOrBlank() && !officeId.isNullOrBlank()) {
-            Log.d(TAG, "Auto-initializing listeners with cached info: regionId=$regionId, officeId=$officeId, driverId=$driverId")
             startListeningForDriverStatus(regionId, officeId, driverId)
             startListeningForAssignedCalls(regionId, officeId, driverId)
             startListeningForCompletedCalls(regionId, officeId, driverId)
         } else {
-            Log.d(TAG, "Cannot auto-initialize listeners: missing regionId or officeId in SharedPreferences")
         }
     }
 }

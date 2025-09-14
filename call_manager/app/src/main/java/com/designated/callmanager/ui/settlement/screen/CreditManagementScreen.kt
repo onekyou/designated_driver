@@ -84,20 +84,20 @@ fun CreditManagementScreen(vm: SettlementViewModel = viewModel()) {
 
     if (showCollectDialog && selectedPerson != null) {
         val collectFocusRequester = remember { FocusRequester() }
-        
+
         LaunchedEffect(showCollectDialog) {
             if (showCollectDialog) {
                 collectFocusRequester.requestFocus()
             }
         }
-        
+
         AlertDialog(
             onDismissRequest = { showCollectDialog = false },
             title = { Text("금액 회수") },
             text = {
                 OutlinedTextField(
-                    value = collectAmountText, 
-                    onValueChange = { collectAmountText = it.filter { ch -> ch.isDigit() } }, 
+                    value = collectAmountText,
+                    onValueChange = { collectAmountText = it.filter { ch -> ch.isDigit() } },
                     label = { Text("회수 금액") },
                     modifier = Modifier.focusRequester(collectFocusRequester),
                     keyboardOptions = KeyboardOptions(
@@ -128,7 +128,6 @@ fun CreditManagementScreen(vm: SettlementViewModel = viewModel()) {
         )
     }
 
-    // 상세 다이얼로그 - 기사별 상세내역과 동일한 포맷
     val context = LocalContext.current
     if (showDetailDialog && selectedPerson != null) {
         CreditDetailDialog(
@@ -144,59 +143,52 @@ fun CreditDetailDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("${person.name} 외상 상세", color = Color.White) },
         text = {
             Column(Modifier.heightIn(max = 450.dp).fillMaxWidth()) {
-                // 헤더 - 외상관리 전용 포맷
                 Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("No", Modifier.weight(0.5f), color = Color.Yellow, textAlign = TextAlign.Center)
-                    Text("날짜", Modifier.weight(1f), color = Color.Yellow, textAlign = TextAlign.Center)  
+                    Text("날짜", Modifier.weight(1f), color = Color.Yellow, textAlign = TextAlign.Center)
                     Text("요금", Modifier.weight(1f), color = Color.Yellow, textAlign = TextAlign.Center)
                 }
                 Divider(color = Color.DarkGray)
-                
+
                 if (person.entries.isEmpty()) {
-                    // 데이터가 없는 경우
                     Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
                         Text("외상 내역이 없습니다.", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
                     }
                 } else {
-                    // 실제 entries 데이터 표시 (두 줄 포맷)
                     LazyColumn(Modifier.weight(1f)) {
                         itemsIndexed(person.entries) { idx, entry ->
                             Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                                // 첫 번째 줄: No, 날짜, 요금
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text("${idx+1}", Modifier.weight(0.5f), color = Color.White, textAlign = TextAlign.Center)
-                                    
-                                    // 날짜에서 월,일만 추출 (yyyy-MM-dd -> MM/dd)
+
                                     val dateText = if (entry.date.contains("-")) {
                                         val parts = entry.date.split("-")
                                         if (parts.size >= 3) "${parts[1]}/${parts[2]}" else entry.date
                                     } else entry.date
                                     Text(dateText, Modifier.weight(1f), color = Color.White, textAlign = TextAlign.Center)
-                                    
+
                                     Text(NumberFormat.getNumberInstance().format(entry.amount), Modifier.weight(1f), color = Color.White, textAlign = TextAlign.Center)
                                 }
-                                
-                                // 두 번째 줄: 출발지→도착지 (중앙 정렬)
+
                                 val routeText = "${entry.departure}→${entry.destination}"
                                 Text(
-                                    routeText, 
-                                    Modifier.fillMaxWidth().padding(top = 2.dp), 
-                                    color = Color.Gray, 
+                                    routeText,
+                                    Modifier.fillMaxWidth().padding(top = 2.dp),
+                                    color = Color.Gray,
                                     textAlign = TextAlign.Center,
                                     style = MaterialTheme.typography.bodySmall
                                 )
-                                
-                                // 구분선 (마지막 항목이 아닌 경우에만)
+
                                 if (idx < person.entries.size - 1) {
                                     Divider(
-                                        color = Color.DarkGray.copy(alpha = 0.3f), 
-                                        thickness = 0.5.dp, 
+                                        color = Color.DarkGray.copy(alpha = 0.3f),
+                                        thickness = 0.5.dp,
                                         modifier = Modifier.padding(vertical = 4.dp)
                                     )
                                 }
@@ -204,34 +196,31 @@ fun CreditDetailDialog(
                         }
                     }
                 }
-                
-                // 총합 표시
+
                 Spacer(Modifier.height(8.dp))
                 Divider(color = Color.DarkGray)
                 Text(
-                    "총 외상 금액: ${NumberFormat.getNumberInstance().format(person.amount)}원", 
-                    color = Color.Yellow, 
+                    "총 외상 금액: ${NumberFormat.getNumberInstance().format(person.amount)}원",
+                    color = Color.Yellow,
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
                 )
             }
         },
-        confirmButton = { 
+        confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                // 공유 버튼
                 TextButton(onClick = {
                     shareCreditDetails(person, context)
-                }) { 
+                }) {
                     Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                         Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("공유") 
+                        Text("공유")
                     }
                 }
-                // 닫기 버튼
-                TextButton(onClick = onDismiss) { 
-                    Text("닫기") 
+                TextButton(onClick = onDismiss) {
+                    Text("닫기")
                 }
             }
         },
@@ -240,35 +229,30 @@ fun CreditDetailDialog(
 }
 
 private fun shareCreditDetails(person: SettlementViewModel.CreditPerson, context: Context) {
-    // 외상 상세내역을 문자열로 생성
     val shareText = buildString {
         append("[외상 내역] ${person.name}\n")
         append("전화번호: ${person.phone.ifEmpty { "미등록" }}\n\n")
-        
+
         person.entries.forEachIndexed { idx, entry ->
-            // 날짜 포맷 변환 (yyyy-MM-dd -> MM/dd)
             val dateText = if (entry.date.contains("-")) {
                 val parts = entry.date.split("-")
                 if (parts.size >= 3) "${parts[1]}/${parts[2]}" else entry.date
             } else entry.date
-            
+
             append("${idx + 1}. ${dateText} ${entry.departure}→${entry.destination} ${NumberFormat.getNumberInstance().format(entry.amount)}원\n")
         }
-        
+
         append("\n총 외상 금액: ${NumberFormat.getNumberInstance().format(person.amount)}원")
     }
-    
-    // 문자 전송 Intent 생성
+
     val smsIntent = Intent(Intent.ACTION_SENDTO).apply {
         data = Uri.parse("smsto:${person.phone}")
         putExtra("sms_body", shareText)
     }
-    
-    // 문자 앱이 있는지 확인 후 실행
+
     if (smsIntent.resolveActivity(context.packageManager) != null) {
         context.startActivity(smsIntent)
     } else {
-        // 문자 앱이 없는 경우 일반 공유로 대체
         val generalShareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, shareText)
@@ -277,4 +261,4 @@ private fun shareCreditDetails(person: SettlementViewModel.CreditPerson, context
         chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(chooser)
     }
-} 
+}

@@ -27,24 +27,22 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToPendingDrivers: (regionId: String, officeId: String) -> Unit,
     onNavigateToSettlement: () -> Unit,
+    onNavigateToExcludeNumber: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val officeStatus by dashboardViewModel.officeStatus.collectAsStateWithLifecycle()
     val regionId by dashboardViewModel.regionId.collectAsStateWithLifecycle()
     val officeId by dashboardViewModel.officeId.collectAsStateWithLifecycle()
 
-    // ★★★ 알림 설정 상태 관리 ★★★
     val prefs = remember { context.getSharedPreferences("call_manager_settings", Context.MODE_PRIVATE) }
     var newCallNotificationEnabled by remember { mutableStateOf(prefs.getBoolean("new_call_notification", true)) }
     var driverEventNotificationEnabled by remember { mutableStateOf(prefs.getBoolean("driver_event_notification", true)) }
-    
+
     val callPrefs = remember { context.getSharedPreferences("call_manager_prefs", Context.MODE_PRIVATE) }
-    
-    // ★★★ 콜 디텍터 설정 상태 관리 ★★★
+
     var callDetectionEnabled by remember { mutableStateOf(callPrefs.getBoolean("call_detection_enabled", false)) }
     var callDetectorServiceStatus by remember { mutableStateOf("확인 중...") }
-    
-    // 콜디텍터 서비스 상태 확인
+
     LaunchedEffect(callDetectionEnabled) {
         callDetectorServiceStatus = if (callDetectionEnabled) {
             if (com.designated.callmanager.service.CallDetectorService.isServiceRunning()) {
@@ -69,8 +67,6 @@ fun SettingsScreen(
                         )
                     }
                 },
-                // Optional: Set colors if needed, otherwise defaults will be used
-                // colors = TopAppBarDefaults.topAppBarColors(...) 
             )
         }
     ) { paddingValues ->
@@ -81,7 +77,6 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // --- Office Status Setting --- 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -103,7 +98,6 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            // --- 정산 관리 메뉴 추가 ---
             Spacer(modifier = Modifier.height(8.dp))
             Row(
                 modifier = Modifier
@@ -113,20 +107,35 @@ fun SettingsScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Payments, // 적절한 머티리얼 아이콘 사용(예: Payments)
+                    imageVector = Icons.Filled.Payments,
                     contentDescription = "정산 관리",
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.width(16.dp))
                 Text("정산 관리", style = MaterialTheme.typography.bodyLarge)
             }
-            // --- ---
 
             Divider()
 
+            // 제외번호 관리
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onNavigateToExcludeNumber() }
+                    .padding(vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Radio,
+                    contentDescription = "제외번호 관리",
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+                Text("제외번호 관리", style = MaterialTheme.typography.bodyLarge)
+            }
+
             Divider()
 
-            // --- 기사 가입 승인 메뉴 ---
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -146,12 +155,12 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.width(16.dp))
                 Text("기사 가입 승인", style = MaterialTheme.typography.bodyLarge)
             }
-            // --- ★★★ 메뉴 추가 끝 ★★★ ---
 
             Divider()
-
-            // --- Notification Settings (Placeholder) --- 
+            
+            Spacer(modifier = Modifier.height(16.dp))
             Text("알림 설정", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -174,11 +183,12 @@ fun SettingsScreen(
                     prefs.edit().putBoolean("driver_event_notification", isChecked).apply()
                 })
             }
-            
+
             Divider()
             
-            // --- 콜 디텍터 설정 ---
+            Spacer(modifier = Modifier.height(16.dp))
             Text("콜 디텍터 설정", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -208,10 +218,8 @@ fun SettingsScreen(
                     onCheckedChange = { isChecked ->
                         callDetectionEnabled = isChecked
                         callPrefs.edit().putBoolean("call_detection_enabled", isChecked).apply()
-                        
-                        // 설정 변경 즉시 서비스 시작/중지
+
                         if (isChecked) {
-                            // 콜디텍터 서비스 시작
                             try {
                                 val intent = android.content.Intent(context, com.designated.callmanager.service.CallDetectorService::class.java)
                                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
@@ -221,26 +229,24 @@ fun SettingsScreen(
                                 }
                                 callDetectorServiceStatus = "시작 중..."
                             } catch (e: Exception) {
-                                android.util.Log.e("SettingsScreen", "Failed to start CallDetectorService", e)
-                            }
+                                }
                         } else {
-                            // 콜디텍터 서비스 중지
                             try {
                                 val intent = android.content.Intent(context, com.designated.callmanager.service.CallDetectorService::class.java)
                                 context.stopService(intent)
                                 callDetectorServiceStatus = "중지 중..."
                             } catch (e: Exception) {
-                                android.util.Log.e("SettingsScreen", "Failed to stop CallDetectorService", e)
-                            }
+                                }
                         }
                     }
                 )
             }
 
             Divider()
-
-            // --- App Info ---
+            
+            Spacer(modifier = Modifier.height(16.dp))
             Text("앱 정보", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
             Text("버전: 1.0.0 (Beta) - 콜디텍터 내장형", style = MaterialTheme.typography.bodyMedium)
             Text("대리운전 콜 매니저", style = MaterialTheme.typography.bodyMedium)
             Text("지역: ${regionId ?: "미설정"}", style = MaterialTheme.typography.bodySmall)
@@ -249,4 +255,4 @@ fun SettingsScreen(
 
         }
     }
-} 
+}

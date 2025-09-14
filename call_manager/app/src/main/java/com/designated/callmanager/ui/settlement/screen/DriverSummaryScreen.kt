@@ -26,7 +26,6 @@ fun DriverSummaryScreen(vm: SettlementViewModel = viewModel()) {
     var showRatioDialog by remember { mutableStateOf(false) }
     val ratio by vm.officeShareRatio.collectAsState()
 
-    // 그룹·집계 (deposit logic)
     val driverStats = remember(trips, ratio) {
         trips.groupBy { it.driverName.ifBlank { "미지정" } }
             .mapValues { (_, list) ->
@@ -67,7 +66,6 @@ fun DriverSummaryScreen(vm: SettlementViewModel = viewModel()) {
         }
         Spacer(Modifier.height(8.dp))
 
-        // 기사별 카드 리스트
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(driverStats) { stat ->
                 DriverDetailCard(stat) {
@@ -128,4 +126,4 @@ private fun DriverDetailCard(stat: DriverStat, onClick: () -> Unit) {
             Text("실납입 : ${"%,d".format(stat.realDeposit)}원", color = Color.Yellow, fontWeight = FontWeight.Bold)
         }
     }
-} 
+}

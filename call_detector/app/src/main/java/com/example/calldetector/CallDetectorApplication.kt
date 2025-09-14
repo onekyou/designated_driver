@@ -2,6 +2,7 @@ package com.example.calldetector
 
 import android.app.Application
 import android.content.ComponentCallbacks2
+import android.content.Context
 import android.content.res.Configuration
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
@@ -16,18 +17,23 @@ class CallDetectorApplication : Application() {
     companion object {
         var crashReportService: CrashReportService? = null
             private set
+        
+        /**
+         * 로그아웃 상태 설정
+         */
+        fun setLogoutState(context: Context, isLoggedOut: Boolean) {
+            val prefs = context.getSharedPreferences("app_state", Context.MODE_PRIVATE)
+            prefs.edit().putBoolean("is_logged_out", isLoggedOut).apply()
+        }
     }
     
     override fun onCreate() {
         super.onCreate()
         
         // Firebase 초기화 및 확인
-        val app = FirebaseApp.initializeApp(this)
-        android.util.Log.d("Firebase", "Firebase initialized: ${app?.name}")
+        FirebaseApp.initializeApp(this)
         
         // Firebase 프로젝트 정보 확인
-        android.util.Log.d("Firebase", "Project ID: ${app?.options?.projectId}")
-        android.util.Log.d("Firebase", "App ID: ${app?.options?.applicationId}")
         
         // Crashlytics 설정
         setupCrashlytics()
@@ -88,39 +94,19 @@ class CallDetectorApplication : Application() {
         val prefs = getSharedPreferences("app_state", MODE_PRIVATE)
         val isLoggedOut = prefs.getBoolean("is_logged_out", false)
         
-        android.util.Log.d("Firebase", "현재 인증 상태: ${auth.currentUser}, 로그아웃 상태: $isLoggedOut")
         
         // 사용자가 명시적으로 로그아웃한 경우 자동 재로그인 하지 않음
         if (auth.currentUser == null && !isLoggedOut) {
-            android.util.Log.d("Firebase", "익명 인증 시작...")
-            
             auth.signInAnonymously()
                 .addOnCompleteListener { task ->
                     if (task.isSuccessful) {
                         val user = auth.currentUser
-                        android.util.Log.d("Firebase", "✅ 익명 인증 성공: ${user?.uid}")
                         
                         // Crashlytics에 사용자 ID 설정
                         FirebaseCrashlytics.getInstance().setUserId(user?.uid ?: "anonymous")
-                    } else {
-                        android.util.Log.e("Firebase", "❌ 익명 인증 실패: ${task.exception?.message}", task.exception)
                     }
                 }
-        } else if (isLoggedOut) {
-            android.util.Log.d("Firebase", "🚫 로그아웃 상태이므로 자동 인증 건너뜀")
-        } else {
-            android.util.Log.d("Firebase", "✅ 이미 인증됨: ${auth.currentUser?.uid}")
         }
     }
     
-    companion object {
-        /**
-         * 로그아웃 상태 설정
-         */
-        fun setLogoutState(context: Context, isLoggedOut: Boolean) {
-            val prefs = context.getSharedPreferences("app_state", Context.MODE_PRIVATE)
-            prefs.edit().putBoolean("is_logged_out", isLoggedOut).apply()
-            android.util.Log.d("Firebase", "로그아웃 상태 변경: $isLoggedOut")
-        }
-    }
 }

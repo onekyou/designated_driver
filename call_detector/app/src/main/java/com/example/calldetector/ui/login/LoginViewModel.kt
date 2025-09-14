@@ -19,12 +19,11 @@ import kotlinx.coroutines.launch
 import com.google.firebase.firestore.ktx.firestore
 import kotlinx.coroutines.tasks.await
 
-// 로그인 상태를 나타내는 sealed class
 sealed class LoginState {
-    object Idle : LoginState() // 초기 상태
-    object Loading : LoginState() // 로그인 시도 중
-    data class Success(val regionId: String, val officeId: String) : LoginState() // regionId, officeId 포함
-    data class Error(val message: String) : LoginState() // 로그인 실패
+    object Idle : LoginState()
+    object Loading : LoginState()
+    data class Success(val regionId: String, val officeId: String) : LoginState()
+    data class Error(val message: String) : LoginState()
 }
 
 class LoginViewModel(application: Application) : AndroidViewModel(application) {
@@ -33,22 +32,18 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
     private val db = Firebase.firestore
     private val sharedPreferences = application.getSharedPreferences("call_detector_login_prefs", Context.MODE_PRIVATE)
 
-    // 로그인 상태를 UI에 노출하기 위한 StateFlow
     private val _loginState = MutableStateFlow<LoginState>(LoginState.Idle)
     val loginState: StateFlow<LoginState> = _loginState
 
-    // UI에서 입력받는 이메일과 비밀번호
     var email by mutableStateOf("")
     var password by mutableStateOf("")
 
-    // 자동 로그인 설정 상태
     var autoLogin by mutableStateOf(false)
 
     init {
         val autoLoginFlag = sharedPreferences.getBoolean("auto_login", false)
         autoLogin = autoLoginFlag
 
-        // 자동 로그인이 설정되어 있고, 저장된 이메일/비번이 있을 때만 로그인 시도
         if (autoLogin) {
             val savedEmail = sharedPreferences.getString("email", "")
             val savedPassword = sharedPreferences.getString("password", "")
@@ -56,7 +51,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
             if (!savedEmail.isNullOrBlank() && !savedPassword.isNullOrBlank()) {
                 email = savedEmail
                 password = savedPassword
-                login() // 자동 로그인 시도
+                login()
             }
         }
     }
@@ -73,7 +68,6 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                 val authResult = auth.signInWithEmailAndPassword(email, password).await()
                 val user = authResult.user
                 if (user != null) {
-                    // Firestore에서 관리자 정보 조회
                     fetchAdminInfoAndProceed(user.uid)
                 } else {
                     _loginState.value = LoginState.Error("로그인에 실패했습니다. 사용자 정보를 가져올 수 없습니다.")
@@ -94,7 +88,6 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                     val officeId = adminDoc.getString("associatedOfficeId")
 
                     if (regionId != null && officeId != null) {
-                        // 자동 로그인이 체크되어 있으면 로그인 정보 저장
                         if (autoLogin) {
                             saveLoginInfo()
                         } else {
@@ -143,7 +136,6 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
         _loginState.value = LoginState.Idle
     }
 
-    // Factory 클래스
     class Factory(private val application: Application) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {

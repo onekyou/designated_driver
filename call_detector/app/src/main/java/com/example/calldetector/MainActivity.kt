@@ -36,7 +36,6 @@ import com.example.calldetector.ui.DetectorConfigViewModelFactory
 import com.example.calldetector.ui.ScreenState
 import com.example.calldetector.ui.login.LoginScreen
 import com.google.firebase.auth.FirebaseAuth
-import android.util.Log
 
 class MainActivity : ComponentActivity() {
 
@@ -84,28 +83,25 @@ class MainActivity : ComponentActivity() {
                 val viewModel: DetectorConfigViewModel = viewModel(
                     factory = DetectorConfigViewModelFactory(application)
                 )
-                
-                // 자동 로그인 체크
-                val isLoggedIn = remember { 
+
+                val isLoggedIn = remember {
                     val prefs = getSharedPreferences("call_detector_auth", Context.MODE_PRIVATE)
-                    prefs.getBoolean("is_logged_in", false) && 
+                    prefs.getBoolean("is_logged_in", false) &&
                     prefs.getString("region_id", null) != null &&
                     prefs.getString("office_id", null) != null
                 }
-                
-                var currentScreen by remember { 
-                    mutableStateOf(if (isLoggedIn) ScreenState.STATUS else ScreenState.LOGIN) 
+
+                var currentScreen by remember {
+                    mutableStateOf(if (isLoggedIn) ScreenState.STATUS else ScreenState.LOGIN)
                 }
-                
-                // 자동 로그인된 경우 detector_config 복원 및 서비스 시작
+
                 LaunchedEffect(isLoggedIn) {
                     if (isLoggedIn) {
                         val authPrefs = getSharedPreferences("call_detector_auth", Context.MODE_PRIVATE)
                         val regionId = authPrefs.getString("region_id", null)
                         val officeId = authPrefs.getString("office_id", null)
-                        
+
                         if (regionId != null && officeId != null) {
-                            // detector_config에도 복원 (서비스에서 사용)
                             val detectorPrefs = getSharedPreferences("detector_config", Context.MODE_PRIVATE)
                             detectorPrefs.edit().apply {
                                 putString("regionId", regionId)
@@ -114,7 +110,7 @@ class MainActivity : ComponentActivity() {
                                 apply()
                             }
                         }
-                        
+
                         startCallDetectorServiceIfNeeded()
                     }
                 }
@@ -123,19 +119,17 @@ class MainActivity : ComponentActivity() {
                     viewModel.onSettingsSaved.collect { savedSuccessfully: Boolean ->
                         if (savedSuccessfully) {
                             currentScreen = ScreenState.STATUS
-                            startCallDetectorServiceIfNeeded() // 서비스 시작 로직 호출
+                            startCallDetectorServiceIfNeeded()
                             showToast("설정이 저장되었으며, 서비스가 활성화되었습니다.")
                         } else {
-                            // MainScreen 내부의 uiState.error를 통해 메시지가 표시되므로 중복 토스트는 제거하거나 필요시 유지
-                            // showToast("설정 저장에 실패했습니다. 모든 항목을 선택해주세요.") 
+                            // showToast("설정 저장에 실패했습니다. 모든 항목을 선택해주세요.")
                         }
                     }
                 }
 
                 when (currentScreen) {
                     ScreenState.LOGIN -> LoginScreen(
-                        onLoginComplete = { regionId, officeId -> 
-                            // 로그인 성공시 자동 로그인 정보 저장
+                        onLoginComplete = { regionId, officeId ->
                             val authPrefs = getSharedPreferences("call_detector_auth", Context.MODE_PRIVATE)
                             authPrefs.edit().apply {
                                 putBoolean("is_logged_in", true)
@@ -144,18 +138,17 @@ class MainActivity : ComponentActivity() {
                                 putLong("login_timestamp", System.currentTimeMillis())
                                 apply()
                             }
-                            
-                            // 콜디텍터 설정에도 저장 (서비스에서 사용)
+
                             val detectorPrefs = getSharedPreferences("detector_config", Context.MODE_PRIVATE)
                             detectorPrefs.edit().apply {
                                 putString("regionId", regionId)
                                 putString("officeId", officeId)
-                                putString("deviceName", android.os.Build.MODEL) // 기기 모델명을 deviceName으로 사용
+                                putString("deviceName", android.os.Build.MODEL)
                                 apply()
                             }
-                            
+
                             currentScreen = ScreenState.STATUS
-                            startCallDetectorServiceIfNeeded() // 서비스 시작
+                            startCallDetectorServiceIfNeeded()
                         },
                         onNavigateToPasswordReset = { /* 비밀번호 리셋 기능은 나중에 구현 */ }
                     )
@@ -163,17 +156,15 @@ class MainActivity : ComponentActivity() {
                     ScreenState.STATUS -> StatusScreen(
                         onNavigateToSettings = { currentScreen = ScreenState.SETTINGS },
                         onLogout = {
-                            // 로그아웃 처리
                             val authPrefs = getSharedPreferences("call_detector_auth", Context.MODE_PRIVATE)
                             authPrefs.edit().clear().apply()
-                            
+
                             val detectorPrefs = getSharedPreferences("detector_config", Context.MODE_PRIVATE)
                             detectorPrefs.edit().clear().apply()
-                            
-                            // Firebase 로그아웃 및 자동 재로그인 방지
+
                             FirebaseAuth.getInstance().signOut()
                             CallDetectorApplication.setLogoutState(this@MainActivity, true)
-                            
+
                             currentScreen = ScreenState.LOGIN
                         }
                     )
@@ -189,7 +180,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // 필요한 경우 여기서도 권한 확인 및 서비스 시작 로직을 추가할 수 있습니다.
     }
 
     override fun onPause() {
@@ -212,15 +202,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // CallDetectorService 시작 (필요한 경우)
     private fun startCallDetectorServiceIfNeeded() {
         if (areAllPermissionsGranted()) {
-            // 설정값이 저장되어 있는지 확인 (예: deviceName)
             val deviceName = sharedPreferences.getString("deviceName", null)
             if (!deviceName.isNullOrBlank()) {
                 val serviceIntent = Intent(this, CallDetectorService::class.java)
                 ContextCompat.startForegroundService(this, serviceIntent)
-                // showToast("콜디텍터 서비스 시작됨") // 필요시 사용자에게 알림
+                // showToast("콜디텍터 서비스 시작됨")
             } else {
                 // showToast("디바이스 설정이 완료되지 않아 서비스를 시작할 수 없습니다.")
             }
@@ -241,23 +229,17 @@ fun MainScreen(viewModel: DetectorConfigViewModel) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
 
-    // MainScreen 재구성 시 상태 로깅
-    Log.d("MainScreen", "Recomposing: selectedRegion=${uiState.selectedRegion?.name}, isLoadingOffices=${uiState.isLoadingOffices}, officesCount=${uiState.offices.size}, selectedOffice=${uiState.selectedOffice?.name}")
-
     val isOfficeDropdownEnabled = uiState.selectedRegion != null && !uiState.isLoadingOffices
-    Log.d("MainScreen", "isOfficeDropdownEnabled: $isOfficeDropdownEnabled")
 
-    // 저장 성공 또는 오류 메시지 표시 (ViewModel의 uiState 사용)
     LaunchedEffect(uiState.saveSuccess) {
         if (uiState.saveSuccess) {
-            // 화면 전환은 MainActivity의 LaunchedEffect에서 처리하므로 여기서는 추가 토스트 불필요
-            viewModel.resetSaveStatus() // ViewModel의 상태 초기화
+            viewModel.resetSaveStatus()
         }
     }
     LaunchedEffect(uiState.error) {
         uiState.error?.let {
             Toast.makeText(context, it, Toast.LENGTH_LONG).show()
-            viewModel.clearError() // ViewModel의 오류 상태 초기화
+            viewModel.clearError()
         }
     }
 
@@ -271,7 +253,7 @@ fun MainScreen(viewModel: DetectorConfigViewModel) {
                 )
             )
         },
-        containerColor = Color(0xFF121212) // 다크 배경
+        containerColor = Color(0xFF121212)
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -280,7 +262,6 @@ fun MainScreen(viewModel: DetectorConfigViewModel) {
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 지역 선택 드롭다운
             var regionExpanded by remember { mutableStateOf(false) }
             ExposedDropdownMenuBox(
                 expanded = regionExpanded,
@@ -293,7 +274,7 @@ fun MainScreen(viewModel: DetectorConfigViewModel) {
                     label = { Text("지역", color = Color(0xFFB0B0B0)) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = regionExpanded) },
                     modifier = Modifier
-                        .menuAnchor() // 필수
+                        .menuAnchor()
                         .fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Color(0xFFFFB000),
@@ -329,7 +310,7 @@ fun MainScreen(viewModel: DetectorConfigViewModel) {
                                 onClick = {
                                     viewModel.selectRegion(region)
                                     regionExpanded = false
-                                    focusManager.clearFocus() // 키보드 숨기기
+                                    focusManager.clearFocus()
                                 }
                             )
                         }
@@ -346,20 +327,15 @@ fun MainScreen(viewModel: DetectorConfigViewModel) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 사무실 선택 드롭다운
             var officeExpanded by remember { mutableStateOf(false) }
 
             ExposedDropdownMenuBox(
                 expanded = officeExpanded && isOfficeDropdownEnabled,
                 onExpandedChange = {
-                    // 현재 uiState를 직접 사용하여 확장 가능 여부를 판단합니다.
                     val canExpandNow = uiState.selectedRegion != null && !uiState.isLoadingOffices
-                    Log.d("MainScreen", "Office ExposedDropdownMenuBox onExpandedChange. Captured isOfficeDropdownEnabled: $isOfficeDropdownEnabled, Evaluated canExpandNow: $canExpandNow")
-                    if (canExpandNow) { // 캡처된 변수 대신 직접 평가한 값 사용
+                    if (canExpandNow) {
                         officeExpanded = !officeExpanded
-                        Log.d("MainScreen", "Office officeExpanded toggled to: $officeExpanded")
                     } else {
-                        Log.d("MainScreen", "Office dropdown not expanded because canExpandNow is false (or captured isOfficeDropdownEnabled was false).")
                     }
                 }
             ) {
@@ -427,7 +403,6 @@ fun MainScreen(viewModel: DetectorConfigViewModel) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 전화기 이름 드롭다운 메뉴
             var deviceNameExpanded by remember { mutableStateOf(false) }
             ExposedDropdownMenuBox(
                 expanded = deviceNameExpanded,
@@ -483,7 +458,7 @@ fun MainScreen(viewModel: DetectorConfigViewModel) {
                 onClick = {
                     viewModel.saveSelection()
                 },
-                enabled = !uiState.isLoadingRegions && !uiState.isLoadingOffices, // 로딩 중 아닐 때만 활성화
+                enabled = !uiState.isLoadingRegions && !uiState.isLoadingOffices,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFFFFB000),
@@ -531,7 +506,7 @@ fun StatusScreen(
                 )
             )
         },
-        containerColor = Color(0xFF121212) // 다크 배경
+        containerColor = Color(0xFF121212)
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -550,11 +525,10 @@ fun StatusScreen(
             Text(
                 text = "백그라운드에서 통화 감지가 실행되고 있습니다.",
                 style = MaterialTheme.typography.bodyLarge,
-                color = Color(0xFFB0B0B0) // 연한 회색
+                color = Color(0xFFB0B0B0)
             )
             Spacer(modifier = Modifier.height(32.dp))
-            
-            // 상태 표시 카드 추가
+
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -568,7 +542,7 @@ fun StatusScreen(
                     Text(
                         text = "🟢 서비스 실행 중",
                         style = MaterialTheme.typography.titleMedium,
-                        color = Color(0xFF4CAF50) // 녹색
+                        color = Color(0xFF4CAF50)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
@@ -579,10 +553,9 @@ fun StatusScreen(
                     )
                 }
             }
-            
+
             Spacer(modifier = Modifier.height(16.dp))
-            
-            // 개인번호 관리 버튼 추가
+
             val context = LocalContext.current
             Button(
                 onClick = {
@@ -591,21 +564,20 @@ fun StatusScreen(
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF2196F3), // 파란색
+                    containerColor = Color(0xFF2196F3),
                     contentColor = Color.White
                 )
             ) {
                 Text("📱 개인번호 관리", style = MaterialTheme.typography.titleMedium)
             }
-            
+
             Spacer(modifier = Modifier.height(16.dp))
-            
-            // 로그아웃 버튼 추가
+
             Button(
                 onClick = onLogout,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFD32F2F), // 빨간색
+                    containerColor = Color(0xFFD32F2F),
                     contentColor = Color.White
                 )
             ) {
@@ -618,7 +590,7 @@ fun StatusScreen(
 @Composable
 fun CallDetectorAppTheme(content: @Composable () -> Unit) {
     val darkColorScheme = darkColorScheme(
-        primary = Color(0xFFFFB000), // 딥 옐로우
+        primary = Color(0xFFFFB000),
         onPrimary = Color.Black,
         primaryContainer = Color(0xFF2A2A2A),
         onPrimaryContainer = Color.White,
@@ -634,7 +606,7 @@ fun CallDetectorAppTheme(content: @Composable () -> Unit) {
         error = Color(0xFFCF6679),
         onError = Color.Black
     )
-    
+
     MaterialTheme(
         colorScheme = darkColorScheme,
         content = content

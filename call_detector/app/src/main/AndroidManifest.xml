@@ -37,6 +37,9 @@
     
     <!-- SMS 발송 권한 (공유콜 시스템용) -->
     <uses-permission android:name="android.permission.SEND_SMS" />
+    
+    <!-- 화면 위에 그리기 권한 (다른 앱 위에 표시) - 백그라운드에서 팝업 생성용 -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
         android:allowBackup="true"
@@ -54,7 +57,10 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.CallDetector">
+            android:theme="@style/Theme.CallDetector"
+            android:launchMode="singleTop"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

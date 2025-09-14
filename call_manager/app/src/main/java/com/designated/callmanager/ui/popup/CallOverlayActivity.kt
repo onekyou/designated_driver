@@ -11,7 +11,6 @@ import android.graphics.PixelFormat
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowManager
@@ -24,29 +23,22 @@ import com.designated.callmanager.R
 import com.designated.callmanager.data.CallInfo
 
 class CallOverlayActivity : Activity() {
-    
+
     private var overlayView: View? = null
     private var windowManager: WindowManager? = null
-    
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        Log.d("CallOverlayActivity", "onCreate - 팝업 생성 시작")
 
-        // 오버레이 권한 체크
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-            Log.w("CallOverlayActivity", "오버레이 권한이 없음")
-            // 오버레이 권한이 없으면 일반 알림으로 대체
             showNotificationInstead()
             finish()
             return
         }
 
-        // 오버레이 레이아웃 inflate
         val inflater = getSystemService(Context.LAYOUT_INFLATER_SERVICE) as LayoutInflater
         val view = inflater.inflate(R.layout.overlay_call_popup, null)
 
-        // 콜 정보 표시 (intent extra에서 전달)
         val callName = intent.getStringExtra(EXTRA_CALL_NAME) ?: "신규 콜"
         val callPhone = intent.getStringExtra(EXTRA_CALL_PHONE) ?: "-"
         val callSummary = intent.getStringExtra(EXTRA_CALL_SUMMARY) ?: "-"
@@ -55,7 +47,6 @@ class CallOverlayActivity : Activity() {
         view.findViewById<TextView>(R.id.textCallPhone).text = callPhone
         view.findViewById<TextView>(R.id.textCallSummary).text = callSummary
 
-        // 버튼 동작 예시
         view.findViewById<Button>(R.id.btnAssign).setOnClickListener {
             Toast.makeText(this, "배차 요청", Toast.LENGTH_SHORT).show()
             finish()
@@ -77,19 +68,17 @@ class CallOverlayActivity : Activity() {
                     WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                 else
                     WindowManager.LayoutParams.TYPE_PHONE,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or 
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
                 WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
                 WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
                 PixelFormat.TRANSLUCENT
             )
-            
+
             windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
             overlayView = view
             windowManager?.addView(view, params)
-            Log.d("CallOverlayActivity", "오버레이 뷰 추가 성공")
         } catch (e: Exception) {
-            Log.e("CallOverlayActivity", "오버레이 뷰 추가 실패", e)
             showNotificationInstead()
             finish()
         }
@@ -100,24 +89,20 @@ class CallOverlayActivity : Activity() {
         try {
             overlayView?.let { view ->
                 windowManager?.removeView(view)
-                Log.d("CallOverlayActivity", "오버레이 뷰 제거됨")
             }
         } catch (e: Exception) {
-            Log.e("CallOverlayActivity", "오버레이 뷰 제거 실패", e)
         }
     }
-    
+
     private fun showNotificationInstead() {
-        Log.d("CallOverlayActivity", "오버레이 대신 알림 표시")
-        
+
         val callName = intent.getStringExtra(EXTRA_CALL_NAME) ?: "신규 콜"
         val callPhone = intent.getStringExtra(EXTRA_CALL_PHONE) ?: "-"
         val callSummary = intent.getStringExtra(EXTRA_CALL_SUMMARY) ?: "-"
-        
+
         val channelId = "call_alert_channel"
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        
-        // 알림 채널 생성 (Android 8.0 이상)
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,
@@ -132,8 +117,7 @@ class CallOverlayActivity : Activity() {
             }
             notificationManager.createNotificationChannel(channel)
         }
-        
-        // 앱 실행 인텐트
+
         val pendingIntent = PendingIntent.getActivity(
             this,
             0,
@@ -142,8 +126,7 @@ class CallOverlayActivity : Activity() {
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        
-        // 알림 생성
+
         val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("🚗 새로운 콜: $callName")
@@ -156,7 +139,7 @@ class CallOverlayActivity : Activity() {
             .setFullScreenIntent(pendingIntent, true)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .build()
-        
+
         notificationManager.notify(System.currentTimeMillis().toInt(), notification)
     }
 

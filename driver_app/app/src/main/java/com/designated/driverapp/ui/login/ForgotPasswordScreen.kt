@@ -1,6 +1,6 @@
 package com.designated.driverapp.ui.login
 
-import android.util.Log
+import Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,7 +50,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
-// 상태 관리를 위한 sealed 클래스
 sealed class PasswordResetState {
     object Idle : PasswordResetState()
     object Loading : PasswordResetState()
@@ -77,10 +76,8 @@ class ForgotPasswordViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 auth.sendPasswordResetEmail(email).await()
-                Log.d(TAG, "비밀번호 재설정 메일 전송 완료: $email")
                 _resetState.value = PasswordResetState.Success
             } catch (e: Exception) {
-                Log.e(TAG, "비밀번호 재설정 메일 전송 실패", e)
                 _resetState.value = PasswordResetState.Error(e.message ?: "비밀번호 재설정 메일 전송에 실패했습니다.")
             }
         }
@@ -171,14 +168,14 @@ fun ForgotPasswordScreen(
                     "비밀번호를 잊으셨나요?",
                     style = MaterialTheme.typography.headlineSmall
                 )
-                
+
                 Text(
                     "계정에 등록된 이메일을 입력하시면 비밀번호 재설정 링크를 보내드립니다.",
                     style = MaterialTheme.typography.bodyMedium
                 )
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 OutlinedTextField(
                     value = viewModel.email,
                     onValueChange = { viewModel.email = it },
@@ -188,7 +185,7 @@ fun ForgotPasswordScreen(
                     modifier = Modifier.fillMaxWidth(),
                     isError = errorMessage != null && viewModel.email.isBlank()
                 )
-                
+
                 errorMessage?.let {
                     Text(
                         text = it,
@@ -199,9 +196,9 @@ fun ForgotPasswordScreen(
                             .padding(start = 4.dp)
                     )
                 }
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 Button(
                     onClick = { viewModel.resetPassword() },
                     enabled = resetState != PasswordResetState.Loading,
@@ -220,4 +217,4 @@ fun ForgotPasswordScreen(
             }
         }
     }
-} 
+}

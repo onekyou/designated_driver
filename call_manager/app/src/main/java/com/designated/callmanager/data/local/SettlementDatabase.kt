@@ -15,11 +15,11 @@ import com.designated.callmanager.data.local.entity.CreditEntity
 )
 abstract class SettlementDatabase : RoomDatabase() {
     abstract fun settlementDao(): SettlementDao
-    
+
     companion object {
         @Volatile
         private var INSTANCE: SettlementDatabase? = null
-        
+
         fun getDatabase(context: Context): SettlementDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(

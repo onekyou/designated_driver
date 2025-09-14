@@ -58,7 +58,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
-import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.material3.TextField
@@ -78,6 +77,7 @@ import com.designated.callmanager.ui.login.LoginViewModel
 import com.designated.callmanager.ui.pendingdrivers.PendingDriversScreen
 import com.designated.callmanager.ui.settings.SettingsScreen
 import com.designated.callmanager.ui.settlement.SettlementTabHost
+import com.designated.callmanager.ui.excludenumber.ExcludeNumberScreen
 import com.designated.callmanager.ui.signup.SignUpScreen
 import com.designated.callmanager.ui.theme.CallManagerTheme
 import com.google.firebase.auth.FirebaseAuth
@@ -94,7 +94,6 @@ import android.os.PowerManager
 import android.content.BroadcastReceiver
 import android.content.IntentFilter
 
-// Define screens for navigation
 enum class Screen {
     Login,
     SignUp,
@@ -102,10 +101,11 @@ enum class Screen {
     Dashboard,
     Settings,
     PendingDrivers,
-    Settlement
+    Settlement,
+    ExcludeNumber,
+    ContactSelection
 }
 
-// 화면 전환 시 전달할 데이터를 관리하는 Sealed Class
 sealed class NavigationParams {
     object None : NavigationParams()
     data class DriverManagement(val regionId: String, val officeId: String) : NavigationParams()
@@ -113,18 +113,15 @@ sealed class NavigationParams {
 
 class MainActivity : ComponentActivity() {
     private lateinit var auth: FirebaseAuth
-    private val dashboardViewModel: DashboardViewModel by viewModels { 
-        androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory(application) 
+    private val dashboardViewModel: DashboardViewModel by viewModels {
+        androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory(application)
     }
     private var isRequestingPermissions = java.util.concurrent.atomic.AtomicBoolean(false)
-    
-    // --- 사용자 정보 ---
+
     private var regionId: String? = null
     private var officeId: String? = null
     private var managerId: String? = null
-    
-    
-    // 권한 요청 런처
+
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -133,39 +130,30 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "일부 기능을 사용하려면 권한이 필요합니다.", Toast.LENGTH_LONG).show()
         }
     }
-    
 
-    // 현재 보여줄 화면 상태를 Activity의 프로퍼티로 선언
-    // Compose navigation: Use mutableState for single source of truth
     private val _screenState = mutableStateOf(Screen.Login)
     var screenState: Screen
         get() = _screenState.value
         set(value) { _screenState.value = value }
 
-    // 화면 간 데이터 전달을 위한 상태 변수
     private var navigationParams: NavigationParams by mutableStateOf(NavigationParams.None)
-    
 
-    // 다이얼로그 표시 요청을 위한 StateFlow 추가
     private val _pendingCallDialogId = MutableStateFlow<String?>(null)
     private val pendingCallDialogId: StateFlow<String?> = _pendingCallDialogId.asStateFlow()
-    
-    // 콜 감지 브로드캐스트 리시버 (기존 대시보드 리스너용)
+
     private val callDetectedReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == "com.designated.callmanager.NEW_CALL_DETECTED") {
                 val callId = intent.getStringExtra("callId")
                 val phoneNumber = intent.getStringExtra("phoneNumber")
                 val contactName = intent.getStringExtra("contactName")
-                
+
                 if (callId != null) {
-                    // 대시보드 리스너에 의해 팝업이 자동 생성될 예정이므로 여기서는 처리하지 않음
                 }
             }
         }
     }
-    
-    // 내부 콜 다이얼로그 브로드캐스트 수신자 (직접 팝업 호출용)
+
     private val internalCallDialogReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == "com.designated.callmanager.INTERNAL_SHOW_CALL_DIALOG") {
@@ -176,7 +164,7 @@ class MainActivity : ComponentActivity() {
                             dashboardViewModel.showCallDialog(callId)
                         } else {
                             _screenState.value = Screen.Dashboard
-                            delay(300) // 화면 전환 대기
+                            delay(300)
                             dashboardViewModel.showCallDialog(callId)
                         }
                     }
@@ -185,7 +173,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // Constants for Intent Actions and Extras
     companion object {
         const val ACTION_SHOW_CALL_POPUP = "ACTION_SHOW_CALL_POPUP"
         const val ACTION_SHOW_SHARED_CALL = "ACTION_SHOW_SHARED_CALL"
@@ -196,19 +183,17 @@ class MainActivity : ComponentActivity() {
         const val ACTION_SHOW_DEVICE_CRASH = "ACTION_SHOW_DEVICE_CRASH"
         const val ACTION_SHOW_TRIP_STARTED_POPUP = "ACTION_SHOW_TRIP_STARTED_POPUP"
         const val ACTION_SHOW_TRIP_COMPLETED_POPUP = "ACTION_SHOW_TRIP_COMPLETED_POPUP"
-        const val EXTRA_CALL_ID = "callId" // FCM 서비스와 키 통일
+        const val EXTRA_CALL_ID = "callId"
         const val EXTRA_SHARED_CALL_ID = "sharedCallId"
     }
 
-    // 권한 요청 결과 처리
     private val requestPermissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         isRequestingPermissions.set(false)
         val allGranted = permissions.entries.all { it.value }
-        
+
         if (allGranted) {
-            // 일반 권한 승인 후, 다시 전체 권한 확인 (overlay 등)
             checkAndRequestPermissions()
         } else {
             val deniedPermissions = permissions.filter { !it.value }.keys
@@ -217,32 +202,26 @@ class MainActivity : ComponentActivity() {
                 "앱 기능 사용에 필요한 권한이 거부되었습니다.",
                 Toast.LENGTH_LONG
             ).show()
-            // 권한 거부 시 서비스 시작 시도 안함 (startCallManagerServiceIfNeeded 호출 제거)
         }
     }
 
-    // 화면 위에 그리기 권한 결과 처리를 위한 ActivityResultLauncher
     private val overlayPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
         isRequestingPermissions.set(false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val hasPermission = Settings.canDrawOverlays(this)
-            
-            // SharedPreferences KTX 사용
+
             getSharedPreferences("call_manager_prefs", MODE_PRIVATE).edit {
                 putBoolean("overlay_permission_requested", true)
             }
-            
+
             if (hasPermission) {
-                // 권한 승인됨 토스트
                 Toast.makeText(this, "백그라운드 콜 표시 활성화됨", Toast.LENGTH_SHORT).show()
             } else {
-                // 권한 거부됨 토스트
                 Toast.makeText(this, "백그라운드 콜 표시 비활성화됨", Toast.LENGTH_LONG).show()
             }
-            
-            // 권한 상태 변경 후 최종 확인 및 서비스 시작 시도
+
             checkAndRequestPermissions()
         }
     }
@@ -251,11 +230,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         auth = Firebase.auth
 
+        // FCM 서비스 초기화를 위한 토큰 요청
+        initializeFirebaseMessaging()
 
-        // 배터리 최적화 제외 요청 (한 번만 요청)
         checkAndRequestBatteryOptimizationOnce()
-        
-        // 내부 콜 다이얼로그 브로드캐스트 수신자 등록
+
         val internalFilter = IntentFilter("com.designated.callmanager.INTERNAL_SHOW_CALL_DIALOG")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(internalCallDialogReceiver, internalFilter, Context.RECEIVER_NOT_EXPORTED)
@@ -263,29 +242,19 @@ class MainActivity : ComponentActivity() {
             registerReceiver(internalCallDialogReceiver, internalFilter)
         }
 
-        // Apply API level check for setDecorFitsSystemWindows
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) { // Android 11 (API 30)
-            window.setDecorFitsSystemWindows(false) // Recommended for edge-to-edge
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.setDecorFitsSystemWindows(false)
         } else {
-            // For older versions, you might not need this or use alternative flags
-            // WindowCompat.setDecorFitsSystemWindows(window, false) // Use WindowCompat if needed
         }
-        // 화면 깜빡임 방지를 위한 설정 - setDecorFitsSystemWindows(false)와 함께 사용하는 것이 일반적
-        // window.setDecorFitsSystemWindows(true) // 이 줄은 제거하거나 주석 처리
-        // 화면 깜빡임 방지를 위한 렌더링 설정
         window.setBackgroundDrawableResource(android.R.color.transparent)
 
-        // <<-- Start of edit: Handle intent in onCreate -->>
-        // currentScreen을 Activity 프로퍼티로 선언
         screenState = if (auth.currentUser == null) Screen.Login else Screen.Dashboard
-        
-        // 기존 로그인 사용자가 있을 경우 자동으로 콜 디텍터 설정 동기화
+
         if (auth.currentUser != null) {
             syncCallDetectorSettingsOnStartup()
         }
-        
-        handleIntent(intent) // onCreate에서도 동일한 핸들러 사용
-        
+
+        handleIntent(intent)
 
         setContent {
             CallManagerTheme {
@@ -293,38 +262,28 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    // Compose navigation: Use MainActivity.screenState as single source of truth
                     val currentScreenState by this@MainActivity._screenState
 
-                    // pendingCallDialogId 상태를 관찰하여 다이얼로그 표시
                     val callIdToShow by pendingCallDialogId.collectAsState()
                     val showNewCallPopup by dashboardViewModel.showNewCallPopup.collectAsState()
 
-                    // ⭐️ 화면 상태와 보여줄 callId가 모두 준비되었을 때 다이얼로그를 띄우는 LaunchedEffect
                     LaunchedEffect(currentScreenState, callIdToShow) {
-                        // 대시보드 화면이고, 표시할 callId가 있을 때만 팝업을 띄운다
                         if (currentScreenState == Screen.Dashboard && callIdToShow != null) {
-                            val callId = callIdToShow!! // Null-safe
-                            // 새로운 콜 팝업이 이미 표시 중이면 중복 팝업 방지
+                            val callId = callIdToShow!!
                             if (!showNewCallPopup) {
-                                dashboardViewModel.showCallDialog(callId) // ViewModel 함수 호출
+                                dashboardViewModel.showCallDialog(callId)
                             } else {
                             }
-                            _pendingCallDialogId.value = null // 처리 후 상태를 반드시 초기화하여 재실행 방지
+                            _pendingCallDialogId.value = null
                         }
                     }
 
-                    // Listen for auth state changes (now only for logout)
                     DisposableEffect(Unit) {
                         val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
-                            // <<-- Start of edit: Log user state in listener -->>
                             val user = firebaseAuth.currentUser
-                            // <<-- End of edit -->>
-                            if (user == null) { // 로그아웃 상태만 처리
-                                // <<-- Start of edit: Add specific log for logout detection -->>
-                                // <<-- End of edit -->>
+                            if (user == null) {
                                 stopCallManagerService()
-                                isRequestingPermissions.set(false) // 로그아웃 시 플래그 리셋
+                                isRequestingPermissions.set(false)
                                 screenState = Screen.Login
                             }
                         }
@@ -334,18 +293,19 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    // 하드웨어 뒤로가기 처리
                     androidx.activity.compose.BackHandler {
                         when (currentScreenState) {
                             Screen.Dashboard, Screen.Login -> {
-                                // 기본 동작: 앱 종료
                                 finish()
                             }
                             Screen.Settings -> {
                                 screenState = Screen.Dashboard
                             }
-                            Screen.Settlement, Screen.PendingDrivers -> {
+                            Screen.Settlement, Screen.PendingDrivers, Screen.ExcludeNumber -> {
                                 screenState = Screen.Settings
+                            }
+                            Screen.ContactSelection -> {
+                                screenState = Screen.ExcludeNumber
                             }
                             Screen.SignUp, Screen.PasswordReset -> {
                                 screenState = Screen.Login
@@ -353,18 +313,16 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    // Display the current screen
                     when (currentScreenState) {
                         Screen.Login -> LoginScreen(
                             onLoginComplete = { regionId, officeId ->
-                                // 사용자 정보 저장
                                 this@MainActivity.regionId = regionId
                                 this@MainActivity.officeId = officeId
                                 this@MainActivity.managerId = auth.currentUser?.uid
-                                
-                                dashboardViewModel.loadDataForUser(regionId, officeId) // Load data for the logged-in user
-                                updateFcmTokenForAdmin(regionId, officeId) // FCM 토큰 업데이트 호출
-                                screenState = Screen.Dashboard // Navigate to Dashboard
+
+                                dashboardViewModel.loadDataForUser(regionId, officeId)
+                                updateFcmTokenForAdmin(regionId, officeId)
+                                screenState = Screen.Dashboard
                             },
                             onNavigateToSignUp = { screenState = Screen.SignUp },
                             onNavigateToPasswordReset = { screenState = Screen.PasswordReset }
@@ -375,7 +333,6 @@ class MainActivity : ComponentActivity() {
                         )
                         Screen.PasswordReset -> { /* TODO: Implement Password Reset Screen */ }
                         Screen.Dashboard -> {
-                            // Check permissions only when navigating to Dashboard
                             LaunchedEffect(Unit) {
                                 checkAndRequestPermissions()
                             }
@@ -397,6 +354,9 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onNavigateToSettlement = {
                                     screenState = Screen.Settlement
+                                },
+                                onNavigateToExcludeNumber = {
+                                    screenState = Screen.ExcludeNumber
                                 }
                             )
                         }
@@ -409,7 +369,6 @@ class MainActivity : ComponentActivity() {
                                     onNavigateBack = { screenState = Screen.Settings }
                                 )
                             } else {
-                                // 파라미터가 없는 비정상적인 접근. 이전 화면으로 돌려보낸다.
                                 LaunchedEffect(Unit) {
                                     Toast.makeText(this@MainActivity, "잘못된 접근입니다. 이전 화면으로 돌아갑니다.", Toast.LENGTH_SHORT).show()
                                     screenState = Screen.Settings
@@ -422,24 +381,34 @@ class MainActivity : ComponentActivity() {
                                 onHome = { screenState = Screen.Dashboard }
                             )
                         }
+                        Screen.ExcludeNumber -> {
+                            ExcludeNumberScreen(
+                                onNavigateBack = { screenState = Screen.Settings },
+                                onNavigateToContactSelection = {
+                                    screenState = Screen.ContactSelection
+                                }
+                            )
+                        }
+                        Screen.ContactSelection -> {
+                            com.designated.callmanager.ui.excludenumber.ContactSelectionScreen(
+                                onNavigateBack = { screenState = Screen.ExcludeNumber }
+                            )
+                        }
                     }
                 }
             }
         }
     }
 
-
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
-        setIntent(intent) // 중요: 새로운 Intent를 설정
+        setIntent(intent)
         handleIntent(intent)
     }
 
     private fun handleIntent(intent: Intent?) {
-        
-        // 백그라운드 FCM 알림 클릭 시 MAIN 액션으로 들어오는 경우 처리
+
         if (intent?.action == Intent.ACTION_MAIN || intent?.action == null) {
-            // FCM extras 확인
             val sharedCallId = intent?.extras?.getString("sharedCallId")
             if (!sharedCallId.isNullOrBlank()) {
                 lifecycleScope.launch {
@@ -452,7 +421,7 @@ class MainActivity : ComponentActivity() {
                 return
             }
         }
-        
+
         when (intent?.action) {
             ACTION_SHOW_CALL_POPUP -> {
                 val callId = intent.getStringExtra(EXTRA_CALL_ID)
@@ -468,27 +437,18 @@ class MainActivity : ComponentActivity() {
                 }
             }
             ACTION_SHOW_SHARED_CALL -> {
-                Log.d("MainActivity", "🔄 ACTION_SHOW_SHARED_CALL 액션 처리 시작")
-                
-                // 여러 방법으로 sharedCallId 추출 시도
-                val sharedCallId = intent.getStringExtra(EXTRA_SHARED_CALL_ID) 
+
+                val sharedCallId = intent.getStringExtra(EXTRA_SHARED_CALL_ID)
                     ?: intent.getStringExtra("sharedCallId")
                     ?: intent.extras?.getString(EXTRA_SHARED_CALL_ID)
                     ?: intent.extras?.getString("sharedCallId")
-                
-                Log.d("MainActivity", "📄 sharedCallId 추출 결과: $sharedCallId")
-                
+
                 if (sharedCallId != null) {
-                    Log.d("MainActivity", "✅ sharedCallId 유효, 처리 진행: $sharedCallId")
-                    // 해당 공유콜 알림 제거
                     val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                     val notificationId = "shared_call_$sharedCallId".hashCode()
-                    
-                    
-                    // 계산된 ID로 제거 시도
+
                     notificationManager.cancel(notificationId)
-                    
-                    // 모든 활성 알림 제거 (임시 해결책)
+
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         val activeNotifications = notificationManager.activeNotifications
                         activeNotifications.forEach { notification ->
@@ -498,117 +458,101 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
-                    
+
                     lifecycleScope.launch {
-                        // 대시보드로 이동
                         if (_screenState.value != Screen.Dashboard) {
                             _screenState.value = Screen.Dashboard
-                            kotlinx.coroutines.delay(300) // 화면 전환 대기
+                            kotlinx.coroutines.delay(300)
                         }
-                        // 공유콜 데이터를 찾아서 알림 팝업 표시
-                        Log.d("MainActivity", "🎯 dashboardViewModel.showSharedCallNotificationFromId 호출: $sharedCallId")
                         dashboardViewModel.showSharedCallNotificationFromId(sharedCallId)
                     }
                 } else {
-                    Log.w("MainActivity", "❌ sharedCallId가 null입니다. Intent extras: ${intent.extras}")
                 }
             }
             ACTION_SHOW_SHARED_CALL_CANCELLED -> {
                 val callId = intent.getStringExtra(EXTRA_CALL_ID)
                 if (callId != null) {
                     lifecycleScope.launch {
-                        // 대시보드로 이동하고 취소 알림 표시
                         if (_screenState.value != Screen.Dashboard) {
                             _screenState.value = Screen.Dashboard
                         }
-                        // 공유콜 취소 알림 다이얼로그 표시
                         dashboardViewModel.showSharedCallCancelledDialog(callId)
                     }
                 } else {
                 }
             }
-            
+
             ACTION_SHOW_TRIP_STARTED_POPUP -> {
-                
+
                 val callId = intent.getStringExtra(EXTRA_CALL_ID)
                 val driverName = intent.getStringExtra("driverName") ?: "기사"
                 val driverPhone = intent.getStringExtra("driverPhone") ?: ""
                 val customerName = intent.getStringExtra("customerName") ?: "고객"
                 val tripSummary = intent.getStringExtra("tripSummary") ?: ""
-                
-                
+
                 lifecycleScope.launch {
-                    // 대시보드로 이동 후 팝업 표시
                     if (_screenState.value != Screen.Dashboard) {
                         _screenState.value = Screen.Dashboard
                     }
                     dashboardViewModel.showTripStartedPopup(driverName, driverPhone, tripSummary, customerName)
                 }
             }
-            
+
             ACTION_SHOW_TRIP_COMPLETED_POPUP -> {
                 val callId = intent.getStringExtra(EXTRA_CALL_ID)
                 val driverName = intent.getStringExtra("driverName") ?: "기사"
                 val customerName = intent.getStringExtra("customerName") ?: "고객"
-                
+
                 lifecycleScope.launch {
-                    // 대시보드로 이동 후 팝업 표시
                     if (_screenState.value != Screen.Dashboard) {
                         _screenState.value = Screen.Dashboard
                     }
                     dashboardViewModel.showTripCompletedPopup(driverName, customerName)
                 }
             }
-            
+
             ACTION_SHOW_SHARED_CALL_CANCELLED_NOTIFICATION -> {
                 val callId = intent.getStringExtra(EXTRA_CALL_ID)
                 val cancelReason = intent.getStringExtra("cancelReason")
                 if (callId != null) {
                     lifecycleScope.launch {
-                        // 대시보드로 이동하고 간단한 알림 표시
                         if (_screenState.value != Screen.Dashboard) {
                             _screenState.value = Screen.Dashboard
                         }
-                        // 토스트나 스낵바로 간단한 알림 표시
                         showToast("공유콜이 취소되었습니다: ${cancelReason ?: "사유 없음"}")
                     }
                 }
             }
-            
+
             ACTION_SHOW_SHARED_CALL_CLAIMED -> {
                 val sharedCallId = intent.getStringExtra(EXTRA_SHARED_CALL_ID)
                 if (sharedCallId != null) {
                     lifecycleScope.launch {
-                        // 대시보드로 이동
                         if (_screenState.value != Screen.Dashboard) {
                             _screenState.value = Screen.Dashboard
                         }
-                        // 공유콜 수락 알림 표시
                         showToast("공유콜이 다른 사무실에서 수락되었습니다")
                     }
                 }
             }
-            
+
             ACTION_SHOW_NEW_CALL_WAITING -> {
                 val callId = intent.getStringExtra(EXTRA_CALL_ID)
                 val customerPhone = intent.getStringExtra("customerPhone")
                 if (callId != null) {
                     lifecycleScope.launch {
-                        // 대시보드로 이동하고 해당 콜 하이라이트
                         if (_screenState.value != Screen.Dashboard) {
                             _screenState.value = Screen.Dashboard
                         }
-                        // 새로운 콜 알림 표시
                         showToast("새로운 콜이 접수되었습니다: ${customerPhone ?: ""}")
                     }
                 }
             }
-            
+
             ACTION_SHOW_DEVICE_CRASH -> {
                 val deviceId = intent.getStringExtra("deviceId")
                 val timestamp = intent.getLongExtra("timestamp", 0L)
                 if (deviceId != null) {
-                    // 크래시 상세 정보 팝업 표시
                     showDeviceCrashDialog(deviceId, timestamp)
                 }
             }
@@ -617,36 +561,30 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        
-        
-        // 콜 감지 브로드캐스트 리시버 등록
+
         val filter = IntentFilter("com.designated.callmanager.NEW_CALL_DETECTED")
-        
-        // Android 14 (API 34) 이상에서는 RECEIVER_NOT_EXPORTED 플래그 필요
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(callDetectedReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
             registerReceiver(callDetectedReceiver, filter)
         }
-        
-        // 저장된 Pending 팝업 확인 및 표시
+
         checkAndShowPendingPopup()
     }
-    
+
     override fun onPause() {
         super.onPause()
-        // 콜 감지 브로드캐스트 리시버 해제
         try {
             unregisterReceiver(callDetectedReceiver)
         } catch (e: IllegalArgumentException) {
-            // 리시버가 등록되지 않은 경우 무시
         }
     }
-    
+
     private fun checkAndShowPendingPopup() {
         val prefs = getSharedPreferences("pending_popups", Context.MODE_PRIVATE)
         val popupType = prefs.getString("popup_type", null)
-        
+
         if (popupType != null) {
             val callId = prefs.getString("popup_call_id", "") ?: ""
             val driverName = prefs.getString("popup_driver_name", "기사") ?: "기사"
@@ -654,18 +592,16 @@ class MainActivity : ComponentActivity() {
             val tripSummary = prefs.getString("popup_trip_summary", "") ?: ""
             val customerName = prefs.getString("popup_customer_name", "고객") ?: "고객"
             val timestamp = prefs.getLong("popup_timestamp", 0)
-            
-            // 10분 이내의 팝업만 표시 (너무 오래된 팝업 방지)
+
             val tenMinutesAgo = System.currentTimeMillis() - (10 * 60 * 1000)
-            
+
             if (timestamp > tenMinutesAgo) {
-                
+
                 lifecycleScope.launch {
-                    // 대시보드로 이동 후 팝업 표시
                     if (_screenState.value != Screen.Dashboard) {
                         _screenState.value = Screen.Dashboard
                     }
-                    
+
                     when (popupType) {
                         "TRIP_STARTED" -> {
                             dashboardViewModel.showTripStartedPopup(driverName, driverPhone, tripSummary, customerName)
@@ -676,8 +612,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-            
-            // 처리 후 저장된 팝업 정보 삭제
+
             prefs.edit().clear().apply()
         }
     }
@@ -692,16 +627,16 @@ class MainActivity : ComponentActivity() {
         } else {
             "시간 정보 없음"
         }
-        
+
         AlertDialog.Builder(this)
             .setTitle("🚨 콜디텍터 강제종료")
             .setMessage("""
                 디바이스: $deviceId
                 발생 시간: $formattedTime
-                
+
                 콜디텍터 앱이 강제로 종료되었습니다.
                 해당 전화기를 점검해 주세요.
-                
+
                 • 앱 재시작 필요
                 • 배터리 최적화 설정 확인
                 • 디바이스 상태 점검
@@ -725,30 +660,23 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkAndRequestPermissions() {
-        if (!isRequestingPermissions.compareAndSet(false, true)) { // 함수 진입 시 플래그 설정 시도
+        if (!isRequestingPermissions.compareAndSet(false, true)) {
             return
         }
-        
 
-        // --- 1단계: 일반 권한 확인 및 요청 --- 
         val requiredPermissions = mutableListOf<String>()
-        // 알림 권한 (Android 13+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 requiredPermissions.add(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
-        // 위치 권한 (서비스 동작에 필요)
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             requiredPermissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
         }
-        // COARSE 위치 권한도 함께 요청하는 것이 좋음
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
              requiredPermissions.add(Manifest.permission.ACCESS_COARSE_LOCATION)
         }
-        
-        
-        // 전화 감지 권한 추가 (콜 디텍터 기능용)
+
         val prefs = getSharedPreferences("call_manager_prefs", Context.MODE_PRIVATE)
         if (prefs.getBoolean("call_detection_enabled", false)) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
@@ -762,40 +690,117 @@ class MainActivity : ComponentActivity() {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
                 requiredPermissions.add(Manifest.permission.READ_CALL_LOG)
             }
-            // 연락처 읽기 권한 (고객명과 주소 정보)
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
                 requiredPermissions.add(Manifest.permission.READ_CONTACTS)
             }
-            // Android에서는 PROCESS_OUTGOING_CALLS가 deprecated되었지만 여전히 필요할 수 있음
             if (ContextCompat.checkSelfPermission(this, "android.permission.PROCESS_OUTGOING_CALLS") != PackageManager.PERMISSION_GRANTED) {
                 requiredPermissions.add("android.permission.PROCESS_OUTGOING_CALLS")
             }
-            // SMS 발송 권한 (공유콜 시스템에서 마감 시 자동 문자 발송용)
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
                 requiredPermissions.add(Manifest.permission.SEND_SMS)
             }
         }
-        
+
         if (requiredPermissions.isNotEmpty()) {
-            // isRequestingPermissions는 이미 true 상태
             requestPermissionsLauncher.launch(requiredPermissions.toTypedArray())
-            // 여기서 return, 결과는 requestPermissionsLauncher 콜백에서 처리 후 checkAndRequestPermissions 재호출
-            return 
+            return
         }
 
-        // --- 2단계: 화면 위에 그리기 권한 확인 및 요청 --- 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
 
-            // 항상 다이얼로그를 표시하여 사용자에게 권한의 필요성을 알리고 설정으로 유도합니다.
             showOverlayPermissionDialog()
-            return // 다이얼로그를 띄우고 나면, 사용자의 선택을 기다려야 하므로 여기서 함수를 종료합니다.
+            return
         }
 
-        // --- 3단계: 모든 권한 확인 완료, 서비스 시작 --- 
         startCallManagerServiceIfNeeded()
-        
-        // 모든 확인/요청 절차 완료 후 플래그 최종 리셋
+
         isRequestingPermissions.set(false)
+    }
+
+    /**
+     * Firebase Messaging 서비스 초기화 및 자동 토큰 복구
+     * FCM 토큰을 요청하고, 무효한 토큰인 경우 자동으로 갱신
+     */
+    private fun initializeFirebaseMessaging() {
+        android.util.Log.d("MainActivity", "========== initializeFirebaseMessaging 시작 ==========")
+
+        // Firebase 초기화 상태 확인
+        try {
+            val firebaseApp = com.google.firebase.FirebaseApp.getInstance()
+            android.util.Log.d("MainActivity", "Firebase 앱 이름: ${firebaseApp.name}")
+            android.util.Log.d("MainActivity", "Firebase 프로젝트 ID: ${firebaseApp.options.projectId}")
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Firebase 앱 정보 가져오기 실패: ${e.message}")
+        }
+
+        // FCM 인스턴스 상태 확인
+        val messaging = FirebaseMessaging.getInstance()
+        android.util.Log.d("MainActivity", "FirebaseMessaging 인스턴스 생성 완료")
+
+        // 자동 토큰 복구 로직 시작
+        validateAndRefreshTokenIfNeeded(messaging)
+
+        android.util.Log.d("MainActivity", "========== initializeFirebaseMessaging 요청 완료 ==========")
+    }
+
+    /**
+     * 토큰 유효성 검증 및 자동 갱신
+     * 무효한 토큰인 경우 자동으로 삭제 후 새 토큰 생성
+     */
+    private fun validateAndRefreshTokenIfNeeded(messaging: FirebaseMessaging) {
+        android.util.Log.d("MainActivity", "🔍 토큰 유효성 검증 시작...")
+
+        // 1단계: 기존 토큰 확인
+        messaging.token.addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                val currentToken = task.result
+                android.util.Log.d("MainActivity", "✅ 현재 토큰 획득: ${currentToken.take(20)}...")
+                android.util.Log.d("MainActivity", "토큰 길이: ${currentToken.length}")
+
+                // 2단계: 토큰 갱신 강제 실행 (무효 토큰 방지)
+                android.util.Log.d("MainActivity", "🔄 토큰 갱신 시작...")
+                refreshToken(messaging)
+
+            } else {
+                android.util.Log.e("MainActivity", "❌ 기존 토큰 획득 실패: ${task.exception?.message}")
+                // 토큰 획득 실패 시에도 갱신 시도
+                refreshToken(messaging)
+            }
+        }
+    }
+
+    /**
+     * FCM 토큰 강제 갱신
+     */
+    private fun refreshToken(messaging: FirebaseMessaging) {
+        android.util.Log.d("MainActivity", "🗑️ 기존 토큰 삭제 중...")
+
+        messaging.deleteToken().addOnCompleteListener { deleteTask ->
+            android.util.Log.d("MainActivity", "토큰 삭제 완료 - 성공: ${deleteTask.isSuccessful}")
+
+            if (!deleteTask.isSuccessful) {
+                android.util.Log.e("MainActivity", "토큰 삭제 실패: ${deleteTask.exception?.message}")
+            }
+
+            // 삭제 성공/실패 관계없이 새 토큰 생성 시도
+            android.util.Log.d("MainActivity", "🆕 새 토큰 생성 중...")
+
+            messaging.token.addOnCompleteListener { newTokenTask ->
+                android.util.Log.d("MainActivity", "새 토큰 생성 완료 - 성공: ${newTokenTask.isSuccessful}")
+
+                if (newTokenTask.isSuccessful) {
+                    val newToken = newTokenTask.result
+                    android.util.Log.d("MainActivity", "✅ 새 토큰 생성 성공: ${newToken.take(20)}...")
+                    android.util.Log.d("MainActivity", "새 토큰 길이: ${newToken.length}")
+                    android.util.Log.d("MainActivity", "🔔 새 토큰으로 MyFirebaseMessagingService 활성화됨")
+
+                    // 새 토큰으로 Firestore 업데이트는 MyFirebaseMessagingService의 onNewToken에서 자동 처리됨
+                } else {
+                    android.util.Log.e("MainActivity", "❌ 새 토큰 생성 실패: ${newTokenTask.exception?.message}")
+                    newTokenTask.exception?.printStackTrace()
+                }
+            }
+        }
     }
 
     private fun showOverlayPermissionDialog() {
@@ -808,21 +813,17 @@ class MainActivity : ComponentActivity() {
             }
             .setNegativeButton("나중에") { dialog, _ ->
                 Toast.makeText(this, "권한이 없어 일부 기능이 제한됩니다.", Toast.LENGTH_LONG).show()
-                isRequestingPermissions.set(false) // 다이얼로그가 닫혔으므로 플래그 리셋
+                isRequestingPermissions.set(false)
                 dialog.dismiss()
             }
             .setCancelable(false)
             .show()
     }
 
-    // 서비스 시작 로직 분리 (중복 호출 방지 및 명확성)
     private fun startCallManagerServiceIfNeeded() {
-        // 필수 권한 확인 (예: 위치 권한)
         val hasLocationPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        
-        // 필요한 모든 권한이 부여되었는지 확인 후 서비스 관리
-        if (hasLocationPermission) { // 서비스 시작에 필요한 최소 권한 (여기서는 위치)
-            // ViewModel을 통해 서비스 시작 요청 (중복 실행 방지 로직은 ViewModel 또는 Service 내부에 있어야 함)
+
+        if (hasLocationPermission) {
             val serviceIntent = Intent(this, CallManagerService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 startForegroundService(serviceIntent)
@@ -831,74 +832,66 @@ class MainActivity : ComponentActivity() {
             }
         } else {
              Toast.makeText(this, "위치 권한이 없어 콜 서비스를 시작할 수 없습니다.", Toast.LENGTH_LONG).show()
-             // 권한 부족 시에도 서비스가 실행 중이면 중지 (선택적, ViewModel에서 처리 가능)
              val serviceIntent = Intent(this, CallManagerService::class.java)
              stopService(serviceIntent)
         }
     }
-    
+
     private fun showToast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 
     private fun updateFcmTokenForAdmin(regionId: String, officeId: String) {
-        val adminId = auth.currentUser?.uid ?: return // 현재 로그인한 사용자의 UID를 가져옵니다.
+        val adminId = auth.currentUser?.uid ?: return
 
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
             if (task.isSuccessful) {
                 val token = task.result
                 val firestore = FirebaseFirestore.getInstance()
-                
-                // ✅ 올바른 경로: admins 최상위 컬렉션 사용 (set with merge)
+
                 val tokenData = hashMapOf("fcmToken" to token)
-                
+
                 firestore.collection("admins").document(adminId)
                     .set(tokenData, com.google.firebase.firestore.SetOptions.merge())
-                    .addOnFailureListener { e -> 
+                    .addOnFailureListener { e ->
                     }
             } else {
             }
         }
     }
-    
 
     override fun onDestroy() {
         super.onDestroy()
-        // 브로드캐스트 수신자 해제
         try {
             unregisterReceiver(internalCallDialogReceiver)
         } catch (e: Exception) {
-            // 이미 해제된 경우 무시
         }
-        // 앱 종료 시 서비스 중지
         val serviceIntent = Intent(this, CallManagerService::class.java)
         stopService(serviceIntent)
     }
-    
+
     private fun checkAndRequestBatteryOptimizationOnce() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val packageName = packageName
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
             val prefs = getSharedPreferences("call_manager_prefs", MODE_PRIVATE)
             val hasRequestedBefore = prefs.getBoolean("battery_optimization_requested", false)
-            
+
             if (!powerManager.isIgnoringBatteryOptimizations(packageName) && !hasRequestedBefore) {
-                
+
                 AlertDialog.Builder(this)
                     .setTitle("백그라운드 작업 허용")
                     .setMessage("콜 매니저가 백그라운드에서 정상 작동하려면 배터리 최적화에서 제외해야 합니다.\n\n기사 운행 시작/완료 알림을 받으려면 설정에서 이 앱을 '최적화하지 않음'으로 설정해 주세요.")
                     .setPositiveButton("설정으로 이동") { _, _ ->
-                        // 요청했음을 기록
                         prefs.edit {
                             putBoolean("battery_optimization_requested", true)
                         }
-                        
+
                         try {
                             val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
                             intent.data = Uri.parse("package:$packageName")
                             startActivity(intent)
                         } catch (_: Exception) {
-                            // 대체 방법: 일반 배터리 최적화 설정 화면
                             try {
                                 val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
                                 startActivity(intent)
@@ -906,8 +899,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
-                    .setNegativeButton("나중에") { _, _ -> 
-                        // 나중에 선택해도 요청했음을 기록 (하루 후 다시 요청하려면 이 줄 제거)
+                    .setNegativeButton("나중에") { _, _ ->
                         prefs.edit {
                             putBoolean("battery_optimization_requested", true)
                         }
@@ -918,64 +910,50 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-    
-    
+
     /**
      * 앱 시작 시 기존 로그인 사용자의 콜 디텍터 설정 자동 동기화
      */
     private fun syncCallDetectorSettingsOnStartup() {
         val currentUser = auth.currentUser
         if (currentUser == null) {
-            Log.w("MainActivity", "syncCallDetectorSettingsOnStartup: 로그인된 사용자가 없음")
             return
         }
-        
-        Log.i("MainActivity", "🔄 기존 로그인 사용자 콜 디텍터 설정 동기화 시작")
-        
+
         lifecycleScope.launch {
             try {
                 val firestore = FirebaseFirestore.getInstance()
                 val adminId = currentUser.uid
-                
-                // admins 컬렉션에서 사용자 정보 조회
+
                 firestore.collection("admins").document(adminId)
                     .get()
                     .addOnSuccessListener { document ->
                         if (document.exists()) {
                             val regionId = document.getString("associatedRegionId")
                             val officeId = document.getString("associatedOfficeId")
-                            
+
                             if (regionId != null && officeId != null) {
-                                Log.i("MainActivity", "✅ 관리자 정보 조회 성공: regionId=$regionId, officeId=$officeId")
-                                
-                                // MainActivity 인스턴스 변수에도 저장
+
                                 this@MainActivity.regionId = regionId
                                 this@MainActivity.officeId = officeId
                                 this@MainActivity.managerId = adminId
-                                
-                                // DashboardViewModel 초기화 및 콜 디텍터 설정 동기화
-                                dashboardViewModel.loadDataForUser(regionId, officeId) // ViewModel 초기화
-                                dashboardViewModel.syncCallDetectorSettings(regionId, officeId) // 콜 디텍터 설정
-                                
-                                Log.i("MainActivity", "🔄 콜 디텍터 설정 동기화 완료")
+
+                                dashboardViewModel.loadDataForUser(regionId, officeId)
+                                dashboardViewModel.syncCallDetectorSettings(regionId, officeId)
+
                             } else {
-                                Log.w("MainActivity", "❌ 관리자 문서에 regionId 또는 officeId가 없음")
                             }
                         } else {
-                            Log.w("MainActivity", "❌ 관리자 문서가 존재하지 않음: $adminId")
                         }
                     }
                     .addOnFailureListener { e ->
-                        Log.e("MainActivity", "❌ 관리자 정보 조회 실패", e)
                     }
             } catch (e: Exception) {
-                Log.e("MainActivity", "❌ syncCallDetectorSettingsOnStartup 실행 중 오류", e)
             }
         }
     }
 }
 
-// Placeholder for Sign Up Screen
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SignUpScreenPlaceholder(onNavigateBack: () -> Unit) {
@@ -994,7 +972,6 @@ fun SignUpScreenPlaceholder(onNavigateBack: () -> Unit) {
     }
 }
 
-// Placeholder for Password Reset Screen
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PasswordResetScreenPlaceholder(onNavigateBack: () -> Unit) {
@@ -1013,7 +990,6 @@ fun PasswordResetScreenPlaceholder(onNavigateBack: () -> Unit) {
     }
 }
 
-// Placeholder for Settings Screen
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreenPlaceholder(
@@ -1022,30 +998,29 @@ fun SettingsScreenPlaceholder(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var isServiceEnabled by remember { mutableStateOf(CallManagerService.isServiceRunning) }
-    
-    // 자동 시작 설정 상태 관리
-    val sharedPrefs = remember { 
-        context.getSharedPreferences("call_manager_prefs", ComponentActivity.MODE_PRIVATE) 
+
+    val sharedPrefs = remember {
+        context.getSharedPreferences("call_manager_prefs", ComponentActivity.MODE_PRIVATE)
     }
-    var autoStartEnabled by remember { 
-        mutableStateOf(sharedPrefs.getBoolean("auto_start_enabled", true)) 
+    var autoStartEnabled by remember {
+        mutableStateOf(sharedPrefs.getBoolean("auto_start_enabled", true))
     }
-    
+
     Scaffold(
-        topBar = { 
+        topBar = {
             TopAppBar(
                 title = { Text("설정") },
-                navigationIcon = { 
+                navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack, // 기본 아이콘 사용
-                            contentDescription = "뒤로가기" 
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "뒤로가기"
                         )
                     }
                 }
-            ) 
+            )
         }
-    ) { paddingValues -> 
+    ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -1057,10 +1032,9 @@ fun SettingsScreenPlaceholder(
                 text = "콜 매니저 설정",
                 style = MaterialTheme.typography.headlineSmall
             )
-            
+
             HorizontalDivider()
-            
-            // 콜 매니저 서비스 상태
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1074,31 +1048,28 @@ fun SettingsScreenPlaceholder(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                
+
                 Switch(
                     checked = isServiceEnabled,
                     onCheckedChange = { checked ->
                         isServiceEnabled = checked
                         val intent = Intent(context, CallManagerService::class.java)
-                        
+
                         if (checked) {
-                            // 서비스 시작
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                                 context.startForegroundService(intent)
                             } else {
                                 context.startService(intent)
                             }
                         } else {
-                            // 서비스 중지
                             context.stopService(intent)
                         }
                     }
                 )
             }
-            
+
             HorizontalDivider()
-            
-            // 자동 시작 설정
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1112,20 +1083,18 @@ fun SettingsScreenPlaceholder(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                
+
                 Switch(
                     checked = autoStartEnabled,
                     onCheckedChange = { checked ->
                         autoStartEnabled = checked
-                        // KTX 사용
                         sharedPrefs.edit { putBoolean("auto_start_enabled", checked) }
                     }
                 )
             }
-            
+
             HorizontalDivider()
-            
-            // 앱 정보
+
             Column(
                 modifier = Modifier.padding(vertical = 16.dp)
             ) {
@@ -1133,9 +1102,9 @@ fun SettingsScreenPlaceholder(
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("개발자: 대리운전 관리자", style = MaterialTheme.typography.bodyMedium)
             }
-            
+
             Spacer(modifier = Modifier.weight(1f))
-            
+
             Button(
                 onClick = onNavigateBack,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
@@ -1146,8 +1115,6 @@ fun SettingsScreenPlaceholder(
     }
 }
 
-
-// Preview for LoginScreen
 @Preview(showBackground = true, name = "Login Screen Preview")
 @Composable
 fun LoginPreview() {
@@ -1156,11 +1123,10 @@ fun LoginPreview() {
     }
 }
 
-// Preview for DashboardScreen
 @Preview(showBackground = true, name = "Dashboard Screen Preview")
 @Composable
 fun DashboardPreview() {
     CallManagerTheme {
-        Text("Dashboard Preview Disabled") // 주석 처리 대신 Placeholder 텍스트 표시 (선택 사항)
+        Text("Dashboard Preview Disabled")
     }
-} 
+}

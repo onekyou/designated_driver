@@ -30,7 +30,6 @@ fun DriverManagementScreen(
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    // regionId와 officeId가 유효할 때만 데이터 로딩
     LaunchedEffect(regionId, officeId) {
         if (regionId.isNotBlank() && officeId.isNotBlank()) {
             viewModel.fetchPendingDrivers(regionId, officeId)
@@ -77,7 +76,7 @@ fun DriverManagementScreen(
                                 viewModel.rejectDriver(regionId, officeId, driver.id)
                                 Toast.makeText(context, "${driver.name} 기사님을 거절했습니다.", Toast.LENGTH_SHORT).show()
                             },
-                            isLoading = isLoading // 전체 로딩 상태를 공유
+                            isLoading = isLoading
                         )
                     }
                 }
@@ -106,7 +105,6 @@ fun PendingDriverItem(
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(driver.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text("연락처: ${driver.phoneNumber}", style = MaterialTheme.typography.bodyMedium)
-                // createdAt 표시 (필요 시)
                 // val formattedDate = driver.createdAt?.toDate()?.let { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(it) } ?: "정보 없음"
                 // Text("요청일: $formattedDate", style = MaterialTheme.typography.bodySmall)
             }
@@ -127,4 +125,4 @@ fun PendingDriverItem(
             }
         }
     }
-} 
+}

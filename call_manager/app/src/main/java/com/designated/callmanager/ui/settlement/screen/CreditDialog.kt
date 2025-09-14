@@ -29,7 +29,7 @@ fun CreditDialog(
     val phoneFocusRequester = remember { FocusRequester() }
     val amountFocusRequester = remember { FocusRequester() }
     val memoFocusRequester = remember { FocusRequester() }
-    
+
     LaunchedEffect(Unit) {
         nameFocusRequester.requestFocus()
     }
@@ -107,4 +107,4 @@ fun CreditDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } }
     )
-} 
+}

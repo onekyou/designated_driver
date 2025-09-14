@@ -13,7 +13,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-// Define the dark color scheme using the design system colors
 private val DarkColorScheme = darkColorScheme(
     primary = Primary,
     secondary = Secondary,
@@ -33,21 +32,19 @@ private val DarkColorScheme = darkColorScheme(
 
 @Composable
 fun CallManagerTheme(
-    darkTheme: Boolean = true, // Force dark theme
+    darkTheme: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = DarkColorScheme // Always use the dark scheme
+    val colorScheme = DarkColorScheme
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.background.toArgb() // Match status bar with background
+            window.statusBarColor = colorScheme.background.toArgb()
 
-            // Apply API level check for setDecorFitsSystemWindows implicitly called by getInsetsController
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) { // Android 11 (API 30) check
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
             } else {
-                // Fallback for older APIs (optional, might have limitations)
                 @Suppress("DEPRECATION")
                 if (!darkTheme) {
                     var flags = window.decorView.systemUiVisibility
@@ -67,4 +64,4 @@ fun CallManagerTheme(
         typography = Typography,
         content = content
     )
-} 
+}

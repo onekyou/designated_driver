@@ -10,4 +10,4 @@ data class SessionInfo(
     val endAt: Timestamp? = null,
     val totalFare: Long = 0,
     val totalTrips: Int = 0
-) 
+)

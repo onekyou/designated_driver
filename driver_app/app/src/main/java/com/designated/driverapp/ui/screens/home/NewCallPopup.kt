@@ -36,7 +36,7 @@ fun NewCallPopup(
                     text = "새로운 호출이 들어왔습니다.",
                     style = MaterialTheme.typography.bodyLarge
                 )
-                
+
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Row(
@@ -53,4 +53,4 @@ fun NewCallPopup(
             }
         }
     }
-} 
+}

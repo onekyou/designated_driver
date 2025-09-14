@@ -1,6 +1,5 @@
 package com.designated.callmanager.ui.drivermanagement
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.designated.callmanager.data.Constants
@@ -30,7 +29,6 @@ class DriverManagementViewModel : ViewModel() {
                 val driversCollection =
                     db.collection("regions").document(regionId).collection("offices").document(officeId)
                         .collection("designated_drivers")
-                Log.d(TAG, "승인 대기 기사 목록 가져오는 중...")
                 val snapshot = driversCollection
                     .whereEqualTo("approvalStatus", Constants.APPROVAL_STATUS_PENDING) // "status" -> "approvalStatus"로 필드명 수정
                     .get()
@@ -40,10 +38,8 @@ class DriverManagementViewModel : ViewModel() {
                     doc.toObject(DriverInfo::class.java)?.copy(id = doc.id)
                 }
                 _pendingDrivers.value = drivers
-                Log.d(TAG, "승인 대기 기사 ${drivers.size}명 로드 완료")
 
             } catch (e: Exception) {
-                Log.e(TAG, "승인 대기 기사 목록 로드 실패", e)
                 // TODO: 에러 처리 UI 업데이트
             } finally {
                 _isLoading.value = false
@@ -59,10 +55,8 @@ class DriverManagementViewModel : ViewModel() {
                     .update("approvalStatus", Constants.APPROVAL_STATUS_APPROVED,
                         "status", Constants.DRIVER_STATUS_OFFLINE)
                     .await()
-                Log.d(TAG, "기사 승인 성공: $driverId")
-                fetchPendingDrivers(regionId, officeId) // 목록 새로고침
+                fetchPendingDrivers(regionId, officeId)
             } catch (e: Exception) {
-                Log.e(TAG, "기사 승인 실패", e)
             }
         }
     }
@@ -74,10 +68,8 @@ class DriverManagementViewModel : ViewModel() {
                     .collection("designated_drivers").document(driverId)
                     .update("approvalStatus", Constants.APPROVAL_STATUS_REJECTED)
                     .await()
-                Log.d(TAG, "기사 거절 성공: $driverId")
-                fetchPendingDrivers(regionId, officeId) // 목록 새로고침
+                fetchPendingDrivers(regionId, officeId)
             } catch (e: Exception) {
-                Log.e(TAG, "기사 거절 실패", e)
             }
         }
     }
