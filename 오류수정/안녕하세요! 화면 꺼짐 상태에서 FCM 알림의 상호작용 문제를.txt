@@ -1,0 +1,170 @@
+안녕하세요\! 화면 꺼짐 상태에서 FCM 알림의 상호작용 문제를 해결하기 위해 깊이 고민하고 여러 시도를 하신 점이 인상적입니다. 명확한 문제 분석과 질문 덕분에 더 정확한 답변을 드릴 수 있겠습니다.
+
+결론부터 말씀드리면, **현재 겪고 계신 문제는 하이브리드 메시지(`notification` + `data`)의 한계 때문이며, Data-only 메시지로 전환하여 앱에서 직접 알림을 생성하는 것이 가장 확실하고 올바른 해결책**입니다.
+
+아래에서 각 질문에 대해 상세히 답변해 드리겠습니다.
+
+-----
+
+### \#\# 🤔 질문 1: FCM 알림 표시 시간 제어
+
+> Firebase Cloud Functions에서 보내는 FCM 하이브리드 메시지의 Android 시스템 알림 표시 시간을 연장할 수 있는 방법이 있습니까?
+
+아니요, **불가능합니다.**
+
+FCM 페이로드에 `notification` 객체를 포함하면, 앱이 백그라운드(또는 종료) 상태일 때 해당 메시지 처리를 **Android 시스템의 Notification Tray가 담당**하게 됩니다. 이때 표시되는 헤드업(Heads-up) 알림의 표시 시간은 전적으로 Android OS가 사용자 경험을 위해 결정합니다. 개발자가 FCM 서버 페이로드를 통해 이 시간을 직접 제어할 수 있는 표준적인 방법은 없습니다.
+
+시도하셨던 `sticky`, `autoCancel`, `ongoing` 옵션에서 TypeScript 오류가 발생한 이유는 해당 필드들이 Firebase Admin SDK의 `admin.messaging.Notification` 타입에 존재하지 않기 때문입니다. 이 옵션들은 FCM 메시지 명세가 아닌, **Android 네이티브 알림을 생성할 때 `NotificationCompat.Builder`에서 사용하는 메서드**들입니다. 즉, 서버가 아닌 클라이언트(앱)에서 설정해야 하는 값입니다.
+
+-----
+
+### \#\# 🤔 질문 2: Android 알림 채널 설정
+
+> 앱의 NotificationChannel 설정을 통해 FCM에서 보낸 시스템 알림의 표시 시간이나 지속성을 제어할 수 있습니까?
+
+아니요, 알림 채널 설정만으로는 헤드업 알림의 **표시 시간(duration)을 직접 제어할 수 없습니다.**
+
+하지만 **지속성(persistence)과 동작 방식에 큰 영향을 미칩니다.** 현재 `IMPORTANCE_HIGH`로 설정하신 것은 헤드업 알림을 표시하기 위한 필수 조건이며 아주 잘 설정하셨습니다.
+
+  - **`setImportance(NotificationManager.IMPORTANCE_HIGH)` 또는 `IMPORTANCE_MAX`**: 이 설정은 알림이 헤드업 알림으로 표시될 *자격*을 부여합니다. 하지만 OS는 여전히 몇 초 후에 이 헤드업 알림을 화면에서 내릴 수 있습니다.
+  - **지속성 제어**: 알림이 스와이프로 사라지지 않게 하려면(지속성), 알림 채널이 아닌 개별 **알림 객체 자체를 `ongoing`으로 설정**해야 합니다. 이는 질문 1에서 언급된 것처럼 앱에서 직접 알림을 생성할 때만 가능합니다.
+
+-----
+
+### \#\# 🤔 질문 3: 대안적 접근 방법
+
+> 화면꺼짐 상태에서 FCM 알림을 더 오래 표시하거나, 클릭 가능성을 높이는 다른 방법이 있습니까?
+
+네, 매우 효과적인 방법들이 있으며 모두 **Data-only 메시지 사용을 전제로 합니다.**
+
+#### 🎯 해결책 1: 전체 화면 인텐트 (Full-Screen Intent) 사용 (가장 강력히 추천)
+
+'공유콜' 수신은 전화 수신과 같이 매우 중요하고 즉각적인 반응이 필요한 이벤트입니다. Android는 바로 이런 상황을 위해 \*\*전체 화면 인텐트(Full-Screen Intent)\*\*라는 강력한 기능을 제공합니다.
+
+  - **동작 방식**: 화면이 꺼져있거나 잠겨있을 때 알림이 도착하면, 지정된 Activity가 즉시 전체 화면으로 실행됩니다. 마치 전화가 올 때 수신 화면이 뜨는 것과 같습니다.
+  - **장점**:
+      - 사용자가 알림을 놓칠 확률이 거의 없습니다.
+      - 알림을 탭하는 중간 과정 없이 바로 배차 수락/거절 화면으로 진입시켜 UX를 극적으로 개선할 수 있습니다.
+  - **구현**: 앱에서 알림을 생성할 때 `setFullScreenIntent()`를 사용하여 `PendingIntent`를 설정합니다.
+
+<!-- end list -->
+
+```kotlin
+// MyFirebaseMessagingService.kt 에서
+val fullScreenIntent = Intent(this, YourCallActivity::class.java).apply {
+    // 필요한 데이터 추가
+    putExtra("sharedCallId", sharedCallId)
+}
+val fullScreenPendingIntent = PendingIntent.getActivity(this, 0, fullScreenIntent,
+    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+val notificationBuilder = NotificationCompat.Builder(this, "your_channel_id")
+    .setContentTitle("새로운 공유콜!")
+    .setContentText("$departure → $destination")
+    // ... 기타 설정 ...
+    .setPriority(NotificationCompat.PRIORITY_MAX)
+    .setCategory(NotificationCompat.CATEGORY_CALL) // 카테고리 지정
+    .setFullScreenIntent(fullScreenPendingIntent, true) // ⭐ 핵심
+```
+
+#### 해결책 2: 진행 중인 알림 (Ongoing Notification)으로 만들기
+
+사용자가 스와이프로 지울 수 없는 알림을 만들어 상단 바에 계속 유지시킬 수 있습니다.
+
+  - **동작 방식**: `setOngoing(true)`로 설정된 알림은 사용자가 직접 지울 수 없으며, 앱에서 코드로 직접 취소하거나 사용자가 알림을 탭하여 상호작용이 완료된 후에야 사라집니다.
+  - **장점**: 헤드업 알림이 사라지더라도 알림 센터(Notification Shade)에 계속 남아있어 클릭 기회를 보장합니다.
+  - **구현**: `NotificationCompat.Builder`에 `.setOngoing(true)`를 추가합니다.
+
+-----
+
+### \#\# 🤔 질문 4: FCM vs 커스텀 알림 (하이브리드 vs. Data-only)
+
+> 현재 구조를 포기하고 Data-only FCM + 앱에서 커스텀 알림 생성 방식으로 전환해야 합니까?
+
+**네, 반드시 전환하셔야 합니다.** 이것이 이번 문제의 근본적인 해결책입니다.
+
+#### 우려사항에 대한 답변: 화면꺼짐과 앱 프로세스
+
+> 화면꺼짐 상태에서 앱 프로세스가 실행되지 않을 가능성
+
+이 부분은 걱정하지 않으셔도 됩니다. `FirebaseMessagingService`는 안드로이드 `Service` 컴포넌트로 구현되어 있으며, **높은 우선순위(high priority)의 FCM Data 메시지를 수신하면 시스템이 앱의 프로세스를 깨워서 `onMessageReceived()`를 실행하도록 보장**합니다.
+
+특히 서버에서 `priority: "high"` (Android) 또는 `apns-priority: '10'` (APNs)를 설정하면, 기기가 도즈(Doze) 모드에 있더라도 시스템이 즉시 메시지를 앱에 전달합니다. 현재 FCM 메시지 구조에 `android: { priority: "high" }`가 이미 포함되어 있으므로, 이 조건은 충족된 상태입니다.
+
+### 🚀 최종 해결책 제안: 전체 구현 변경안
+
+1.  **Firebase Cloud Functions (서버 측)**
+
+      - FCM 메시지에서 최상위 `notification` 객체를 **제거**하세요. `data` 객체만 남겨 Data-only 메시지로 만듭니다.
+
+    <!-- end list -->
+
+    ```typescript
+    // AS-IS (Before)
+    const message: admin.messaging.MulticastMessage = {
+      notification: { /* ... */ }, // 👈 이 부분을 제거
+      data: { /* ... */ },
+      android: { /* ... */ }
+    };
+
+    // TO-BE (After) - Data-only Message
+    const message: admin.messaging.MulticastMessage = {
+      data: {
+        type: "NEW_SHARED_CALL",
+        sharedCallId: callId,
+        title: "🔄 새로운 공유콜!", // 알림 제목/내용도 data에 포함
+        body: `${departure} → ${destination}`,
+        // ... 기타 데이터
+      },
+      android: {
+        priority: "high", // 👈 시스템을 깨우기 위해 필수
+      }
+    };
+    ```
+
+2.  **Android App (`MyFirebaseMessagingService`)**
+
+      - `onMessageReceived` 메서드 안에서 **항상** 알림 생성 로직을 수행하도록 구현합니다. (이제 앱이 포그라운드/백그라운드일 때 모두 이 메서드가 호출됩니다.)
+      - 위에서 제안한 **Full-Screen Intent** 또는 **Ongoing Notification** 방식으로 커스텀 알림을 생성하여 `NotificationManager`로 표시합니다.
+
+    <!-- end list -->
+
+    ```kotlin
+    // MyFirebaseMessagingService.kt
+    override fun onMessageReceived(remoteMessage: RemoteMessage) {
+        super.onMessageReceived(remoteMessage)
+
+        val data = remoteMessage.data
+        val type = data["type"]
+
+        if (type == "NEW_SHARED_CALL") {
+            // 1. 데이터 추출
+            val title = data["title"] ?: "새로운 공유콜!"
+            val body = data["body"] ?: "자세한 내용을 확인하세요."
+            val sharedCallId = data["sharedCallId"]
+
+            // 2. Full-Screen Intent 또는 일반 PendingIntent 생성
+            // ... (질문 3의 코드 참고)
+
+            // 3. 커스텀 알림 생성 및 표시
+            showCustomNotification(title, body, pendingIntent)
+        }
+    }
+
+    private fun showCustomNotification(...) {
+        val notificationBuilder = NotificationCompat.Builder(this, "shared_call_fcm_channel_v3")
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setAutoCancel(true) // 클릭 시 알림 자동 제거
+            .setOngoing(true) // (선택) 스와이프로 못 지우게
+            // .setFullScreenIntent(fullScreenPendingIntent, true) // (강력 추천)
+            .setContentIntent(contentPendingIntent) // 알림 클릭 시 동작
+
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(System.currentTimeMillis().toInt(), notificationBuilder.build())
+    }
+    ```
+
+이처럼 구조를 변경하면 알림의 표시 방식, 지속성, 클릭 동작 등 모든 것을 앱에서 완벽하게 제어할 수 있게 되어 현재 겪고 계신 문제를 말끔하게 해결할 수 있습니다.

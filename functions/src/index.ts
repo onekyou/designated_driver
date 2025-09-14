@@ -215,9 +215,13 @@ export const onSharedCallCreated = onDocumentCreated(
         return;
       }
 
-      // FCM 알림 전송 (notification 필드 제거로 Android 자동 알림 방지)
+      // FCM 하이브리드 방식 (Notification + Data) - 화면 꺼짐 상태에서도 알림 표시
       const message: admin.messaging.MulticastMessage = {
-        // notification 필드 완전 제거 - Android에서 직접 처리
+        notification: {
+          title: "🔄 새로운 공유콜!",
+          body: `${sharedCallData.departure || "출발지"} → ${sharedCallData.destination || "도착지"}`,
+          // click_action은 deprecated, 대신 data.click_action 사용
+        },
         data: {
           type: "NEW_SHARED_CALL",
           sharedCallId: callId,
@@ -228,13 +232,19 @@ export const onSharedCallCreated = onDocumentCreated(
           phoneNumber: sharedCallData.phoneNumber || "",
           click_action: "ACTION_SHOW_SHARED_CALL",
           showPopup: "true", // 팝업 표시 플래그
-          // 알림 제목과 내용을 예약어가 아닌 키로 전송
-          customTitle: "🚨 새로운 공유콜이 도착했습니다! 🚨",
+          // 알림 제목과 내용을 예약어가 아닌 키로 전송 (호환성 유지)
+          customTitle: "🔄 새로운 공유콜!",
           customMessage: `${sharedCallData.departure || "출발지"} → ${sharedCallData.destination || "도착지"}\n요금: ${sharedCallData.fare || 0}원\n📞 ${sharedCallData.phoneNumber || "전화번호"}`,
         },
         android: {
           priority: "high",
-          // notification 필드 완전 제거 - Android가 자동 알림 생성하지 않도록
+          notification: {
+            channelId: "shared_call_fcm_channel_v3",
+            priority: "max",
+            defaultSound: true,
+            defaultVibrateTimings: true,
+            clickAction: "ACTION_SHOW_SHARED_CALL",
+          }
         },
         tokens,
       };

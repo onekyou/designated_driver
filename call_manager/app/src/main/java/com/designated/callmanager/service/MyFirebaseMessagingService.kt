@@ -123,7 +123,19 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             }
             "NEW_SHARED_CALL" -> {
                 Log.d(TAG, "🔔 [DEBUG] NEW_SHARED_CALL 처리 시작")
-                handleNewSharedCall(remoteMessage, callId)
+
+                val isScreenOffState = isScreenOff()
+                Log.d(TAG, "🔔 [HYBRID] 화면 상태 - 화면 꺼짐: $isScreenOffState")
+
+                if (isScreenOffState) {
+                    Log.d(TAG, "🔔 [HYBRID] 화면 꺼짐 상태 - 시스템 notification 의존 (커스텀 처리 생략)")
+                    // 화면 꺼짐 상태에서는 서버의 notification 필드를 통한 시스템 알림에만 의존
+                    // 추가 커스텀 알림 처리하지 않음
+                } else {
+                    Log.d(TAG, "🔔 [HYBRID] 화면 켜진 상태 (포그라운드/백그라운드) - 기존 커스텀 처리")
+                    handleNewSharedCall(remoteMessage, callId)
+                }
+
                 Log.d(TAG, "🔔 [DEBUG] NEW_SHARED_CALL 처리 완료")
             }
             "STATUS_CHANGE" -> {
@@ -698,5 +710,15 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             }
         }
         return false
+    }
+
+    private fun isScreenOff(): Boolean {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
+            !powerManager.isInteractive
+        } else {
+            @Suppress("DEPRECATION")
+            !powerManager.isScreenOn
+        }
     }
 }

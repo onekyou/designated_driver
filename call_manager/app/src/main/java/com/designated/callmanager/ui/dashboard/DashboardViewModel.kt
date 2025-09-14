@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -141,6 +142,10 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     val showNewSharedCallPopup: StateFlow<Boolean> = _showNewSharedCallPopup
     private val _newSharedCallInfo = MutableStateFlow<com.designated.callmanager.data.SharedCallInfo?>(null)
     val newSharedCallInfo: StateFlow<com.designated.callmanager.data.SharedCallInfo?> = _newSharedCallInfo
+
+    // FCM 알림 클릭으로 인한 팝업인지 구분하는 플래그
+    private val _isFromFcmNotification = MutableStateFlow(false)
+    val isFromFcmNotification: StateFlow<Boolean> = _isFromFcmNotification
 
     private var callsListener: ListenerRegistration? = null
     private var driversListener: ListenerRegistration? = null
@@ -671,6 +676,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun dismissNewSharedCallPopup() {
         _showNewSharedCallPopup.value = false
         _newSharedCallInfo.value = null
+        _isFromFcmNotification.value = false // FCM 플래그 리셋
     }
 
     fun assignNewCall(driverId: String) {
@@ -988,23 +994,41 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun showSharedCallNotificationFromId(sharedCallId: String) {
+        Log.d("DashboardViewModel", "🔍 [FCM_DEBUG] showSharedCallNotificationFromId() 시작 - sharedCallId: $sharedCallId")
         viewModelScope.launch {
             try {
+                Log.d("DashboardViewModel", "🔍 [FCM_DEBUG] Firestore에서 shared_calls 조회 시작")
                 val sharedCallDoc = firestore.collection("shared_calls").document(sharedCallId).get().await()
+                Log.d("DashboardViewModel", "🔍 [FCM_DEBUG] 문서 존재 여부: ${sharedCallDoc.exists()}")
 
                 if (sharedCallDoc.exists()) {
                     val sharedCallData = sharedCallDoc.toObject(com.designated.callmanager.data.SharedCallInfo::class.java)
                         ?.copy(id = sharedCallDoc.id)
+                    Log.d("DashboardViewModel", "🔍 [FCM_DEBUG] 파싱된 sharedCallData: $sharedCallData")
 
                     if (sharedCallData != null) {
+                        Log.d("DashboardViewModel", "🔍 [FCM_DEBUG] 팝업 표시 시작 - _showNewSharedCallPopup.value = true")
 
-                        _showNewSharedCallPopup.value = true
+                        // FCM 알림으로부터 온 팝업임을 표시
+                        _isFromFcmNotification.value = true
+
+                        // UI 강제 업데이트를 위해 먼저 false로 설정
+                        _showNewSharedCallPopup.value = false
                         _newSharedCallInfo.value = sharedCallData
+
+                        // 짧은 지연 후 true로 설정하여 UI 갱신 보장
+                        kotlinx.coroutines.delay(50)
+                        _showNewSharedCallPopup.value = true
+
+                        Log.d("DashboardViewModel", "🔍 [FCM_DEBUG] 팝업 데이터 설정 완료 - FCM 플래그: ${_isFromFcmNotification.value}, showNewSharedCallPopup: ${_showNewSharedCallPopup.value}")
                     } else {
+                        Log.d("DashboardViewModel", "🔍 [FCM_DEBUG] sharedCallData가 null - 팝업 표시 불가")
                     }
                 } else {
+                    Log.d("DashboardViewModel", "🔍 [FCM_DEBUG] 문서가 존재하지 않음 - sharedCallId: $sharedCallId")
                 }
             } catch (e: Exception) {
+                Log.d("DashboardViewModel", "🔍 [FCM_DEBUG] 예외 발생: ${e.message}")
             }
         }
     }
