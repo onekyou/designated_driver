@@ -173,7 +173,15 @@
         <activity
         android:name=".ui.popup.RequestOverlayPermissionActivity"
         android:exported="false" />
-        
+
+        <!-- 공유콜 중간팝업 Activity -->
+        <activity
+            android:name=".ui.SharedCallAcceptActivity"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.CallManager" />
+
 </application>
 
 </manifest> 
