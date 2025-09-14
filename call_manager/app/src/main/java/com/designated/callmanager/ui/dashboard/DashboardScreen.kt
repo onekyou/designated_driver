@@ -39,6 +39,7 @@ import com.designated.callmanager.data.CallInfo
 import com.designated.callmanager.data.CallStatus
 import com.designated.callmanager.data.DriverInfo
 import com.designated.callmanager.data.DriverStatus
+import com.designated.callmanager.service.CallManagerService
 import com.designated.callmanager.data.SharedCallInfo
 import com.designated.callmanager.ui.dashboard.DashboardViewModel.Companion.formatTimeAgo
 import androidx.compose.material3.OutlinedTextField
@@ -198,7 +199,9 @@ fun DashboardScreen(
     }
 
     LaunchedEffect(Unit) {
-        viewModel.startForegroundService(context)
+        if (!CallManagerService.isServiceRunning) {
+            viewModel.startForegroundService(context)
+        }
     }
 
     LaunchedEffect(approvalActionState) {

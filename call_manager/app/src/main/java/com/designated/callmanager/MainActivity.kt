@@ -80,6 +80,7 @@ import com.designated.callmanager.ui.settlement.SettlementTabHost
 import com.designated.callmanager.ui.excludenumber.ExcludeNumberScreen
 import com.designated.callmanager.ui.signup.SignUpScreen
 import com.designated.callmanager.ui.theme.CallManagerTheme
+import com.designated.callmanager.util.CallManagerPermissionManager
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
@@ -116,19 +117,23 @@ class MainActivity : ComponentActivity() {
     private val dashboardViewModel: DashboardViewModel by viewModels {
         androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory(application)
     }
-    private var isRequestingPermissions = java.util.concurrent.atomic.AtomicBoolean(false)
 
     private var regionId: String? = null
     private var officeId: String? = null
     private var managerId: String? = null
 
-    private val requestPermissionLauncher = registerForActivityResult(
+    private lateinit var permissionManager: CallManagerPermissionManager
+
+    private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        val allGranted = permissions.all { it.value }
-        if (!allGranted) {
-            Toast.makeText(this, "일부 기능을 사용하려면 권한이 필요합니다.", Toast.LENGTH_LONG).show()
-        }
+        permissionManager.onPermissionResult(permissions)
+    }
+
+    private val overlayPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        permissionManager.onOverlayPermissionResult()
     }
 
     private val _screenState = mutableStateOf(Screen.Login)
@@ -187,53 +192,25 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_SHARED_CALL_ID = "sharedCallId"
     }
 
-    private val requestPermissionsLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        isRequestingPermissions.set(false)
-        val allGranted = permissions.entries.all { it.value }
-
-        if (allGranted) {
-            checkAndRequestPermissions()
-        } else {
-            val deniedPermissions = permissions.filter { !it.value }.keys
-            Toast.makeText(
-                this,
-                "앱 기능 사용에 필요한 권한이 거부되었습니다.",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-    }
-
-    private val overlayPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) {
-        isRequestingPermissions.set(false)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val hasPermission = Settings.canDrawOverlays(this)
-
-            getSharedPreferences("call_manager_prefs", MODE_PRIVATE).edit {
-                putBoolean("overlay_permission_requested", true)
-            }
-
-            if (hasPermission) {
-                Toast.makeText(this, "백그라운드 콜 표시 활성화됨", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, "백그라운드 콜 표시 비활성화됨", Toast.LENGTH_LONG).show()
-            }
-
-            checkAndRequestPermissions()
-        }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         auth = Firebase.auth
 
+        // 권한 매니저 초기화
+        permissionManager = CallManagerPermissionManager(
+            activity = this,
+            onAllPermissionsGranted = {
+                startCallManagerServiceIfNeeded()
+            },
+            onPermissionsDenied = { deniedPermissions ->
+                Toast.makeText(this, "일부 권한이 거부되어 기능이 제한될 수 있습니다.", Toast.LENGTH_LONG).show()
+            }
+        )
+        permissionManager.initialize(permissionLauncher, overlayPermissionLauncher)
+
         // FCM 서비스 초기화를 위한 토큰 요청
         initializeFirebaseMessaging()
-
-        checkAndRequestBatteryOptimizationOnce()
 
         val internalFilter = IntentFilter("com.designated.callmanager.INTERNAL_SHOW_CALL_DIALOG")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -283,7 +260,6 @@ class MainActivity : ComponentActivity() {
                             val user = firebaseAuth.currentUser
                             if (user == null) {
                                 stopCallManagerService()
-                                isRequestingPermissions.set(false)
                                 screenState = Screen.Login
                             }
                         }
@@ -334,7 +310,10 @@ class MainActivity : ComponentActivity() {
                         Screen.PasswordReset -> { /* TODO: Implement Password Reset Screen */ }
                         Screen.Dashboard -> {
                             LaunchedEffect(Unit) {
-                                checkAndRequestPermissions()
+                                // 필요한 권한이 없을 때만 요청
+                                if (!permissionManager.areAllRequiredPermissionsGranted()) {
+                                    permissionManager.requestAllPermissions()
+                                }
                             }
                             DashboardScreen(
                                 viewModel = dashboardViewModel,
@@ -426,11 +405,15 @@ class MainActivity : ComponentActivity() {
             ACTION_SHOW_CALL_POPUP -> {
                 val callId = intent.getStringExtra(EXTRA_CALL_ID)
                 if (callId != null) {
-                    lifecycleScope.launch {
-                        if (_screenState.value == Screen.Dashboard) {
-                            dashboardViewModel.showCallDialog(callId)
-                        } else {
-                            _pendingCallDialogId.value = callId
+                    val popupId = "CALL_${callId}"
+                    if (!isPopupAlreadyShown(popupId)) {
+                        lifecycleScope.launch {
+                            markPopupAsShown(popupId)
+                            if (_screenState.value == Screen.Dashboard) {
+                                dashboardViewModel.showCallDialog(callId)
+                            } else {
+                                _pendingCallDialogId.value = callId
+                            }
                         }
                     }
                 } else {
@@ -483,18 +466,21 @@ class MainActivity : ComponentActivity() {
             }
 
             ACTION_SHOW_TRIP_STARTED_POPUP -> {
-
                 val callId = intent.getStringExtra(EXTRA_CALL_ID)
                 val driverName = intent.getStringExtra("driverName") ?: "기사"
                 val driverPhone = intent.getStringExtra("driverPhone") ?: ""
                 val customerName = intent.getStringExtra("customerName") ?: "고객"
                 val tripSummary = intent.getStringExtra("tripSummary") ?: ""
 
-                lifecycleScope.launch {
-                    if (_screenState.value != Screen.Dashboard) {
-                        _screenState.value = Screen.Dashboard
+                val popupId = "TRIP_STARTED_${callId}"
+                if (!isPopupAlreadyShown(popupId)) {
+                    lifecycleScope.launch {
+                        markPopupAsShown(popupId)
+                        if (_screenState.value != Screen.Dashboard) {
+                            _screenState.value = Screen.Dashboard
+                        }
+                        dashboardViewModel.showTripStartedPopup(driverName, driverPhone, tripSummary, customerName)
                     }
-                    dashboardViewModel.showTripStartedPopup(driverName, driverPhone, tripSummary, customerName)
                 }
             }
 
@@ -503,11 +489,15 @@ class MainActivity : ComponentActivity() {
                 val driverName = intent.getStringExtra("driverName") ?: "기사"
                 val customerName = intent.getStringExtra("customerName") ?: "고객"
 
-                lifecycleScope.launch {
-                    if (_screenState.value != Screen.Dashboard) {
-                        _screenState.value = Screen.Dashboard
+                val popupId = "TRIP_COMPLETED_${callId}"
+                if (!isPopupAlreadyShown(popupId)) {
+                    lifecycleScope.launch {
+                        markPopupAsShown(popupId)
+                        if (_screenState.value != Screen.Dashboard) {
+                            _screenState.value = Screen.Dashboard
+                        }
+                        dashboardViewModel.showTripCompletedPopup(driverName, customerName)
                     }
-                    dashboardViewModel.showTripCompletedPopup(driverName, customerName)
                 }
             }
 
@@ -581,6 +571,37 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun isPopupAlreadyShown(popupId: String): Boolean {
+        val prefs = getSharedPreferences("shown_popups", Context.MODE_PRIVATE)
+        return prefs.getBoolean(popupId, false)
+    }
+
+    private fun markPopupAsShown(popupId: String) {
+        val prefs = getSharedPreferences("shown_popups", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(popupId, true).apply()
+
+        // 주기적으로 오래된 팝업 기록 정리 (100개 이상 시)
+        if (prefs.all.size > 100) {
+            clearOldPopupRecords()
+        }
+    }
+
+    private fun clearOldPopupRecords() {
+        val prefs = getSharedPreferences("shown_popups", Context.MODE_PRIVATE)
+        val editor = prefs.edit()
+
+        // 24시간 이상 된 CALL_ 팝업만 정리 (운행 관련은 유지)
+        val oneDayAgo = System.currentTimeMillis() - (24 * 60 * 60 * 1000)
+        val keysToRemove = prefs.all.keys.filter { key ->
+            key.startsWith("CALL_")
+        }.take(50) // 최대 50개만 삭제
+
+        keysToRemove.forEach { key ->
+            editor.remove(key)
+        }
+        editor.apply()
+    }
+
     private fun checkAndShowPendingPopup() {
         val prefs = getSharedPreferences("pending_popups", Context.MODE_PRIVATE)
         val popupType = prefs.getString("popup_type", null)
@@ -593,14 +614,22 @@ class MainActivity : ComponentActivity() {
             val customerName = prefs.getString("popup_customer_name", "고객") ?: "고객"
             val timestamp = prefs.getLong("popup_timestamp", 0)
 
+            val popupId = "${popupType}_${callId}"
+
+            if (isPopupAlreadyShown(popupId)) {
+                prefs.edit().clear().apply()
+                return
+            }
+
             val tenMinutesAgo = System.currentTimeMillis() - (10 * 60 * 1000)
 
             if (timestamp > tenMinutesAgo) {
-
                 lifecycleScope.launch {
                     if (_screenState.value != Screen.Dashboard) {
                         _screenState.value = Screen.Dashboard
                     }
+
+                    markPopupAsShown(popupId)
 
                     when (popupType) {
                         "TRIP_STARTED" -> {
@@ -659,63 +688,6 @@ class MainActivity : ComponentActivity() {
         stopService(serviceIntent)
     }
 
-    private fun checkAndRequestPermissions() {
-        if (!isRequestingPermissions.compareAndSet(false, true)) {
-            return
-        }
-
-        val requiredPermissions = mutableListOf<String>()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                requiredPermissions.add(Manifest.permission.POST_NOTIFICATIONS)
-            }
-        }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            requiredPermissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-             requiredPermissions.add(Manifest.permission.ACCESS_COARSE_LOCATION)
-        }
-
-        val prefs = getSharedPreferences("call_manager_prefs", Context.MODE_PRIVATE)
-        if (prefs.getBoolean("call_detection_enabled", false)) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
-                requiredPermissions.add(Manifest.permission.READ_PHONE_STATE)
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_NUMBERS) != PackageManager.PERMISSION_GRANTED) {
-                    requiredPermissions.add(Manifest.permission.READ_PHONE_NUMBERS)
-                }
-            }
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
-                requiredPermissions.add(Manifest.permission.READ_CALL_LOG)
-            }
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
-                requiredPermissions.add(Manifest.permission.READ_CONTACTS)
-            }
-            if (ContextCompat.checkSelfPermission(this, "android.permission.PROCESS_OUTGOING_CALLS") != PackageManager.PERMISSION_GRANTED) {
-                requiredPermissions.add("android.permission.PROCESS_OUTGOING_CALLS")
-            }
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
-                requiredPermissions.add(Manifest.permission.SEND_SMS)
-            }
-        }
-
-        if (requiredPermissions.isNotEmpty()) {
-            requestPermissionsLauncher.launch(requiredPermissions.toTypedArray())
-            return
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-
-            showOverlayPermissionDialog()
-            return
-        }
-
-        startCallManagerServiceIfNeeded()
-
-        isRequestingPermissions.set(false)
-    }
 
     /**
      * Firebase Messaging 서비스 초기화 및 자동 토큰 복구
@@ -803,34 +775,22 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun showOverlayPermissionDialog() {
-        AlertDialog.Builder(this)
-            .setTitle("필수 권한 안내")
-            .setMessage("앱의 정상적인 사용을 위해 '다른 앱 위에 표시' 권한이 반드시 필요합니다. 설정 화면으로 이동하여 권한을 허용해주세요.")
-            .setPositiveButton("설정으로 이동") { _, _ ->
-                val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
-                overlayPermissionLauncher.launch(intent)
-            }
-            .setNegativeButton("나중에") { dialog, _ ->
-                Toast.makeText(this, "권한이 없어 일부 기능이 제한됩니다.", Toast.LENGTH_LONG).show()
-                isRequestingPermissions.set(false)
-                dialog.dismiss()
-            }
-            .setCancelable(false)
-            .show()
-    }
 
     private fun startCallManagerServiceIfNeeded() {
         val hasLocationPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
-        if (hasLocationPermission) {
-            val serviceIntent = Intent(this, CallManagerService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(serviceIntent)
-            } else {
-                startService(serviceIntent)
+        if (hasLocationPermission && !CallManagerService.isServiceRunning) {
+            try {
+                val serviceIntent = Intent(this, CallManagerService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(serviceIntent)
+                } else {
+                    startService(serviceIntent)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "Service start failed", e)
             }
-        } else {
+        } else if (!hasLocationPermission) {
              Toast.makeText(this, "위치 권한이 없어 콜 서비스를 시작할 수 없습니다.", Toast.LENGTH_LONG).show()
              val serviceIntent = Intent(this, CallManagerService::class.java)
              stopService(serviceIntent)
@@ -870,46 +830,6 @@ class MainActivity : ComponentActivity() {
         stopService(serviceIntent)
     }
 
-    private fun checkAndRequestBatteryOptimizationOnce() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val packageName = packageName
-            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-            val prefs = getSharedPreferences("call_manager_prefs", MODE_PRIVATE)
-            val hasRequestedBefore = prefs.getBoolean("battery_optimization_requested", false)
-
-            if (!powerManager.isIgnoringBatteryOptimizations(packageName) && !hasRequestedBefore) {
-
-                AlertDialog.Builder(this)
-                    .setTitle("백그라운드 작업 허용")
-                    .setMessage("콜 매니저가 백그라운드에서 정상 작동하려면 배터리 최적화에서 제외해야 합니다.\n\n기사 운행 시작/완료 알림을 받으려면 설정에서 이 앱을 '최적화하지 않음'으로 설정해 주세요.")
-                    .setPositiveButton("설정으로 이동") { _, _ ->
-                        prefs.edit {
-                            putBoolean("battery_optimization_requested", true)
-                        }
-
-                        try {
-                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-                            intent.data = Uri.parse("package:$packageName")
-                            startActivity(intent)
-                        } catch (_: Exception) {
-                            try {
-                                val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                                startActivity(intent)
-                            } catch (_: Exception) {
-                            }
-                        }
-                    }
-                    .setNegativeButton("나중에") { _, _ ->
-                        prefs.edit {
-                            putBoolean("battery_optimization_requested", true)
-                        }
-                    }
-                    .show()
-            } else if (powerManager.isIgnoringBatteryOptimizations(packageName)) {
-            } else {
-            }
-        }
-    }
 
     /**
      * 앱 시작 시 기존 로그인 사용자의 콜 디텍터 설정 자동 동기화
@@ -938,7 +858,8 @@ class MainActivity : ComponentActivity() {
                                 this@MainActivity.officeId = officeId
                                 this@MainActivity.managerId = adminId
 
-                                dashboardViewModel.loadDataForUser(regionId, officeId)
+                                // DashboardViewModel이 이미 init에서 리스너를 시작하므로 loadDataForUser 호출 불필요
+                                // 콜 디텍터 설정만 동기화
                                 dashboardViewModel.syncCallDetectorSettings(regionId, officeId)
 
                             } else {

@@ -1,9 +1,12 @@
 package com.designated.callmanager.ui.dashboard
 
+import android.Manifest
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.designated.callmanager.CallManagerApplication
@@ -176,6 +179,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun startListening(regionId: String, officeId: String) {
+        // 이미 같은 office를 리스닝 중이면 중복 시작하지 않음
+        if (_regionId.value == regionId && _officeId.value == officeId && callsListener != null) {
+            return
+        }
+
         stopListening()
         val officeRef = firestore.collection("regions").document(regionId)
             .collection("offices").document(officeId)
@@ -255,7 +263,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                                 _showTripStartedPopup.value = true
                             }
                             if (callInfo.status == CallStatus.COMPLETED.firestoreValue && previousStatusMap[doc.id] != CallStatus.COMPLETED.firestoreValue) {
-                                if (lastCompletedCallId != doc.id) {
+                                // SharedPreferences로 이미 표시한 완료 팝업 체크
+                                val prefs = appContext.getSharedPreferences("shown_popups", Context.MODE_PRIVATE)
+                                val popupId = "TRIP_COMPLETED_${doc.id}"
+
+                                if (!prefs.getBoolean(popupId, false)) {
                                     val driverName = if (callInfo.callType == "SHARED") {
                                         "공유 기사님"
                                     } else {
@@ -264,6 +276,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                                     val customerName: String = callInfo.customerName?.takeIf { it.isNotBlank() } ?: "고객"
                                     _tripCompletedInfo.value = Pair(driverName, customerName)
                                     _showTripCompletedPopup.value = true
+
+                                    // 표시한 팝업으로 마킹
+                                    prefs.edit().putBoolean(popupId, true).apply()
                                     lastCompletedCallId = doc.id
                                 }
                             }
@@ -765,6 +780,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun loadDataForUser(regionId: String, officeId: String) {
+        // 이미 같은 region/office를 로드 중이면 중복 실행하지 않음
+        if (_regionId.value == regionId && _officeId.value == officeId && callsListener != null) {
+            return
+        }
+
         stopListening()
         callsCache.clear()
         driverCache.clear()
@@ -1035,6 +1055,14 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
         if (isCallDetectionEnabled) {
             if (com.designated.callmanager.service.CallDetectorService.isServiceRunning()) {
+                return
+            }
+
+            // 권한 확인
+            val hasReadCallLog = ContextCompat.checkSelfPermission(appContext, Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED
+            val hasReadPhoneState = ContextCompat.checkSelfPermission(appContext, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
+
+            if (!hasReadCallLog || !hasReadPhoneState) {
                 return
             }
 

@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(adb:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(./gradlew:*)",
+      "Bash(taskkill:*)",
+      "Bash(del \"C:\\app_dev\\designated_driver\\call_manager\\app\\src\\main\\java\\com\\designated\\callmanager\\util\\PermissionManager.kt\")",
+      "Bash(dir)",
+      "Bash(git rm:*)"
     ],
     "deny": [],
     "ask": [],
