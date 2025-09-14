@@ -8,6 +8,7 @@ import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.util.Log
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -138,6 +139,7 @@ fun DashboardScreen(
     val newCallInfo by viewModel.newCallInfo.collectAsStateWithLifecycle()
     val showNewSharedCallPopup by viewModel.showNewSharedCallPopup.collectAsStateWithLifecycle()
     val newSharedCallInfo by viewModel.newSharedCallInfo.collectAsStateWithLifecycle()
+    val isFromFcmNotification by viewModel.isFromFcmNotification.collectAsStateWithLifecycle()
 
     val showSharedCallCancelledDialog by viewModel.showSharedCallCancelledDialog.collectAsStateWithLifecycle()
     val sharedCancelledCallInfo by viewModel.cancelledCallInfo.collectAsStateWithLifecycle()
@@ -165,7 +167,8 @@ fun DashboardScreen(
                         if (showNewCallPopup) {
                             viewModel.dismissNewCallPopup()
                         }
-                        if (showNewSharedCallPopup) {
+                        // FCM 알림으로 인한 팝업은 자동으로 닫지 않음
+                        if (showNewSharedCallPopup && !isFromFcmNotification) {
                             viewModel.dismissNewSharedCallPopup()
                         }
                         if (showTripStartedPopup) {
@@ -488,11 +491,13 @@ fun DashboardScreen(
     }
 
     if (showNewSharedCallPopup && newSharedCallInfo != null) {
+        Log.d("DashboardScreen", "🔍 [FCM_DEBUG] 팝업 조건 만족 - SharedCallAcceptDialog 표시 시작")
         val call = newSharedCallInfo!!
         val waitingDrivers = drivers.filter { driver ->
             val statusEnum = DriverStatus.fromString(driver.status?.trim() ?: "")
             statusEnum == DriverStatus.WAITING || statusEnum == DriverStatus.ONLINE
         }
+        Log.d("DashboardScreen", "🔍 [FCM_DEBUG] 전체 드라이버 수: ${drivers.size}, 대기 중 드라이버 수: ${waitingDrivers.size}")
         SharedCallAcceptDialog(
             sharedCall = call,
             availableDrivers = waitingDrivers,
@@ -1462,6 +1467,7 @@ fun SharedCallAcceptDialog(
     onDismiss: () -> Unit,
     onConfirm: (departure: String, destination: String, fare: Int, driver: DriverInfo?) -> Unit
 ) {
+    Log.d("SharedCallAcceptDialog", "🔍 [FCM_DEBUG] SharedCallAcceptDialog 컴포넌트 진입 - sharedCall: ${sharedCall.id}, drivers: ${availableDrivers.size}개")
     var departure by remember { mutableStateOf(sharedCall.departure ?: "") }
     var destination by remember { mutableStateOf(sharedCall.destination ?: "") }
     var fareText by remember { mutableStateOf((sharedCall.fare ?: 0).toString()) }
@@ -1475,9 +1481,16 @@ fun SharedCallAcceptDialog(
         departureFocusRequester.requestFocus()
     }
 
+    Log.d("SharedCallAcceptDialog", "🔍 [FCM_DEBUG] AlertDialog 렌더링 시작")
     AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("공유 콜 수락", fontWeight = FontWeight.Bold) },
+        onDismissRequest = {
+            Log.d("SharedCallAcceptDialog", "🔍 [FCM_DEBUG] AlertDialog onDismissRequest 호출")
+            onDismiss()
+        },
+        title = {
+            Log.d("SharedCallAcceptDialog", "🔍 [FCM_DEBUG] AlertDialog Title 렌더링")
+            Text("공유 콜 수락", fontWeight = FontWeight.Bold)
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(

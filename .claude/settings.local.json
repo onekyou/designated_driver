@@ -7,7 +7,11 @@
       "Bash(taskkill:*)",
       "Bash(del \"C:\\app_dev\\designated_driver\\call_manager\\app\\src\\main\\java\\com\\designated\\callmanager\\util\\PermissionManager.kt\")",
       "Bash(dir)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(git commit:*)",
+      "Bash(npm run build:*)",
+      "Bash(firebase deploy:*)",
+      "Bash(firebase functions:list:*)"
     ],
     "deny": [],
     "ask": [],

@@ -7,6 +7,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.util.Log
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -386,6 +387,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
+        // FCM 알림 클릭 디버깅 로그
+        Log.d("MainActivity", "🔍 [FCM_DEBUG] handleIntent() 시작")
+        Log.d("MainActivity", "🔍 [FCM_DEBUG] Intent action: ${intent?.action}")
+        Log.d("MainActivity", "🔍 [FCM_DEBUG] Intent extras: ${intent?.extras}")
+        intent?.extras?.keySet()?.forEach { key ->
+            Log.d("MainActivity", "🔍 [FCM_DEBUG] Extra - $key: ${intent.extras?.get(key)}")
+        }
 
         if (intent?.action == Intent.ACTION_MAIN || intent?.action == null) {
             val sharedCallId = intent?.extras?.getString("sharedCallId")
@@ -420,11 +428,14 @@ class MainActivity : ComponentActivity() {
                 }
             }
             ACTION_SHOW_SHARED_CALL -> {
+                Log.d("MainActivity", "🔍 [FCM_DEBUG] ACTION_SHOW_SHARED_CALL 케이스 진입")
 
                 val sharedCallId = intent.getStringExtra(EXTRA_SHARED_CALL_ID)
                     ?: intent.getStringExtra("sharedCallId")
                     ?: intent.extras?.getString(EXTRA_SHARED_CALL_ID)
                     ?: intent.extras?.getString("sharedCallId")
+
+                Log.d("MainActivity", "🔍 [FCM_DEBUG] sharedCallId: $sharedCallId")
 
                 if (sharedCallId != null) {
                     val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -442,14 +453,22 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
+                    Log.d("MainActivity", "🔍 [FCM_DEBUG] sharedCallId 있음 - 배차팝업 표시 시작")
                     lifecycleScope.launch {
                         if (_screenState.value != Screen.Dashboard) {
                             _screenState.value = Screen.Dashboard
-                            kotlinx.coroutines.delay(300)
+                            Log.d("MainActivity", "🔍 [FCM_DEBUG] Dashboard로 화면 전환 - 800ms 대기")
+                            kotlinx.coroutines.delay(800) // 더 긴 대기 시간
+                        } else {
+                            Log.d("MainActivity", "🔍 [FCM_DEBUG] 이미 Dashboard 화면 - 200ms 대기")
+                            kotlinx.coroutines.delay(200) // 짧은 대기
                         }
+                        Log.d("MainActivity", "🔍 [FCM_DEBUG] ViewModel 호출 시작")
                         dashboardViewModel.showSharedCallNotificationFromId(sharedCallId)
+                        Log.d("MainActivity", "🔍 [FCM_DEBUG] ViewModel 호출 완료")
                     }
                 } else {
+                    Log.d("MainActivity", "🔍 [FCM_DEBUG] sharedCallId 없음 - 처리 불가")
                 }
             }
             ACTION_SHOW_SHARED_CALL_CANCELLED -> {
