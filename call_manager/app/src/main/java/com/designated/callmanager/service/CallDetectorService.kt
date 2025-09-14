@@ -42,7 +42,7 @@ class CallDetectorService : Service() {
     private val NOTIFICATION_ID = 1
     private val CALL_MANAGER_CHANNEL_ID = "CallManagerActivationChannel"
     private val CALL_MANAGER_NOTIFICATION_ID = 2
-    private lateinit var callLogObserver: CallLogObserver
+    private var callLogObserver: CallLogObserver? = null
     private val db = FirebaseFirestore.getInstance()
     private lateinit var sharedPreferences: SharedPreferences
     private val serviceScope = CoroutineScope(Dispatchers.IO)
@@ -59,25 +59,30 @@ class CallDetectorService : Service() {
     override fun onCreate() {
         super.onCreate()
 
-        val hasReadCallLog = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED
-        val hasReadPhoneState = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
-
-        if (!hasReadCallLog || !hasReadPhoneState) {
-            stopSelf()
-            return
-        }
-
+        // 먼저 Foreground 서비스로 시작 (5초 타임아웃 방지)
         serviceStartTime = System.currentTimeMillis()
         sharedPreferences = getSharedPreferences("call_manager_prefs", Context.MODE_PRIVATE)
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
 
+        // 권한 확인
+        val hasReadCallLog = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED
+        val hasReadPhoneState = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
+
+        if (!hasReadCallLog || !hasReadPhoneState) {
+            // 권한이 없으면 서비스를 종료하되, startForeground는 이미 호출했으므로 타임아웃 방지
+            stopSelf()
+            return
+        }
+
         callLogObserver = CallLogObserver(Handler(mainLooper))
-        contentResolver.registerContentObserver(
-            CallLog.Calls.CONTENT_URI,
-            true,
-            callLogObserver
-        )
+        callLogObserver?.let { observer ->
+            contentResolver.registerContentObserver(
+                CallLog.Calls.CONTENT_URI,
+                true,
+                observer
+            )
+        }
 
         isRunning = true
     }
@@ -769,7 +774,13 @@ class CallDetectorService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        contentResolver.unregisterContentObserver(callLogObserver)
+        try {
+            callLogObserver?.let { observer ->
+                contentResolver.unregisterContentObserver(observer)
+            }
+        } catch (e: Exception) {
+            // 이미 해제되었거나 초기화되지 않은 경우 무시
+        }
         isRunning = false
     }
 }

@@ -1,0 +1,65 @@
+전문가 관점에서 현상을 분석해 보겠습니다. TestFirebaseMessagingService는 정상 작동하는데 MyFirebaseMessagingService만 호출되지 않는다는 점이 문제 해결의 가장 결정적인 단서입니다.
+
+이것은 Firebase SDK 설정, google-services.json, 네트워크 등 기본적인 FCM 연동 자체에는 문제가 없으며, MyFirebaseMessagingService가 메시지를 수신하지 못하도록 하는 다른 요인이 개입하고 있음을 의미합니다.
+
+질문 1. MyFirebaseMessagingService 내부 코드가 호출을 방해할 수 있는가?
+아니요, 그럴 가능성은 거의 없습니다. onMessageReceived 메서드 내부의 코드는 메서드가 호출된 후에 실행됩니다. 내부 로직이 복잡하거나 오류가 있어서 앱이 즉시 비정상 종료(Crash)되더라도, 호출 자체는 이루어지기 때문에 Logcat에 최소한 메서드 진입 로그나 오류 로그가 남아야 합니다.
+
+호출 자체가 전혀 기록되지 않는다면, 원인은 메서드 내부가 아닌 외부, 즉 메시지가 MyFirebaseMessagingService에 도달하기 전 단계에 있다고 봐야 합니다.
+
+질문 2. data-only 메시지인데 시스템이 자동 알림을 생성하는 경우?
+가장 유력한 원인은 두 가지 중 하나입니다.
+
+메시지가 실제로는 data-only가 아닌 경우: Firebase Functions에서 notification 필드를 제거했더라도, 사용하는 라이브러리나 FCM 전송 API의 특정 파라미터가 notification 페이로드로 변환되어 전송될 수 있습니다.
+
+(가장 가능성 높음) 제3자 라이브러리의 개입: 일부 마케팅 자동화, 채팅, 분석 SDK(예: Braze, Customer.io 등)는 자체적으로 FCM 메시지를 수신하고 처리하는 FirebaseMessagingService를 포함하고 있습니다. 이 SDK가 모든 FCM 메시지를 먼저 가로채서, 특정 조건에 따라 자신들이 직접 시스템 알림을 생성할 수 있습니다. 이것이 onMessageReceived는 호출되지 않는데 시스템 알림은 뜨는 현상을 완벽하게 설명합니다.
+
+질문 3. Android 버전별 알림 소리가 다른 이유?
+이는 알림 채널(Notification Channels) 때문입니다. 안드로이드 8.0(API 26)부터 모든 알림은 특정 '채널'에 속해야 하며, 알림의 소리, 진동, 중요도 등은 개별 알림이 아닌 채널에 의해 결정됩니다.
+
+data-only 메시지를 받은 앱이 직접 알림을 생성할 때는 개발자가 지정한 채널 ID를 사용합니다.
+
+하지만 지금처럼 시스템이나 제3자 라이브러리가 알림을 생성하는 경우, 해당 라이브러리가 생성한 기본(Default) 채널을 사용하게 됩니다.
+
+Android 15: '긴급 소리'가 들린다는 것은 해당 알림이 IMPORTANCE_HIGH 또는 IMPORTANCE_MAX로 설정된 채널을 통해 표시되었음을 시사합니다. 최신 안드로이드 버전일수록 시스템이나 라이브러리가 중요한 정보를 누락하지 않도록 더 높은 중요도의 기본 채널을 사용할 수 있습니다.
+
+Android 13: '기본 소리'는 일반적인 IMPORTANCE_DEFAULT 채널을 통해 알림이 생성되었을 가능성이 높습니다.
+
+결론적으로, 알림을 생성하는 주체(제3자 라이브러리 등)가 OS 버전에 따라 다른 기본 채널 정책을 사용하고 있을 가능성이 매우 높습니다.
+
+질문 4. 원인을 찾는 가장 확실한 방법 (핵심 해결책)
+AndroidManifest.xml 파일의 충돌이 가장 유력한 원인입니다.
+
+안드로이드 시스템은 com.google.firebase.MESSAGING_EVENT 인텐트 필터를 가진 서비스가 매니페스트에 여러 개 등록되어 있을 경우, 그중 단 하나만 선택해서 메시지를 전달합니다. 어떤 것이 선택될지는 예측하기 어렵습니다.
+
+TestFirebaseMessagingService를 추가했을 때 그것이 호출되었다는 것은, 시스템이 여러 후보 중 TestFirebaseMessagingService를 선택했다는 의미입니다. 이는 반대로 MyFirebaseMessagingService 외에 다른 FirebaseMessagingService가 이미 등록되어 있었을 가능성을 강력히 시사합니다.
+
+해결을 위한 단계별 절차
+Merged Manifest 확인:
+
+Android Studio에서 app/src.main/AndroidManifest.xml 파일을 엽니다.
+
+하단의 Merged Manifest 탭을 클릭합니다.
+
+이곳에서 최종적으로 빌드에 포함되는 매니페스트의 전체 내용을 볼 수 있습니다.
+
+FirebaseMessagingService 또는 <action android:name="com.google.firebase.MESSAGING_EVENT" />를 검색하여 MyFirebaseMessagingService 외에 다른 서비스가 등록되어 있는지 반드시 확인하세요.
+
+제3자 라이브러리 의심 및 제거:
+
+Merged Manifest에서 다른 FCM 서비스가 발견되었다면, 그것이 어떤 라이브러리에서 온 것인지 확인합니다. (예: com.some.sdk.FcmService)
+
+해당 라이브러리가 메시지를 가로채는 것이 확실하므로, 그 라이브러리의 문서를 찾아 FCM 메시지 처리를 위임(delegate)하거나 비활성화하는 옵션이 있는지 확인해야 합니다.
+
+만약 옵션이 없다면, AndroidManifest.xml에 아래와 같이 tools:node="remove" 속성을 사용하여 라이브러리의 서비스를 강제로 제거하고 테스트해볼 수 있습니다.
+
+XML
+
+<service
+    android:name="com.some.sdk.FcmService"
+    tools:node="remove" />
+TestFirebaseMessagingService 제거:
+
+문제 해결 과정에서 추가했던 TestFirebaseMessagingService와 관련 매니페스트 선언을 완전히 삭제하여 테스트 환경을 단순화하세요.
+
+이 과정을 통해 숨어있던 다른 FCM 서비스의 존재를 확인하고 제거하면, FCM 메시지는 정상적으로 MyFirebaseMessagingService의 onMessageReceived로 전달될 것입니다.
