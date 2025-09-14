@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.designated.callmanager.MainActivity
 import com.designated.callmanager.R
+import com.designated.callmanager.ui.SharedCallAcceptActivity
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
@@ -122,21 +123,10 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 Log.d(TAG, "🔔 [DEBUG] call_assigned 처리 완료")
             }
             "NEW_SHARED_CALL" -> {
-                Log.d(TAG, "🔔 [DEBUG] NEW_SHARED_CALL 처리 시작")
-
-                val isScreenOffState = isScreenOff()
-                Log.d(TAG, "🔔 [HYBRID] 화면 상태 - 화면 꺼짐: $isScreenOffState")
-
-                if (isScreenOffState) {
-                    Log.d(TAG, "🔔 [HYBRID] 화면 꺼짐 상태 - 시스템 notification 의존 (커스텀 처리 생략)")
-                    // 화면 꺼짐 상태에서는 서버의 notification 필드를 통한 시스템 알림에만 의존
-                    // 추가 커스텀 알림 처리하지 않음
-                } else {
-                    Log.d(TAG, "🔔 [HYBRID] 화면 켜진 상태 (포그라운드/백그라운드) - 기존 커스텀 처리")
-                    handleNewSharedCall(remoteMessage, callId)
-                }
-
-                Log.d(TAG, "🔔 [DEBUG] NEW_SHARED_CALL 처리 완료")
+                Log.d(TAG, "🔔 [DATA_ONLY] NEW_SHARED_CALL 처리 시작")
+                // Data-only 메시지이므로 항상 커스텀 알림 생성
+                showCustomSharedCallNotification(remoteMessage)
+                Log.d(TAG, "🔔 [DATA_ONLY] NEW_SHARED_CALL 처리 완료")
             }
             "STATUS_CHANGE" -> {
                 Log.d(TAG, "🔔 [DEBUG] STATUS_CHANGE 처리 시작")
@@ -720,5 +710,60 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             @Suppress("DEPRECATION")
             !powerManager.isScreenOn
         }
+    }
+
+    /**
+     * Data-only FCM 메시지로부터 커스텀 공유콜 알림 생성
+     * 전문가 권장: Ongoing Notification + Full-Screen Intent (향후 추가)
+     */
+    private fun showCustomSharedCallNotification(remoteMessage: RemoteMessage) {
+        Log.d(TAG, "🔔 [CUSTOM] 커스텀 공유콜 알림 생성 시작")
+
+        val data = remoteMessage.data
+        val sharedCallId = data["sharedCallId"] ?: return
+        val title = data["title"] ?: "🔄 새로운 공유콜!"
+        val body = data["body"] ?: "공유콜이 도착했습니다"
+        val customMessage = data["customMessage"] ?: body
+
+        Log.d(TAG, "🔔 [CUSTOM] sharedCallId: $sharedCallId")
+        Log.d(TAG, "🔔 [CUSTOM] title: $title")
+        Log.d(TAG, "🔔 [CUSTOM] body: $body")
+
+        // PendingIntent 생성 - SharedCallAcceptActivity로 직접 이동
+        val intent = Intent(this, SharedCallAcceptActivity::class.java).apply {
+            putExtra(SharedCallAcceptActivity.EXTRA_SHARED_CALL_ID, sharedCallId)
+            putExtra(SharedCallAcceptActivity.EXTRA_TITLE, title)
+            putExtra(SharedCallAcceptActivity.EXTRA_BODY, body)
+            putExtra(SharedCallAcceptActivity.EXTRA_CUSTOM_MESSAGE, customMessage)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            sharedCallId.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // Full-Screen Intent 알림 생성 (전문가 권장 - 전화 수신처럼 즉시 전체화면)
+        val notificationBuilder = NotificationCompat.Builder(this, "shared_call_fcm_channel_v3")
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(customMessage))
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_CALL) // 전화 카테고리
+            .setAutoCancel(true)
+            .setFullScreenIntent(pendingIntent, true) // ⭐ Full-Screen Intent 핵심
+            .setContentIntent(pendingIntent)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationId = sharedCallId.hashCode()
+
+        Log.d(TAG, "🔔 [CUSTOM] 알림 표시 - ID: $notificationId")
+        notificationManager.notify(notificationId, notificationBuilder.build())
+
+        Log.d(TAG, "🔔 [CUSTOM] 커스텀 공유콜 알림 생성 완료")
     }
 }
