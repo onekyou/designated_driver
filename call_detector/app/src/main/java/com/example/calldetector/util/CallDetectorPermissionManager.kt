@@ -19,25 +19,25 @@ class CallDetectorPermissionManager(
     private val onAllPermissionsGranted: () -> Unit,
     private val onPermissionsDenied: (List<String>) -> Unit
 ) {
-
+    
     companion object {
         private const val PREFS_NAME = "CallDetectorPrefs"
         private const val KEY_OVERLAY_PERMISSION_REQUESTED = "overlay_permission_requested"
         private const val KEY_BATTERY_OPTIMIZATION_REQUESTED = "battery_optimization_requested"
     }
-
+    
     private val prefs = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private var isRequestingPermissions = false
-
+    
     data class PermissionInfo(
         val permission: String,
         val title: String,
         val description: String,
         val required: Boolean = true
     )
-
+    
     private val requiredPermissions = listOf(
-
+        // 전화 관련 권한 (콜디텍터 핵심 기능)
         PermissionInfo(
             permission = Manifest.permission.READ_PHONE_STATE,
             title = "전화 상태 읽기",
@@ -56,15 +56,15 @@ class CallDetectorPermissionManager(
             description = "전화번호로 저장된 고객명을 찾기 위해 필요합니다.",
             required = true
         ),
-
+        // 알림 권한 (Android 13+)
         PermissionInfo(
-            permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+            permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) 
                 Manifest.permission.POST_NOTIFICATIONS else "",
             title = "알림 권한",
             description = "콜 감지 상태 및 서비스 알림을 표시하기 위해 필요합니다.",
             required = true
         ),
-
+        // SMS 권한 (공유콜 시스템용)
         PermissionInfo(
             permission = Manifest.permission.SEND_SMS,
             title = "SMS 발송",
@@ -72,10 +72,10 @@ class CallDetectorPermissionManager(
             required = false
         )
     ).filter { it.permission.isNotEmpty() }
-
+    
     private lateinit var permissionLauncher: ActivityResultLauncher<Array<String>>
     private lateinit var overlayPermissionLauncher: ActivityResultLauncher<Intent>
-
+    
     fun initialize(
         permissionLauncher: ActivityResultLauncher<Array<String>>,
         overlayPermissionLauncher: ActivityResultLauncher<Intent>
@@ -83,21 +83,21 @@ class CallDetectorPermissionManager(
         this.permissionLauncher = permissionLauncher
         this.overlayPermissionLauncher = overlayPermissionLauncher
     }
-
+    
     fun requestAllPermissions() {
         if (isRequestingPermissions) return
         isRequestingPermissions = true
-
+        
         showPermissionExplanationDialog()
     }
-
+    
     private fun showPermissionExplanationDialog() {
         val requiredPerms = getRequiredPermissions()
         val optionalPerms = getOptionalPermissions()
-
+        
         val message = buildString {
             append("콜디텍터의 정상적인 동작을 위해 다음 권한이 필요합니다:\n\n")
-
+            
             if (requiredPerms.isNotEmpty()) {
                 append("📞 필수 권한 (콜 감지 기능):\n")
                 requiredPerms.forEach { perm ->
@@ -105,7 +105,7 @@ class CallDetectorPermissionManager(
                 }
                 append("\n")
             }
-
+            
             if (optionalPerms.isNotEmpty()) {
                 append("💬 추가 기능 권한:\n")
                 optionalPerms.forEach { perm ->
@@ -113,11 +113,11 @@ class CallDetectorPermissionManager(
                 }
                 append("\n")
             }
-
+            
             append("⚠️ 필수 권한이 없으면 앱이 작동하지 않습니다.\n")
             append("권한을 허용하시겠습니까?")
         }
-
+        
         AlertDialog.Builder(activity)
             .setTitle("📱 콜디텍터 권한 요청")
             .setMessage(message)
@@ -134,7 +134,7 @@ class CallDetectorPermissionManager(
             .setCancelable(false)
             .show()
     }
-
+    
     private fun showPermissionDeniedDialog() {
         AlertDialog.Builder(activity)
             .setTitle("⚠️ 권한 필요")
@@ -148,7 +148,7 @@ class CallDetectorPermissionManager(
                     intent.data = Uri.parse("package:${activity.packageName}")
                     activity.startActivity(intent)
                 } catch (e: Exception) {
-
+                    // 설정 화면 열기 실패
                 }
                 isRequestingPermissions = false
             }
@@ -159,64 +159,64 @@ class CallDetectorPermissionManager(
             .setCancelable(false)
             .show()
     }
-
+    
     private fun getRequiredPermissions(): List<PermissionInfo> {
         return requiredPermissions.filter { it.required && needsPermission(it.permission) }
     }
-
+    
     private fun getOptionalPermissions(): List<PermissionInfo> {
         return requiredPermissions.filter { !it.required && needsPermission(it.permission) }
     }
-
+    
     private fun needsPermission(permission: String): Boolean {
         return ContextCompat.checkSelfPermission(activity, permission) != PackageManager.PERMISSION_GRANTED
     }
-
+    
     private fun requestRuntimePermissions() {
         val allPermissions = requiredPermissions
             .filter { needsPermission(it.permission) }
             .map { it.permission }
             .toTypedArray()
-
+            
         if (allPermissions.isNotEmpty()) {
             permissionLauncher.launch(allPermissions)
         } else {
             checkSpecialPermissions()
         }
     }
-
+    
     private fun requestRequiredPermissionsOnly() {
         val requiredPerms = getRequiredPermissions()
             .map { it.permission }
             .toTypedArray()
-
+            
         if (requiredPerms.isNotEmpty()) {
             permissionLauncher.launch(requiredPerms)
         } else {
             checkSpecialPermissions()
         }
     }
-
+    
     fun onPermissionResult(permissions: Map<String, Boolean>) {
         val deniedPermissions = permissions.filter { !it.value }.keys.toList()
         val deniedRequiredPermissions = deniedPermissions.filter { permission ->
             requiredPermissions.any { it.permission == permission && it.required }
         }
-
+        
         if (deniedRequiredPermissions.isNotEmpty()) {
-
+            // 필수 권한이 거부됨
             showCriticalPermissionDeniedDialog(deniedRequiredPermissions)
         } else {
-
+            // 필수 권한은 모두 승인됨, 특수 권한 확인
             checkSpecialPermissions()
         }
     }
-
+    
     private fun showCriticalPermissionDeniedDialog(deniedPermissions: List<String>) {
         val deniedPermissionNames = deniedPermissions.mapNotNull { permission ->
             requiredPermissions.find { it.permission == permission }?.title
         }.joinToString(", ")
-
+        
         AlertDialog.Builder(activity)
             .setTitle("❌ 필수 권한 거부됨")
             .setMessage(
@@ -230,7 +230,7 @@ class CallDetectorPermissionManager(
                     intent.data = Uri.parse("package:${activity.packageName}")
                     activity.startActivity(intent)
                 } catch (e: Exception) {
-
+                    // 설정 화면 열기 실패
                 }
                 isRequestingPermissions = false
             }
@@ -245,17 +245,18 @@ class CallDetectorPermissionManager(
             .setCancelable(false)
             .show()
     }
-
+    
     private fun checkSpecialPermissions() {
-
+        // 1. 화면 위에 그리기 권한 확인
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(activity)) {
             showOverlayPermissionDialog()
             return
         }
-
+        
+        // 2. 배터리 최적화 제외 확인
         checkBatteryOptimization()
     }
-
+    
     private fun showOverlayPermissionDialog() {
         AlertDialog.Builder(activity)
             .setTitle("📱 백그라운드 표시 권한")
@@ -265,7 +266,7 @@ class CallDetectorPermissionManager(
             )
             .setPositiveButton("설정으로 이동") { _, _ ->
                 prefs.edit { putBoolean(KEY_OVERLAY_PERMISSION_REQUESTED, true) }
-                val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, 
                     Uri.parse("package:${activity.packageName}"))
                 overlayPermissionLauncher.launch(intent)
             }
@@ -276,35 +277,36 @@ class CallDetectorPermissionManager(
             .setCancelable(false)
             .show()
     }
-
+    
     fun onOverlayPermissionResult() {
         val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             Settings.canDrawOverlays(activity)
         } else true
-
+        
         if (hasPermission) {
             showToast("백그라운드 배차 화면이 활성화되었습니다")
         } else {
             showToast("백그라운드 배차 화면이 제한됩니다")
         }
-
+        
         checkBatteryOptimization()
     }
-
+    
     private fun checkBatteryOptimization() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val powerManager = activity.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
             val hasRequestedBefore = prefs.getBoolean(KEY_BATTERY_OPTIMIZATION_REQUESTED, false)
-
+            
             if (!powerManager.isIgnoringBatteryOptimizations(activity.packageName) && !hasRequestedBefore) {
                 showBatteryOptimizationDialog()
                 return
             }
         }
-
+        
+        // 모든 권한 검사 완료
         finalizePermissionCheck()
     }
-
+    
     private fun showBatteryOptimizationDialog() {
         AlertDialog.Builder(activity)
             .setTitle("🔋 배터리 최적화 제외")
@@ -326,30 +328,30 @@ class CallDetectorPermissionManager(
             .setCancelable(false)
             .show()
     }
-
+    
     private fun requestBatteryOptimizationExemption() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             try {
-
+                // 방법 1: 직접 앱별 배터리 최적화 예외 요청 (권한이 있는 경우)
                 val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
                 intent.data = Uri.parse("package:${activity.packageName}")
                 activity.startActivity(intent)
                 showToast("앱을 선택하고 '허용'을 눌러주세요")
             } catch (e: Exception) {
                 try {
-
+                    // 방법 2: 일반 배터리 최적화 설정 화면
                     val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
                     activity.startActivity(intent)
                     showToast("앱 목록에서 '${getAppName()}'을 찾아 '허용'으로 설정해주세요")
                 } catch (e2: Exception) {
                     try {
-
+                        // 방법 3: 일반 배터리 설정 화면
                         val intent = Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)
                         activity.startActivity(intent)
                         showToast("배터리 설정에서 앱 최적화를 비활성화해주세요")
                     } catch (e3: Exception) {
                         try {
-
+                            // 방법 4: 앱 정보 화면으로 이동
                             val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
                             intent.data = Uri.parse("package:${activity.packageName}")
                             activity.startActivity(intent)
@@ -362,7 +364,7 @@ class CallDetectorPermissionManager(
             }
         }
     }
-
+    
     private fun getAppName(): String {
         return try {
             val packageInfo = activity.packageManager.getApplicationInfo(activity.packageName, 0)
@@ -371,23 +373,25 @@ class CallDetectorPermissionManager(
             "콜디텍터"
         }
     }
-
+    
     private fun finalizePermissionCheck() {
         isRequestingPermissions = false
-
+        
+        // 필수 권한이 모두 승인되었는지 확인
         val missingRequiredPermissions = getRequiredPermissions()
-
+        
         if (missingRequiredPermissions.isEmpty()) {
             onAllPermissionsGranted()
         } else {
             onPermissionsDenied(missingRequiredPermissions.map { it.permission })
         }
     }
-
+    
     private fun showToast(message: String) {
         android.widget.Toast.makeText(activity, message, android.widget.Toast.LENGTH_SHORT).show()
     }
-
+    
+    // 현재 모든 필수 권한이 승인되었는지 확인하는 헬퍼 함수
     fun areAllRequiredPermissionsGranted(): Boolean {
         return getRequiredPermissions().isEmpty()
     }

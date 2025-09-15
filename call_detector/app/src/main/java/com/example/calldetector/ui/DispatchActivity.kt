@@ -15,28 +15,52 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 
 class DispatchActivity : ComponentActivity() {
-
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
+        
+        android.util.Log.d("DispatchActivity", "🔍 [DEBUG] DispatchActivity onCreate 시작!")
+        android.util.Log.d("DispatchActivity", "🔍 [DEBUG] Intent: $intent")
+        android.util.Log.d("DispatchActivity", "🔍 [DEBUG] Intent extras: ${intent.extras}")
+        
         val phoneNumber = intent.getStringExtra("EXTRA_PHONE_NUMBER") ?: ""
         val contactName = intent.getStringExtra("EXTRA_CONTACT_NAME")
         val contactAddress = intent.getStringExtra("EXTRA_CONTACT_ADDRESS")
         val regionId = intent.getStringExtra("EXTRA_REGION_ID") ?: ""
         val officeId = intent.getStringExtra("EXTRA_OFFICE_ID") ?: ""
         val deviceName = intent.getStringExtra("EXTRA_DEVICE_NAME") ?: ""
-
+        
+        android.util.Log.d("DispatchActivity", "🔍 [DEBUG] 추출된 데이터:")
+        android.util.Log.d("DispatchActivity", "🔍 [DEBUG] 전화번호: '$phoneNumber'")
+        android.util.Log.d("DispatchActivity", "🔍 [DEBUG] 연락처명: '$contactName'")
+        android.util.Log.d("DispatchActivity", "🔍 [DEBUG] 주소: '$contactAddress'")
+        android.util.Log.d("DispatchActivity", "🔍 [DEBUG] 지역ID: '$regionId', 사무실ID: '$officeId'")
+        android.util.Log.d("DispatchActivity", "🔍 [DEBUG] 디바이스: '$deviceName'")
+        
+        if (phoneNumber.isEmpty()) {
+            android.util.Log.e("DispatchActivity", "❌ [DEBUG] phoneNumber가 비어있음! Activity 종료")
+            finish()
+            return
+        }
+        
+        android.util.Log.d("DispatchActivity", "🚀 [DEBUG] setContent 시작!")
+        
         setContent {
+            android.util.Log.d("DispatchActivity", "🔍 [DEBUG] setContent 내부 - Compose UI 시작")
             CallDetectorAppTheme {
+                android.util.Log.d("DispatchActivity", "🔍 [DEBUG] CallDetectorAppTheme 내부")
                 var drivers by remember { mutableStateOf<List<DriverInfo>>(emptyList()) }
                 var isLoading by remember { mutableStateOf(true) }
-
+                
                 LaunchedEffect(Unit) {
+                    android.util.Log.d("DispatchActivity", "🔍 [DEBUG] LaunchedEffect 시작 - 기사 로딩")
                     drivers = loadAvailableDrivers(regionId, officeId)
+                    android.util.Log.d("DispatchActivity", "🔍 [DEBUG] 기사 로딩 완료 - ${drivers.size}명")
                     isLoading = false
                 }
-
+                
                 if (isLoading) {
+                    android.util.Log.d("DispatchActivity", "🔄 [DEBUG] 로딩 중 - CircularProgressIndicator 표시")
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = androidx.compose.ui.Alignment.Center
@@ -44,6 +68,7 @@ class DispatchActivity : ComponentActivity() {
                         CircularProgressIndicator()
                     }
                 } else {
+                    android.util.Log.d("DispatchActivity", "🎯 [DEBUG] DispatchDialog 생성!")
                     DispatchDialog(
                         callInfo = CallInfo(
                             phoneNumber = phoneNumber,
@@ -60,6 +85,7 @@ class DispatchActivity : ComponentActivity() {
                             finish()
                         },
                         onDelete = {
+                            // 삭제 - Firestore 업로드 안함
                             finish()
                         },
                         onShare = {
@@ -73,8 +99,30 @@ class DispatchActivity : ComponentActivity() {
                 }
             }
         }
+        
+        android.util.Log.d("DispatchActivity", "✅ [DEBUG] onCreate 완료!")
     }
-
+    
+    override fun onStart() {
+        super.onStart()
+        android.util.Log.d("DispatchActivity", "🔍 [DEBUG] onStart 호출됨")
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        android.util.Log.d("DispatchActivity", "🔍 [DEBUG] onResume 호출됨 - 화면에 표시됨!")
+    }
+    
+    override fun onPause() {
+        super.onPause()
+        android.util.Log.d("DispatchActivity", "🔍 [DEBUG] onPause 호출됨")
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        android.util.Log.d("DispatchActivity", "🔍 [DEBUG] onDestroy 호출됨 - Activity 종료")
+    }
+    
     private suspend fun loadAvailableDrivers(regionId: String, officeId: String): List<DriverInfo> {
         return try {
             val db = FirebaseFirestore.getInstance()
@@ -83,12 +131,12 @@ class DispatchActivity : ComponentActivity() {
                 .whereEqualTo("status", "ONLINE")
                 .get()
                 .await()
-
+            
             snapshot.documents.mapNotNull { doc ->
                 val name = doc.getString("name") ?: return@mapNotNull null
                 val status = doc.getString("status") ?: "UNKNOWN"
                 val phone = doc.getString("phone") ?: ""
-
+                
                 DriverInfo(
                     id = doc.id,
                     name = name,
@@ -100,19 +148,19 @@ class DispatchActivity : ComponentActivity() {
             emptyList()
         }
     }
-
+    
     private fun createCallWithDriver(
-        phoneNumber: String,
-        contactName: String?,
+        phoneNumber: String, 
+        contactName: String?, 
         contactAddress: String?,
-        driver: DriverInfo,
-        regionId: String,
+        driver: DriverInfo, 
+        regionId: String, 
         officeId: String,
         deviceName: String
     ) {
         val db = FirebaseFirestore.getInstance()
         val callPath = "regions/$regionId/offices/$officeId/calls"
-
+        
         val callData = hashMapOf<String, Any>(
             "phoneNumber" to phoneNumber,
             "customerName" to (contactName ?: phoneNumber),
@@ -128,16 +176,18 @@ class DispatchActivity : ComponentActivity() {
             "assignedDriverName" to driver.name,
             "assignedTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
         )
-
+        
         contactAddress?.let { callData["customerAddress"] = it }
-
+        
+        // 콜 문서 생성
         db.collection(callPath).add(callData)
-
+        
+        // 기사 상태를 ON_TRIP으로 변경
         val driverPath = "regions/$regionId/offices/$officeId/designated_drivers"
         db.collection(driverPath).document(driver.id)
             .update("status", "ON_TRIP")
     }
-
+    
     private fun createCallOnHold(
         phoneNumber: String,
         contactName: String?,
@@ -148,7 +198,7 @@ class DispatchActivity : ComponentActivity() {
     ) {
         val db = FirebaseFirestore.getInstance()
         val callPath = "regions/$regionId/offices/$officeId/calls"
-
+        
         val callData = hashMapOf<String, Any>(
             "phoneNumber" to phoneNumber,
             "customerName" to (contactName ?: phoneNumber),
@@ -161,12 +211,12 @@ class DispatchActivity : ComponentActivity() {
             "callType" to "수신",
             "timestampClient" to System.currentTimeMillis()
         )
-
+        
         contactAddress?.let { callData["customerAddress"] = it }
-
+        
         db.collection(callPath).add(callData)
     }
-
+    
     private fun createSharedCall(
         phoneNumber: String,
         contactName: String?,
@@ -177,7 +227,7 @@ class DispatchActivity : ComponentActivity() {
     ) {
         val db = FirebaseFirestore.getInstance()
         val sharedCallsPath = "regions/$regionId/offices/$officeId/shared_calls"
-
+        
         val sharedCallData = hashMapOf<String, Any>(
             "phoneNumber" to phoneNumber,
             "customerName" to (contactName ?: phoneNumber),
@@ -189,12 +239,12 @@ class DispatchActivity : ComponentActivity() {
             "callType" to "수신",
             "timestampClient" to System.currentTimeMillis()
         )
-
+        
         contactAddress?.let { sharedCallData["customerAddress"] = it }
-
+        
         db.collection(sharedCallsPath).add(sharedCallData)
     }
-
+    
     companion object {
         fun startDispatchDialog(
             context: Context,
@@ -238,7 +288,7 @@ fun CallDetectorAppTheme(content: @Composable () -> Unit) {
         error = androidx.compose.ui.graphics.Color(0xFFCF6679),
         onError = androidx.compose.ui.graphics.Color.Black
     )
-
+    
     MaterialTheme(
         colorScheme = darkColorScheme,
         content = content
