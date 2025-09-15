@@ -193,15 +193,12 @@ export const onSharedCallCreated = onDocumentCreated(
           return; // 다음 관리자로 넘어감
         }
         
-        logger.info(`[shared-created:${callId}] ✅ 원본 사무실이 아님: ${adminData.associatedOfficeId} ≠ ${sharedCallData.sourceOfficeId}`);
         
         if (adminData.fcmToken) {
           // 중복 토큰 방지
           if (!tokens.includes(adminData.fcmToken)) {
             tokens.push(adminData.fcmToken);
-            logger.info(`[shared-created:${callId}] 📤 알림 대상 추가: ${adminData.associatedOfficeId}`);
           } else {
-            logger.info(`[shared-created:${callId}] 🔄 중복 토큰 제외: ${adminData.associatedOfficeId}`);
           }
         } else {
           logger.warn(`[shared-created:${callId}] ⚠️ FCM 토큰 없음: ${adminData.associatedOfficeId}`);
@@ -237,7 +234,6 @@ export const onSharedCallCreated = onDocumentCreated(
       };
 
       // 🚨 실제 전송되는 페이로드 확인
-      logger.info(`[shared-created:${callId}] 🔍 Final FCM Payload:`, JSON.stringify(message, null, 2));
       
       const response = await admin.messaging().sendEachForMulticast(message);
       logger.info(`[shared-created:${callId}] FCM 알림 전송 완료. 성공: ${response.successCount}, 실패: ${response.failureCount}`);
@@ -1240,7 +1236,6 @@ export const migratePickupDrivers = onCall(
 export const testFcmMessage = onRequest(
   { region: "asia-northeast3" },
   async (req, res) => {
-    logger.info("🚨 [testFcmMessage] FCM 테스트 함수 호출됨");
     
     const message = {
       notification: {
@@ -1266,12 +1261,9 @@ export const testFcmMessage = onRequest(
       token: "fNqW53QeRTef5R9fHRoxJi:APA91bEMRlbcD26SX8iBi5EeU_bIrdtpLcGDHW9_7TQIHKeDBFJs_xlWet-QSrvUXPaHvWCZn8ZczvKr5e1HlTYtM3dewIbxGZfOnxYPgIMVgex-VELP4PI",
     };
 
-    // 🔍 실제 전송되는 페이로드 확인
-    logger.info("🔍 [testFcmMessage] Final FCM Payload:", JSON.stringify(message, null, 2));
 
     try {
       const response = await admin.messaging().send(message);
-      logger.info("✅ [testFcmMessage] FCM 메시지 전송 성공:", response);
       
       res.json({
         success: true,

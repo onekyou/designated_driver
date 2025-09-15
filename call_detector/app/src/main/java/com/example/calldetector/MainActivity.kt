@@ -96,9 +96,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Log.d(tag, "🟢 [DEBUG] MainActivity onCreate 시작!")
-        Log.d(tag, "🟢 [DEBUG] onCreate intent: $intent")
-        Log.d(tag, "🟢 [DEBUG] onCreate action: ${intent?.action}")
 
         sharedPreferences = getSharedPreferences("CallDetectorPrefs", Context.MODE_PRIVATE)
         
@@ -144,7 +141,6 @@ class MainActivity : ComponentActivity() {
         }
         
         // 초기 Intent 처리
-        Log.d(tag, "🔍 [DEBUG] onCreate에서 handleIntent 호출 - intent: $intent, action: ${intent?.action}")
         handleIntent(intent)
 
         setContent {
@@ -269,39 +265,22 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
-        Log.d(tag, "🔍 [DEBUG] MainActivity onNewIntent 호출됨!")
-        Log.d(tag, "🔍 [DEBUG] intent: $intent")
-        Log.d(tag, "🔍 [DEBUG] action: ${intent?.action}")
-        Log.d(tag, "🔍 [DEBUG] extras: ${intent?.extras}")
         setIntent(intent)
         handleIntent(intent)
     }
     
     private fun handleIntent(intent: Intent?) {
-        Log.d(tag, "🔍 [DEBUG] MainActivity handleIntent 호출됨!")
-        Log.d(tag, "🔍 [DEBUG] intent action: ${intent?.action}")
-        Log.d(tag, "🔍 [DEBUG] ACTION_SHOW_DISPATCH_POPUP 상수: $ACTION_SHOW_DISPATCH_POPUP")
-        Log.d(tag, "🔍 [DEBUG] action 비교 결과: ${intent?.action == ACTION_SHOW_DISPATCH_POPUP}")
-        
         when (intent?.action) {
             ACTION_SHOW_DISPATCH_POPUP -> {
-                Log.d(tag, "✅ [DEBUG] ACTION_SHOW_DISPATCH_POPUP 조건 통과!")
                 val phoneNumber = intent.getStringExtra("phoneNumber")
                 val contactName = intent.getStringExtra("contactName")
                 val contactAddress = intent.getStringExtra("contactAddress")
                 val regionId = intent.getStringExtra("regionId")
                 val officeId = intent.getStringExtra("officeId")
                 val deviceName = intent.getStringExtra("deviceName")
-                
-                Log.i(tag, "🔍 [DEBUG] Intent 데이터 추출:")
-                Log.i(tag, "🔍 [DEBUG] phoneNumber: $phoneNumber")
-                Log.i(tag, "🔍 [DEBUG] contactName: $contactName")
-                Log.i(tag, "🔍 [DEBUG] contactAddress: $contactAddress")
-                Log.i(tag, "🔍 [DEBUG] regionId: $regionId, officeId: $officeId")
-                
+
                 // DispatchActivity 실행 (로컬 데이터 직접 전달)
                 if (phoneNumber != null) {
-                    Log.i(tag, "🚀 [DEBUG] phoneNumber 존재, DispatchActivity 시작!")
                     val dispatchIntent = Intent(this, com.example.calldetector.ui.DispatchActivity::class.java).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
                                Intent.FLAG_ACTIVITY_CLEAR_TOP or 
@@ -317,8 +296,6 @@ class MainActivity : ComponentActivity() {
                     }
                     
                     startActivity(dispatchIntent)
-                } else {
-                    Log.e(tag, "❌ [DEBUG] phoneNumber가 null이어서 DispatchActivity 실행 안함!")
                 }
             }
             else -> {
