@@ -685,23 +685,87 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
         }
         // notificationData 변수 제거 - 더 이상 사용하지 않음
         if (afterData.status === "IN_PROGRESS") {
-            // 운행 시작 로직 - FCM 알림만 제거하고 로직 유지
+            // 운행 시작 로직
             const driverName = afterData.assignedDriverName || "기사";
             // 공유콜인 경우: 원사무실(sourceOfficeId)에만 (공유기사) 표시, 수락사무실에는 실제 기사 이름만 표시
             const isSourceOffice = afterData.callType === "SHARED" && afterData.sourceOfficeId === officeId;
             const driverDisplayName = isSourceOffice ? `${driverName} (공유기사)` : driverName;
             logger.info(`[onCallStatusChanged:${callId}] 기사 이름 표시 로직 - callType: ${afterData.callType}, sourceOfficeId: ${afterData.sourceOfficeId}, currentOfficeId: ${officeId}, isSourceOffice: ${isSourceOffice}, driverDisplayName: ${driverDisplayName}`);
-            // FCM 알림만 제거 - 다른 로직은 유지
-            logger.info(`[onCallStatusChanged:${callId}] Trip started - FCM 알림 생략 (리스너로 처리)`);
+            // FCM 메시지 전송 (notification 필드 추가로 백그라운드에서도 확실히 알림 표시)
+            const payload = {
+                notification: {
+                    title: "🚗 운행 시작",
+                    body: `${afterData.customerName || "고객"} - ${driverDisplayName}`,
+                },
+                data: {
+                    type: "STATUS_CHANGE",
+                    callId: callId,
+                    statusText: "운행 시작",
+                    customerName: afterData.customerName || "고객",
+                    customerPhone: afterData.customerPhone || "-",
+                    driverName: driverDisplayName
+                },
+                android: {
+                    priority: "high",
+                    ttl: 60000,
+                    notification: {
+                        sound: "default",
+                        clickAction: "com.designated.callmanager.HOME",
+                        channelId: "status_change_fcm_channel"
+                    }
+                }
+            };
+            // 모든 관리자에게 전송
+            for (const token of tokens) {
+                try {
+                    await admin.messaging().send(Object.assign(Object.assign({}, payload), { token }));
+                    logger.info(`[onCallStatusChanged:${callId}] 운행시작 FCM 알림 전송 성공 - token: ${token.substring(0, 10)}...`);
+                }
+                catch (error) {
+                    logger.error(`[onCallStatusChanged:${callId}] 운행시작 FCM 알림 전송 실패:`, error);
+                }
+            }
         }
         else if (afterData.status === "COMPLETED") {
-            // 운행 완료 로직 - FCM 알림만 제거하고 로직 유지
+            // 운행 완료 로직
             const basedriverName = afterData.assignedDriverName || "기사";
             const isSourceOffice = afterData.callType === "SHARED" && afterData.sourceOfficeId === officeId;
             const driverName = isSourceOffice ? `${basedriverName} (공유기사)` : basedriverName;
             logger.info(`[onCallStatusChanged:${callId}] 운행완료 기사 이름 표시 로직 - callType: ${afterData.callType}, sourceOfficeId: ${afterData.sourceOfficeId}, currentOfficeId: ${officeId}, isSourceOffice: ${isSourceOffice}, driverName: ${driverName}`);
-            // FCM 알림만 제거 - 다른 로직은 유지
-            logger.info(`[onCallStatusChanged:${callId}] Trip completed - FCM 알림 생략 (리스너로 처리)`);
+            // FCM 메시지 전송 (notification 필드 추가로 백그라운드에서도 확실히 알림 표시)
+            const payload = {
+                notification: {
+                    title: "✅ 운행 완료",
+                    body: `${afterData.customerName || "고객"} - ${driverName}`,
+                },
+                data: {
+                    type: "STATUS_CHANGE",
+                    callId: callId,
+                    statusText: "운행 완료",
+                    customerName: afterData.customerName || "고객",
+                    customerPhone: afterData.customerPhone || "-",
+                    driverName: driverName
+                },
+                android: {
+                    priority: "high",
+                    ttl: 60000,
+                    notification: {
+                        sound: "default",
+                        clickAction: "com.designated.callmanager.HOME",
+                        channelId: "status_change_fcm_channel"
+                    }
+                }
+            };
+            // 모든 관리자에게 전송
+            for (const token of tokens) {
+                try {
+                    await admin.messaging().send(Object.assign(Object.assign({}, payload), { token }));
+                    logger.info(`[onCallStatusChanged:${callId}] 운행완료 FCM 알림 전송 성공 - token: ${token.substring(0, 10)}...`);
+                }
+                catch (error) {
+                    logger.error(`[onCallStatusChanged:${callId}] 운행완료 FCM 알림 전송 실패:`, error);
+                }
+            }
         }
     }
 });
@@ -1042,21 +1106,27 @@ exports.migratePickupDrivers = (0, https_2.onCall)({
 exports.testFcmMessage = (0, https_1.onRequest)({ region: "asia-northeast3" }, async (req, res) => {
     logger.info("🚨 [testFcmMessage] FCM 테스트 함수 호출됨");
     const message = {
+        notification: {
+            title: "✅ 운행 완료 (테스트)",
+            body: "테스트고객 - 테스트기사",
+        },
         data: {
-            type: "NEW_SHARED_CALL",
-            alertTitle: "🚨 테스트 공유콜입니다! 🚨",
-            alertMessage: "테스트출발지 → 테스트도착지\n요금: 15000원\n📞 01087654321",
-            departure: "테스트출발지",
-            destination: "테스트도착지",
-            phoneNumber: "01087654321",
-            fare: "15000",
-            sharedCallId: "test_shared_call_" + Date.now()
+            type: "STATUS_CHANGE",
+            callId: "test_call_" + Date.now(),
+            statusText: "운행 완료",
+            customerName: "테스트고객",
+            customerPhone: "010-1234-5678",
+            driverName: "테스트기사"
         },
         android: {
             priority: "high",
-            // notification 필드 완전 제거 - 순수 data-only
+            notification: {
+                sound: "default",
+                clickAction: "com.designated.callmanager.HOME",
+                channelId: "status_change_fcm_channel"
+            }
         },
-        token: "eA4imumxSBiEKbbh6KkjDF:APA91bF3ATavoruXmXL-FVK6_noFvKLvVlZsV4jgR3xxclv4OKJA52t96x9jZBKcfX_Oizg8j06iChliQKa0yfXr7oJKI_jwo_wXTTYGZD4vQ-GOsa_X9qQ",
+        token: "fNqW53QeRTef5R9fHRoxJi:APA91bEMRlbcD26SX8iBi5EeU_bIrdtpLcGDHW9_7TQIHKeDBFJs_xlWet-QSrvUXPaHvWCZn8ZczvKr5e1HlTYtM3dewIbxGZfOnxYPgIMVgex-VELP4PI",
     };
     // 🔍 실제 전송되는 페이로드 확인
     logger.info("🔍 [testFcmMessage] Final FCM Payload:", JSON.stringify(message, null, 2));
@@ -1077,6 +1147,6 @@ exports.testFcmMessage = (0, https_1.onRequest)({ region: "asia-northeast3" }, a
         });
     }
 });
-const _forceDeploy = Date.now() + 2; // 배포 강제용 더미 변수
+const _forceDeploy = Date.now() + 999999; // 배포 강제용 더미 변수
 void _forceDeploy; // 사용해서 컴파일 경고 해소
 //# sourceMappingURL=index.js.map

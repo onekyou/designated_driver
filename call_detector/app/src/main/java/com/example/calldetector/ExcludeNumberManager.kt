@@ -1,6 +1,7 @@
 package com.example.calldetector
 
 import android.content.Context
+import android.util.Log
 import java.io.*
 import java.text.SimpleDateFormat
 import java.util.*
@@ -12,7 +13,7 @@ import org.json.JSONArray
  * SharedPreferences를 사용하여 로컬에 저장
  */
 class ExcludeNumberManager(private val context: Context) {
-
+    
     companion object {
         private const val PREFS_NAME = "exclude_numbers"
         private const val KEY_NUMBERS = "numbers"
@@ -21,46 +22,56 @@ class ExcludeNumberManager(private val context: Context) {
         private const val BACKUP_FILE_NAME = "exclude_numbers_backup.txt"
         private const val TAG = "ExcludeNumberManager"
     }
-
+    
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-
+    
     /**
      * 제외 번호 추가 (이름 없이)
      */
     fun addExcludeNumber(phoneNumber: String) {
         addExcludeNumber(phoneNumber, null)
     }
-
+    
     /**
      * 제외 번호 추가 (이름과 함께)
      */
     fun addExcludeNumber(phoneNumber: String, name: String?) {
         val normalizedNumber = normalizePhoneNumber(phoneNumber)
-
+        
+        // 기존 Set 방식으로도 저장 (하위 호환성)
         val excludeSet = getExcludeNumbers().toMutableSet()
         excludeSet.add(normalizedNumber)
         saveExcludeNumbers(excludeSet)
-
+        
+        // 이름과 함께 JSON으로 저장
         saveNumberWithName(normalizedNumber, name)
-
+        
+        Log.d(TAG, "번호 추가됨: $normalizedNumber ${name?.let { "($it)" } ?: ""}")
+        
+        // 자동 백업 수행
         performAutoBackup()
     }
-
+    
     /**
      * 제외 번호 제거
      */
     fun removeExcludeNumber(phoneNumber: String) {
         val normalizedNumber = normalizePhoneNumber(phoneNumber)
-
+        
+        // 기존 Set에서 제거
         val excludeSet = getExcludeNumbers().toMutableSet()
         excludeSet.remove(normalizedNumber)
         saveExcludeNumbers(excludeSet)
-
+        
+        // 이름 정보도 제거
         saveNumberWithName(normalizedNumber, null)
-
+        
+        Log.d(TAG, "번호 제거됨: $normalizedNumber")
+        
+        // 자동 백업 수행
         performAutoBackup()
     }
-
+    
     /**
      * 모든 제외 번호 삭제 (테스트용)
      */
@@ -69,10 +80,12 @@ class ExcludeNumberManager(private val context: Context) {
             .remove(KEY_NUMBERS)
             .remove(KEY_NUMBERS_WITH_NAMES)
             .apply()
-
+        Log.d(TAG, "모든 개인번호 삭제됨")
+        
+        // 자동 백업 수행
         performAutoBackup()
     }
-
+    
     /**
      * 제외 번호인지 확인
      */
@@ -80,24 +93,25 @@ class ExcludeNumberManager(private val context: Context) {
         val normalizedNumber = normalizePhoneNumber(phoneNumber)
         val isExcluded = getExcludeNumbers().contains(normalizedNumber)
         if (isExcluded) {
+            Log.d(TAG, "제외 번호로 확인됨: $normalizedNumber")
         }
         return isExcluded
     }
-
+    
     /**
      * 모든 제외 번호 가져오기
      */
     fun getExcludeNumbers(): Set<String> {
         return prefs.getStringSet(KEY_NUMBERS, emptySet()) ?: emptySet()
     }
-
+    
     /**
      * 제외 번호 개수 가져오기
      */
     fun getExcludeCount(): Int {
         return getExcludeNumbers().size
     }
-
+    
     /**
      * 여러 번호를 한번에 추가
      */
@@ -107,19 +121,23 @@ class ExcludeNumberManager(private val context: Context) {
             excludeSet.add(normalizePhoneNumber(phoneNumber))
         }
         saveExcludeNumbers(excludeSet)
-
+        Log.d(TAG, "${phoneNumbers.size}개 번호 추가됨")
+        
+        // 자동 백업 수행
         performAutoBackup()
     }
-
+    
     /**
      * 모든 제외 번호 삭제
      */
     fun clearAll() {
         saveExcludeNumbers(emptySet())
-
+        Log.d(TAG, "모든 제외 번호 삭제됨")
+        
+        // 자동 백업 수행
         performAutoBackup()
     }
-
+    
     /**
      * 제외 번호 저장
      */
@@ -128,7 +146,7 @@ class ExcludeNumberManager(private val context: Context) {
             .putStringSet(KEY_NUMBERS, numbers)
             .apply()
     }
-
+    
     /**
      * 전화번호 정규화
      * 010-1234-5678 → 01012345678
@@ -136,22 +154,24 @@ class ExcludeNumberManager(private val context: Context) {
      */
     fun normalizePhoneNumber(phoneNumber: String): String {
         var normalized = phoneNumber.replace(Regex("[^0-9]"), "")
-
+        
+        // 국제번호 처리
         if (normalized.startsWith("82")) {
             normalized = "0" + normalized.substring(2)
         }
-
+        
+        // +82 처리
         if (phoneNumber.startsWith("+82")) {
             normalized = "0" + normalized.substring(2)
         }
-
+        
         return normalized
     }
-
+    
     /**
      * 자동 백업 시스템 관련 메서드들
      */
-
+    
     /**
      * 제외 번호 목록을 파일로 백업
      */
@@ -159,34 +179,38 @@ class ExcludeNumberManager(private val context: Context) {
         return try {
             val excludeNumbers = getExcludeNumbers()
             if (excludeNumbers.isEmpty()) {
+                Log.d(TAG, "백업할 번호가 없습니다.")
                 return true
             }
-
+            
             val backupFile = File(context.filesDir, BACKUP_FILE_NAME)
             val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
             val timestamp = dateFormat.format(Date())
-
+            
             backupFile.bufferedWriter().use { writer ->
                 writer.write("# CallDetector 개인번호 백업 파일\n")
                 writer.write("# 백업 일시: $timestamp\n")
                 writer.write("# 총 ${excludeNumbers.size}개 번호\n")
                 writer.write("\n")
-
+                
                 excludeNumbers.sorted().forEach { number ->
                     writer.write("$number\n")
                 }
             }
-
+            
+            // 백업 완료 시간 저장
             prefs.edit()
                 .putLong(KEY_BACKUP_TIMESTAMP, System.currentTimeMillis())
                 .apply()
-
+            
+            Log.i(TAG, "백업 완료: ${excludeNumbers.size}개 번호가 백업됨")
             true
         } catch (e: Exception) {
+            Log.e(TAG, "백업 실패", e)
             false
         }
     }
-
+    
     /**
      * 백업 파일에서 제외 번호 목록 복원
      */
@@ -196,20 +220,22 @@ class ExcludeNumberManager(private val context: Context) {
             if (!backupFile.exists()) {
                 return RestoreResult.FileNotFound
             }
-
+            
             val restoredNumbers = mutableSetOf<String>()
             var backupInfo = ""
-
+            
             backupFile.bufferedReader().use { reader ->
                 reader.lineSequence().forEach { line ->
                     val trimmedLine = line.trim()
                     when {
                         trimmedLine.startsWith("#") -> {
+                            // 백업 정보 수집
                             if (trimmedLine.contains("백업 일시:") || trimmedLine.contains("총") && trimmedLine.contains("개 번호")) {
                                 backupInfo += trimmedLine.removePrefix("#").trim() + "\n"
                             }
                         }
                         trimmedLine.isNotEmpty() && !trimmedLine.startsWith("#") -> {
+                            // 전화번호 라인
                             val normalizedNumber = normalizePhoneNumber(trimmedLine)
                             if (normalizedNumber.isNotEmpty()) {
                                 restoredNumbers.add(normalizedNumber)
@@ -218,27 +244,32 @@ class ExcludeNumberManager(private val context: Context) {
                     }
                 }
             }
-
+            
             if (restoredNumbers.isEmpty()) {
                 return RestoreResult.EmptyFile
             }
-
+            
+            // 현재 데이터와 비교
             val currentNumbers = getExcludeNumbers()
             val newNumbers = restoredNumbers - currentNumbers
             val totalRestored = restoredNumbers.size
-
+            
+            // 복원된 번호들로 교체
             saveExcludeNumbers(restoredNumbers)
-
+            
+            Log.i(TAG, "복원 완료: $totalRestored 개 번호 복원됨 (새로운 번호: ${newNumbers.size}개)")
+            
             RestoreResult.Success(
                 totalCount = totalRestored,
                 newCount = newNumbers.size,
                 backupInfo = backupInfo.trim()
             )
         } catch (e: Exception) {
+            Log.e(TAG, "복원 실패", e)
             RestoreResult.Error(e.message ?: "알 수 없는 오류")
         }
     }
-
+    
     /**
      * 백업 파일 존재 여부 확인
      */
@@ -246,14 +277,14 @@ class ExcludeNumberManager(private val context: Context) {
         val backupFile = File(context.filesDir, BACKUP_FILE_NAME)
         return backupFile.exists()
     }
-
+    
     /**
      * 마지막 백업 시간 가져오기
      */
     fun getLastBackupTime(): Long {
         return prefs.getLong(KEY_BACKUP_TIMESTAMP, 0)
     }
-
+    
     /**
      * 자동 백업 수행 (데이터 변경시 호출)
      * 백업은 비동기로 수행하여 UI를 블록하지 않음
@@ -263,10 +294,11 @@ class ExcludeNumberManager(private val context: Context) {
             try {
                 backupToFile()
             } catch (e: Exception) {
+                Log.e(TAG, "자동 백업 실패", e)
             }
         }.start()
     }
-
+    
     /**
      * 이름과 함께 번호 저장 (JSON 형태)
      */
@@ -274,27 +306,29 @@ class ExcludeNumberManager(private val context: Context) {
         try {
             val existingJson = prefs.getString(KEY_NUMBERS_WITH_NAMES, "{}") ?: "{}"
             val jsonObject = JSONObject(existingJson)
-
+            
             if (name != null) {
                 jsonObject.put(normalizedNumber, name)
             } else {
+                // 이름이 null이면 해당 키 삭제
                 jsonObject.remove(normalizedNumber)
             }
-
+            
             prefs.edit()
                 .putString(KEY_NUMBERS_WITH_NAMES, jsonObject.toString())
                 .apply()
         } catch (e: Exception) {
+            Log.e(TAG, "이름과 함께 번호 저장 실패", e)
         }
     }
-
+    
     /**
      * 이름과 함께 모든 제외 번호 가져오기
      */
     fun getExcludeNumberItems(): List<ExcludeNumberItem> {
         val numbers = getExcludeNumbers()
         val namesJson = prefs.getString(KEY_NUMBERS_WITH_NAMES, "{}") ?: "{}"
-
+        
         return try {
             val jsonObject = JSONObject(namesJson)
             numbers.map { phoneNumber ->
@@ -306,6 +340,8 @@ class ExcludeNumberManager(private val context: Context) {
                 )
             }.sortedWith(compareBy({ it.name ?: "zzz" }, { it.phoneNumber }))
         } catch (e: Exception) {
+            Log.e(TAG, "이름과 함께 번호 가져오기 실패", e)
+            // 예외 발생 시 이름 없이 반환
             numbers.map { phoneNumber ->
                 ExcludeNumberItem(
                     phoneNumber = phoneNumber,
@@ -315,7 +351,7 @@ class ExcludeNumberManager(private val context: Context) {
             }.sortedBy { it.phoneNumber }
         }
     }
-
+    
     /**
      * 전화번호 포맷팅 (표시용)
      */
@@ -330,7 +366,7 @@ class ExcludeNumberManager(private val context: Context) {
             else -> number
         }
     }
-
+    
     /**
      * 백업 파일 삭제
      */
@@ -340,9 +376,11 @@ class ExcludeNumberManager(private val context: Context) {
             val deleted = if (backupFile.exists()) backupFile.delete() else true
             if (deleted) {
                 prefs.edit().remove(KEY_BACKUP_TIMESTAMP).apply()
+                Log.d(TAG, "백업 파일 삭제됨")
             }
             deleted
         } catch (e: Exception) {
+            Log.e(TAG, "백업 파일 삭제 실패", e)
             false
         }
     }
@@ -362,7 +400,7 @@ sealed class RestoreResult {
  * 제외 번호 아이템 (번호 + 이름 정보)
  */
 data class ExcludeNumberItem(
-    val phoneNumber: String,
-    val displayNumber: String,
-    val name: String? = null
+    val phoneNumber: String,      // 01012345678 (정규화된 번호)
+    val displayNumber: String,    // 010-1234-5678 (표시용)
+    val name: String? = null      // 연락처 이름 (있는 경우)
 )
