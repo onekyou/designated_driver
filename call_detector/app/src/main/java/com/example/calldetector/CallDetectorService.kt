@@ -327,24 +327,7 @@ class CallDetectorService : Service() {
                 }
             }
             
-            Log.i(TAG, "🔍 [DEBUG] Intent 생성 완료 - action: ${intent.action}")
-            Log.i(TAG, "🔍 [DEBUG] Intent flags: ${intent.flags}")
-            Log.i(TAG, "🔍 [DEBUG] Intent extras: phoneNumber=${intent.getStringExtra("phoneNumber")}")
-            
-            // 기존 Activity 방식 (주석 처리 - 백그라운드에서 작동하지 않음)
-            /*
-            Log.i(TAG, "🚀 [DEBUG] startActivity 호출 중...")
-            try {
-                startActivity(intent)
-                Log.i(TAG, "✅ [DEBUG] startActivity 호출 완료! MainActivity로 Intent 전송됨")
-            } catch (activityException: Exception) {
-                Log.e(TAG, "💥 [DEBUG] startActivity에서 예외 발생!", activityException)
-                throw activityException // 외부 catch에서 처리하도록
-            }
-            */
-            
-            // 새로운 WindowManager 방식 - 콜매니저와 동일한 방식
-            Log.i(TAG, "🚀 WindowManager 방식으로 직접 팝업 생성 시작")
+            // WindowManager 방식 - 콜매니저와 동일한 방식
             showOverlayPopup(phoneNumber, contactName, contactAddress, regionId, officeId)
             
         } catch (e: Exception) {
@@ -381,7 +364,6 @@ class CallDetectorService : Service() {
                 return
             }
             
-            Log.i(TAG, "✅ SYSTEM_ALERT_WINDOW 권한 확인됨 - 기존 DispatchActivity 직접 실행")
             
             // SYSTEM_ALERT_WINDOW 권한이 있으므로 DispatchActivity를 바로 실행 가능
             val dispatchIntent = Intent(this, com.example.calldetector.ui.DispatchActivity::class.java).apply {

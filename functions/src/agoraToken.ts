@@ -146,11 +146,9 @@ export const generateAgoraToken = onCall(
     // 토큰 생성 전 파라미터 로깅
     logger.info("=== Token Generation Parameters ===");
     logger.info(`APP_ID: ${APP_ID} (length: ${APP_ID.length})`);
-    logger.info(`🔍 SERVER App ID: ${APP_ID} (Length: ${APP_ID.length})`);
     logger.info(`App Certificate: ${appCertificate.substring(0, 4)}...${appCertificate.substring(appCertificate.length - 4)} (length: ${appCertificate.length})`);
     logger.info(`Full App Certificate for verification: ${appCertificate}`);
     logger.info(`Channel: ${channelName}`);
-    logger.info(`🔍 SERVER Channel: ${channelName}`);
     logger.info(`UID: ${agoraUID} (type: ${typeof agoraUID}) - Client provided: ${clientUID !== 0 ? 'YES' : 'NO'}`);
     logger.info(`Role: ${role} (RtcRole.PUBLISHER = ${RtcRole.PUBLISHER})`);
     logger.info(`Server Time: ${currentTimeInSeconds} (${new Date(currentTimeInSeconds * 1000).toISOString()})`);

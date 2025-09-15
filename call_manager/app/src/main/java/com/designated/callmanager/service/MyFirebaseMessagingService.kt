@@ -37,52 +37,24 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         super.onCreate()
         Log.d("TEST_ORIGINAL", "🚨🚨🚨 MyFirebaseMessagingService onCreate 호출됨!!! 🚨🚨🚨")
         println("🚨🚨🚨 MyFirebaseMessagingService onCreate 호출됨!!! 🚨🚨🚨")
-        Log.d(TAG, "========== MyFirebaseMessagingService onCreate 시작 ==========")
-        Log.d(TAG, "🔍 [DEBUG] 서비스 생성 시각: ${System.currentTimeMillis()}")
-        Log.d(TAG, "🔍 [DEBUG] 프로세스 ID: ${android.os.Process.myPid()}")
-        Log.d(TAG, "🔍 [DEBUG] 스레드 ID: ${Thread.currentThread().id}")
-
         createNotificationChannels()
-
-        // 서비스 시작 시 기존 토큰 확인 및 동기화
-        Log.d(TAG, "토큰 동기화 시작...")
 
         // FCM 토큰 즉시 확인
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
             if (!task.isSuccessful) {
-                Log.w(TAG, "🔑❌ FCM 토큰 가져오기 실패", task.exception)
-                println("🔑❌ FCM 토큰 가져오기 실패: ${task.exception}")
+                Log.w(TAG, "FCM 토큰 가져오기 실패", task.exception)
                 return@addOnCompleteListener
             }
-
-            val token = task.result
-            Log.d(TAG, "🔑✅ 현재 FCM 토큰: $token")
-            println("🔑✅ 현재 FCM 토큰: $token")
         }
 
         checkAndSyncExistingToken()
-
-        Log.d(TAG, "========== MyFirebaseMessagingService onCreate 완료 ==========")
     }
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
-        // super.onMessageReceived(remoteMessage) 제거 - 이중알림 방지
-        Log.d("TEST_ORIGINAL", "🚨🚨🚨 MyFirebaseMessagingService onMessageReceived 호출됨!!! 🚨🚨🚨")
-        println("🚨🚨🚨 MyFirebaseMessagingService onMessageReceived 호출됨!!! 🚨🚨🚨")
-        Log.d(TAG, "========== 🚨🚨🚨 FCM 메시지 수신됨 🚨🚨🚨 ==========")
-        Log.d(TAG, "🔍 [DEBUG] 수신 시각: ${System.currentTimeMillis()}")
-        Log.d(TAG, "🔍 [DEBUG] 스레드 ID: ${Thread.currentThread().id}")
-        Log.d(TAG, "🔔 FCM 메시지 from: ${remoteMessage.from}")
-        Log.d(TAG, "🔔 FCM 메시지 messageId: ${remoteMessage.messageId}")
-        Log.d(TAG, "🔔 FCM 메시지 messageType: ${remoteMessage.messageType}")
-        Log.d(TAG, "데이터: ${remoteMessage.data}")
-        Log.d(TAG, "알림: ${remoteMessage.notification}")
-
         val messageType = remoteMessage.data["type"] ?: run {
-            Log.w(TAG, "⚠️ [DEBUG] messageType이 null입니다 - 메시지 처리 중단")
+            Log.w(TAG, "messageType이 null입니다 - 메시지 처리 중단")
             return
         }
-        Log.d(TAG, "메시지 타입: $messageType")
 
         // 포그라운드에서 처리할 메시지 타입들 (테스트를 위해 모든 공유콜 허용)
         val sharedCallTypes = setOf(

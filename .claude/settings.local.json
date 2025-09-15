@@ -15,7 +15,8 @@
       "Bash(dir:*)",
       "Bash(npm run deploy:*)",
       "Bash(firebase functions:log:*)",
-      "Bash(npx firebase functions:log:*)"
+      "Bash(npx firebase functions:log:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": [],
