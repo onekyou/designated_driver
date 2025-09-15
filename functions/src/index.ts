@@ -902,84 +902,9 @@ export const onCallStatusChanged = onDocumentUpdated(
   }
 );
 
-// 신규 콜이 생성될 때 (status == WAITING && assignedDriverId == null)
-export const sendNewCallNotification = onDocumentCreated(
-  {
-    region: "asia-northeast3",
-    document: "regions/{regionId}/offices/{officeId}/calls/{callId}",
-  },
-  async (event) => {
-    logger.info(`[sendNewCallNotification:${event.params.callId}] 🚨🚨🚨 START - New call received. VERSION: 2025-09-09-v3-FINAL 🚨🚨🚨`);
-
-    const data = event.data?.data();
-    if (!data) {
-      logger.warn("[sendNewCallNotification] 🚨 No data in document.");
-      return;
-    }
-
-    logger.info(`[sendNewCallNotification] 🚨 Data received: status=${data.status}, fromCallManager=${data.fromCallManager}, fromCallDetector=${data.fromCallDetector}`);
-
-    if (data.status !== "WAITING") {
-      logger.info("[sendNewCallNotification] 🚨 Call is not in WAITING status. Skip.");
-      return;
-    }
-
-    // 콜매니저나 콜디텍터에서 생성된 콜인지 확인 (FCM 알림 생략)
-    logger.info(`[sendNewCallNotification] Checking call source - fromCallManager: ${data.fromCallManager}, fromCallDetector: ${data.fromCallDetector}`);
-    
-    if (data.fromCallManager === true || data.fromCallDetector !== undefined) {
-      const source = data.fromCallManager ? "CallManager" : "CallDetector";
-      logger.info(`[sendNewCallNotification] Call created from ${source} app. Skipping FCM notification to avoid duplicate.`);
-      return;
-    }
-    
-    logger.info(`[sendNewCallNotification] Call source check passed. Proceeding with FCM notification.`);
-
-    // 1) 관리자 FCM 토큰 조회
-    const adminQuery = await admin
-      .firestore()
-      .collection("admins")
-      .where("associatedRegionId", "==", event.params.regionId)
-      .where("associatedOfficeId", "==", event.params.officeId)
-      .get();
-
-    const tokens = adminQuery.docs
-      .map((d) => d.data().fcmToken as string | undefined)
-      .filter((t): t is string => !!t && t.length > 0);
-
-    logger.info(`[getAdminTokens] SUCCESS: Found ${adminQuery.size} admins, ${tokens.length} valid tokens.`);
-
-    if (tokens.length === 0) {
-      logger.warn("[sendNewCallNotification] No valid admin FCM tokens, abort.");
-      return;
-    }
-
-    // 2) 알림 + 데이터 메시지 전송
-    const newCallMessage = {
-      // notification 필드 완전 제거 - Android가 자동 알림 생성하지 않도록
-      data: {
-        type: "NEW_CALL_WAITING",
-        callId: event.params.callId,
-        customerPhone: data.phoneNumber || "",
-        // 알림 제목과 내용을 완전히 다른 키로 전송
-        alertTitle: "새로운 콜이 접수되었습니다.",
-        alertMessage: `새로운 콜이 접수되었습니다.`,
-      },
-      android: {
-        priority: "high" as const,
-        // notification 필드 완전 제거
-      },
-      tokens,
-    };
-    
-    // 🚨 실제 전송되는 페이로드 확인
-    logger.info(`[sendNewCallNotification:${event.params.callId}] 🔍 Final FCM Payload:`, JSON.stringify(newCallMessage, null, 2));
-    
-    await admin.messaging().sendEachForMulticast(newCallMessage);
-
-    logger.info("[sendNewCallNotification] sendEachForMulticast with notification sent.");
-  }
-);
+// 새 콜 알림 함수 제거됨
+// 이유: Call Detector에서 로컬 데이터로 즉시 팝업 생성하므로 FCM 알림 불필요
+// 기존 함수는 중복 알림 및 앱 재빌드 시 이전 콜 재팝업 문제 야기
 
 // =============================
 // 공유콜 상태 동기화 - 수락사무실의 콜 상태를 원사무실에 반영
@@ -1364,5 +1289,5 @@ export const testFcmMessage = onRequest(
   }
 );
 
-const _forceDeploy = Date.now() + 999999; // 배포 강제용 더미 변수
+const _forceDeploy = Date.now() + 1000000; // 배포 강제용 더미 변수
 void _forceDeploy;                 // 사용해서 컴파일 경고 해소

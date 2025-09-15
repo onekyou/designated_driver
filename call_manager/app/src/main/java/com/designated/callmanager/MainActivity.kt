@@ -185,7 +185,7 @@ class MainActivity : ComponentActivity() {
         const val ACTION_SHOW_SHARED_CALL_CANCELLED = "ACTION_SHOW_SHARED_CALL_CANCELLED"
         const val ACTION_SHOW_SHARED_CALL_CANCELLED_NOTIFICATION = "ACTION_SHOW_SHARED_CALL_CANCELLED_NOTIFICATION"
         const val ACTION_SHOW_SHARED_CALL_CLAIMED = "ACTION_SHOW_SHARED_CALL_CLAIMED"
-        const val ACTION_SHOW_NEW_CALL_WAITING = "ACTION_SHOW_NEW_CALL_WAITING"
+// const val ACTION_SHOW_NEW_CALL_WAITING = "ACTION_SHOW_NEW_CALL_WAITING" // 제거됨
         const val ACTION_SHOW_DEVICE_CRASH = "ACTION_SHOW_DEVICE_CRASH"
         const val ACTION_SHOW_TRIP_STARTED_POPUP = "ACTION_SHOW_TRIP_STARTED_POPUP"
         const val ACTION_SHOW_TRIP_COMPLETED_POPUP = "ACTION_SHOW_TRIP_COMPLETED_POPUP"
@@ -545,18 +545,8 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            ACTION_SHOW_NEW_CALL_WAITING -> {
-                val callId = intent.getStringExtra(EXTRA_CALL_ID)
-                val customerPhone = intent.getStringExtra("customerPhone")
-                if (callId != null) {
-                    lifecycleScope.launch {
-                        if (_screenState.value != Screen.Dashboard) {
-                            _screenState.value = Screen.Dashboard
-                        }
-                        showToast("새로운 콜이 접수되었습니다: ${customerPhone ?: ""}")
-                    }
-                }
-            }
+// ACTION_SHOW_NEW_CALL_WAITING 처리 제거됨
+            // 이유: Call Detector에서 직접 팝업 생성하므로 불필요
 
             ACTION_SHOW_DEVICE_CRASH -> {
                 val deviceId = intent.getStringExtra("deviceId")
@@ -609,10 +599,10 @@ class MainActivity : ComponentActivity() {
         val prefs = getSharedPreferences("shown_popups", Context.MODE_PRIVATE)
         val editor = prefs.edit()
 
-        // 24시간 이상 된 CALL_ 팝업만 정리 (운행 관련은 유지)
+        // 24시간 이상 된 CALL_, NEW_CALL_ 팝업만 정리 (운행 관련은 유지)
         val oneDayAgo = System.currentTimeMillis() - (24 * 60 * 60 * 1000)
         val keysToRemove = prefs.all.keys.filter { key ->
-            key.startsWith("CALL_")
+            key.startsWith("CALL_") || key.startsWith("NEW_CALL_")
         }.take(50) // 최대 50개만 삭제
 
         keysToRemove.forEach { key ->

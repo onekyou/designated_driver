@@ -235,8 +235,17 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                                 callInfo.status == CallStatus.WAITING.firestoreValue) {
 
                                 if (callInfo.callType != "SHARED") {
-                                    _newCallInfo.value = callInfo
-                                    _showNewCallPopup.value = true
+                                    // SharedPreferences로 이미 표시한 새 콜 팝업 체크
+                                    val prefs = appContext.getSharedPreferences("shown_popups", Context.MODE_PRIVATE)
+                                    val popupId = "NEW_CALL_${doc.id}"
+
+                                    if (!prefs.getBoolean(popupId, false)) {
+                                        _newCallInfo.value = callInfo
+                                        _showNewCallPopup.value = true
+
+                                        // 표시한 팝업으로 마킹
+                                        prefs.edit().putBoolean(popupId, true).apply()
+                                    }
                                 }
                             }
                             if (callInfo.status == CallStatus.IN_PROGRESS.firestoreValue && previousStatusMap[doc.id] != CallStatus.IN_PROGRESS.firestoreValue) {
