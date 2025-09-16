@@ -81,21 +81,73 @@ fun DriverSummaryScreen(vm: SettlementViewModel = viewModel()) {
     }
 
     if (showRatioDialog) {
-        var sliderVal by remember { mutableStateOf(ratio.toFloat()) }
+        var inputValue by remember { mutableStateOf(ratio.toString()) }
+        var isError by remember { mutableStateOf(false) }
+
         AlertDialog(
             onDismissRequest = { showRatioDialog = false },
             title = { Text("납입 비율 설정") },
             text = {
                 Column {
-                    Slider(value = sliderVal, onValueChange = { sliderVal = it }, valueRange = 10f..90f, steps = 16)
-                    Text("${sliderVal.roundToInt()}%", color = Color.White)
+                    Text(
+                        text = "기사 납입 비율을 입력하세요 (10-90%)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.8f),
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    OutlinedTextField(
+                        value = inputValue,
+                        onValueChange = { newValue ->
+                            // 숫자와 % 기호만 허용
+                            val filteredValue = newValue.filter { it.isDigit() || it == '%' }
+                                .replace("%", "")
+                                .take(2) // 최대 2자리
+
+                            inputValue = if (filteredValue.isNotEmpty()) {
+                                val num = filteredValue.toIntOrNull()
+                                if (num != null && num in 10..90) {
+                                    isError = false
+                                    "$num%"
+                                } else {
+                                    isError = true
+                                    "$filteredValue%"
+                                }
+                            } else {
+                                isError = true
+                                ""
+                            }
+                        },
+                        label = { Text("비율 (%)", color = Color.White.copy(alpha = 0.7f)) },
+                        isError = isError,
+                        supportingText = {
+                            if (isError) {
+                                Text(
+                                    text = "10% ~ 90% 사이의 값을 입력하세요",
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color.White,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.5f)
+                        ),
+                        singleLine = true
+                    )
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    vm.updateOfficeShareRatio(sliderVal.roundToInt())
-                    showRatioDialog = false
-                }) { Text("확인") }
+                TextButton(
+                    onClick = {
+                        val numericValue = inputValue.replace("%", "").toIntOrNull()
+                        if (numericValue != null && numericValue in 10..90) {
+                            vm.updateOfficeShareRatio(numericValue)
+                            showRatioDialog = false
+                        }
+                    },
+                    enabled = !isError && inputValue.isNotEmpty()
+                ) { Text("확인") }
             },
             dismissButton = { TextButton(onClick = { showRatioDialog = false }) { Text("취소") } },
             containerColor = Color(0xFF2A2A2A)

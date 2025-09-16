@@ -272,6 +272,7 @@ class MainActivity : ComponentActivity() {
     private fun handleIntent(intent: Intent?) {
         when (intent?.action) {
             ACTION_SHOW_DISPATCH_POPUP -> {
+                val callId = intent.getStringExtra("callId") // Firebase document ID
                 val phoneNumber = intent.getStringExtra("phoneNumber")
                 val contactName = intent.getStringExtra("contactName")
                 val contactAddress = intent.getStringExtra("contactAddress")
@@ -279,18 +280,19 @@ class MainActivity : ComponentActivity() {
                 val officeId = intent.getStringExtra("officeId")
                 val deviceName = intent.getStringExtra("deviceName")
 
-                // DispatchActivity 실행 (로컬 데이터 직접 전달)
-                if (phoneNumber != null) {
+                // DispatchActivity 실행 (Firebase ID 포함)
+                if (phoneNumber != null && regionId != null && officeId != null) {
                     val dispatchIntent = Intent(this, com.example.calldetector.ui.DispatchActivity::class.java).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
-                               Intent.FLAG_ACTIVITY_CLEAR_TOP or 
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                               Intent.FLAG_ACTIVITY_CLEAR_TOP or
                                Intent.FLAG_ACTIVITY_SINGLE_TOP
-                        
+
+                        callId?.let { putExtra("EXTRA_CALL_ID", it) } // Firebase document ID
                         putExtra("EXTRA_PHONE_NUMBER", phoneNumber)
                         contactName?.let { putExtra("EXTRA_CONTACT_NAME", it) }
                         contactAddress?.let { putExtra("EXTRA_CONTACT_ADDRESS", it) }
-                        regionId?.let { putExtra("EXTRA_REGION_ID", it) }
-                        officeId?.let { putExtra("EXTRA_OFFICE_ID", it) }
+                        putExtra("EXTRA_REGION_ID", regionId)
+                        putExtra("EXTRA_OFFICE_ID", officeId)
                         deviceName?.let { putExtra("EXTRA_DEVICE_NAME", it) }
                         putExtra("FROM_NEW_CALL", true)
                     }

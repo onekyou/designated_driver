@@ -597,14 +597,17 @@ fun CallCard(call: CallInfo, onCallClick: (CallInfo) -> Unit) {
         colors = CardDefaults.cardColors(containerColor = Color(0xFF3A3A3A)),
         shape = RoundedCornerShape(0.dp)
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(onClick = { onCallClick(call) })
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
             Column(modifier = Modifier.weight(1f)) {
                 val displayText = (if (!call.customerName.isNullOrBlank()) {
                     call.customerName
@@ -636,7 +639,7 @@ fun CallCard(call: CallInfo, onCallClick: (CallInfo) -> Unit) {
                 )
                 call.assignedDriverName?.let {
                     Text(
-                        text = "배정: $it 기사",
+                        text = "배정: $it",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFFFFAB00)
                     )
@@ -655,6 +658,19 @@ fun CallCard(call: CallInfo, onCallClick: (CallInfo) -> Unit) {
                     else -> Color(0xFF4CAF50)
                 }
             )
+            }
+
+            // 목적지를 Card 중앙에 오버레이로 배치
+            call.destination_set?.let { destination ->
+                if (destination.isNotBlank()) {
+                    Text(
+                        text = "목적지: $destination",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Color(0xFF03DAC6),
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
+            }
         }
     }
 }

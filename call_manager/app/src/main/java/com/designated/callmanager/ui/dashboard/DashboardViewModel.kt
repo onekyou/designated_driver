@@ -234,7 +234,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                             if (dc.type == DocumentChange.Type.ADDED &&
                                 callInfo.status == CallStatus.WAITING.firestoreValue) {
 
-                                if (callInfo.callType != "SHARED") {
+                                // 콜 디텍터에서 생성한 콜은 팝업 표시하지 않음
+                                if (callInfo.fromCallDetector == true) {
+                                    // 콜 디텍터에서 이미 팝업을 표시했으므로 무시
+                                    Log.d(TAG, "Ignoring call from CallDetector: ${doc.id}")
+                                } else if (callInfo.callType != "SHARED") {
+                                    // 콜 매니저에서 생성했거나 fromCallDetector가 없는 경우만 팝업 표시
                                     // SharedPreferences로 이미 표시한 새 콜 팝업 체크
                                     val prefs = appContext.getSharedPreferences("shown_popups", Context.MODE_PRIVATE)
                                     val popupId = "NEW_CALL_${doc.id}"

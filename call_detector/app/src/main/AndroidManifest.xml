@@ -73,7 +73,9 @@
             android:exported="false"
             android:theme="@style/Theme.CallDetector"
             android:launchMode="singleTop"
-            android:excludeFromRecents="true" />
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true" />
         
         <!-- 개인번호 관리 액티비티 -->
         <activity
