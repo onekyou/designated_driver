@@ -41,7 +41,11 @@ data class CallInfo(
 
     @PropertyName("departure") var departure: String? = null,
     @PropertyName("destination") var destination: String? = null,
-    @PropertyName("cancelReason") var cancelReason: String? = null
+    @PropertyName("cancelReason") var cancelReason: String? = null,
+
+    // 콜 생성 출처 플래그
+    @PropertyName("fromCallDetector") var fromCallDetector: Boolean? = null,
+    @PropertyName("fromCallManager") var fromCallManager: Boolean? = null
 ) {
     // constructor() : this("", "", "", Timestamp.now(), CallStatus.PENDING.value)
 }

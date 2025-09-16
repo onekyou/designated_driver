@@ -4,21 +4,32 @@ import android.app.Application
 import android.content.Context
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Radio
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.designated.callmanager.data.Constants
 import com.designated.callmanager.ui.dashboard.DashboardViewModel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,18 +45,97 @@ fun SettingsScreen(
     val regionId by dashboardViewModel.regionId.collectAsStateWithLifecycle()
     val officeId by dashboardViewModel.officeId.collectAsStateWithLifecycle()
 
+    // 알림 설정
     val prefs = remember { context.getSharedPreferences("call_manager_settings", Context.MODE_PRIVATE) }
     var newCallNotificationEnabled by remember { mutableStateOf(prefs.getBoolean("new_call_notification", true)) }
     var driverEventNotificationEnabled by remember { mutableStateOf(prefs.getBoolean("driver_event_notification", true)) }
 
+    // 콜디텍터 설정 (최초 설치 시 기본값 true)
     val callPrefs = remember { context.getSharedPreferences("call_manager_prefs", Context.MODE_PRIVATE) }
-
-    var callDetectionEnabled by remember { mutableStateOf(callPrefs.getBoolean("call_detection_enabled", false)) }
+    var callDetectionEnabled by remember { mutableStateOf(callPrefs.getBoolean("call_detection_enabled", true)) }
     var callDetectorServiceStatus by remember { mutableStateOf("확인 중...") }
+    var isFirstTime by remember { mutableStateOf(!callPrefs.contains("call_detection_enabled")) }
+
+    LaunchedEffect(Unit) {
+        // 권한 확인
+        val hasReadCallLog = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.READ_CALL_LOG
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val hasReadPhoneState = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.READ_PHONE_STATE
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+
+        // 최초 설치 시 기본값 설정 및 서비스 시작
+        if (isFirstTime) {
+            callPrefs.edit().putBoolean("call_detection_enabled", true).apply()
+
+            if (!hasReadCallLog || !hasReadPhoneState) {
+                callDetectorServiceStatus = "권한 필요 ⚠️"
+            } else {
+                try {
+                    val intent = android.content.Intent(context, com.designated.callmanager.service.CallDetectorService::class.java)
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                        context.startForegroundService(intent)
+                    } else {
+                        context.startService(intent)
+                    }
+                    val isRunning = com.designated.callmanager.service.CallDetectorService.isServiceActuallyRunning(context)
+                    callDetectorServiceStatus = if (isRunning) {
+                        "실행 중 ✅"
+                    } else {
+                        "중지됨 ⚠️"
+                    }
+                } catch (e: Exception) {
+                    callDetectorServiceStatus = "시작 실패 ❌"
+                }
+            }
+        } else {
+            callDetectorServiceStatus = if (callDetectionEnabled) {
+                if (!hasReadCallLog || !hasReadPhoneState) {
+                    "권한 필요 ⚠️"
+                } else if (com.designated.callmanager.service.CallDetectorService.isServiceActuallyRunning(context)) {
+                    "실행 중 ✅"
+                } else {
+                    try {
+                        val intent = android.content.Intent(context, com.designated.callmanager.service.CallDetectorService::class.java)
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                            context.startForegroundService(intent)
+                        } else {
+                            context.startService(intent)
+                        }
+                        val isRunning = com.designated.callmanager.service.CallDetectorService.isServiceActuallyRunning(context)
+                        if (isRunning) {
+                            "실행 중 ✅"
+                        } else {
+                            "중지됨 ⚠️"
+                        }
+                    } catch (e: Exception) {
+                        "시작 실패 ❌"
+                    }
+                }
+            } else {
+                "비활성화됨 ❌"
+            }
+        }
+    }
 
     LaunchedEffect(callDetectionEnabled) {
+        val hasReadCallLog = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.READ_CALL_LOG
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val hasReadPhoneState = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.READ_PHONE_STATE
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
         callDetectorServiceStatus = if (callDetectionEnabled) {
-            if (com.designated.callmanager.service.CallDetectorService.isServiceRunning()) {
+            if (!hasReadCallLog || !hasReadPhoneState) {
+                "권한 필요 ⚠️"
+            } else if (com.designated.callmanager.service.CallDetectorService.isServiceActuallyRunning(context)) {
                 "실행 중 ✅"
             } else {
                 "중지됨 ⚠️"
@@ -74,16 +164,21 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 사무실 상태 섹션
+            SettingsSection(
+                title = "사무실 관리",
+                icon = Icons.Filled.Settings
             ) {
-                Text("사무실 콜 공유 상태", style = MaterialTheme.typography.titleMedium)
-                Switch(
+                SettingsToggleItem(
+                    title = "사무실 콜 공유 상태",
+                    description = if (officeStatus != Constants.OFFICE_STATUS_CLOSED_SHARING)
+                        "현재 '운영 중' 상태입니다. 콜은 내부에서 처리됩니다."
+                    else "현재 '마감(공유 중)' 상태입니다. 콜은 공유 채널로 전송됩니다.",
                     checked = officeStatus == Constants.OFFICE_STATUS_CLOSED_SHARING,
                     onCheckedChange = { isChecked ->
                         val newStatus = if (isChecked) Constants.OFFICE_STATUS_CLOSED_SHARING else Constants.OFFICE_STATUS_OPERATING
@@ -91,168 +186,306 @@ fun SettingsScreen(
                     }
                 )
             }
-            Text(
-                text = if (officeStatus != Constants.OFFICE_STATUS_CLOSED_SHARING) "현재 '운영 중' 상태입니다. 콜은 내부에서 처리됩니다."
-                else "현재 '마감(공유 중)' 상태입니다. 콜은 공유 채널로 전송됩니다.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
 
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onNavigateToSettlement() }
-                    .padding(vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 관리 메뉴 섹션
+            SettingsSection(
+                title = "관리",
+                icon = Icons.Filled.Settings
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Payments,
-                    contentDescription = "정산 관리",
-                    modifier = Modifier.size(24.dp)
+                SettingsNavigationItem(
+                    title = "정산 관리",
+                    description = "수익 배분, 지출 관리",
+                    icon = Icons.Filled.Payments,
+                    onClick = onNavigateToSettlement
                 )
-                Spacer(modifier = Modifier.width(16.dp))
-                Text("정산 관리", style = MaterialTheme.typography.bodyLarge)
-            }
 
-            Divider()
-
-            // 제외번호 관리
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onNavigateToExcludeNumber() }
-                    .padding(vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Radio,
-                    contentDescription = "제외번호 관리",
-                    modifier = Modifier.size(24.dp)
+                SettingsNavigationItem(
+                    title = "제외번호 관리",
+                    description = "개인번호 필터링",
+                    icon = Icons.Filled.Radio,
+                    onClick = onNavigateToExcludeNumber
                 )
-                Spacer(modifier = Modifier.width(16.dp))
-                Text("제외번호 관리", style = MaterialTheme.typography.bodyLarge)
-            }
 
-            Divider()
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
+                SettingsNavigationItem(
+                    title = "기사 가입 승인",
+                    description = "대기 중인 기사 승인",
+                    icon = Icons.Filled.PersonAdd,
+                    onClick = {
                         if (regionId != null && officeId != null) {
                             onNavigateToPendingDrivers(regionId!!, officeId!!)
                         }
                     }
-                    .padding(vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Filled.PersonAdd,
-                    contentDescription = "기사 가입 승인",
-                    modifier = Modifier.size(24.dp)
                 )
-                Spacer(modifier = Modifier.width(16.dp))
-                Text("기사 가입 승인", style = MaterialTheme.typography.bodyLarge)
             }
 
-            Divider()
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("알림 설정", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 알림 설정 섹션
+            SettingsSection(
+                title = "알림 설정",
+                icon = Icons.Filled.NotificationsActive
             ) {
-                Text("새 콜 알림음")
-                Switch(checked = newCallNotificationEnabled, onCheckedChange = { isChecked ->
-                    newCallNotificationEnabled = isChecked
-                    prefs.edit().putBoolean("new_call_notification", isChecked).apply()
-                })
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("기사 이벤트 알림 (출/퇴근, 승인 등)")
-                Switch(checked = driverEventNotificationEnabled, onCheckedChange = { isChecked ->
-                    driverEventNotificationEnabled = isChecked
-                    prefs.edit().putBoolean("driver_event_notification", isChecked).apply()
-                })
+                SettingsToggleItem(
+                    title = "새 콜 알림음",
+                    description = "새로운 콜 접수 시 알림음 재생",
+                    checked = newCallNotificationEnabled,
+                    onCheckedChange = { isChecked ->
+                        newCallNotificationEnabled = isChecked
+                        prefs.edit().putBoolean("new_call_notification", isChecked).apply()
+                    }
+                )
+
+                SettingsToggleItem(
+                    title = "기사 이벤트 알림",
+                    description = "출/퇴근, 승인 등 기사 관련 알림",
+                    checked = driverEventNotificationEnabled,
+                    onCheckedChange = { isChecked ->
+                        driverEventNotificationEnabled = isChecked
+                        prefs.edit().putBoolean("driver_event_notification", isChecked).apply()
+                    }
+                )
             }
 
-            Divider()
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("콜 디텍터 설정", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 콜디텍터 설정 섹션
+            SettingsSection(
+                title = "콜디텍터 설정",
+                icon = Icons.Filled.PhoneAndroid
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("전화 감지 기능")
-                    Text(
-                        if (callDetectionEnabled) "수신 전화를 자동으로 Firebase에 저장" else "전화 감지 기능이 비활성화됨",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        "상태: $callDetectorServiceStatus",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (callDetectorServiceStatus.contains("실행 중")) {
-                            MaterialTheme.colorScheme.primary
-                        } else if (callDetectorServiceStatus.contains("중지됨")) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-                    )
-                }
-                Switch(
+                SettingsToggleItem(
+                    title = "전화 감지 기능",
+                    description = if (callDetectionEnabled) "수신 전화를 자동으로 Firebase에 저장" else "전화 감지 기능이 비활성화됨",
+                    statusText = "상태: $callDetectorServiceStatus",
+                    statusColor = when {
+                        callDetectorServiceStatus.contains("실행 중") -> MaterialTheme.colorScheme.primary
+                        callDetectorServiceStatus.contains("중지됨") -> MaterialTheme.colorScheme.error
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                     checked = callDetectionEnabled,
                     onCheckedChange = { isChecked ->
                         callDetectionEnabled = isChecked
                         callPrefs.edit().putBoolean("call_detection_enabled", isChecked).apply()
 
+                        val hasReadCallLog = androidx.core.content.ContextCompat.checkSelfPermission(
+                            context,
+                            android.Manifest.permission.READ_CALL_LOG
+                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                        val hasReadPhoneState = androidx.core.content.ContextCompat.checkSelfPermission(
+                            context,
+                            android.Manifest.permission.READ_PHONE_STATE
+                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
                         if (isChecked) {
-                            try {
-                                val intent = android.content.Intent(context, com.designated.callmanager.service.CallDetectorService::class.java)
-                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                                    context.startForegroundService(intent)
-                                } else {
-                                    context.startService(intent)
+                            if (!hasReadCallLog || !hasReadPhoneState) {
+                                callDetectorServiceStatus = "권한 필요 ⚠️"
+                            } else {
+                                try {
+                                    val intent = android.content.Intent(context, com.designated.callmanager.service.CallDetectorService::class.java)
+                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                        context.startForegroundService(intent)
+                                    } else {
+                                        context.startService(intent)
+                                    }
+                                    callDetectorServiceStatus = if (com.designated.callmanager.service.CallDetectorService.isServiceActuallyRunning(context)) {
+                                        "실행 중 ✅"
+                                    } else {
+                                        "중지됨 ⚠️"
+                                    }
+                                } catch (e: Exception) {
+                                    callDetectorServiceStatus = "시작 실패 ❌"
                                 }
-                                callDetectorServiceStatus = "시작 중..."
-                            } catch (e: Exception) {
-                                }
+                            }
                         } else {
                             try {
                                 val intent = android.content.Intent(context, com.designated.callmanager.service.CallDetectorService::class.java)
                                 context.stopService(intent)
-                                callDetectorServiceStatus = "중지 중..."
+                                callDetectorServiceStatus = "비활성화됨 ❌"
                             } catch (e: Exception) {
-                                }
+                                callDetectorServiceStatus = "중지 실패 ⚠️"
+                            }
                         }
                     }
                 )
             }
 
-            Divider()
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("앱 정보", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("버전: 1.0.0 (Beta) - 콜디텍터 내장형", style = MaterialTheme.typography.bodyMedium)
-            Text("대리운전 콜 매니저", style = MaterialTheme.typography.bodyMedium)
-            Text("지역: ${regionId ?: "미설정"}", style = MaterialTheme.typography.bodySmall)
-            Text("사무실 ID: ${officeId ?: "미설정"}", style = MaterialTheme.typography.bodySmall)
-            Text("콜디텍터: ${if (callDetectionEnabled) "활성화" else "비활성화"}", style = MaterialTheme.typography.bodySmall)
+            Spacer(modifier = Modifier.height(24.dp))
 
+            // 앱 정보 섹션
+            SettingsSection(
+                title = "앱 정보",
+                icon = Icons.Filled.Info
+            ) {
+                SettingsInfoItem(
+                    label = "버전",
+                    value = "1.0.0 (Beta) - 콜디텍터 내장형"
+                )
+
+                SettingsInfoItem(
+                    label = "앱명",
+                    value = "대리운전 콜 매니저"
+                )
+
+                SettingsInfoItem(
+                    label = "지역",
+                    value = regionId ?: "미설정"
+                )
+
+                SettingsInfoItem(
+                    label = "사무실 ID",
+                    value = officeId ?: "미설정"
+                )
+
+                SettingsInfoItem(
+                    label = "콜디텍터",
+                    value = if (callDetectionEnabled) "활성화" else "비활성화"
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
         }
+    }
+}
+
+@Composable
+private fun SettingsSection(
+    title: String,
+    icon: ImageVector,
+    content: @Composable () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 16.dp)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            content()
+        }
+    }
+}
+
+@Composable
+private fun SettingsToggleItem(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    statusText: String? = null,
+    statusColor: androidx.compose.ui.graphics.Color? = null
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (statusText != null && statusColor != null) {
+                Text(
+                    text = statusText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = statusColor
+                )
+            }
+        }
+
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange
+        )
+    }
+}
+
+@Composable
+private fun SettingsNavigationItem(
+    title: String,
+    description: String,
+    icon: ImageVector,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsInfoItem(
+    label: String,
+    value: String
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium
+        )
     }
 }

@@ -290,10 +290,10 @@ class CallDetectorService : Service() {
     /**
      * 새 콜 감지 시 MainActivity를 포그라운드로 전환하고 팝업 트리거
      */
-    private fun bringMainActivityToForegroundForNewCall(phoneNumber: String, contactName: String?, contactAddress: String?, regionId: String, officeId: String) {
+    private fun bringMainActivityToForegroundForNewCall(callId: String, phoneNumber: String, contactName: String?, contactAddress: String?, regionId: String, officeId: String) {
         try {
             Log.i(TAG, "🔍 [DEBUG] bringMainActivityToForegroundForNewCall 시작")
-            Log.i(TAG, "🔍 [DEBUG] 파라미터 - phoneNumber: $phoneNumber, contactName: $contactName, contactAddress: $contactAddress")
+            Log.i(TAG, "🔍 [DEBUG] 파라미터 - callId: $callId, phoneNumber: $phoneNumber, contactName: $contactName, contactAddress: $contactAddress")
             Log.i(TAG, "🔍 [DEBUG] 파라미터 - regionId: $regionId, officeId: $officeId")
             
             // MainActivity로 이동하면서 콜 정보 전달
@@ -310,8 +310,9 @@ class CallDetectorService : Service() {
                     addCategory(Intent.CATEGORY_DEFAULT)
                 }
                 
-                // 새 콜 팝업을 위한 액션과 데이터 (로컬 데이터 직접 전달)
+                // 새 콜 팝업을 위한 액션과 데이터 (Firebase ID 포함)
                 action = com.example.calldetector.MainActivity.ACTION_SHOW_DISPATCH_POPUP
+                putExtra("callId", callId) // Firebase document ID 추가
                 putExtra("phoneNumber", phoneNumber)
                 contactName?.let { putExtra("contactName", it) }
                 contactAddress?.let { putExtra("contactAddress", it) }
@@ -328,24 +329,24 @@ class CallDetectorService : Service() {
             }
             
             // WindowManager 방식 - 콜매니저와 동일한 방식
-            showOverlayPopup(phoneNumber, contactName, contactAddress, regionId, officeId)
+            showOverlayPopup(callId, phoneNumber, contactName, contactAddress, regionId, officeId)
             
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to show overlay popup", e)
             // 폴백으로 Full-Screen Intent 사용
             Log.w(TAG, "⚠️ Using Full-Screen Intent fallback")
-            showFullScreenIntentNotification(phoneNumber, contactName, contactAddress, regionId, officeId)
+            showFullScreenIntentNotification(callId, phoneNumber, contactName, contactAddress, regionId, officeId)
         }
         
-        // 기존 catch 블록들 (주석 처리)
+        // 기존 catch 블록들 (주석 처리 - callId 파라미터 추가됨)
         /*
         } catch (e: SecurityException) {
             Log.w(TAG, "⚠️ Direct activity start failed for new call, using Full-Screen Intent fallback")
-            showFullScreenIntentNotification(phoneNumber, contactName, contactAddress, regionId, officeId)
+            showFullScreenIntentNotification(callId, phoneNumber, contactName, contactAddress, regionId, officeId)
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to bring MainActivity to foreground for new call", e)
             Log.w(TAG, "⚠️ Using Full-Screen Intent fallback instead")
-            showFullScreenIntentNotification(phoneNumber, contactName, contactAddress, regionId, officeId)
+            showFullScreenIntentNotification(callId, phoneNumber, contactName, contactAddress, regionId, officeId)
         }
         */
     }
@@ -353,14 +354,14 @@ class CallDetectorService : Service() {
     /**
      * WindowManager를 사용한 오버레이 팝업 생성 (콜매니저 방식)
      */
-    private fun showOverlayPopup(phoneNumber: String, contactName: String?, contactAddress: String?, regionId: String, officeId: String) {
+    private fun showOverlayPopup(callId: String, phoneNumber: String, contactName: String?, contactAddress: String?, regionId: String, officeId: String) {
         try {
             Log.i(TAG, "🎯 showOverlayPopup 시작 - 권한 체크")
             
             // SYSTEM_ALERT_WINDOW 권한 체크
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
                 Log.w(TAG, "❌ SYSTEM_ALERT_WINDOW 권한 없음 - Full-Screen Intent로 폴백")
-                showFullScreenIntentNotification(phoneNumber, contactName, contactAddress, regionId, officeId)
+                showFullScreenIntentNotification(callId, phoneNumber, contactName, contactAddress, regionId, officeId)
                 return
             }
             
@@ -372,6 +373,7 @@ class CallDetectorService : Service() {
                        Intent.FLAG_ACTIVITY_SINGLE_TOP or
                        Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
                        
+                putExtra("EXTRA_CALL_ID", callId) // Firebase document ID 추가
                 putExtra("EXTRA_PHONE_NUMBER", phoneNumber)
                 contactName?.let { putExtra("EXTRA_CONTACT_NAME", it) }
                 contactAddress?.let { putExtra("EXTRA_CONTACT_ADDRESS", it) }
@@ -389,7 +391,7 @@ class CallDetectorService : Service() {
         }
     }
 
-    private fun showFullScreenIntentNotification(phoneNumber: String, contactName: String?, contactAddress: String?, regionId: String, officeId: String) {
+    private fun showFullScreenIntentNotification(callId: String, phoneNumber: String, contactName: String?, contactAddress: String?, regionId: String, officeId: String) {
         try {
             Log.i(TAG, "🚀 [DEBUG] showFullScreenIntentNotification 시작")
             
@@ -426,6 +428,7 @@ class CallDetectorService : Service() {
                 
                 // 새 콜 팝업을 위한 액션과 데이터
                 action = com.example.calldetector.MainActivity.ACTION_SHOW_DISPATCH_POPUP
+                putExtra("callId", callId) // Firebase document ID 추가
                 putExtra("phoneNumber", phoneNumber)
                 contactName?.let { putExtra("contactName", it) }
                 contactAddress?.let { putExtra("contactAddress", it) }
@@ -581,7 +584,7 @@ class CallDetectorService : Service() {
             "deviceName" to deviceName,
             "callType" to "수신",
             "timestampClient" to System.currentTimeMillis(),
-            "fromCallDetector" to false // 독립 콜디텍터에서 생성된 콜 (팝업 표시 필요)
+            "fromCallDetector" to true // 독립 콜디텍터에서 생성된 콜 (콜매니저에서 팝업 표시 방지)
         )
     }
 
@@ -705,33 +708,42 @@ class CallDetectorService : Service() {
             "deviceName" to deviceName,
             "callType" to "수신",
             "timestampClient" to System.currentTimeMillis(),
-            "fromCallDetector" to false // 독립 콜디텍터에서 생성된 콜 (팝업 표시 필요)
+            "fromCallDetector" to true // 독립 콜디텍터에서 생성된 콜 (콜매니저에서 팝업 표시 방지)
         )
         
-        // 1. 즉시 팝업 생성 (로컬 데이터 사용)
-        Log.i(TAG, "🚀 Call ended - immediately showing popup with local data")
-        bringMainActivityToForegroundForNewCall(phoneNumber, contactName, contactAddress, regionId, officeId)
-        
-        // 2. Firebase 업로드 (병렬 처리)
+        // Firebase에 먼저 업로드하고 ID를 받아서 팝업 생성 (콜매니저와 동일한 방식)
         val targetPath = "regions/$regionId/offices/$officeId/calls"
         Log.i(TAG, "🚨 About to upload callData: $callData")
         Log.i(TAG, "🚨 fromCallDetector value: ${callData["fromCallDetector"]}")
-        
+
         db.collection(targetPath)
             .add(callData)
             .addOnSuccessListener { documentReference ->
                 Log.i(TAG, "✅ Call data saved to Firestore with ID: ${documentReference.id}")
+
+                // Firebase ID를 받은 후 팝업 생성
+                bringMainActivityToForegroundForNewCall(
+                    documentReference.id,
+                    phoneNumber,
+                    contactName,
+                    contactAddress,
+                    regionId,
+                    officeId
+                )
+
                 Log.i(TAG, "✅ Call end processing completed")
             }
             .addOnFailureListener { e ->
                 Log.e(TAG, "❌ Failed to save call data to Firestore: ${e.message}", e)
-                // 실패해도 기사배차 팝업은 생성 (알림 방식으로 폴백)
-                showCallManagerNotification(
-                    context = this@CallDetectorService,
-                    callId = "failed_${System.currentTimeMillis()}",
-                    phoneNumber = phoneNumber,
-                    contactName = contactName,
-                    contactAddress = contactAddress
+                // 실패 시에도 임시 ID로 팝업 생성
+                val tempCallId = "temp_${System.currentTimeMillis()}"
+                bringMainActivityToForegroundForNewCall(
+                    tempCallId,
+                    phoneNumber,
+                    contactName,
+                    contactAddress,
+                    regionId,
+                    officeId
                 )
             }
     }
@@ -756,7 +768,7 @@ class CallDetectorService : Service() {
             "timestamp" to FieldValue.serverTimestamp(),
             "callType" to "AFTER_HOURS", // 퇴근 후 콜
             "timestampClient" to System.currentTimeMillis(),
-            "fromCallDetector" to false // 독립 콜디텍터에서 생성된 콜 (팝업 표시 필요)
+            "fromCallDetector" to true // 독립 콜디텍터에서 생성된 콜 (콜매니저에서 팝업 표시 방지)
         )
         
         contactName?.let { sharedCallData["customerName"] = it }
@@ -862,7 +874,7 @@ class CallDetectorService : Service() {
             "timestamp" to FieldValue.serverTimestamp(),
             "callType" to "AFTER_HOURS_QUICK", // 마감 후 빠른 응답
             "timestampClient" to System.currentTimeMillis(),
-            "fromCallDetector" to false, // 독립 콜디텍터에서 생성된 콜 (팝업 표시 필요)
+            "fromCallDetector" to true, // 독립 콜디텍터에서 생성된 콜 (콜매니저에서 팝업 표시 방지)
             "fromRinging" to true // RINGING 상태에서 생성됨을 표시
         )
         

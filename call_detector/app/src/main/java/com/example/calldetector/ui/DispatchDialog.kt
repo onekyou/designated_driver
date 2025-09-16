@@ -116,8 +116,8 @@ fun DispatchDialog(
         },
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onHold) { 
-                    Text("보류") 
+                TextButton(onClick = onHold) {
+                    Text("나중에")
                 }
 
                 TextButton(onClick = onShare) { 

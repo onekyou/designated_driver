@@ -54,6 +54,18 @@ class CallDetectorService : Service() {
         private var isRunning = false
 
         fun isServiceRunning(): Boolean = isRunning
+
+        // 실제 시스템에서 서비스 상태를 확인하는 메서드
+        fun isServiceActuallyRunning(context: Context): Boolean {
+            val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+            @Suppress("DEPRECATION")
+            for (service in manager.getRunningServices(Integer.MAX_VALUE)) {
+                if (CallDetectorService::class.java.name == service.service.className) {
+                    return true
+                }
+            }
+            return false
+        }
     }
 
     override fun onCreate() {
