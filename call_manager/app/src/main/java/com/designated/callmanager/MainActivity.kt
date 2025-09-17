@@ -343,7 +343,7 @@ class MainActivity : ComponentActivity() {
                         Screen.PendingDrivers -> {
                             val params = navigationParams
                             if (params is NavigationParams.DriverManagement) {
-                                DriverManagementScreen(
+                                PendingDriversScreen(
                                     regionId = params.regionId,
                                     officeId = params.officeId,
                                     onNavigateBack = { screenState = Screen.Settings }

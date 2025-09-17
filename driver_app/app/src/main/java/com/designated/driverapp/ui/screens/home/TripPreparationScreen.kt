@@ -35,7 +35,7 @@ import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.util.*
-import Log
+import android.util.Log
 
 private val DeepYellow = Color(0xFFFFB000)
 private val DarkBackground = Color(0xFF1A1A1A)

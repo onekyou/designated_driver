@@ -60,6 +60,9 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.VisualTransformation
+import android.view.inputmethod.EditorInfo
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.runtime.DisposableEffect
@@ -133,6 +136,7 @@ fun DashboardScreen(
     val showTripCompletedPopup by viewModel.showTripCompletedPopup.collectAsStateWithLifecycle()
     val tripCompletedInfo by viewModel.tripCompletedInfo.collectAsStateWithLifecycle()
     val showCanceledCallPopup by viewModel.showCanceledCallPopup.collectAsStateWithLifecycle()
+    val showSharedCallTakenDialog by viewModel.showSharedCallTakenDialog.collectAsState()
     val canceledCallInfo by viewModel.canceledCallInfo.collectAsStateWithLifecycle()
 
     val showNewCallPopup by viewModel.showNewCallPopup.collectAsStateWithLifecycle()
@@ -373,6 +377,21 @@ fun DashboardScreen(
         )
     }
 
+    // 공유콜 마감 다이얼로그
+    if (showSharedCallTakenDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissSharedCallTakenDialog() },
+            icon = { Icon(Icons.Default.Info, contentDescription = null) },
+            title = { Text("공유콜 마감") },
+            text = { Text("다른 사무실에서 이미 수락하여 공유콜이 마감되었습니다.") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.dismissSharedCallTakenDialog() }) {
+                    Text("확인")
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -592,6 +611,23 @@ fun CallCard(call: CallInfo, onCallClick: (CallInfo) -> Unit) {
     val callStatus = remember(call.status) { CallStatus.fromFirestoreValue(call.status) }
     val statusDisplayName = callStatus.getDisplayName()
 
+    // 공유콜이 배차 완료된 경우 또는 일반콜이 운행중인 경우 클릭 비활성화
+    val isCallInProgress = callStatus == CallStatus.IN_PROGRESS ||
+                          callStatus == CallStatus.AWAITING_SETTLEMENT ||
+                          callStatus == CallStatus.COMPLETED
+
+    val isSharedCallCompleted = call.callType == "SHARED" && (
+        callStatus == CallStatus.ASSIGNED ||
+        callStatus == CallStatus.ACCEPTED ||
+        callStatus == CallStatus.PICKUP_COMPLETE ||
+        callStatus == CallStatus.IN_PROGRESS ||
+        callStatus == CallStatus.AWAITING_SETTLEMENT ||
+        callStatus == CallStatus.COMPLETED ||
+        callStatus == CallStatus.SHARED_OUT
+    )
+
+    val shouldDisableClick = isCallInProgress || isSharedCallCompleted
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF3A3A3A)),
@@ -600,7 +636,13 @@ fun CallCard(call: CallInfo, onCallClick: (CallInfo) -> Unit) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(onClick = { onCallClick(call) })
+                .then(
+                    if (shouldDisableClick) {
+                        Modifier // 클릭 비활성화
+                    } else {
+                        Modifier.clickable(onClick = { onCallClick(call) })
+                    }
+                )
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Row(
@@ -1129,6 +1171,7 @@ fun NewCallAssignmentDialog(
     )
 
     if (showShareDialog) {
+        // 초기값에 공백을 넣어 한글 입력을 유도
         var departure by remember { mutableStateOf("") }
         var destination by remember { mutableStateOf("") }
         var fareText by remember { mutableStateOf("") }
@@ -1150,6 +1193,7 @@ fun NewCallAssignmentDialog(
                         value = departure,
                         onValueChange = { departure = it },
                         label = { Text("출발지") },
+                        placeholder = { Text("예: 서울역") },
                         modifier = Modifier.focusRequester(departureFocusRequester),
                         keyboardOptions = KeyboardOptions(
                             imeAction = ImeAction.Next
@@ -1162,6 +1206,7 @@ fun NewCallAssignmentDialog(
                         value = destination,
                         onValueChange = { destination = it },
                         label = { Text("도착지") },
+                        placeholder = { Text("예: 강남역") },
                         modifier = Modifier.focusRequester(destinationFocusRequester),
                         keyboardOptions = KeyboardOptions(
                             imeAction = ImeAction.Next
@@ -1513,6 +1558,7 @@ fun SharedCallAcceptDialog(
                     value = departure,
                     onValueChange = { departure = it },
                     label = { Text("출발지") },
+                    placeholder = { Text("예: 서울역") },
                     singleLine = true,
                     modifier = Modifier.focusRequester(departureFocusRequester),
                     keyboardOptions = KeyboardOptions(
@@ -1526,6 +1572,7 @@ fun SharedCallAcceptDialog(
                     value = destination,
                     onValueChange = { destination = it },
                     label = { Text("도착지") },
+                    placeholder = { Text("예: 강남역") },
                     singleLine = true,
                     modifier = Modifier.focusRequester(destinationFocusRequester),
                     keyboardOptions = KeyboardOptions(

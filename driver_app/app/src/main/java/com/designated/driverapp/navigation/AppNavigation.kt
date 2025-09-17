@@ -51,7 +51,6 @@ fun AppNavigation(
     LaunchedEffect(uiState.navigateToHistorySettlement) {
         if (uiState.navigateToHistorySettlement) {
             navController.navigate(AppDestinations.HISTORY_SETTLEMENT_ROUTE) {
-                popUpTo(AppDestinations.HOME_ROUTE) { inclusive = true }
                 launchSingleTop = true
             }
             driverViewModel.onNavigateToHistorySettlementHandled()
@@ -64,7 +63,7 @@ fun AppNavigation(
                 driverViewModel = driverViewModel,
                 onLoginSuccess = { regionId, officeId, driverId ->
                     driverViewModel.initializeListenersWithInfo(regionId, officeId, driverId)
-                    navController.navigate(AppDestinations.HISTORY_SETTLEMENT_ROUTE) {
+                    navController.navigate(AppDestinations.HOME_ROUTE) {
                         popUpTo(AppDestinations.LOGIN_ROUTE) { inclusive = true }
                         launchSingleTop = true
                     }

@@ -898,6 +898,85 @@ export const onCallStatusChanged = onDocumentUpdated(
   }
 );
 
+// pending_drivers 컬렉션에 새 문서 생성 시 FCM 알림 전송
+export const onDriverSignupRequest = onDocumentCreated(
+  {
+    region: "asia-northeast3",
+    document: "pending_drivers/{driverId}"
+  },
+  async (event: any) => {
+    const driverId = event.params.driverId;
+    const driverData = event.data?.data();
+
+    if (!driverData) {
+      logger.warn(`[onDriverSignupRequest:${driverId}] No driver data found.`);
+      return;
+    }
+
+    const { targetRegionId, targetOfficeId, name, phoneNumber } = driverData;
+
+    logger.info(`[onDriverSignupRequest:${driverId}] New driver signup: ${name} for office ${targetOfficeId}`);
+
+    try {
+      // 해당 사무실의 관리자들 FCM 토큰 가져오기
+      const adminsSnapshot = await admin.firestore()
+        .collection("admins")
+        .where("associatedRegionId", "==", targetRegionId)
+        .where("associatedOfficeId", "==", targetOfficeId)
+        .get();
+
+      const tokens: string[] = [];
+      adminsSnapshot.forEach(doc => {
+        const adminData = doc.data();
+        if (adminData.fcmToken) {
+          tokens.push(adminData.fcmToken);
+        }
+      });
+
+      if (tokens.length === 0) {
+        logger.warn(`[onDriverSignupRequest:${driverId}] No admin tokens found for office ${targetOfficeId}`);
+        return;
+      }
+
+      // FCM 메시지 전송
+      const payload = {
+        notification: {
+          title: "🚗 새 기사 가입 신청",
+          body: `${name}님이 가입 승인을 기다리고 있습니다.`,
+        },
+        data: {
+          type: "DRIVER_APPROVAL_REQUEST",
+          driverId: driverId,
+          driverName: name,
+          driverPhone: phoneNumber || "",
+        },
+        android: {
+          priority: "high" as const,
+          ttl: 60000,
+          notification: {
+            sound: "default",
+            clickAction: "com.designated.callmanager.HOME",
+            channelId: "driver_approval_channel"
+          }
+        }
+      };
+
+      // 모든 관리자에게 전송
+      for (const token of tokens) {
+        try {
+          await admin.messaging().send({ ...payload, token });
+          logger.info(`[onDriverSignupRequest:${driverId}] FCM sent to admin token: ${token.substring(0, 10)}...`);
+        } catch (error) {
+          logger.error(`[onDriverSignupRequest:${driverId}] Failed to send FCM:`, error);
+        }
+      }
+
+    } catch (error) {
+      logger.error(`[onDriverSignupRequest:${driverId}] Error processing pending driver:`, error);
+    }
+  }
+);
+
 // 새 콜 알림 함수 제거됨
 // 이유: Call Detector에서 로컬 데이터로 즉시 팝업 생성하므로 FCM 알림 불필요
 // 기존 함수는 중복 알림 및 앱 재빌드 시 이전 콜 재팝업 문제 야기

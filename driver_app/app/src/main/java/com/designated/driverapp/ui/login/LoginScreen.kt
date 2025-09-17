@@ -21,7 +21,7 @@ import com.designated.driverapp.ui.login.LoginViewModel
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.designated.driverapp.viewmodel.DriverViewModel
 import com.google.firebase.messaging.FirebaseMessaging
-import Log
+import android.util.Log
 
 @Composable
 fun LoginScreen(

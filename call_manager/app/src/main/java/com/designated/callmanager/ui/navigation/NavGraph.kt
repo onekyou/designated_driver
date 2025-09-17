@@ -43,6 +43,8 @@ fun AppNavGraph(
         }
         composable(Screen.PendingDrivers.route) {
              PendingDriversScreen(
+                 regionId = "default", // TODO: 실제 regionId 전달
+                 officeId = "default", // TODO: 실제 officeId 전달
                  onNavigateBack = { navController.popBackStack() }
              )
         }

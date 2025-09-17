@@ -24,13 +24,20 @@ import android.text.format.DateFormat
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PendingDriversScreen(
-    viewModel: PendingDriversViewModel = viewModel(),
+    regionId: String,
+    officeId: String,
     onNavigateBack: () -> Unit
 ) {
+    val context = LocalContext.current
+    val viewModel: PendingDriversViewModel = viewModel(
+        factory = PendingDriversViewModel.Factory(
+            application = context.applicationContext as android.app.Application,
+            regionId = regionId,
+            officeId = officeId
+        )
+    )
     val uiState by viewModel.uiState.collectAsState()
     val approvalState by viewModel.approvalState.collectAsState()
-
-    val context = LocalContext.current
 
     LaunchedEffect(approvalState) {
         when (val state = approvalState) {
