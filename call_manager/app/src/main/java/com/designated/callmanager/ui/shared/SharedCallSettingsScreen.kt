@@ -1,9 +1,14 @@
 package com.designated.callmanager.ui.shared
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -12,14 +17,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.designated.callmanager.data.SharedCallInfo
 import com.designated.callmanager.data.PointTransaction
 import com.designated.callmanager.ui.dashboard.DashboardViewModel
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.Icons
-import androidx.compose.material3.ExperimentalMaterial3Api
+import com.designated.callmanager.ui.dashboard.ClosingSettlement
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -29,26 +30,19 @@ fun SharedCallSettingsScreen(
     onNavigateBack: () -> Unit,
     viewModel: DashboardViewModel = viewModel()
 ) {
-    val allSharedCalls by viewModel.allSharedCalls.collectAsState()
     val pointsInfo by viewModel.pointsInfo.collectAsState()
     val pointTransactions by viewModel.pointTransactions.collectAsState()
-    val myOfficeId by viewModel.officeId.collectAsState()
-    val (tabIndex, setTabIndex) = remember { mutableStateOf(0) }
+    val closingSettlements by viewModel.closingSettlements.collectAsState()
 
-    val myPublished = allSharedCalls.filter { it.sourceOfficeId == myOfficeId }
-    val myClaimed   = allSharedCalls.filter { it.claimedOfficeId == myOfficeId }
+    val (selectedTabIndex, setSelectedTabIndex) = remember { mutableStateOf(0) }
 
     BackHandler {
         onNavigateBack()
     }
 
-    LaunchedEffect(allSharedCalls, pointsInfo, pointTransactions, myOfficeId) {
-
-        allSharedCalls.forEach { call ->
-        }
-
-        pointTransactions.forEach { transaction ->
-        }
+    LaunchedEffect(Unit) {
+        // 마감정산 데이터 로드
+        viewModel.loadClosingSettlements()
     }
 
     Scaffold(topBar = {
@@ -94,37 +88,27 @@ fun SharedCallSettingsScreen(
                 }
             }
 
-            TabRow(selectedTabIndex = tabIndex) {
-                Tab(selected = tabIndex==0, onClick={setTabIndex(0)}, text={Text("내가 올린")})
-                Tab(selected = tabIndex==1, onClick={setTabIndex(1)}, text={Text("내가 수락")})
-                Tab(selected = tabIndex==2, onClick={setTabIndex(2)}, text={Text("포인트 내역")})
+            TabRow(selectedTabIndex = selectedTabIndex) {
+                Tab(
+                    selected = selectedTabIndex == 0,
+                    onClick = { setSelectedTabIndex(0) },
+                    text = { Text("포인트 내역") }
+                )
+                Tab(
+                    selected = selectedTabIndex == 1,
+                    onClick = { setSelectedTabIndex(1) },
+                    text = { Text("마감정산") }
+                )
+                Tab(
+                    selected = selectedTabIndex == 2,
+                    onClick = { setSelectedTabIndex(2) },
+                    text = { Text("테스트") }
+                )
             }
 
             LazyColumn(Modifier.fillMaxSize()) {
-                when (tabIndex) {
+                when (selectedTabIndex) {
                     0 -> {
-                        if (myPublished.isEmpty()) {
-                            item {
-                                EmptyStateMessage("아직 올린 공유콜이 없습니다.")
-                            }
-                        } else {
-                            items(myPublished, key={it.id}) { call ->
-                                SharedCallRow(call, isPublished = true)
-                            }
-                        }
-                    }
-                    1 -> {
-                        if (myClaimed.isEmpty()) {
-                            item {
-                                EmptyStateMessage("아직 수락한 공유콜이 없습니다.")
-                            }
-                        } else {
-                            items(myClaimed, key={it.id}) { call ->
-                                SharedCallRow(call, isPublished = false)
-                            }
-                        }
-                    }
-                    2 -> {
                         if (pointTransactions.isEmpty()) {
                             item {
                                 EmptyStateMessage("포인트 거래 내역이 없습니다.")
@@ -135,7 +119,92 @@ fun SharedCallSettingsScreen(
                             }
                         }
                     }
+                    1 -> {
+                        if (closingSettlements.isEmpty()) {
+                            item {
+                                EmptyStateMessage("마감정산 내역이 없습니다.")
+                            }
+                        } else {
+                            items(closingSettlements, key={it.date}) { settlement ->
+                                ClosingSettlementRow(settlement)
+                            }
+                        }
+                    }
+                    2 -> {
+                        item {
+                            TestSection(viewModel)
+                        }
+                    }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TestSection(viewModel: DashboardViewModel) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                "포인트 시스템 테스트",
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                "테스트 거래를 생성하여 포인트 시스템의 정합성을 확인할 수 있습니다.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = {
+                        viewModel.createTestPointTransaction(
+                            amount = 1000,
+                            type = "CHARGE",
+                            description = "테스트 충전 +1000P"
+                        )
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("충전 테스트")
+                }
+
+                Button(
+                    onClick = {
+                        viewModel.createTestPointTransaction(
+                            amount = -500,
+                            type = "SHARED_CALL_SEND",
+                            description = "테스트 송금 -500P"
+                        )
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("송금 테스트")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Button(
+                onClick = {
+                    viewModel.createTestPointsDocument()
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("초기 포인트 설정 (1000P)")
             }
         }
     }
@@ -158,81 +227,6 @@ private fun EmptyStateMessage(message: String) {
     }
 }
 
-@Composable
-private fun SharedCallRow(call: SharedCallInfo, isPublished: Boolean) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "${call.departure ?: "출발지"} → ${call.destination ?: "도착지"}",
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleSmall
-                )
-                StatusChip(call.status)
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    "요금: ${call.fare ?: 0}원",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                call.timestamp?.let { timestamp ->
-                    Text(
-                        SimpleDateFormat("MM/dd HH:mm", Locale.getDefault()).format(timestamp.toDate()),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            if (call.status == "COMPLETED") {
-                val pointAmount = ((call.fare ?: 0) * 0.1).toInt()
-                Text(
-                    if (isPublished) "+${pointAmount}P (수익)" else "-${pointAmount}P (수수료)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (isPublished) Color(0xFF4CAF50) else Color(0xFFF44336),
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun StatusChip(status: String) {
-    val (color, text) = when (status) {
-        "OPEN" -> Color(0xFF2196F3) to "대기중"
-        "CLAIMED" -> Color(0xFFFFA000) to "수락됨"
-        "COMPLETED" -> Color(0xFF4CAF50) to "완료"
-        else -> Color.Gray to status
-    }
-
-    Card(
-        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.1f)),
-        modifier = Modifier.padding(0.dp)
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            style = MaterialTheme.typography.bodySmall,
-            color = color,
-            fontWeight = FontWeight.Medium
-        )
-    }
-}
 
 @Composable
 private fun PointTransactionRow(transaction: PointTransaction) {
@@ -287,5 +281,97 @@ private fun getTransactionTypeText(type: String): String {
         "SHARED_CALL_SEND" -> "공유콜 송금"
         "SHARED_CALL_RECEIVE" -> "공유콜 수익"
         else -> type
+    }
+}
+
+@Composable
+private fun ClosingSettlementRow(settlement: ClosingSettlement) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        settlement.date,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        "마감콜: ${settlement.completedCalls}/${settlement.totalCalls}건",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "${settlement.totalRevenue}원",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (expanded && settlement.details.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                settlement.details.forEach { detail ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 2.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "👤 ${detail.customerName}",
+                                    fontWeight = FontWeight.Medium,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    "${detail.fare}원",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(2.dp))
+
+                            Text(
+                                "📍 ${detail.departure} → ${detail.destination}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }

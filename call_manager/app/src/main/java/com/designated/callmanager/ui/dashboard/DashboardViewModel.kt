@@ -46,6 +46,28 @@ sealed class DriverApprovalActionState {
     data class Error(val message: String) : DriverApprovalActionState()
 }
 
+data class PreviousDayClosingData(
+    val totalCount: Int,
+    val completedCount: Int,
+    val uncompletedCount: Int,
+    val completedCalls: List<CompletedClosingCall>
+)
+
+data class CompletedClosingCall(
+    val customerName: String,
+    val departure: String,
+    val destination: String,
+    val fare: Long
+)
+
+data class ClosingSettlement(
+    val date: String, // "yyyy-MM-dd" 형식
+    val totalCalls: Int,
+    val completedCalls: Int,
+    val totalRevenue: Long,
+    val details: List<CompletedClosingCall>
+)
+
 class DashboardViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
@@ -149,6 +171,17 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     // FCM 알림 클릭으로 인한 팝업인지 구분하는 플래그
     private val _isFromFcmNotification = MutableStateFlow(false)
     val isFromFcmNotification: StateFlow<Boolean> = _isFromFcmNotification
+
+    // 전날 마감내역 관련
+    private val _showPreviousDayClosingDialog = MutableStateFlow(false)
+    val showPreviousDayClosingDialog: StateFlow<Boolean> = _showPreviousDayClosingDialog.asStateFlow()
+
+    private val _previousDayClosingData = MutableStateFlow<PreviousDayClosingData?>(null)
+    val previousDayClosingData: StateFlow<PreviousDayClosingData?> = _previousDayClosingData.asStateFlow()
+
+    // 마감정산 관련
+    private val _closingSettlements = MutableStateFlow<List<ClosingSettlement>>(emptyList())
+    val closingSettlements: StateFlow<List<ClosingSettlement>> = _closingSettlements.asStateFlow()
 
     private var callsListener: ListenerRegistration? = null
     private var driversListener: ListenerRegistration? = null
@@ -428,9 +461,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }
 
-        pointTransactionsListener = firestore.collection("point_transactions")
-            .whereEqualTo("regionId", regionId)
-            .whereEqualTo("officeId", officeId)
+        pointTransactionsListener = officeRef.collection("point_transactions")
             .orderBy("timestamp", Query.Direction.DESCENDING)
             .limit(50)
             .addSnapshotListener { snapshots, e ->
@@ -442,6 +473,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                         doc.toObject(PointTransaction::class.java)?.apply { id = doc.id }
                     }
                     _pointTransactions.value = transactions
+
+                    // 잔액 정합성 검증
+                    validateBalanceConsistency(transactions)
                 }
             }
     }
@@ -1129,5 +1163,284 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun dismissSharedCallTakenDialog() {
         _showSharedCallTakenDialog.value = false
+    }
+
+    // 전날 마감내역 조회 및 팝업 관리
+    fun loadPreviousDayClosingData() {
+        val region = _regionId.value ?: return
+        val office = _officeId.value ?: return
+
+        viewModelScope.launch {
+            try {
+                // 어제 날짜 계산 (0시부터 23:59:59까지)
+                val calendar = java.util.Calendar.getInstance()
+                calendar.add(java.util.Calendar.DAY_OF_MONTH, -1)
+                calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
+                calendar.set(java.util.Calendar.MINUTE, 0)
+                calendar.set(java.util.Calendar.SECOND, 0)
+                calendar.set(java.util.Calendar.MILLISECOND, 0)
+                val yesterdayStart = Timestamp(calendar.time)
+
+                calendar.set(java.util.Calendar.HOUR_OF_DAY, 23)
+                calendar.set(java.util.Calendar.MINUTE, 59)
+                calendar.set(java.util.Calendar.SECOND, 59)
+                calendar.set(java.util.Calendar.MILLISECOND, 999)
+                val yesterdayEnd = Timestamp(calendar.time)
+
+                // 어제 마감콜들 조회 (callType이 마감콜 관련이거나 특정 조건을 만족하는 콜들)
+                val callsQuery = firestore.collection("regions").document(region)
+                    .collection("offices").document(office)
+                    .collection("calls")
+                    .whereGreaterThanOrEqualTo("timestamp", yesterdayStart)
+                    .whereLessThanOrEqualTo("timestamp", yesterdayEnd)
+                    .get()
+                    .await()
+
+                val closingCalls = mutableListOf<CallInfo>()
+
+                for (doc in callsQuery.documents) {
+                    val callInfo = parseCallDocument(doc)
+                    if (callInfo != null) {
+                        // 마감콜 판단 로직: callType이 마감콜 관련이거나, 출발지/도착지/요금이 모두 없는 경우
+                        val isClosingCall = callInfo.callType == "MISSED_AFTER_HOURS" ||
+                                          callInfo.callType == "AFTER_HOURS_QUICK" ||
+                                          (callInfo.departure_set.isNullOrBlank() &&
+                                           callInfo.destination_set.isNullOrBlank() &&
+                                           (callInfo.fare_set == null || callInfo.fare_set == 0L) &&
+                                           callInfo.departure.isNullOrBlank() &&
+                                           callInfo.destination.isNullOrBlank() &&
+                                           (callInfo.fare == null || callInfo.fare == 0L))
+
+                        if (isClosingCall) {
+                            closingCalls.add(callInfo)
+                        }
+                    }
+                }
+
+                val completedCalls = closingCalls.filter { it.status == CallStatus.COMPLETED.firestoreValue }
+                val uncompletedCalls = closingCalls.filter { it.status != CallStatus.COMPLETED.firestoreValue }
+
+                val completedClosingCallList = completedCalls.map { call ->
+                    CompletedClosingCall(
+                        customerName = call.customerName?.takeIf { it.isNotBlank() } ?: "고객",
+                        departure = call.departure_set?.takeIf { it.isNotBlank() }
+                                   ?: call.departure?.takeIf { it.isNotBlank() }
+                                   ?: "출발지 미설정",
+                        destination = call.destination_set?.takeIf { it.isNotBlank() }
+                                     ?: call.destination?.takeIf { it.isNotBlank() }
+                                     ?: "도착지 미설정",
+                        fare = call.fare_set ?: call.fare ?: 0L
+                    )
+                }
+
+                val closingData = PreviousDayClosingData(
+                    totalCount = closingCalls.size,
+                    completedCount = completedCalls.size,
+                    uncompletedCount = uncompletedCalls.size,
+                    completedCalls = completedClosingCallList
+                )
+
+                // 마감콜이 있을 때만 팝업 표시
+                if (closingData.totalCount > 0) {
+                    _previousDayClosingData.value = closingData
+                    _showPreviousDayClosingDialog.value = true
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "전날 마감내역 조회 실패", e)
+            }
+        }
+    }
+
+    fun dismissPreviousDayClosingDialog() {
+        _showPreviousDayClosingDialog.value = false
+        _previousDayClosingData.value = null
+    }
+
+    // 마감정산 조회 (최근 30일)
+    fun loadClosingSettlements() {
+        val region = _regionId.value ?: return
+        val office = _officeId.value ?: return
+
+        viewModelScope.launch {
+            try {
+                val settlements = mutableListOf<ClosingSettlement>()
+                val calendar = java.util.Calendar.getInstance()
+
+                // 최근 30일간 조회
+                for (i in 0 until 30) {
+                    calendar.time = java.util.Date()
+                    calendar.add(java.util.Calendar.DAY_OF_MONTH, -i)
+
+                    val dateStart = calendar.clone() as java.util.Calendar
+                    dateStart.set(java.util.Calendar.HOUR_OF_DAY, 0)
+                    dateStart.set(java.util.Calendar.MINUTE, 0)
+                    dateStart.set(java.util.Calendar.SECOND, 0)
+                    dateStart.set(java.util.Calendar.MILLISECOND, 0)
+
+                    val dateEnd = calendar.clone() as java.util.Calendar
+                    dateEnd.set(java.util.Calendar.HOUR_OF_DAY, 23)
+                    dateEnd.set(java.util.Calendar.MINUTE, 59)
+                    dateEnd.set(java.util.Calendar.SECOND, 59)
+                    dateEnd.set(java.util.Calendar.MILLISECOND, 999)
+
+                    val dateString = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(calendar.time)
+
+                    // 해당 날짜의 마감콜들 조회
+                    val callsQuery = firestore.collection("regions").document(region)
+                        .collection("offices").document(office)
+                        .collection("calls")
+                        .whereGreaterThanOrEqualTo("timestamp", Timestamp(dateStart.time))
+                        .whereLessThanOrEqualTo("timestamp", Timestamp(dateEnd.time))
+                        .get()
+                        .await()
+
+                    val dayClosingCalls = mutableListOf<CallInfo>()
+
+                    for (doc in callsQuery.documents) {
+                        val callInfo = parseCallDocument(doc)
+                        if (callInfo != null) {
+                            val isClosingCall = callInfo.callType == "MISSED_AFTER_HOURS" ||
+                                              callInfo.callType == "AFTER_HOURS_QUICK" ||
+                                              (callInfo.departure_set.isNullOrBlank() &&
+                                               callInfo.destination_set.isNullOrBlank() &&
+                                               (callInfo.fare_set == null || callInfo.fare_set == 0L) &&
+                                               callInfo.departure.isNullOrBlank() &&
+                                               callInfo.destination.isNullOrBlank() &&
+                                               (callInfo.fare == null || callInfo.fare == 0L))
+
+                            if (isClosingCall) {
+                                dayClosingCalls.add(callInfo)
+                            }
+                        }
+                    }
+
+                    if (dayClosingCalls.isNotEmpty()) {
+                        val completedCalls = dayClosingCalls.filter { it.status == CallStatus.COMPLETED.firestoreValue }
+                        val totalRevenue = completedCalls.sumOf { call ->
+                            call.fare_set ?: call.fare ?: 0L
+                        }
+
+                        val completedClosingCallList = completedCalls.map { call ->
+                            CompletedClosingCall(
+                                customerName = call.customerName?.takeIf { it.isNotBlank() } ?: "고객",
+                                departure = call.departure_set?.takeIf { it.isNotBlank() }
+                                           ?: call.departure?.takeIf { it.isNotBlank() }
+                                           ?: "출발지 미설정",
+                                destination = call.destination_set?.takeIf { it.isNotBlank() }
+                                             ?: call.destination?.takeIf { it.isNotBlank() }
+                                             ?: "도착지 미설정",
+                                fare = call.fare_set ?: call.fare ?: 0L
+                            )
+                        }
+
+                        val settlement = ClosingSettlement(
+                            date = dateString,
+                            totalCalls = dayClosingCalls.size,
+                            completedCalls = completedCalls.size,
+                            totalRevenue = totalRevenue,
+                            details = completedClosingCallList
+                        )
+
+                        settlements.add(settlement)
+                    }
+                }
+
+                _closingSettlements.value = settlements
+
+            } catch (e: Exception) {
+                Log.e(TAG, "마감정산 조회 실패", e)
+            }
+        }
+    }
+
+    // 잔액 정합성 검증
+    private fun validateBalanceConsistency(transactions: List<PointTransaction>) {
+        viewModelScope.launch {
+            try {
+                val calculatedBalance = transactions.sumOf { it.amount.toLong() }
+                val storedBalance = _pointsInfo.value?.balance?.toLong() ?: 0L
+
+                if (calculatedBalance != storedBalance) {
+                    Log.w(TAG, "포인트 잔액 불일치 감지: 계산값=$calculatedBalance, 저장값=$storedBalance")
+
+                    // 불일치 시 정정 트랜잭션 생성 (테스트용)
+                    val difference = storedBalance - calculatedBalance
+                    if (difference != 0L) {
+                        createAdjustmentTransaction(difference, "잔액 정합성 자동 조정")
+                    }
+                } else {
+                    Log.d(TAG, "포인트 잔액 정합성 확인: $calculatedBalance")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "잔액 정합성 검증 실패", e)
+            }
+        }
+    }
+
+    // 테스트용 포인트 거래 생성
+    fun createTestPointTransaction(amount: Int, type: String, description: String) {
+        val region = _regionId.value ?: return
+        val office = _officeId.value ?: return
+
+        viewModelScope.launch {
+            try {
+                val officeRef = firestore.collection("regions").document(region)
+                    .collection("offices").document(office)
+
+                // 거래 내역 추가
+                val transactionData = hashMapOf(
+                    "type" to type,
+                    "amount" to amount,
+                    "description" to description,
+                    "timestamp" to Timestamp.now(),
+                    "createdBy" to (auth.currentUser?.uid ?: "system")
+                )
+
+                officeRef.collection("point_transactions").add(transactionData).await()
+
+                // 잔액 업데이트
+                val currentBalance = _pointsInfo.value?.balance ?: 0
+                val newBalance = currentBalance + amount
+
+                val balanceData = hashMapOf(
+                    "balance" to newBalance,
+                    "updatedAt" to Timestamp.now()
+                )
+
+                officeRef.collection("points").document("points")
+                    .set(balanceData).await()
+
+                Log.d(TAG, "테스트 거래 생성 완료: $amount, $type")
+            } catch (e: Exception) {
+                Log.e(TAG, "테스트 거래 생성 실패", e)
+            }
+        }
+    }
+
+    // 정정 거래 생성
+    private fun createAdjustmentTransaction(amount: Long, description: String) {
+        val region = _regionId.value ?: return
+        val office = _officeId.value ?: return
+
+        viewModelScope.launch {
+            try {
+                val officeRef = firestore.collection("regions").document(region)
+                    .collection("offices").document(office)
+
+                val transactionData = hashMapOf(
+                    "type" to "ADJUSTMENT",
+                    "amount" to amount.toInt(),
+                    "description" to description,
+                    "timestamp" to Timestamp.now(),
+                    "createdBy" to "system"
+                )
+
+                officeRef.collection("point_transactions").add(transactionData).await()
+                Log.d(TAG, "정정 거래 생성: $amount")
+            } catch (e: Exception) {
+                Log.e(TAG, "정정 거래 생성 실패", e)
+            }
+        }
     }
 }
