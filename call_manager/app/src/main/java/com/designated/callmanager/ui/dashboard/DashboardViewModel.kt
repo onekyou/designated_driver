@@ -1003,17 +1003,30 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
         viewModelScope.launch {
             try {
-                val pointsRef = firestore.collection("regions").document(region)
+                val officeRef = firestore.collection("regions").document(region)
                     .collection("offices").document(office)
-                    .collection("points").document("points")
 
+                // 1. 포인트 잔액 설정
+                val pointsRef = officeRef.collection("points").document("points")
                 val testPointsData = hashMapOf(
                     "balance" to 1000,
                     "updatedAt" to Timestamp.now()
                 )
-
                 pointsRef.set(testPointsData).await()
+
+                // 2. 초기 충전 거래 내역 생성
+                val transactionData = hashMapOf(
+                    "type" to "CHARGE",
+                    "amount" to 1000,
+                    "description" to "초기 포인트 설정",
+                    "timestamp" to Timestamp.now(),
+                    "createdBy" to (auth.currentUser?.uid ?: "system")
+                )
+                officeRef.collection("point_transactions").add(transactionData).await()
+
+                Log.d(TAG, "초기 포인트 설정 완료: 1000P + 거래 내역 생성")
             } catch (e: Exception) {
+                Log.e(TAG, "초기 포인트 설정 실패", e)
             }
         }
     }
