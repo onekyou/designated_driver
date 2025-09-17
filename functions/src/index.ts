@@ -11,6 +11,7 @@ import {onDocumentWritten, onDocumentUpdated, onDocumentCreated} from "firebase-
 import {onRequest} from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
+import { processSharedCallPoints } from "./handlers/points";
 
 // Firebase Admin SDK 초기화
 admin.initializeApp();
@@ -1116,99 +1117,36 @@ export const onSharedCallCompleted = onDocumentUpdated(
       
       const sourceSharedCallId = afterData.sourceSharedCallId;
       const fare = afterData.fare_set || afterData.fare || 0;
-      const pointRatio = 0.1; // 10%
-      const pointAmount = Math.round(fare * pointRatio);
 
       try {
-        await admin.firestore().runTransaction(async (tx) => {
-          // 원본 shared_calls 문서 레퍼런스
-          const sharedCallRef = admin.firestore().collection("shared_calls").doc(sourceSharedCallId);
-          const sharedCallSnap = await tx.get(sharedCallRef);
+        // 1. 먼저 shared_calls 업데이트
+        const sharedCallRef = admin.firestore().collection("shared_calls").doc(sourceSharedCallId);
+        const sharedCallSnap = await sharedCallRef.get();
 
-          if (!sharedCallSnap.exists) {
-            logger.error(`[call-completed:${callId}] 원본 shared_calls 문서를 찾을 수 없습니다: ${sourceSharedCallId}`);
-            return;
-          }
+        if (!sharedCallSnap.exists) {
+          logger.error(`[call-completed:${callId}] 원본 shared_calls 문서를 찾을 수 없습니다: ${sourceSharedCallId}`);
+          return;
+        }
 
-          const sharedCallData = sharedCallSnap.data() as SharedCallData;
+        const sharedCallData = sharedCallSnap.data() as SharedCallData;
 
-          // 포인트 레퍼런스
-          const sourcePointsRef = admin
-            .firestore()
-            .collection("regions")
-            .doc(sharedCallData.sourceRegionId)
-            .collection("offices")
-            .doc(sharedCallData.sourceOfficeId)
-            .collection("points")
-            .doc("points");
-
-          const targetPointsRef = admin
-            .firestore()
-            .collection("regions")
-            .doc(regionId)
-            .collection("offices")
-            .doc(officeId)
-            .collection("points")
-            .doc("points");
-
-          // 포인트 잔액 읽기
-          const [sourceSnap, targetSnap] = await Promise.all([
-            tx.get(sourcePointsRef),
-            tx.get(targetPointsRef)
-          ]);
-
-          const sourceBalance = (sourceSnap.data()?.balance || 0) + pointAmount;
-          const targetBalance = (targetSnap.data()?.balance || 0) - pointAmount;
-
-          // 1) shared_calls 문서를 COMPLETED로 업데이트
-          tx.update(sharedCallRef, {
-            status: "COMPLETED",
-            completedAt: admin.firestore.FieldValue.serverTimestamp(),
-            destCallId: callId
-          });
-
-          // 2) 포인트 문서 업데이트
-          tx.set(sourcePointsRef, {
-            balance: sourceBalance,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          }, { merge: true });
-
-          tx.set(targetPointsRef, {
-            balance: targetBalance,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          }, { merge: true });
-
-          // 3) 포인트 거래 내역 저장
-          const timestamp = admin.firestore.FieldValue.serverTimestamp();
-          
-          // 원본 사무실 거래 내역 (포인트 받음)
-          const sourceTransactionRef = admin.firestore().collection("point_transactions").doc();
-          tx.set(sourceTransactionRef, {
-            type: "SHARED_CALL_RECEIVE",
-            amount: pointAmount,
-            description: `공유콜 수수료 수익 (${sharedCallData.departure || "출발지"} → ${sharedCallData.destination || "도착지"})`,
-            timestamp: timestamp,
-            regionId: sharedCallData.sourceRegionId,
-            officeId: sharedCallData.sourceOfficeId,
-            relatedSharedCallId: sourceSharedCallId
-          });
-
-          // 대상 사무실 거래 내역 (포인트 차감)
-          const targetTransactionRef = admin.firestore().collection("point_transactions").doc();
-          tx.set(targetTransactionRef, {
-            type: "SHARED_CALL_SEND",
-            amount: -pointAmount,
-            description: `공유콜 수수료 지출 (${sharedCallData.departure || "출발지"} → ${sharedCallData.destination || "도착지"})`,
-            timestamp: timestamp,
-            regionId: regionId,
-            officeId: officeId,
-            relatedSharedCallId: sourceSharedCallId
-          });
-
-          logger.info(`[call-completed:${callId}] 포인트 처리 완료. Source: +${pointAmount}, Target: -${pointAmount}, 거래내역 생성됨`);
+        // shared_calls 문서를 COMPLETED로 업데이트
+        await sharedCallRef.update({
+          status: "COMPLETED",
+          completedAt: admin.firestore.FieldValue.serverTimestamp(),
+          destCallId: callId
         });
 
-        logger.info(`[call-completed:${callId}] 공유콜 완료 처리 성공. SharedCallId: ${sourceSharedCallId}`);
+        // 2. 포인트 처리 (별도 함수 호출)
+        await processSharedCallPoints(
+          sharedCallData,
+          regionId,
+          officeId,
+          fare,
+          sourceSharedCallId
+        );
+
+        logger.info(`[call-completed:${callId}] 공유콜 완료 처리 및 포인트 분배 완료. SharedCallId: ${sourceSharedCallId}`);
 
       } catch (error) {
         logger.error(`[call-completed:${callId}] 공유콜 완료 처리 오류:`, error);
