@@ -20,7 +20,8 @@
       "Bash(pkill:*)",
       "Bash(find:*)",
       "Bash(.\\gradlew --stop)",
-      "Bash(firebase functions:delete:*)"
+      "Bash(firebase functions:delete:*)",
+      "Bash(.gradlew build)"
     ],
     "deny": [],
     "ask": [],

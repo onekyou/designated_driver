@@ -148,6 +148,10 @@ fun DashboardScreen(
     val showSharedCallCancelledDialog by viewModel.showSharedCallCancelledDialog.collectAsStateWithLifecycle()
     val sharedCancelledCallInfo by viewModel.cancelledCallInfo.collectAsStateWithLifecycle()
 
+    // 전날 마감내역 팝업 관련
+    val showPreviousDayClosingDialog by viewModel.showPreviousDayClosingDialog.collectAsStateWithLifecycle()
+    val previousDayClosingData by viewModel.previousDayClosingData.collectAsStateWithLifecycle()
+
     var showSharedSettings by remember { mutableStateOf(false) }
 
     var selectedSharedCall by remember { mutableStateOf<SharedCallInfo?>(null) }
@@ -256,6 +260,14 @@ fun DashboardScreen(
             if (newCallNotificationEnabled) {
                 playNotificationSound(context)
             }
+        }
+    }
+
+    // 사무실 상태 변경 감지 및 전날 마감내역 로드
+    LaunchedEffect(officeStatus) {
+        if (officeStatus == "OPEN") {
+            // 마감에서 운영으로 전환된 경우 전날 마감내역 로드
+            viewModel.loadPreviousDayClosingData()
         }
     }
 
@@ -389,6 +401,14 @@ fun DashboardScreen(
                     Text("확인")
                 }
             }
+        )
+    }
+
+    // 전날 마감내역 팝업
+    if (showPreviousDayClosingDialog && previousDayClosingData != null) {
+        PreviousDayClosingDialog(
+            closingData = previousDayClosingData!!,
+            onDismiss = { viewModel.dismissPreviousDayClosingDialog() }
         )
     }
 
@@ -1529,6 +1549,14 @@ fun SharedCallAcceptDialog(
     onConfirm: (departure: String, destination: String, fare: Int, driver: DriverInfo?) -> Unit
 ) {
     Log.d("SharedCallAcceptDialog", "🔍 [FCM_DEBUG] SharedCallAcceptDialog 컴포넌트 진입 - sharedCall: ${sharedCall.id}, drivers: ${availableDrivers.size}개")
+
+    // 마감콜 여부 판단: callType이 있거나, 출발지/도착지/요금이 모두 없는 경우
+    val isClosingCall = sharedCall.callType == "MISSED_AFTER_HOURS" ||
+                        sharedCall.callType == "AFTER_HOURS_QUICK" ||
+                        (sharedCall.departure.isNullOrBlank() &&
+                         sharedCall.destination.isNullOrBlank() &&
+                         (sharedCall.fare == null || sharedCall.fare == 0))
+
     var departure by remember { mutableStateOf(sharedCall.departure ?: "") }
     var destination by remember { mutableStateOf(sharedCall.destination ?: "") }
     var fareText by remember { mutableStateOf((sharedCall.fare ?: 0).toString()) }
@@ -1554,12 +1582,41 @@ fun SharedCallAcceptDialog(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // 마감콜인 경우 표시
+                if (isClosingCall) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "마감 후 부재중 콜",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        }
+                    }
+                }
+
                 OutlinedTextField(
                     value = departure,
                     onValueChange = { departure = it },
                     label = { Text("출발지") },
                     placeholder = { Text("예: 서울역") },
                     singleLine = true,
+                    enabled = !isClosingCall,
                     modifier = Modifier.focusRequester(departureFocusRequester),
                     keyboardOptions = KeyboardOptions(
                         imeAction = ImeAction.Next
@@ -1574,6 +1631,7 @@ fun SharedCallAcceptDialog(
                     label = { Text("도착지") },
                     placeholder = { Text("예: 강남역") },
                     singleLine = true,
+                    enabled = !isClosingCall,
                     modifier = Modifier.focusRequester(destinationFocusRequester),
                     keyboardOptions = KeyboardOptions(
                         imeAction = ImeAction.Next
@@ -1587,6 +1645,7 @@ fun SharedCallAcceptDialog(
                     onValueChange = { fareText = it.filter { c -> c.isDigit() } },
                     label = { Text("요금") },
                     singleLine = true,
+                    enabled = !isClosingCall,
                     modifier = Modifier.focusRequester(fareFocusRequester),
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Number,
@@ -1627,7 +1686,10 @@ fun SharedCallAcceptDialog(
             val confirmEnabled = selectedDriver != null
             Button(enabled = confirmEnabled, onClick = {
                 val fare = fareText.toIntOrNull() ?: 0
-                if (departure.isNotBlank() && destination.isNotBlank() && fare > 0 && selectedDriver != null) {
+                // 마감콜의 경우 기사 선택만으로 확인 가능, 일반 콜은 모든 필드 필요
+                if (isClosingCall && selectedDriver != null) {
+                    onConfirm(departure, destination, fare, selectedDriver)
+                } else if (!isClosingCall && departure.isNotBlank() && destination.isNotBlank() && fare > 0 && selectedDriver != null) {
                     onConfirm(departure, destination, fare, selectedDriver)
                 }
             }) { Text("확인") }
@@ -1731,6 +1793,111 @@ fun SharedCallCancelledDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
+                Text("확인")
+            }
+        }
+    )
+}
+
+@Composable
+fun PreviousDayClosingDialog(
+    closingData: PreviousDayClosingData,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Filled.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("📋 전날 마감콜 내역")
+            }
+        },
+        text = {
+            LazyColumn {
+                item {
+                    // 요약 정보
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                "📊 마감콜 요약",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("전체 마감콜: ${closingData.totalCount}건")
+                                Text("수행: ${closingData.completedCount}건")
+                                Text("미수행: ${closingData.uncompletedCount}건")
+                            }
+                        }
+                    }
+
+                    if (closingData.completedCalls.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            "✅ 수행된 마감콜",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+
+                items(closingData.completedCalls) { call ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 2.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "👤 ${call.customerName}",
+                                    fontWeight = FontWeight.Medium,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Text(
+                                    "${call.fare}원",
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Text(
+                                "📍 ${call.departure} → ${call.destination}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
                 Text("확인")
             }
         }
