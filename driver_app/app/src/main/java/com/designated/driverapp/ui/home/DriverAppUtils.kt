@@ -11,7 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
-import Log
+import android.util.Log
 import com.designated.driverapp.viewmodel.DriverViewModel
 import com.designated.driverapp.data.Constants
 

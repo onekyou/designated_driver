@@ -69,7 +69,8 @@ service cloud.firestore {
 
     // --- Nested Collections under Regions/Offices ---
     match /regions/{regionId}/offices/{officeId} {
-      allow read: if isAuthenticated(); // Allow basic office/region info reading
+      // 🔥 회원가입 시 사무실 목록 조회를 위해 모든 사용자에게 읽기 허용
+      allow read: if true; // Allow basic office/region info reading for signup
       
       // 사무실 상태(status) 필드 업데이트 허용 - 관리자만
       allow update: if isOfficeAdmin(regionId, officeId) && 

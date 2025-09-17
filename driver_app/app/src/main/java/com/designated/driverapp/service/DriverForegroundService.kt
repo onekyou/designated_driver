@@ -9,7 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
-import Log
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.designated.driverapp.MainActivity
 import com.designated.driverapp.R
@@ -311,15 +311,6 @@ class DriverForegroundService : Service() {
 
             callInfo?.apply {
                 id = document.id
-
-                    TAG,
-                    "[parseCallDocument] Parsed CallInfo => id=$id, status=$status, statusEnum=\\${statusEnum}, " +
-                            "assignedDriverId=$assignedDriverId, departure_set=\\\"$departure_set\\\", destination_set=\\\"$destination_set\\\", fare_set=$fare_set"
-                )
-
-                    PARSE_DEBUG_TAG,
-                    "[PARSED] id=$id, status=$status, statusEnum=\\${statusEnum}, assignedDriverId=$assignedDriverId, departure_set=$departure_set, destination_set=$destination_set, fare_set=$fare_set"
-                )
             }
 
             callInfo

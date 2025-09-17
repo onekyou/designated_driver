@@ -94,6 +94,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 handleNewCall(remoteMessage, callId)
                 Log.d(TAG, "🔔 [DEBUG] call_assigned 처리 완료")
             }
+            "DRIVER_APPROVAL_REQUEST" -> {
+                Log.d(TAG, "🔔 [DEBUG] DRIVER_APPROVAL_REQUEST 처리 시작")
+                handleDriverApprovalRequest(remoteMessage)
+                Log.d(TAG, "🔔 [DEBUG] DRIVER_APPROVAL_REQUEST 처리 완료")
+            }
             "NEW_SHARED_CALL" -> {
                 Log.d(TAG, "🔔 [DATA_ONLY] NEW_SHARED_CALL 처리 시작")
                 // Data-only 메시지이므로 항상 커스텀 알림 생성
@@ -386,6 +391,35 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             }
 
         }
+    }
+
+    private fun handleDriverApprovalRequest(remoteMessage: RemoteMessage) {
+        val driverId = remoteMessage.data["driverId"] ?: return
+        val driverName = remoteMessage.data["driverName"] ?: "기사"
+        val driverPhone = remoteMessage.data["driverPhone"] ?: ""
+
+        Log.d(TAG, "[handleDriverApprovalRequest] 기사 승인 요청 알림 생성: $driverName")
+
+        // 알림 생성
+        showNotification(
+            channelId = DRIVER_UPDATE_CHANNEL_ID,
+            notificationId = "driver_approval_$driverId".hashCode(),
+            title = "🚗 새 기사 가입 신청",
+            content = "$driverName 님이 가입 승인을 기다리고 있습니다.",
+            bigText = "이름: $driverName\n전화: $driverPhone\n승인 대기 중",
+            callId = driverId,
+            color = ContextCompat.getColor(this, android.R.color.holo_blue_dark),
+            autoCancel = true,
+            isNewCall = false,
+            timeoutAfter = 0
+        )
+
+        // MainActivity에서 승인 다이얼로그 표시하도록 브로드캐스트 전송
+        val intent = Intent("com.designated.callmanager.DRIVER_APPROVAL_REQUEST")
+        intent.putExtra("driverId", driverId)
+        intent.putExtra("driverName", driverName)
+        intent.putExtra("driverPhone", driverPhone)
+        sendBroadcast(intent)
     }
 
     private fun handleNewCall(remoteMessage: RemoteMessage, callId: String) {

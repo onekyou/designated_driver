@@ -9,7 +9,7 @@ import android.location.Address
 import android.location.Geocoder
 import android.os.Build
 import android.os.IBinder
-import Log
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.designated.driverapp.data.Constants

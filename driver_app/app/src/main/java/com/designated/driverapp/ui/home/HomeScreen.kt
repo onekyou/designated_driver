@@ -1,6 +1,6 @@
 package com.designated.driverapp.ui.home
 
-import Log
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -26,6 +26,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.History
+import com.designated.driverapp.navigation.AppDestinations
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.CoroutineScope
+import com.designated.driverapp.ui.home.logoutUserAndExitApp
+import androidx.compose.runtime.rememberCoroutineScope
+import android.content.Context
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.tasks.await
 
 private const val TAG = "HomeScreen"
 
@@ -36,6 +47,31 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var officeName by remember { mutableStateOf("사무실") }
+
+    LaunchedEffect(Unit) {
+        val prefs = context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
+        val regionId = prefs.getString("regionId", null)
+        val officeId = prefs.getString("officeId", null)
+
+        if (regionId != null && officeId != null) {
+            try {
+                val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                val document = firestore.collection("regions").document(regionId)
+                    .collection("offices").document(officeId).get().await()
+                officeName = if (document.exists()) {
+                    document.getString("name") ?: officeId
+                } else {
+                    officeId
+                }
+            } catch (e: Exception) {
+                officeName = officeId
+            }
+        }
+    }
 
     LaunchedEffect(uiState.errorMessage) {
         uiState.errorMessage?.let {
@@ -45,7 +81,68 @@ fun HomeScreen(
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+        topBar = {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = Color.Black,
+                shadowElevation = 4.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(64.dp)
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    IconButton(
+                        onClick = {
+                            logoutUserAndExitApp(context, scope, viewModel)
+                            navController.navigate(AppDestinations.LOGIN_ROUTE) {
+                                popUpTo(0) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        },
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ExitToApp,
+                            contentDescription = "로그아웃",
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = officeName,
+                            style = MaterialTheme.typography.titleLarge,
+                            color = Color.White
+                        )
+                    }
+
+                    IconButton(
+                        onClick = {
+                            navController.navigate(AppDestinations.HISTORY_SETTLEMENT_ROUTE) {
+                                launchSingleTop = true
+                            }
+                        },
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = "운행내역",
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                }
+            }
+        },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        containerColor = Color(0xFF121212)
     ) { paddingValues ->
         Box(
             modifier = Modifier
@@ -91,8 +188,7 @@ fun HomeScreen(
                         else -> {
                             WaitingScreen(
                                 driverStatus = uiState.driverStatus,
-                                onGoOnline = { viewModel.updateDriverStatus(DriverStatus.ONLINE) },
-                                onGoOffline = { viewModel.updateDriverStatus(DriverStatus.OFFLINE) }
+                                onGoOnline = { viewModel.updateDriverStatus(DriverStatus.ONLINE) }
                             )
                         }
                     }
@@ -115,8 +211,7 @@ fun HomeScreen(
                 else -> {
                     WaitingScreen(
                         driverStatus = uiState.driverStatus,
-                        onGoOnline = { viewModel.updateDriverStatus(DriverStatus.ONLINE) },
-                        onGoOffline = { viewModel.updateDriverStatus(DriverStatus.OFFLINE) }
+                        onGoOnline = { viewModel.updateDriverStatus(DriverStatus.ONLINE) }
                     )
                 }
             }

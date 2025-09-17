@@ -17,8 +17,7 @@ import com.designated.driverapp.model.DriverStatus
 @Composable
 fun WaitingScreen(
     driverStatus: DriverStatus,
-    onGoOnline: () -> Unit,
-    onGoOffline: () -> Unit
+    onGoOnline: () -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -33,10 +32,6 @@ fun WaitingScreen(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("배차가 완료되면 알림으로 알려드립니다.")
-                Spacer(modifier = Modifier.height(32.dp))
-                Button(onClick = onGoOffline) {
-                    Text("오프라인으로 전환")
-                }
             }
             else -> {
                 Text(

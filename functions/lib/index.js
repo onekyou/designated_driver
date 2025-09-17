@@ -41,7 +41,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.testFcmMessage = exports.migratePickupDrivers = exports.onDesignatedDriverStatusChange = exports.onPickupDriverStatusChange = exports.refreshAgoraToken = exports.generateAgoraToken = exports.finalizeWorkDay = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.sendNewCallNotification = exports.onCallStatusChanged = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.onSharedCallCreated = exports.oncallassigned = void 0;
+exports.testFcmMessage = exports.migratePickupDrivers = exports.onDesignatedDriverStatusChange = exports.onPickupDriverStatusChange = exports.refreshAgoraToken = exports.generateAgoraToken = exports.finalizeWorkDay = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.onSharedCallCreated = exports.oncallassigned = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const admin = __importStar(require("firebase-admin"));
@@ -160,15 +160,12 @@ exports.onSharedCallCreated = (0, firestore_1.onDocumentCreated)({
                 logger.info(`[shared-created:${callId}] ⛔ 원본 사무실 제외: ${adminData.associatedOfficeId} (sourceOfficeId: ${sharedCallData.sourceOfficeId})`);
                 return; // 다음 관리자로 넘어감
             }
-            logger.info(`[shared-created:${callId}] ✅ 원본 사무실이 아님: ${adminData.associatedOfficeId} ≠ ${sharedCallData.sourceOfficeId}`);
             if (adminData.fcmToken) {
                 // 중복 토큰 방지
                 if (!tokens.includes(adminData.fcmToken)) {
                     tokens.push(adminData.fcmToken);
-                    logger.info(`[shared-created:${callId}] 📤 알림 대상 추가: ${adminData.associatedOfficeId}`);
                 }
                 else {
-                    logger.info(`[shared-created:${callId}] 🔄 중복 토큰 제외: ${adminData.associatedOfficeId}`);
                 }
             }
             else {
@@ -201,7 +198,6 @@ exports.onSharedCallCreated = (0, firestore_1.onDocumentCreated)({
             tokens,
         };
         // 🚨 실제 전송되는 페이로드 확인
-        logger.info(`[shared-created:${callId}] 🔍 Final FCM Payload:`, JSON.stringify(message, null, 2));
         const response = await admin.messaging().sendEachForMulticast(message);
         logger.info(`[shared-created:${callId}] FCM 알림 전송 완료. 성공: ${response.successCount}, 실패: ${response.failureCount}`);
         // 실패한 토큰들 로그 및 자동 정리
@@ -769,68 +765,78 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
         }
     }
 });
-// 신규 콜이 생성될 때 (status == WAITING && assignedDriverId == null)
-exports.sendNewCallNotification = (0, firestore_1.onDocumentCreated)({
+// pending_drivers 컬렉션에 새 문서 생성 시 FCM 알림 전송
+exports.onDriverSignupRequest = (0, firestore_1.onDocumentCreated)({
     region: "asia-northeast3",
-    document: "regions/{regionId}/offices/{officeId}/calls/{callId}",
+    document: "pending_drivers/{driverId}"
 }, async (event) => {
     var _a;
-    logger.info(`[sendNewCallNotification:${event.params.callId}] 🚨🚨🚨 START - New call received. VERSION: 2025-09-09-v3-FINAL 🚨🚨🚨`);
-    const data = (_a = event.data) === null || _a === void 0 ? void 0 : _a.data();
-    if (!data) {
-        logger.warn("[sendNewCallNotification] 🚨 No data in document.");
+    const driverId = event.params.driverId;
+    const driverData = (_a = event.data) === null || _a === void 0 ? void 0 : _a.data();
+    if (!driverData) {
+        logger.warn(`[onDriverSignupRequest:${driverId}] No driver data found.`);
         return;
     }
-    logger.info(`[sendNewCallNotification] 🚨 Data received: status=${data.status}, fromCallManager=${data.fromCallManager}, fromCallDetector=${data.fromCallDetector}`);
-    if (data.status !== "WAITING") {
-        logger.info("[sendNewCallNotification] 🚨 Call is not in WAITING status. Skip.");
-        return;
+    const { targetRegionId, targetOfficeId, name, phoneNumber } = driverData;
+    logger.info(`[onDriverSignupRequest:${driverId}] New driver signup: ${name} for office ${targetOfficeId}`);
+    try {
+        // 해당 사무실의 관리자들 FCM 토큰 가져오기
+        const adminsSnapshot = await admin.firestore()
+            .collection("admins")
+            .where("associatedRegionId", "==", targetRegionId)
+            .where("associatedOfficeId", "==", targetOfficeId)
+            .get();
+        const tokens = [];
+        adminsSnapshot.forEach(doc => {
+            const adminData = doc.data();
+            if (adminData.fcmToken) {
+                tokens.push(adminData.fcmToken);
+            }
+        });
+        if (tokens.length === 0) {
+            logger.warn(`[onDriverSignupRequest:${driverId}] No admin tokens found for office ${targetOfficeId}`);
+            return;
+        }
+        // FCM 메시지 전송
+        const payload = {
+            notification: {
+                title: "🚗 새 기사 가입 신청",
+                body: `${name}님이 가입 승인을 기다리고 있습니다.`,
+            },
+            data: {
+                type: "DRIVER_APPROVAL_REQUEST",
+                driverId: driverId,
+                driverName: name,
+                driverPhone: phoneNumber || "",
+            },
+            android: {
+                priority: "high",
+                ttl: 60000,
+                notification: {
+                    sound: "default",
+                    clickAction: "com.designated.callmanager.HOME",
+                    channelId: "driver_approval_channel"
+                }
+            }
+        };
+        // 모든 관리자에게 전송
+        for (const token of tokens) {
+            try {
+                await admin.messaging().send(Object.assign(Object.assign({}, payload), { token }));
+                logger.info(`[onDriverSignupRequest:${driverId}] FCM sent to admin token: ${token.substring(0, 10)}...`);
+            }
+            catch (error) {
+                logger.error(`[onDriverSignupRequest:${driverId}] Failed to send FCM:`, error);
+            }
+        }
     }
-    // 콜매니저나 콜디텍터에서 생성된 콜인지 확인 (FCM 알림 생략)
-    logger.info(`[sendNewCallNotification] Checking call source - fromCallManager: ${data.fromCallManager}, fromCallDetector: ${data.fromCallDetector}`);
-    if (data.fromCallManager === true || data.fromCallDetector !== undefined) {
-        const source = data.fromCallManager ? "CallManager" : "CallDetector";
-        logger.info(`[sendNewCallNotification] Call created from ${source} app. Skipping FCM notification to avoid duplicate.`);
-        return;
+    catch (error) {
+        logger.error(`[onDriverSignupRequest:${driverId}] Error processing pending driver:`, error);
     }
-    logger.info(`[sendNewCallNotification] Call source check passed. Proceeding with FCM notification.`);
-    // 1) 관리자 FCM 토큰 조회
-    const adminQuery = await admin
-        .firestore()
-        .collection("admins")
-        .where("associatedRegionId", "==", event.params.regionId)
-        .where("associatedOfficeId", "==", event.params.officeId)
-        .get();
-    const tokens = adminQuery.docs
-        .map((d) => d.data().fcmToken)
-        .filter((t) => !!t && t.length > 0);
-    logger.info(`[getAdminTokens] SUCCESS: Found ${adminQuery.size} admins, ${tokens.length} valid tokens.`);
-    if (tokens.length === 0) {
-        logger.warn("[sendNewCallNotification] No valid admin FCM tokens, abort.");
-        return;
-    }
-    // 2) 알림 + 데이터 메시지 전송
-    const newCallMessage = {
-        // notification 필드 완전 제거 - Android가 자동 알림 생성하지 않도록
-        data: {
-            type: "NEW_CALL_WAITING",
-            callId: event.params.callId,
-            customerPhone: data.phoneNumber || "",
-            // 알림 제목과 내용을 완전히 다른 키로 전송
-            alertTitle: "새로운 콜이 접수되었습니다.",
-            alertMessage: `새로운 콜이 접수되었습니다.`,
-        },
-        android: {
-            priority: "high",
-            // notification 필드 완전 제거
-        },
-        tokens,
-    };
-    // 🚨 실제 전송되는 페이로드 확인
-    logger.info(`[sendNewCallNotification:${event.params.callId}] 🔍 Final FCM Payload:`, JSON.stringify(newCallMessage, null, 2));
-    await admin.messaging().sendEachForMulticast(newCallMessage);
-    logger.info("[sendNewCallNotification] sendEachForMulticast with notification sent.");
 });
+// 새 콜 알림 함수 제거됨
+// 이유: Call Detector에서 로컬 데이터로 즉시 팝업 생성하므로 FCM 알림 불필요
+// 기존 함수는 중복 알림 및 앱 재빌드 시 이전 콜 재팝업 문제 야기
 // =============================
 // 공유콜 상태 동기화 - 수락사무실의 콜 상태를 원사무실에 반영
 // =============================
@@ -1104,7 +1110,6 @@ exports.migratePickupDrivers = (0, https_2.onCall)({
 // 🚨 FCM 테스트 함수 (HTTP 트리거)
 // =============================
 exports.testFcmMessage = (0, https_1.onRequest)({ region: "asia-northeast3" }, async (req, res) => {
-    logger.info("🚨 [testFcmMessage] FCM 테스트 함수 호출됨");
     const message = {
         notification: {
             title: "✅ 운행 완료 (테스트)",
@@ -1128,11 +1133,8 @@ exports.testFcmMessage = (0, https_1.onRequest)({ region: "asia-northeast3" }, a
         },
         token: "fNqW53QeRTef5R9fHRoxJi:APA91bEMRlbcD26SX8iBi5EeU_bIrdtpLcGDHW9_7TQIHKeDBFJs_xlWet-QSrvUXPaHvWCZn8ZczvKr5e1HlTYtM3dewIbxGZfOnxYPgIMVgex-VELP4PI",
     };
-    // 🔍 실제 전송되는 페이로드 확인
-    logger.info("🔍 [testFcmMessage] Final FCM Payload:", JSON.stringify(message, null, 2));
     try {
         const response = await admin.messaging().send(message);
-        logger.info("✅ [testFcmMessage] FCM 메시지 전송 성공:", response);
         res.json({
             success: true,
             messageId: response,
@@ -1147,6 +1149,6 @@ exports.testFcmMessage = (0, https_1.onRequest)({ region: "asia-northeast3" }, a
         });
     }
 });
-const _forceDeploy = Date.now() + 999999; // 배포 강제용 더미 변수
+const _forceDeploy = Date.now() + 1000000; // 배포 강제용 더미 변수
 void _forceDeploy; // 사용해서 컴파일 경고 해소
 //# sourceMappingURL=index.js.map

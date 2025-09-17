@@ -51,6 +51,8 @@ class PendingDriversViewModel(
     }
 
     fun fetchPendingDrivers() {
+        android.util.Log.d("PendingDriversViewModel", "fetchPendingDrivers called - regionId: $regionId, officeId: $officeId")
+
         if (regionId.isBlank() || officeId.isBlank()) {
             _uiState.value = PendingDriversUiState.Error("관리자 정보(지역/사무실 ID)가 유효하지 않습니다.")
             return
@@ -59,20 +61,20 @@ class PendingDriversViewModel(
         _uiState.value = PendingDriversUiState.Loading
         viewModelScope.launch {
             try {
-                val allPendingSnapshot = firestore.collection("pending_drivers").get().await()
-
-                allPendingSnapshot.documents.forEach { doc ->
-                }
+                android.util.Log.d("PendingDriversViewModel", "Starting Firestore query...")
 
                 val snapshot = firestore.collection("pending_drivers")
                     .whereEqualTo("targetRegionId", regionId)
                     .whereEqualTo("targetOfficeId", officeId)
-                    .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.ASCENDING)
+                    .orderBy("requestedAt", com.google.firebase.firestore.Query.Direction.ASCENDING)
                     .get()
                     .await()
 
+                android.util.Log.d("PendingDriversViewModel", "Firestore query completed - found ${snapshot.documents.size} documents")
+
                 val driverList = snapshot.documents.mapNotNull { doc ->
                     try {
+                        android.util.Log.d("PendingDriversViewModel", "Processing doc ${doc.id}: ${doc.data}")
                         val parsedDriver = doc.toObject(PendingDriverInfo::class.java)
                         if (parsedDriver?.authUid == null) {
                             parsedDriver?.copy(authUid = doc.id)
@@ -80,15 +82,16 @@ class PendingDriversViewModel(
                             parsedDriver
                         }
                     } catch (e: Exception) {
+                        android.util.Log.e("PendingDriversViewModel", "Error parsing doc ${doc.id}", e)
                         null
                     }
                 }
 
-                driverList.forEach { driver ->
-                }
-
+                android.util.Log.d("PendingDriversViewModel", "Parsed ${driverList.size} drivers successfully")
                 _uiState.value = PendingDriversUiState.Success(driverList)
-                } catch (e: Exception) {
+
+            } catch (e: Exception) {
+                android.util.Log.e("PendingDriversViewModel", "fetchPendingDrivers failed", e)
                 _uiState.value = PendingDriversUiState.Error("승인 대기 목록 로드 실패: ${e.message}")
             }
         }

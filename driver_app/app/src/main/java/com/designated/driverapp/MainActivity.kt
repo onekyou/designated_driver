@@ -4,7 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import Log
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -81,7 +81,7 @@ class MainActivity : ComponentActivity() {
                         if (!initialCallId.value.isNullOrBlank()) {
                             "call_details/{callId}".replace("{callId}", initialCallId.value!!)
                         } else {
-                            "history_settlement"
+                            "home"
                         }
                     } else {
                         "login"

@@ -99,6 +99,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _allSharedCalls = MutableStateFlow<List<com.designated.callmanager.data.SharedCallInfo>>(emptyList())
     val allSharedCalls: StateFlow<List<com.designated.callmanager.data.SharedCallInfo>> = _allSharedCalls.asStateFlow()
 
+    private val _showSharedCallTakenDialog = MutableStateFlow(false)
+    val showSharedCallTakenDialog: StateFlow<Boolean> = _showSharedCallTakenDialog.asStateFlow()
+
     private val _pointsInfo = MutableStateFlow<PointsInfo?>(null)
     val pointsInfo: StateFlow<PointsInfo?> = _pointsInfo.asStateFlow()
 
@@ -906,6 +909,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     ))
                 }.await()
             } catch (e: Exception) {
+                _showSharedCallTakenDialog.value = true
             }
         }
     }
@@ -954,6 +958,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     tx.update(docRef, updateMap)
                 }.await()
             } catch (e: Exception) {
+                _showSharedCallTakenDialog.value = true
             }
         }
     }
@@ -1120,5 +1125,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             } catch (e: Exception) {
             }
         }
+    }
+
+    fun dismissSharedCallTakenDialog() {
+        _showSharedCallTakenDialog.value = false
     }
 }

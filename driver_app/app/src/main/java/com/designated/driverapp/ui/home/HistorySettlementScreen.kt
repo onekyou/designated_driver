@@ -28,8 +28,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.border
 import androidx.compose.ui.unit.Dp
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.util.Calendar
@@ -41,8 +45,8 @@ import com.designated.driverapp.ui.home.logoutUserAndExitApp
 import androidx.compose.runtime.rememberCoroutineScope
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import androidx.compose.runtime.SideEffect
+import android.util.Log
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistorySettlementScreen(
     navController: NavController,
@@ -101,15 +105,17 @@ fun HistorySettlementScreen(
         val cashAmount: Int = 0
     )
     fun parseTripSummary(summary: String): TripSummary? {
-        val parts = summary.split(", ")
+        // 먼저 timestamp 부분을 분리
+        val summaryWithoutTimestamp = summary.split("|timestamp=")[0]
+        val parts = summaryWithoutTimestamp.split(", ")
         if (parts.size < 4) return null
         val fare = parts[2].replace("원", "").replace(",", "").trim().toIntOrNull() ?: 0
-        val payment = parts[3]
+        val payment = parts[3].trim()  // trim 추가
         return if (payment.startsWith("현금+포인트")) {
             val cashRegex = Regex("\\(([\\d,]+)원 현금\\)")
             val cashMatch = cashRegex.find(payment)
             val cash = cashMatch?.groupValues?.getOrNull(1)?.replace(",", "")?.toIntOrNull() ?: 0
-            TripSummary(fare, "현금+포인트", cash)
+            TripSummary(fare, payment, cash)
         } else {
             TripSummary(fare, payment)
         }
@@ -121,7 +127,7 @@ fun HistorySettlementScreen(
     val totalCredit = parsedList.sumOf {
         val credit = when {
             it.payment == "현금" -> 0
-            it.payment == "현금+포인트" -> it.fare - it.cashAmount
+            it.payment.startsWith("현금+포인트") -> it.fare - it.cashAmount
             else -> it.fare
         }
         credit
@@ -204,41 +210,56 @@ fun HistorySettlementScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Box(modifier = Modifier.fillMaxWidth()) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = Color.Black,
+                shadowElevation = 4.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(64.dp)
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    IconButton(
+                        onClick = onNavigateBack,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.ArrowBack,
+                            contentDescription = "뒤로가기",
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
                         Text(
                             text = "운행 내역",
                             style = MaterialTheme.typography.titleLarge,
-                            modifier = Modifier.align(Alignment.Center),
                             color = Color.White
                         )
                     }
-                },
-                navigationIcon = {
-                    IconButton(onClick = { showLogoutConfirmDialog = true }) {
-                        Icon(Icons.Filled.ExitToApp, contentDescription = "로그아웃", tint = Color.White)
+
+                    IconButton(
+                        onClick = { showHistoryDialog = true },
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Settings,
+                            contentDescription = "설정",
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp)
+                        )
                     }
-                },
-                actions = {
-                    IconButton(onClick = {
-                        navController.navigate("home") {
-                            popUpTo("home") { inclusive = false }
-                        }
-                    }) {
-                        Icon(Icons.Filled.Home, contentDescription = "홈으로 이동", tint = Color.White)
-                    }
-                    IconButton(onClick = { showHistoryDialog = true }) {
-                        Icon(Icons.Filled.History, contentDescription = "이전 기록 보기", tint = Color.White)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = Color.White,
-                    actionIconContentColor = Color.White
-                )
-            )
-        }
+                }
+            }
+        },
+        containerColor = Color(0xFF121212)
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -250,27 +271,88 @@ fun HistorySettlementScreen(
             if (showHistoryDialog) {
                 AlertDialog(
                     onDismissRequest = { showHistoryDialog = false },
-                    title = { Text("이전 운행/정산 기록") },
+                    title = {
+                        Text(
+                            "이전 운행/정산 기록",
+                            color = Color.White
+                        )
+                    },
                     text = {
-                        if (sessionList.isEmpty()) {
-                            Text("이전 기록이 없습니다.")
-                        } else {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(400.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A)),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
                             Column {
-                                sessionList.forEachIndexed { idx, session ->
-                                    Card(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 4.dp)
-                                            .clickable {
-                                                selectedSession = session
-                                                showSessionDetail = true
-                                            },
-                                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)),
-                                        elevation = CardDefaults.cardElevation(0.dp)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "저장된 기록",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
+                                if (sessionList.isEmpty()) {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Column(modifier = Modifier.padding(12.dp)) {
-                                            Text("기록일: ${session.date}", fontWeight = FontWeight.Bold)
-                                            Text("운행내역: ${session.history.size}건")
+                                        Text(
+                                            "이전 기록이 없습니다.",
+                                            color = Color.Gray
+                                        )
+                                    }
+                                } else {
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        contentPadding = PaddingValues(bottom = 16.dp)
+                                    ) {
+                                        items(sessionList) { session ->
+                                            Card(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        selectedSession = session
+                                                        showSessionDetail = true
+                                                    },
+                                                colors = CardDefaults.cardColors(containerColor = Color(0xFF3A3A3A)),
+                                                shape = RoundedCornerShape(0.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                    ) {
+                                                        Column(modifier = Modifier.weight(1f)) {
+                                                            Text(
+                                                                text = "기록일: ${session.date}",
+                                                                style = MaterialTheme.typography.bodyMedium,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = Color.White
+                                                            )
+                                                            Text(
+                                                                text = "운행내역: ${session.history.size}건",
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                color = Color.LightGray
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -278,8 +360,17 @@ fun HistorySettlementScreen(
                         }
                     },
                     confirmButton = {
-                        Button(onClick = { showHistoryDialog = false }) { Text("닫기") }
-                    }
+                        Button(
+                            onClick = { showHistoryDialog = false },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFFFB000),
+                                contentColor = Color.Black
+                            )
+                        ) {
+                            Text("닫기")
+                        }
+                    },
+                    containerColor = Color(0xFF1A1A1A)
                 )
             }
             if (showSessionDetail && selectedSession != null) {
@@ -315,30 +406,82 @@ fun HistorySettlementScreen(
                     }
                 )
             }
-            LazyColumn(modifier = Modifier.weight(1f)) {
-                if (tripHistory.isEmpty()) {
-                    item {
-                        Text("운행내역이 없습니다.", color = Color.Gray, modifier = Modifier.padding(16.dp))
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A)),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "운행 내역",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
                     }
-                } else {
-                    items(tripHistory) { summary ->
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                            elevation = CardDefaults.cardElevation(0.dp)
-                        ) {
-                            val parts = summary.split("|timestamp=")
-                            val displaySummary = parts[0]
-                            val dateStr = if (parts.size > 1) {
-                                val ts = parts[1].toLongOrNull() ?: 0L
-                                if (ts > 0L) SimpleDateFormat("yyyy-MM-dd HH:mm").format(Date(ts)) else ""
-                            } else ""
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text(displaySummary, color = Color.Black)
-                                if (dateStr.isNotEmpty()) {
-                                    Text(dateStr, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        contentPadding = PaddingValues(bottom = 16.dp)
+                    ) {
+                        if (tripHistory.isEmpty()) {
+                            item {
+                                Text(
+                                    "운행내역이 없습니다.",
+                                    color = Color.Gray,
+                                    modifier = Modifier.padding(16.dp)
+                                )
+                            }
+                        } else {
+                            items(tripHistory) { summary ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF3A3A3A)),
+                                    shape = RoundedCornerShape(0.dp)
+                                ) {
+                                    val parts = summary.split("|timestamp=")
+                                    val displaySummary = parts[0]
+                                    val dateStr = if (parts.size > 1) {
+                                        val ts = parts[1].toLongOrNull() ?: 0L
+                                        if (ts > 0L) SimpleDateFormat("yyyy-MM-dd HH:mm").format(Date(ts)) else ""
+                                    } else ""
+
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = displaySummary,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color.White
+                                                )
+                                                if (dateStr.isNotEmpty()) {
+                                                    Text(
+                                                        text = dateStr,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = Color.LightGray
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -388,7 +531,7 @@ fun HistorySettlementScreen(
                 AlertDialog(
                     onDismissRequest = { showClearDialog = false },
                     title = { Text("운행내역/정산내역 저장 및 초기화") },
-                    text = { Text("오늘까지의 운행내역/정산내역을 저장하고 새로 시작합니다. 이전 기록은 최대 5개까지 보관됩니다. 진행할까요?") },
+                    text = { Text("운행내역/정산내역을 저장하고 새로 시작합니다. 이전 기록은 최대 5개까지 보관됩니다. 진행할까요?") },
                     confirmButton = {
                         Button(onClick = {
                             val now = SimpleDateFormat("yyyy-MM-dd HH:mm").format(Date())
@@ -416,7 +559,7 @@ fun HistorySettlementScreen(
                 Button(
                     onClick = { showClearDialog = true },
                     modifier = Modifier.fillMaxWidth()
-                ) { Text("오늘까지의 운행내역/정산내역 저장 및 초기화") }
+                ) { Text("운행내역/정산내역 저장 및 초기화") }
             }
         }
         if (showLogoutConfirmDialog) {

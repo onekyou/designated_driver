@@ -13,7 +13,7 @@ import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import Log
+import android.util.Log
 
 class MyFirebaseMessagingService : FirebaseMessagingService() {
 
