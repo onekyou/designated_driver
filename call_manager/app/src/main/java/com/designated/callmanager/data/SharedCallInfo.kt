@@ -17,5 +17,6 @@ data class SharedCallInfo(
     val phoneNumber: String? = null,
     val claimedAt: Timestamp? = null,
     val completedAt: Timestamp? = null,
-    val destCallId: String? = null
+    val destCallId: String? = null,
+    val callType: String? = null
 )
