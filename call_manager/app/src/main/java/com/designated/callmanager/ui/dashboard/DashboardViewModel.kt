@@ -18,6 +18,9 @@ import com.designated.callmanager.data.DriverInfo
 import com.designated.callmanager.data.DriverStatus
 import com.designated.callmanager.data.PointsInfo
 import com.designated.callmanager.data.PointTransaction
+import com.designated.callmanager.data.repository.PointRepository
+import com.designated.callmanager.data.local.AppDatabase
+import com.designated.callmanager.di.DatabaseProvider
 import com.designated.callmanager.service.CallManagerService
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
@@ -96,6 +99,18 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val firestore = FirebaseFirestore.getInstance()
     private val sharedPreferences = application.getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
     private val appContext = application.applicationContext
+
+    // Repository 패턴 구성 요소
+    private val database: AppDatabase by lazy {
+        DatabaseProvider.provideAppDatabase(getApplication<Application>().applicationContext)
+    }
+    private val pointRepository: PointRepository by lazy {
+        DatabaseProvider.providePointRepository(
+            database = database,
+            firestore = firestore,
+            scope = DatabaseProvider.provideRepositoryScope()
+        )
+    }
 
     private val _regionId = MutableStateFlow<String?>(null)
     val regionId: StateFlow<String?> = _regionId.asStateFlow()
@@ -188,8 +203,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private var officeStatusListener: ListenerRegistration? = null
     private var sharedCallsListener: ListenerRegistration? = null
     private var allSharedCallsListener: ListenerRegistration? = null
-    private var pointsListener: ListenerRegistration? = null
-    private var pointTransactionsListener: ListenerRegistration? = null
+    // Repository 패턴으로 변경됨 - Firebase 리스너 제거
 
     private val callsCache = mutableMapOf<String, CallInfo>()
     private val driverCache = mutableMapOf<String, DriverInfo>()
@@ -448,36 +462,46 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 _allSharedCalls.value = allCalls.sortedByDescending { it.timestamp?.seconds ?: 0 }
             }
 
-        pointsListener = officeRef.collection("points").document("points")
-            .addSnapshotListener { snapshot, e ->
-                if (e != null) {
-                    return@addSnapshotListener
-                }
-                if (snapshot != null && snapshot.exists()) {
-                    val pointsInfo = snapshot.toObject(PointsInfo::class.java)
-                    _pointsInfo.value = pointsInfo
-                } else {
-                    _pointsInfo.value = PointsInfo(0, null)
-                }
-            }
+        // Repository 패턴으로 교체됨 - 포인트 데이터 구독 시작
+        setupPointsObservers(regionId, officeId)
+    }
 
-        pointTransactionsListener = officeRef.collection("point_transactions")
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(50)
-            .addSnapshotListener { snapshots, e ->
-                if (e != null) {
-                    return@addSnapshotListener
+    /**
+     * Repository 패턴을 사용한 포인트 데이터 구독 설정
+     */
+    private fun setupPointsObservers(regionId: String, officeId: String) {
+        Log.d(TAG, "포인트 옵저버 설정: $regionId/$officeId")
+
+        // 1. 포인트 잔액 구독
+        viewModelScope.launch {
+            pointRepository.getPointsInfoFlow(regionId, officeId)
+                .collect { pointsInfo ->
+                    _pointsInfo.value = pointsInfo ?: PointsInfo(0, null)
+                    Log.d(TAG, "포인트 잔액 업데이트: ${pointsInfo?.balance ?: 0}")
                 }
-                if (snapshots != null) {
-                    val transactions = snapshots.documents.mapNotNull { doc ->
-                        doc.toObject(PointTransaction::class.java)?.apply { id = doc.id }
-                    }
+        }
+
+        // 2. 거래 내역 구독
+        viewModelScope.launch {
+            pointRepository.getTransactionsFlow(regionId, officeId)
+                .collect { transactions ->
                     _pointTransactions.value = transactions
+                    Log.d(TAG, "포인트 거래 내역 업데이트: ${transactions.size}개")
 
                     // 잔액 정합성 검증
                     validateBalanceConsistency(transactions)
                 }
+        }
+
+        // 3. 초기 데이터 새로고침 (백그라운드)
+        viewModelScope.launch {
+            try {
+                pointRepository.refreshData(regionId, officeId)
+                Log.d(TAG, "포인트 데이터 새로고침 완료")
+            } catch (e: Exception) {
+                Log.e(TAG, "포인트 데이터 새로고침 실패", e)
             }
+        }
     }
 
     private fun updateCallsFromCache() {
@@ -866,20 +890,24 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         officeStatusListener?.remove()
         sharedCallsListener?.remove()
         allSharedCallsListener?.remove()
-        pointsListener?.remove()
-        pointTransactionsListener?.remove()
+        // Repository 패턴으로 변경됨 - Firebase 리스너 제거
         callsListener = null
         driversListener = null
         officeStatusListener = null
         sharedCallsListener = null
         allSharedCallsListener = null
-        pointsListener = null
-        pointTransactionsListener = null
+        // Repository 패턴으로 변경됨
     }
 
     override fun onCleared() {
         super.onCleared()
         stopListening()
+
+        // Repository 정리
+        pointRepository.stopSync()
+
+        // Database 정리 (선택사항 - 앱 종료 시)
+        // database.close() // 필요시에만 사용
     }
 
     fun shareCall(callInfo: CallInfo, departure: String, destination: String, fare: Int) {
@@ -1001,6 +1029,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         val region = _regionId.value ?: return
         val office = _officeId.value ?: return
 
+        Log.d(TAG, "초기 포인트 설정 시작: Region=$region, Office=$office")
+
         viewModelScope.launch {
             try {
                 val officeRef = firestore.collection("regions").document(region)
@@ -1012,7 +1042,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     "balance" to 1000,
                     "updatedAt" to Timestamp.now()
                 )
+                Log.d(TAG, "포인트 문서 생성 시작: 1000P")
                 pointsRef.set(testPointsData).await()
+                Log.d(TAG, "포인트 문서 생성 완료: 1000P")
 
                 // 2. 초기 충전 거래 내역 생성
                 val transactionData = hashMapOf(
@@ -1022,7 +1054,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     "timestamp" to Timestamp.now(),
                     "createdBy" to (auth.currentUser?.uid ?: "system")
                 )
+                Log.d(TAG, "거래 내역 생성 시작")
                 officeRef.collection("point_transactions").add(transactionData).await()
+                Log.d(TAG, "거래 내역 생성 완료")
 
                 Log.d(TAG, "초기 포인트 설정 완료: 1000P + 거래 내역 생성")
             } catch (e: Exception) {
@@ -1185,27 +1219,51 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
         viewModelScope.launch {
             try {
-                // 어제 날짜 계산 (0시부터 23:59:59까지)
+                // 마감 시간은 SettlementViewModel에서 기록한 SharedPreferences에서 가져옴
+                val closingTimePrefs = appContext.getSharedPreferences("closing_times", Context.MODE_PRIVATE)
+                val popupPrefs = appContext.getSharedPreferences("closing_popups", Context.MODE_PRIVATE)
+
+                // 마지막 마감 시간 가져오기
+                val lastClosingTime = closingTimePrefs.getLong("last_closing_time_${region}_${office}", 0L)
+                val lastPopupShownTime = popupPrefs.getLong("last_popup_shown_${region}_${office}", 0L)
+                val currentTime = System.currentTimeMillis()
+
+                // 마감 이후 첫 업무 시작인지 확인
+                // 1. 마지막 마감 시간이 있고
+                // 2. 마지막 팝업 표시 시간이 마지막 마감 시간보다 이전이면
+                // 3. 현재 시간이 마감 시간 이후면 팝업 표시
+
+                if (lastClosingTime == 0L) {
+                    Log.d(TAG, "마감 기록이 없음 - 팝업 표시하지 않음")
+                    return@launch
+                }
+
+                if (lastPopupShownTime >= lastClosingTime) {
+                    Log.d(TAG, "이미 이번 마감 이후 팝업 표시됨 - 건너뛰기")
+                    return@launch
+                }
+
+                // 어제 날짜 계산 (마감 날짜 기준)
                 val calendar = java.util.Calendar.getInstance()
-                calendar.add(java.util.Calendar.DAY_OF_MONTH, -1)
+                calendar.timeInMillis = lastClosingTime
                 calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
                 calendar.set(java.util.Calendar.MINUTE, 0)
                 calendar.set(java.util.Calendar.SECOND, 0)
                 calendar.set(java.util.Calendar.MILLISECOND, 0)
-                val yesterdayStart = Timestamp(calendar.time)
+                val closingDayStart = Timestamp(calendar.time)
 
                 calendar.set(java.util.Calendar.HOUR_OF_DAY, 23)
                 calendar.set(java.util.Calendar.MINUTE, 59)
                 calendar.set(java.util.Calendar.SECOND, 59)
                 calendar.set(java.util.Calendar.MILLISECOND, 999)
-                val yesterdayEnd = Timestamp(calendar.time)
+                val closingDayEnd = Timestamp(calendar.time)
 
                 // 어제 마감콜들 조회 (callType이 마감콜 관련이거나 특정 조건을 만족하는 콜들)
                 val callsQuery = firestore.collection("regions").document(region)
                     .collection("offices").document(office)
                     .collection("calls")
-                    .whereGreaterThanOrEqualTo("timestamp", yesterdayStart)
-                    .whereLessThanOrEqualTo("timestamp", yesterdayEnd)
+                    .whereGreaterThanOrEqualTo("timestamp", closingDayStart)
+                    .whereLessThanOrEqualTo("timestamp", closingDayEnd)
                     .get()
                     .await()
 
@@ -1257,6 +1315,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 if (closingData.totalCount > 0) {
                     _previousDayClosingData.value = closingData
                     _showPreviousDayClosingDialog.value = true
+
+                    // 팝업 표시 시간을 기록하여 중복 방지
+                    popupPrefs.edit()
+                        .putLong("last_popup_shown_${region}_${office}", currentTime)
+                        .apply()
+                    Log.d(TAG, "전날 마감내역 팝업 표시 기록: last_popup_shown_${region}_${office} = $currentTime")
                 }
 
             } catch (e: Exception) {
@@ -1367,21 +1431,33 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    // 잔액 정합성 검증
-    private fun validateBalanceConsistency(transactions: List<PointTransaction>) {
+    // 잔액 정합성 검증 (전체 거래내역 조회)
+    private fun validateBalanceConsistency(recentTransactions: List<PointTransaction>) {
         viewModelScope.launch {
             try {
-                val calculatedBalance = transactions.sumOf { it.amount.toLong() }
+                val region = _regionId.value ?: return@launch
+                val office = _officeId.value ?: return@launch
+
+                // 전체 거래내역을 조회하여 정확한 합계 계산
+                val officeRef = firestore.collection("regions").document(region)
+                    .collection("offices").document(office)
+
+                val allTransactions = officeRef.collection("point_transactions")
+                    .get()
+                    .await()
+
+                val calculatedBalance = allTransactions.documents.sumOf { doc ->
+                    doc.getLong("amount") ?: 0L
+                }
+
                 val storedBalance = _pointsInfo.value?.balance?.toLong() ?: 0L
 
                 if (calculatedBalance != storedBalance) {
                     Log.w(TAG, "포인트 잔액 불일치 감지: 계산값=$calculatedBalance, 저장값=$storedBalance")
+                    Log.w(TAG, "전체 거래 수: ${allTransactions.size()}, 화면 표시 거래 수: ${recentTransactions.size}")
 
-                    // 불일치 시 정정 트랜잭션 생성 (테스트용)
-                    val difference = storedBalance - calculatedBalance
-                    if (difference != 0L) {
-                        createAdjustmentTransaction(difference, "잔액 정합성 자동 조정")
-                    }
+                    // 정정은 하지 않고 로그만 남김 (자동 정정 비활성화)
+                    // 실제 운영에서는 관리자가 수동으로 조정하도록 함
                 } else {
                     Log.d(TAG, "포인트 잔액 정합성 확인: $calculatedBalance")
                 }
@@ -1392,37 +1468,28 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     // 테스트용 포인트 거래 생성
+    /**
+     * Repository 패턴을 사용한 테스트 포인트 거래 생성
+     */
     fun createTestPointTransaction(amount: Int, type: String, description: String) {
         val region = _regionId.value ?: return
         val office = _officeId.value ?: return
 
         viewModelScope.launch {
             try {
-                val officeRef = firestore.collection("regions").document(region)
-                    .collection("offices").document(office)
-
-                // 거래 내역 추가
-                val transactionData = hashMapOf(
-                    "type" to type,
-                    "amount" to amount,
-                    "description" to description,
-                    "timestamp" to Timestamp.now(),
-                    "createdBy" to (auth.currentUser?.uid ?: "system")
+                // Repository를 통한 거래 추가
+                val transaction = PointTransaction(
+                    id = "", // Firestore에서 자동 생성
+                    type = type,
+                    amount = amount,
+                    description = description,
+                    timestamp = Timestamp.now(),
+                    regionId = region,
+                    officeId = office,
+                    relatedSharedCallId = null
                 )
 
-                officeRef.collection("point_transactions").add(transactionData).await()
-
-                // 잔액 업데이트
-                val currentBalance = _pointsInfo.value?.balance ?: 0
-                val newBalance = currentBalance + amount
-
-                val balanceData = hashMapOf(
-                    "balance" to newBalance,
-                    "updatedAt" to Timestamp.now()
-                )
-
-                officeRef.collection("points").document("points")
-                    .set(balanceData).await()
+                pointRepository.addTransaction(region, office, transaction)
 
                 Log.d(TAG, "테스트 거래 생성 완료: $amount, $type")
             } catch (e: Exception) {
