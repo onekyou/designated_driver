@@ -265,9 +265,7 @@ fun HistorySettlementScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(16.dp)
         ) {
-            Spacer(modifier = Modifier.height(8.dp))
             if (showHistoryDialog) {
                 AlertDialog(
                     onDismissRequest = { showHistoryDialog = false },
@@ -450,37 +448,18 @@ fun HistorySettlementScreen(
                                 ) {
                                     val parts = summary.split("|timestamp=")
                                     val displaySummary = parts[0]
-                                    val dateStr = if (parts.size > 1) {
-                                        val ts = parts[1].toLongOrNull() ?: 0L
-                                        if (ts > 0L) SimpleDateFormat("yyyy-MM-dd HH:mm").format(Date(ts)) else ""
-                                    } else ""
 
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                                            .padding(horizontal = 16.dp, vertical = 10.dp)
                                     ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = displaySummary,
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = Color.White
-                                                )
-                                                if (dateStr.isNotEmpty()) {
-                                                    Text(
-                                                        text = dateStr,
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        color = Color.LightGray
-                                                    )
-                                                }
-                                            }
-                                        }
+                                        Text(
+                                            text = displaySummary,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
                                     }
                                 }
                             }
@@ -488,11 +467,10 @@ fun HistorySettlementScreen(
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             Card(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
+                    .fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF424242)),
                 elevation = CardDefaults.cardElevation(0.dp)
             ) {
@@ -555,7 +533,9 @@ fun HistorySettlementScreen(
                     }
                 )
             }
-            Column {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
+            ) {
                 Button(
                     onClick = { showClearDialog = true },
                     modifier = Modifier.fillMaxWidth()

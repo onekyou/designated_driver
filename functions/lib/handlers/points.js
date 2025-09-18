@@ -51,18 +51,36 @@ const logger = functions.logger;
 async function processSharedCallPoints(sharedCallData, regionId, officeId, fare, sourceSharedCallId) {
     const pointRatio = 0.1; // 10% 수수료
     const pointAmount = Math.round(fare * pointRatio);
-    logger.info(`[points] 포인트 처리 시작. 요금: ${fare}, 포인트: ${pointAmount}`);
+    logger.info(`[points] 포인트 처리 시작. 요금: ${fare}, 포인트: ${pointAmount}, sharedCallId: ${sourceSharedCallId}`);
     await admin.firestore().runTransaction(async (tx) => {
         var _a, _b;
-        // 1) 포인트 잔액 조회 및 업데이트
-        const sourcePointsRef = admin.firestore()
+        // ====== 중복 처리 방지 체크 ======
+        // 이미 이 공유콜에 대한 포인트 거래가 존재하는지 확인
+        const sourceOfficeRef = admin.firestore()
             .collection("regions").doc(sharedCallData.sourceRegionId)
-            .collection("offices").doc(sharedCallData.sourceOfficeId)
-            .collection("points").doc("points");
-        const targetPointsRef = admin.firestore()
+            .collection("offices").doc(sharedCallData.sourceOfficeId);
+        const targetOfficeRef = admin.firestore()
             .collection("regions").doc(regionId)
-            .collection("offices").doc(officeId)
-            .collection("points").doc("points");
+            .collection("offices").doc(officeId);
+        // 이미 처리된 거래가 있는지 확인
+        const [sourceExistingTx, targetExistingTx] = await Promise.all([
+            tx.get(sourceOfficeRef.collection("point_transactions")
+                .where("relatedSharedCallId", "==", sourceSharedCallId)
+                .where("type", "==", "SHARED_CALL_RECEIVE")
+                .limit(1)),
+            tx.get(targetOfficeRef.collection("point_transactions")
+                .where("relatedSharedCallId", "==", sourceSharedCallId)
+                .where("type", "==", "SHARED_CALL_SEND")
+                .limit(1))
+        ]);
+        if (!sourceExistingTx.empty || !targetExistingTx.empty) {
+            logger.warn(`[points] 이미 처리된 공유콜 포인트입니다. SharedCallId: ${sourceSharedCallId}`);
+            return; // 이미 처리됨
+        }
+        logger.info(`[points] 새로운 포인트 처리를 시작합니다. SharedCallId: ${sourceSharedCallId}`);
+        // 1) 포인트 잔액 조회 및 업데이트
+        const sourcePointsRef = sourceOfficeRef.collection("points").doc("points");
+        const targetPointsRef = targetOfficeRef.collection("points").doc("points");
         // 포인트 잔액 읽기
         const [sourceSnap, targetSnap] = await Promise.all([
             tx.get(sourcePointsRef),
@@ -83,9 +101,6 @@ async function processSharedCallPoints(sharedCallData, regionId, officeId, fare,
         // 2) 포인트 거래 내역 저장 (사무실별 서브컬렉션)
         const timestamp = admin.firestore.FieldValue.serverTimestamp();
         // 원본 사무실 거래 내역 (포인트 받음)
-        const sourceOfficeRef = admin.firestore()
-            .collection("regions").doc(sharedCallData.sourceRegionId)
-            .collection("offices").doc(sharedCallData.sourceOfficeId);
         const sourceTransactionRef = sourceOfficeRef.collection("point_transactions").doc();
         tx.set(sourceTransactionRef, {
             type: "SHARED_CALL_RECEIVE",
@@ -96,9 +111,6 @@ async function processSharedCallPoints(sharedCallData, regionId, officeId, fare,
             relatedSharedCallId: sourceSharedCallId
         });
         // 대상 사무실 거래 내역 (포인트 차감)
-        const targetOfficeRef = admin.firestore()
-            .collection("regions").doc(regionId)
-            .collection("offices").doc(officeId);
         const targetTransactionRef = targetOfficeRef.collection("point_transactions").doc();
         tx.set(targetTransactionRef, {
             type: "SHARED_CALL_SEND",

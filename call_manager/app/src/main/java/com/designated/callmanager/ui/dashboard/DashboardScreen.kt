@@ -458,8 +458,7 @@ fun DashboardScreen(
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize()) {
             Column(
-                modifier = Modifier.fillMaxSize().padding(paddingValues).padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.fillMaxSize().padding(paddingValues)
             ) {
                 CallListContainer(
                     modifier = Modifier.fillMaxWidth().weight(4.5f),
@@ -471,6 +470,8 @@ fun DashboardScreen(
                     onCallClick = { callInfo -> viewModel.showCallDialog(callInfo.id) },
                     onAddCallClick = { viewModel.createPlaceholderCall() }
                 )
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 SharedCallListContainer(
                     modifier = Modifier.fillMaxWidth().weight(4.5f),
@@ -488,6 +489,8 @@ fun DashboardScreen(
                     },
                     currentOfficeId = officeId
                 )
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 DriverStatusCard(
                     modifier = Modifier.fillMaxWidth().weight(1f),

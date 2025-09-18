@@ -41,12 +41,19 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
         val cashTrips   = trips.filter { it.paymentMethod == "현금" }
         val bankTrips   = trips.filter { it.paymentMethod == "이체" }
         val creditTrips = trips.filter { it.paymentMethod == "외상" }
-        val cardTrips   = trips.filter { it.paymentMethod == "카드" }
+        val cashPlusPointTrips = trips.filter { it.paymentMethod == "현금+포인트" }
 
-        val cashSum   = cashTrips.sumOf { it.fare }
+        val cashSum   = cashTrips.sumOf { it.fare } +
+                        cashPlusPointTrips.sumOf { trip ->
+                            trip.cashAmount ?: 0  // 현금+포인트에서 현금 부분 추가
+                        }
         val bankSum   = bankTrips.sumOf { it.fare }
         val creditSum = creditTrips.sumOf { if(it.creditAmount>0) it.creditAmount else it.fare }
-        val cardSum   = cardTrips.sumOf { it.fare }
+        // 포인트 금액: 현금+포인트에서 포인트 부분만 계산
+        val pointSum = cashPlusPointTrips.sumOf { trip ->
+            val cashReceived = trip.cashAmount ?: 0
+            if (cashReceived > 0) trip.fare - cashReceived else trip.fare
+        }
 
         Spacer(Modifier.height(8.dp))
 
@@ -54,7 +61,7 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
             PaymentStatCard(label="현금", amount=cashSum, color=Color(0xFF4CAF50), modifier=Modifier.weight(1f)) { paymentDialog = "현금" to cashTrips }
             PaymentStatCard(label="이체", amount=bankSum, color=Color(0xFF03A9F4), modifier=Modifier.weight(1f)) { paymentDialog = "이체" to bankTrips }
             PaymentStatCard(label="외상", amount=creditSum, color=Color(0xFFF44336), modifier=Modifier.weight(1f)) { paymentDialog = "외상" to creditTrips }
-            PaymentStatCard(label="카드", amount=cardSum, color=Color(0xFFFF9800), modifier=Modifier.weight(1f)) { paymentDialog = "카드" to cardTrips }
+            PaymentStatCard(label="포인트", amount=pointSum, color=Color(0xFF9C27B0), modifier=Modifier.weight(1f)) { paymentDialog = "포인트" to cashPlusPointTrips }
         }
 
         Spacer(Modifier.height(8.dp))
@@ -63,14 +70,30 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
             Column(Modifier.padding(16.dp)) {
                 Text("총 매출: %,d원".format(totalFare), color = Color.White, style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.height(4.dp))
-                val totalExpense = (totalFare * ratio / 100.0).toInt()
-                val totalProfit  = totalFare - totalExpense
-                Text("총 지출(비율 ${ratio}%): ${"%,d".format(totalExpense)}원", color = Color.White)
-                Text("총 수입: ${"%,d".format(totalProfit)}원", color = Color.Yellow, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                val totalDeposit = (totalFare * ratio / 100.0).toInt()  // 총 납입금
+
+                // 총 외상 계산 (기사앱과 동일한 로직)
+                val totalCredit = trips.sumOf { trip ->
+                    when {
+                        trip.paymentMethod == "현금" -> 0
+                        trip.paymentMethod == "현금+포인트" -> {
+                            val cashReceived = trip.cashAmount ?: 0
+                            if (cashReceived > 0) trip.fare - cashReceived else trip.fare
+                        }
+                        else -> trip.fare // 카드, 이체, 외상은 전액 외상
+                    }
+                }
+
+                val realDeposit = totalDeposit - totalCredit  // 기사 납입금
+                val totalRealIncome = totalFare - pointSum  // 총 실수입 (포인트 손실 제외)
+
+                Text("총 납입금(비율 ${ratio}%): ${"%,d".format(totalDeposit)}원", color = Color.White)
+                Text("기사 납입금: ${"%,d".format(realDeposit)}원", color = Color.LightGray)
+                Text("총 실수입: ${"%,d".format(totalRealIncome)}원", color = Color.Yellow, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
 
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("지출 비율 조정", color=Color.White)
+                    Text("납입금 비율 조정", color=Color.White)
                     IconButton(onClick = { showRatioDialog = true }) {
                         Icon(Icons.Filled.Settings, contentDescription = "비율 설정", tint = Color.White)
                     }
@@ -151,11 +174,11 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
 
         AlertDialog(
             onDismissRequest = { showRatioDialog = false },
-            title = { Text("지출 비율 설정") },
+            title = { Text("납입금 비율 설정") },
             text = {
                 Column {
                     Text(
-                        text = "사무실 지출 비율을 입력하세요 (5-95%)",
+                        text = "기사 납입금 비율을 입력하세요 (10-90%)",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.8f),
                         modifier = Modifier.padding(bottom = 8.dp)
@@ -163,23 +186,17 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
                     OutlinedTextField(
                         value = inputValue,
                         onValueChange = { newValue ->
-                            // 숫자와 % 기호만 허용
-                            val filteredValue = newValue.filter { it.isDigit() || it == '%' }
-                                .replace("%", "")
-                                .take(2) // 최대 2자리
+                            // 숫자만 허용
+                            val filteredValue = newValue.filter { it.isDigit() }.take(2)
 
-                            inputValue = if (filteredValue.isNotEmpty()) {
+                            inputValue = filteredValue
+
+                            // 유효성 검사
+                            if (filteredValue.isNotEmpty()) {
                                 val num = filteredValue.toIntOrNull()
-                                if (num != null && num in 5..95) {
-                                    isError = false
-                                    "$num%"
-                                } else {
-                                    isError = true
-                                    "$filteredValue%"
-                                }
+                                isError = num == null || num !in 10..90
                             } else {
                                 isError = true
-                                ""
                             }
                         },
                         label = { Text("비율 (%)", color = Color.White.copy(alpha = 0.7f)) },
@@ -187,7 +204,7 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
                         supportingText = {
                             if (isError) {
                                 Text(
-                                    text = "5% ~ 95% 사이의 값을 입력하세요",
+                                    text = "10% ~ 90% 사이의 값을 입력하세요",
                                     color = MaterialTheme.colorScheme.error
                                 )
                             }
@@ -205,8 +222,8 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
             confirmButton = {
                 TextButton(
                     onClick = {
-                        val numericValue = inputValue.replace("%", "").toIntOrNull()
-                        if (numericValue != null && numericValue in 5..95) {
+                        val numericValue = inputValue.toIntOrNull()
+                        if (numericValue != null && numericValue in 10..90) {
                             vm.updateOfficeShareRatio(numericValue)
                             showRatioDialog = false
                         }

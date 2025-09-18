@@ -48,7 +48,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
     private val _allTripsCleared = MutableStateFlow(false)
     val allTripsCleared: StateFlow<Boolean> = _allTripsCleared
 
-    private val _officeShareRatio = MutableStateFlow(40)
+    private val _officeShareRatio = MutableStateFlow(60)
     val officeShareRatio: StateFlow<Int> = _officeShareRatio
 
     private val _sessionList = MutableStateFlow<List<SessionInfo>>(emptyList())
@@ -454,17 +454,28 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
         val totalTrips = trips.size
         val totalFare  = trips.sumOf { it.fare }.toLong()
         val newSessionId = System.currentTimeMillis().toString()
+        val closingTime = System.currentTimeMillis()
 
         viewModelScope.launch {
             repository.insertSession(
                 SessionEntity(
                     sessionId   = newSessionId,
-                    endAt       = System.currentTimeMillis(),
+                    endAt       = closingTime,
                     totalTrips  = totalTrips,
                     totalFare   = totalFare
                 )
             )
             repository.markTripsFinalized(trips.map { it.callId }, newSessionId)
+        }
+
+        // 마감 시간을 DashboardViewModel이 사용할 수 있도록 기록
+        val region = currentRegionId
+        val office = currentOfficeId
+        if (region != null && office != null) {
+            val closingPrefs = getApplication<Application>().getSharedPreferences("closing_times", Context.MODE_PRIVATE)
+            closingPrefs.edit()
+                .putLong("last_closing_time_${region}_${office}", closingTime)
+                .apply()
         }
 
         _allTripsCleared.value = true
