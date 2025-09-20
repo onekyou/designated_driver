@@ -55,24 +55,19 @@ fun DateDetailDialog(date: String, settlements: List<SettlementData>, onDismiss:
         onDismissRequest = onDismiss,
         title = { Text("$date 상세 내역", color = Color.White) },
         text = {
-            Column(Modifier.heightIn(max = 450.dp).fillMaxWidth()) {
-                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("No", Modifier.weight(0.5f), color = Color.Yellow, textAlign = TextAlign.Center)
-                    Text("고객", Modifier.weight(1f), color = Color.Yellow, textAlign = TextAlign.Center)
-                    Text("기사", Modifier.weight(1f), color = Color.Yellow, textAlign = TextAlign.Center)
-                    Text("요금", Modifier.weight(1f), color = Color.Yellow, textAlign = TextAlign.Center)
-                    Text("결제", Modifier.weight(1f), color = Color.Yellow, textAlign = TextAlign.Center)
-                }
-                Divider(color = Color.DarkGray)
-                LazyColumn(Modifier.weight(1f)) {
-                    itemsIndexed(settlements) { idx, s ->
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("${idx+1}", Modifier.weight(0.5f), color = Color.White, textAlign = TextAlign.Center)
-                            Text(s.customerName.take(3), Modifier.weight(1f), color = Color.White, textAlign = TextAlign.Center)
-                            Text(s.driverName, Modifier.weight(1f), color = Color.White, textAlign = TextAlign.Center)
-                            Text(NumberFormat.getNumberInstance().format(s.fare), Modifier.weight(1f), color = Color.White, textAlign = TextAlign.Center)
-                            Text(s.paymentMethod, Modifier.weight(1f), color = Color.White, textAlign = TextAlign.Center)
-                        }
+            LazyColumn(Modifier.heightIn(max = 450.dp).fillMaxWidth()) {
+                itemsIndexed(settlements) { idx, s ->
+                    Column(Modifier.padding(vertical = 4.dp)) {
+                        Text(
+                            text = "${idx+1}.${s.departure} - ${s.destination}",
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = "${s.customerName} ${NumberFormat.getNumberInstance().format(s.fare)} ${s.paymentMethod}",
+                            color = Color.LightGray,
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     }
                 }
             }

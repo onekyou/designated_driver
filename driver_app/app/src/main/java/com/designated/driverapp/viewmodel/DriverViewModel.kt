@@ -520,7 +520,7 @@ class DriverViewModel @Inject constructor(
             val paymentString = when (paymentMethod) {
                 "현금" -> "현금"
                 "외상" -> "외상"
-                "카드" -> "카드"
+                "이체" -> "이체"
                 "현금+포인트" -> if (cashAmount != null) "현금+포인트(${String.format("%,d", cashAmount)}원 현금)" else "현금+포인트"
                 "포인트" -> "포인트"
                 else -> paymentMethod
@@ -613,13 +613,11 @@ class DriverViewModel @Inject constructor(
 
     private fun performFirestoreUpdate(block: suspend () -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
-            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            _uiState.update { it.copy(errorMessage = null) }
             try {
                 block()
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = e.message ?: "알 수 없는 오류가 발생했습니다.") }
-            } finally {
-                _uiState.update { it.copy(isLoading = false) }
             }
         }
     }

@@ -2,6 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="#FF121212"
     android:orientation="vertical"
     android:padding="16dp">
 
@@ -11,10 +12,14 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:hint="연락처 이름 또는 번호로 검색"
+        android:textColorHint="#FF999999"
+        android:textColor="#FFFFFFFF"
         android:inputType="text"
         android:background="@drawable/search_background"
         android:drawableLeft="@android:drawable/ic_menu_search"
+        android:drawableTint="#FFFFFFFF"
         android:drawablePadding="8dp"
+        android:padding="12dp"
         android:layout_marginBottom="8dp" />
 
     <!-- 카운트 및 컨트롤 영역 -->
@@ -31,7 +36,7 @@
             android:layout_weight="1"
             android:text="연락처 0개 중 0개 선택"
             android:textSize="14sp"
-            android:textColor="@android:color/darker_gray" />
+            android:textColor="#FFFFFFFF" />
 
         <Button
             android:id="@+id/selectAllButton"
@@ -61,7 +66,7 @@
         android:text="선택 완료 (0개)"
         android:textSize="16sp"
         android:backgroundTint="@color/primary"
-        android:textColor="@android:color/black"
+        android:textColor="#FFFFFFFF"
         android:layout_marginTop="16dp" />
 
 </LinearLayout>

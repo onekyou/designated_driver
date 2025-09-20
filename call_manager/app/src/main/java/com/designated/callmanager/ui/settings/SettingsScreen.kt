@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.alpha
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PersonAdd
@@ -15,6 +16,9 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,6 +30,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.designated.callmanager.data.Constants
 import com.designated.callmanager.ui.dashboard.DashboardViewModel
+import com.designated.callmanager.ui.settlement.SettlementViewModel
+import com.designated.callmanager.ui.settlement.SettlementViewModel.BackupState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -40,10 +46,27 @@ fun SettingsScreen(
     onNavigateToSettlement: () -> Unit,
     onNavigateToExcludeNumber: () -> Unit = {},
 ) {
+    val settlementViewModel: SettlementViewModel = viewModel()
     val context = LocalContext.current
     val officeStatus by dashboardViewModel.officeStatus.collectAsStateWithLifecycle()
     val regionId by dashboardViewModel.regionId.collectAsStateWithLifecycle()
     val officeId by dashboardViewModel.officeId.collectAsStateWithLifecycle()
+
+    // 백업 관련 상태
+    val backupState by settlementViewModel.backupState.collectAsStateWithLifecycle()
+    val hasCloudBackups by settlementViewModel.hasCloudBackups.collectAsStateWithLifecycle()
+    val settlementList by settlementViewModel.settlementList.collectAsStateWithLifecycle()
+
+    // 백업 다이얼로그 상태
+    var showBackupDialog by remember { mutableStateOf(false) }
+    var showRestoreDialog by remember { mutableStateOf(false) }
+
+    // 백업 체크
+    LaunchedEffect(regionId, officeId) {
+        if (regionId != null && officeId != null) {
+            settlementViewModel.checkCloudBackups()
+        }
+    }
 
     // 알림 설정
     val prefs = remember { context.getSharedPreferences("call_manager_settings", Context.MODE_PRIVATE) }
@@ -222,6 +245,78 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            // 백업/복원 섹션
+            SettingsSection(
+                title = "데이터 백업 (준비중)",
+                icon = Icons.Filled.Backup
+            ) {
+                SettingsActionItem(
+                    title = "정산 데이터 백업",
+                    description = "준비중입니다",
+                    icon = Icons.Filled.CloudUpload,
+                    enabled = false,
+                    onClick = { /* 비활성화 */ }
+                )
+
+                SettingsActionItem(
+                    title = "정산 데이터 복원",
+                    description = "준비중입니다",
+                    icon = Icons.Filled.CloudDownload,
+                    enabled = false,
+                    onClick = { /* 비활성화 */ }
+                )
+
+                // 백업 상태 표시
+                when (backupState) {
+                    is BackupState.Loading -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(top = 8.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "처리 중...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                    is BackupState.Success -> {
+                        val successState = backupState as BackupState.Success
+                        Text(
+                            text = "✅ ${successState.message}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                        LaunchedEffect(successState) {
+                            delay(3000)
+                            settlementViewModel.clearBackupState()
+                        }
+                    }
+                    is BackupState.Error -> {
+                        val errorState = backupState as BackupState.Error
+                        Text(
+                            text = "❌ ${errorState.error}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                        LaunchedEffect(errorState) {
+                            delay(5000)
+                            settlementViewModel.clearBackupState()
+                        }
+                    }
+                    else -> {}
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             // 알림 설정 섹션
             SettingsSection(
                 title = "알림 설정",
@@ -347,6 +442,58 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
+
+    // 백업 확인 다이얼로그
+    if (showBackupDialog) {
+        AlertDialog(
+            onDismissRequest = { showBackupDialog = false },
+            title = { Text("정산 데이터 백업") },
+            text = {
+                Text("${settlementList.size}건의 정산 데이터를 클라우드에 백업하시겠습니까?\n\n백업된 데이터는 앱을 삭제하거나 재설치해도 복원할 수 있습니다.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showBackupDialog = false
+                        settlementViewModel.backupSettlements()
+                    }
+                ) {
+                    Text("백업")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBackupDialog = false }) {
+                    Text("취소")
+                }
+            }
+        )
+    }
+
+    // 복원 확인 다이얼로그
+    if (showRestoreDialog) {
+        AlertDialog(
+            onDismissRequest = { showRestoreDialog = false },
+            title = { Text("정산 데이터 복원") },
+            text = {
+                Text("클라우드에서 정산 데이터를 복원하시겠습니까?\n\n현재 로컬 정산 데이터는 모두 삭제되고 클라우드 데이터로 대체됩니다.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showRestoreDialog = false
+                        settlementViewModel.restoreSettlements()
+                    }
+                ) {
+                    Text("복원")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRestoreDialog = false }) {
+                    Text("취소")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -462,6 +609,46 @@ private fun SettingsNavigationItem(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsActionItem(
+    title: String,
+    description: String,
+    icon: ImageVector,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled) { onClick() }
+            .padding(vertical = 12.dp)
+            .let { if (!enabled) it.alpha(0.5f) else it },
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
             )
         }
     }

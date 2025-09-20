@@ -66,7 +66,6 @@ class PendingDriversViewModel(
                 val snapshot = firestore.collection("pending_drivers")
                     .whereEqualTo("targetRegionId", regionId)
                     .whereEqualTo("targetOfficeId", officeId)
-                    .orderBy("requestedAt", com.google.firebase.firestore.Query.Direction.ASCENDING)
                     .get()
                     .await()
 
@@ -76,16 +75,23 @@ class PendingDriversViewModel(
                     try {
                         android.util.Log.d("PendingDriversViewModel", "Processing doc ${doc.id}: ${doc.data}")
                         val parsedDriver = doc.toObject(PendingDriverInfo::class.java)
-                        if (parsedDriver?.authUid == null) {
+                        val finalDriver = if (parsedDriver?.authUid == null) {
                             parsedDriver?.copy(authUid = doc.id)
                         } else {
                             parsedDriver
+                        }
+
+                        // 클라이언트 측에서 상태 필터링
+                        if (finalDriver?.status in listOf("승인대기중", "승인중")) {
+                            finalDriver
+                        } else {
+                            null
                         }
                     } catch (e: Exception) {
                         android.util.Log.e("PendingDriversViewModel", "Error parsing doc ${doc.id}", e)
                         null
                     }
-                }
+                }.sortedBy { it.requestedAt }
 
                 android.util.Log.d("PendingDriversViewModel", "Parsed ${driverList.size} drivers successfully")
                 _uiState.value = PendingDriversUiState.Success(driverList)
@@ -158,11 +164,27 @@ class PendingDriversViewModel(
                 }
 
                 try {
-                    pendingDriverDocRef.delete().await()
+                    pendingDriverDocRef.update("status", "승인중").await()
                     } catch (e: Exception) {
                     }
 
+                // 로컬 상태를 먼저 업데이트
+                val currentState = _uiState.value
+                if (currentState is PendingDriversUiState.Success) {
+                    val updatedDrivers = currentState.drivers.map { driver ->
+                        if (driver.authUid == driverUid) {
+                            driver.copy(status = "승인중")
+                        } else {
+                            driver
+                        }
+                    }
+                    _uiState.value = PendingDriversUiState.Success(updatedDrivers)
+                }
+
                 _approvalState.value = DriverApprovalState.Success(driverInfo.name ?: "(이름 없음)", true)
+
+                // 백그라운드에서 새로고침
+                kotlinx.coroutines.delay(1500)
                 fetchPendingDrivers()
 
             } catch (e: Exception) {
@@ -171,23 +193,59 @@ class PendingDriversViewModel(
         }
     }
 
-    fun rejectDriver(driverInfo: PendingDriverInfo) {
+    fun deleteDriver(driverInfo: PendingDriverInfo) {
         val driverUid = driverInfo.authUid
         if (driverUid.isNullOrBlank()) {
-            _approvalState.value = DriverApprovalState.Error("거절 실패: 기사 고유 ID(authUid)가 없습니다.")
+            _approvalState.value = DriverApprovalState.Error("삭제 실패: 기사 고유 ID(authUid)가 없습니다.")
             return
         }
         _approvalState.value = DriverApprovalState.Loading
         viewModelScope.launch {
             try {
+                // pending_drivers에서 삭제
                 val pendingDriverDocRef = firestore.collection("pending_drivers").document(driverUid)
                 pendingDriverDocRef.delete().await()
 
+                // 승인된 기사라면 기사 컬렉션에서도 삭제
+                if (driverInfo.status == "승인중") {
+                    val normalizedType = driverInfo.driverType.trim()
+                    val driverCollection = when {
+                        normalizedType.equals("PICKUP", ignoreCase = true) -> "pickup_drivers"
+                        normalizedType == "픽업기사" -> "pickup_drivers"
+                        normalizedType.equals("DESIGNATED", ignoreCase = true) -> "designated_drivers"
+                        normalizedType == "대리기사" -> "designated_drivers"
+                        else -> "designated_drivers"
+                    }
+
+                    val driverDocRef = firestore.collection("regions").document(driverInfo.targetRegionId)
+                        .collection("offices").document(driverInfo.targetOfficeId)
+                        .collection(driverCollection).document(driverUid)
+
+                    try {
+                        driverDocRef.delete().await()
+                    } catch (e: Exception) {
+                        android.util.Log.w("PendingDriversViewModel", "기사 컬렉션에서 삭제 실패: ${e.message}")
+                    }
+                }
+
+                // Cloud Functions를 통해 Auth 계정 삭제 요청
+                try {
+                    val deleteRequest = mapOf(
+                        "uid" to driverUid,
+                        "requestedBy" to "call_manager"
+                    )
+                    firestore.collection("delete_requests").add(deleteRequest).await()
+                } catch (e: Exception) {
+                    android.util.Log.w("PendingDriversViewModel", "Auth 계정 삭제 요청 실패: ${e.message}")
+                }
+
                 _approvalState.value = DriverApprovalState.Success(driverInfo.name ?: "(이름 없음)", false)
+                // 삭제 후 즉시 새로고침하지 않고 잠시 후에 새로고침
+                kotlinx.coroutines.delay(1500)
                 fetchPendingDrivers()
 
             } catch (e: Exception) {
-                _approvalState.value = DriverApprovalState.Error("기사 거절 중 오류 발생: ${e.message}")
+                _approvalState.value = DriverApprovalState.Error("기사 삭제 중 오류 발생: ${e.message}")
             }
         }
     }

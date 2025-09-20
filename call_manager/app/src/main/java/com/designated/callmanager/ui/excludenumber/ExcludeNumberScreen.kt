@@ -77,7 +77,7 @@ fun ExcludeNumberScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFFFFAB00),
+                    containerColor = Color.Black,
                     titleContentColor = Color.White,
                     navigationIconContentColor = Color.White,
                     actionIconContentColor = Color.White
@@ -149,12 +149,12 @@ fun ExcludeNumberScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(Color.White)
+                .background(Color(0xFF121212))
         ) {
 
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                color = Color.White,
+                color = Color(0xFF2A2A2A),
                 shadowElevation = 2.dp
             ) {
                 Column(
@@ -165,13 +165,17 @@ fun ExcludeNumberScreen(
                         value = uiState.searchQuery,
                         onValueChange = { viewModel.updateSearchQuery(it) },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("이름 또는 번호로 검색") },
+                        placeholder = { Text("이름 또는 번호로 검색", color = Color.Gray) },
                         leadingIcon = {
                             Icon(Icons.Default.Search, contentDescription = null)
                         },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color.Gray,
-                            unfocusedBorderColor = Color.Gray
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color.White,
+                            unfocusedBorderColor = Color.Gray,
+                            focusedLabelColor = Color.White,
+                            unfocusedLabelColor = Color.Gray
                         ),
                         singleLine = true
                     )
@@ -186,7 +190,7 @@ fun ExcludeNumberScreen(
                         Text(
                             text = "총 ${uiState.totalCount}개의 개인번호",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Gray
+                            color = Color.White
                         )
 
                         TextButton(
@@ -196,7 +200,7 @@ fun ExcludeNumberScreen(
                         ) {
                             Text(
                                 "전화번호부에서 선택",
-                                color = Color(0xFF9C27B0)
+                                color = Color(0xFFFFAB00)
                             )
                         }
                     }
@@ -209,7 +213,7 @@ fun ExcludeNumberScreen(
 
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(8.dp)
+                    contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
                     items(uiState.filteredNumbers) { item ->
                         ExcludeNumberItem(
@@ -236,14 +240,15 @@ fun ExcludeNumberScreen(
     showDeleteDialog?.let { item ->
         AlertDialog(
             onDismissRequest = { showDeleteDialog = null },
-            title = { Text("삭제 확인") },
+            title = { Text("삭제 확인", color = Color.White) },
+            containerColor = Color(0xFF2A2A2A),
             text = {
                 val displayText = if (item.name != null) {
                     "${item.name} (${item.displayNumber})"
                 } else {
                     item.displayNumber
                 }
-                Text("$displayText 를 개인번호에서 제거하시겠습니까?")
+                Text("$displayText 를 개인번호에서 제거하시겠습니까?", color = Color.White)
             },
             confirmButton = {
                 TextButton(
@@ -268,9 +273,10 @@ fun ExcludeNumberScreen(
         if (viewModel.hasBackupFile()) {
             AlertDialog(
                 onDismissRequest = { showRestoreDialog = false },
-                title = { Text("데이터 복원") },
+                title = { Text("데이터 복원", color = Color.White) },
+                containerColor = Color(0xFF2A2A2A),
                 text = {
-                    Text("백업 파일에서 개인번호 목록을 복원하시겠습니까?\n현재 데이터와 병합됩니다.")
+                    Text("백업 파일에서 개인번호 목록을 복원하시겠습니까?\n현재 데이터와 병합됩니다.", color = Color.White)
                 },
                 confirmButton = {
                     TextButton(
@@ -329,8 +335,9 @@ fun ExcludeNumberScreen(
 
         AlertDialog(
             onDismissRequest = { showBackupInfoDialog = false },
-            title = { Text("백업 정보") },
-            text = { Text(message) },
+            title = { Text("백업 정보", color = Color.White) },
+            text = { Text(message, color = Color.White) },
+            containerColor = Color(0xFF2A2A2A),
             confirmButton = {
                 TextButton(onClick = { showBackupInfoDialog = false }) {
                     Text("확인")
@@ -343,8 +350,9 @@ fun ExcludeNumberScreen(
         val count = uiState.totalCount
         AlertDialog(
             onDismissRequest = { showClearAllDialog = false },
-            title = { Text("전체 삭제 확인") },
-            text = { Text("모든 개인번호($count 개)를 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.\n(테스트용 기능)") },
+            title = { Text("전체 삭제 확인", color = Color.White) },
+            text = { Text("모든 개인번호($count 개)를 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.\n(테스트용 기능)", color = Color.White) },
+            containerColor = Color(0xFF2A2A2A),
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -370,45 +378,52 @@ fun ExcludeNumberItem(
     item: ExcludeNumberItem,
     onDeleteClick: () -> Unit
 ) {
-
-    Row(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { }
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .clickable { },
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF2A2A2A)
+        )
     ) {
-
-        Column(
-            modifier = Modifier.weight(1f)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                if (item.name != null) {
+                    Text(
+                        text = item.name,
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
 
-            if (item.name != null) {
                 Text(
-                    text = item.name,
-                    color = Color.Black,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
+                    text = item.displayNumber,
+                    color = Color.LightGray,
+                    fontSize = 14.sp
                 )
             }
 
-            Text(
-                text = item.displayNumber,
-                color = Color.Gray,
-                fontSize = 14.sp
-            )
-        }
-
-        IconButton(
-            onClick = onDeleteClick,
-            modifier = Modifier.size(48.dp)
-        ) {
-            Icon(
-                Icons.Default.Delete,
-                contentDescription = "삭제",
-                tint = Color.Red.copy(alpha = 0.7f),
-                modifier = Modifier.padding(12.dp)
-            )
+            IconButton(
+                onClick = onDeleteClick,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "삭제",
+                    tint = Color.Red.copy(alpha = 0.7f),
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         }
     }
 }
@@ -422,17 +437,26 @@ fun AddNumberDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("개인번호 추가") },
+        title = { Text("개인번호 추가", color = Color.White) },
         text = {
             OutlinedTextField(
                 value = phoneNumber,
                 onValueChange = { phoneNumber = it },
                 label = { Text("전화번호") },
-                placeholder = { Text("010-1234-5678") },
+                placeholder = { Text("010-1234-5678", color = Color.Gray) },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedBorderColor = Color.White,
+                    unfocusedBorderColor = Color.Gray,
+                    focusedLabelColor = Color.White,
+                    unfocusedLabelColor = Color.Gray
+                )
             )
         },
+        containerColor = Color(0xFF2A2A2A),
         confirmButton = {
             TextButton(
                 onClick = {

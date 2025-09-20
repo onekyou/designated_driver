@@ -108,7 +108,7 @@ fun ContactSelectionScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFFFFAB00),
+                    containerColor = Color.Black,
                     titleContentColor = Color.White,
                     navigationIconContentColor = Color.White
                 )
@@ -119,7 +119,7 @@ fun ContactSelectionScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(Color.White) // 전체 배경을 흰색으로
+                .background(Color(0xFF121212))
         ) {
 
             Column(
@@ -132,13 +132,17 @@ fun ContactSelectionScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 8.dp),
-                    placeholder = { Text("연락처 이름 또는 번호로 검색") },
+                    placeholder = { Text("연락처 이름 또는 번호로 검색", color = Color.Gray) },
                     leadingIcon = {
                         Icon(Icons.Default.Search, contentDescription = null)
                     },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color.Gray,
-                        unfocusedBorderColor = Color.Gray
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = Color.White,
+                        unfocusedBorderColor = Color.Gray,
+                        focusedLabelColor = Color.White,
+                        unfocusedLabelColor = Color.Gray
                     ),
                     singleLine = true
                 )
@@ -153,7 +157,7 @@ fun ContactSelectionScreen(
                     Text(
                         text = "연락처 $totalContacts 개 중 $totalSelected 개 선택",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray,
+                        color = Color.White,
                         fontSize = 14.sp
                     )
                     
@@ -266,7 +270,7 @@ fun ContactSelectionItem(
             .clickable { onToggle() },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) Color(0xFFF0F0F0) else Color.White
+            containerColor = if (isSelected) Color(0xFF3A3A3A) else Color(0xFF2A2A2A)
         )
     ) {
         Row(
@@ -286,12 +290,13 @@ fun ContactSelectionItem(
                 Text(
                     text = contact.name,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
+                    fontSize = 16.sp,
+                    color = Color.White
                 )
                 Text(
                     text = contact.displayNumbers.joinToString("\n"),
                     fontSize = 14.sp,
-                    color = Color.Gray
+                    color = Color.LightGray
                 )
             }
         }

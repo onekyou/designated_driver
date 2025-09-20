@@ -457,7 +457,7 @@ fun HistorySettlementScreen(
                                         Text(
                                             text = displaySummary,
                                             style = MaterialTheme.typography.bodyLarge,
-                                            fontWeight = FontWeight.Bold,
+                                            fontWeight = FontWeight.Normal,
                                             color = Color.White
                                         )
                                     }
