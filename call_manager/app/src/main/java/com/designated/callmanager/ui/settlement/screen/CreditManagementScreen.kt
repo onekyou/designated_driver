@@ -95,25 +95,34 @@ fun CreditManagementScreen(vm: SettlementViewModel = viewModel()) {
             onDismissRequest = { showCollectDialog = false },
             title = { Text("금액 회수") },
             text = {
-                OutlinedTextField(
-                    value = collectAmountText,
-                    onValueChange = { collectAmountText = it.filter { ch -> ch.isDigit() } },
-                    label = { Text("회수 금액") },
-                    modifier = Modifier.focusRequester(collectFocusRequester),
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number,
-                        imeAction = ImeAction.Done
-                    ),
-                    keyboardActions = KeyboardActions(
-                        onDone = {
-                            val amt = collectAmountText.toIntOrNull() ?: 0
-                            if (amt > 0) {
-                                vm.reduceCredit(selectedPerson!!.id, amt)
-                                showCollectDialog = false
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("현재 외상 금액: ${selectedPerson!!.amount}원", color = Color.White)
+                    OutlinedTextField(
+                        value = collectAmountText,
+                        onValueChange = { collectAmountText = it.filter { ch -> ch.isDigit() } },
+                        label = { Text("회수 금액") },
+                        modifier = Modifier.focusRequester(collectFocusRequester),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Number,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                val amt = collectAmountText.toIntOrNull() ?: 0
+                                if (amt > 0) {
+                                    vm.reduceCredit(selectedPerson!!.id, amt)
+                                    showCollectDialog = false
+                                }
                             }
-                        }
+                        )
                     )
-                )
+                    Button(
+                        onClick = { collectAmountText = selectedPerson!!.amount.toString() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("전액회수 (${selectedPerson!!.amount}원)")
+                    }
+                }
             },
             confirmButton = {
                 TextButton(onClick = {

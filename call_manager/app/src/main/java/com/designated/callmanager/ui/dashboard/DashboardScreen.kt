@@ -48,6 +48,8 @@ import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.filled.Phone
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.tasks.await
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -1374,6 +1376,20 @@ fun SharedCallCard(
     onDelete: ((SharedCallInfo) -> Unit)? = null,
     isSourceOffice: Boolean = false
 ) {
+    // 사무실명 가져오기
+    var officeName by remember { mutableStateOf("") }
+    LaunchedEffect(sharedCall.sourceOfficeId) {
+        if ((sharedCall.callType == "마감콜" || sharedCall.callType == "AFTER_HOURS_QUICK" || sharedCall.callType == "MISSED_AFTER_HOURS") && sharedCall.sourceOfficeId.isNotEmpty()) {
+            val firestore = FirebaseFirestore.getInstance()
+            try {
+                val doc = firestore.collection("regions").document(sharedCall.sourceRegionId)
+                    .collection("offices").document(sharedCall.sourceOfficeId).get().await()
+                officeName = doc.getString("name") ?: sharedCall.sourceOfficeId
+            } catch (e: Exception) {
+                officeName = sharedCall.sourceOfficeId
+            }
+        }
+    }
     val bgColor = when (sharedCall.status) {
         "OPEN" -> Color(0xFF3A3A3A)
         "CLAIMED" -> Color(0xFF2A2A2A)
@@ -1394,17 +1410,34 @@ fun SharedCallCard(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "${sharedCall.departure ?: "출발지"} → ${sharedCall.destination ?: "도착지"}",
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                sharedCall.fare?.let {
+                if (sharedCall.callType == "마감콜" || sharedCall.callType == "AFTER_HOURS_QUICK" || sharedCall.callType == "MISSED_AFTER_HOURS") {
+                    // 마감콜은 "마감콜 | 사무실명"만 표시
                     Text(
-                        text = "요금: ${it}원",
-                        color = Color.LightGray,
-                        style = MaterialTheme.typography.bodySmall
+                        text = "마감콜",
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
                     )
+                    if (officeName.isNotEmpty()) {
+                        Text(
+                            text = officeName,
+                            color = Color.LightGray,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                } else {
+                    // 일반 콜은 출발지-도착지와 요금만 표시
+                    Text(
+                        text = "${sharedCall.departure ?: "출발지"} → ${sharedCall.destination ?: "도착지"}",
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    sharedCall.fare?.let {
+                        Text(
+                            text = "요금: ${it}원",
+                            color = Color.LightGray,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             }
             when (sharedCall.status) {

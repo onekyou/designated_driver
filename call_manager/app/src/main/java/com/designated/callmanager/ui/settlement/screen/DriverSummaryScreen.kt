@@ -37,7 +37,7 @@ fun DriverSummaryScreen(vm: SettlementViewModel = viewModel()) {
                             val cashReceived = trip.cashAmount ?: 0
                             if (cashReceived > 0) trip.fare - cashReceived else trip.fare
                         }
-                        else -> trip.fare // 카드, 이체, 외상은 전액 외상
+                        else -> trip.fare // 이체, 외상은 전액 외상
                     }
                 }
                 val deposit = (fareSum * ratio / 100.0).roundToInt()
@@ -57,7 +57,7 @@ fun DriverSummaryScreen(vm: SettlementViewModel = viewModel()) {
                 val cashReceived = trip.cashAmount ?: 0
                 if (cashReceived > 0) trip.fare - cashReceived else trip.fare
             }
-            else -> trip.fare // 카드, 이체, 외상은 전액 외상
+            else -> trip.fare // 이체, 외상은 전액 외상
         }
     }
     val totalDeposit = (totalFare * ratio / 100.0).roundToInt()

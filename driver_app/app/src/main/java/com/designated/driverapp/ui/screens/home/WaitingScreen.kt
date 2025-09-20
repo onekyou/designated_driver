@@ -38,10 +38,6 @@ fun WaitingScreen(
                     "현재 ${driverStatus.getDisplayName()} 상태입니다.",
                     style = MaterialTheme.typography.headlineSmall
                 )
-                Spacer(modifier = Modifier.height(32.dp))
-                Button(onClick = onGoOnline) {
-                    Text("온라인으로 전환")
-                }
             }
         }
     }

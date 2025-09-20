@@ -7,13 +7,14 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:background="#FF121212"
         android:orientation="vertical">
 
         <!-- 검색바 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@android:color/white"
+            android:background="#FF2A2A2A"
             android:elevation="2dp"
             android:orientation="vertical"
             android:padding="16dp">
@@ -24,8 +25,11 @@
                 android:layout_height="wrap_content"
                 android:background="@drawable/search_background"
                 android:drawableStart="@android:drawable/ic_menu_search"
+                android:drawableTint="#FFFFFFFF"
                 android:drawablePadding="12dp"
                 android:hint="이름 또는 번호로 검색"
+                android:textColorHint="#FF999999"
+                android:textColor="#FFFFFFFF"
                 android:imeOptions="actionSearch"
                 android:inputType="text"
                 android:padding="12dp" />
@@ -42,7 +46,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="총 0개의 개인번호"
-                    android:textColor="@android:color/darker_gray"
+                    android:textColor="#FFFFFFFF"
                     android:textSize="14sp" />
 
                 <Button
@@ -51,7 +55,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="전화번호부에서 선택"
-                    android:textColor="@color/purple_500" />
+                    android:textColor="#FFFFAB00" />
 
             </LinearLayout>
 

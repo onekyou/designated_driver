@@ -6,6 +6,8 @@ import androidx.lifecycle.AndroidViewModel
 import com.designated.callmanager.data.Constants
 import com.designated.callmanager.data.SettlementData
 import com.designated.callmanager.data.SessionInfo
+import com.designated.callmanager.data.SettlementBackup
+import com.designated.callmanager.data.repository.SettlementBackupRepository
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
@@ -23,6 +25,7 @@ import com.designated.callmanager.data.local.CreditEntryEntity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import android.util.Log
 
 class SettlementViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -60,6 +63,26 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
     private val database = CallManagerDatabase.getInstance(getApplication())
     private val repository = SettlementRepository(database)
     private val creditDao = database.creditDao()
+
+    // 백업/복원 관련
+    private val backupRepository = SettlementBackupRepository(getApplication())
+
+    // 백업 상태 관리
+    sealed class BackupState {
+        object Idle : BackupState()
+        object Loading : BackupState()
+        data class Success(val message: String) : BackupState()
+        data class Error(val error: String) : BackupState()
+    }
+
+    private val _backupState = MutableStateFlow<BackupState>(BackupState.Idle)
+    val backupState: StateFlow<BackupState> = _backupState.asStateFlow()
+
+    private val _backupList = MutableStateFlow<List<SettlementBackup>>(emptyList())
+    val backupList: StateFlow<List<SettlementBackup>> = _backupList.asStateFlow()
+
+    private val _hasCloudBackups = MutableStateFlow(false)
+    val hasCloudBackups: StateFlow<Boolean> = _hasCloudBackups.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -238,7 +261,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                             fare = fareAmount,
                             paymentMethod = doc.getString("paymentMethod") ?: "N/A",
                             cardAmount = null,
-                            cashAmount = cashReceived ?: 0,
+                            cashAmount = cashReceived,  // null 허용하여 포인트 계산 정확도 향상
                             creditAmount = creditAmount ?: 0,
                             completedAt = completedTimestamp,
                             driverId = doc.getString("assignedDriverId") ?: "",
@@ -518,5 +541,172 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
             .get()
             .addOnSuccessListener { snap -> cb(snap.getString("phoneNumber")) }
             .addOnFailureListener { cb(null) }
+    }
+
+    // ====== 백업/복원 기능 ======
+
+    /**
+     * 정산 데이터를 클라우드에 백업
+     */
+    fun backupSettlements() {
+        val regionId = currentRegionId
+        val officeId = currentOfficeId
+
+        if (regionId == null || officeId == null) {
+            _backupState.value = BackupState.Error("사무실 정보가 설정되지 않았습니다")
+            return
+        }
+
+        val settlements = _settlementList.value
+        if (settlements.isEmpty()) {
+            _backupState.value = BackupState.Error("백업할 정산 데이터가 없습니다")
+            return
+        }
+
+        viewModelScope.launch {
+            _backupState.value = BackupState.Loading
+
+            try {
+                val result = backupRepository.backupSettlements(regionId, officeId, settlements)
+
+                if (result.isSuccess) {
+                    _backupState.value = BackupState.Success("${settlements.size}건의 정산 데이터를 백업했습니다")
+                    checkCloudBackups() // 백업 목록 새로고침
+                    Log.d("SettlementViewModel", "백업 성공: ${result.getOrNull()}")
+                } else {
+                    val error = result.exceptionOrNull()?.message ?: "알 수 없는 오류"
+                    _backupState.value = BackupState.Error("백업 실패: $error")
+                    Log.e("SettlementViewModel", "백업 실패", result.exceptionOrNull())
+                }
+            } catch (e: Exception) {
+                _backupState.value = BackupState.Error("백업 중 오류 발생: ${e.message}")
+                Log.e("SettlementViewModel", "백업 예외", e)
+            }
+        }
+    }
+
+    /**
+     * 클라우드에서 정산 데이터 복원
+     */
+    fun restoreSettlements(backupId: String? = null) {
+        val regionId = currentRegionId
+        val officeId = currentOfficeId
+
+        if (regionId == null || officeId == null) {
+            _backupState.value = BackupState.Error("사무실 정보가 설정되지 않았습니다")
+            return
+        }
+
+        viewModelScope.launch {
+            _backupState.value = BackupState.Loading
+
+            try {
+                val result = backupRepository.restoreSettlements(regionId, officeId, backupId)
+
+                if (result.isSuccess) {
+                    val restoredSettlements = result.getOrNull() ?: emptyList()
+
+                    // 앱 삭제/재설치 시 전체 복원을 위해 기존 데이터 모두 삭제
+                    repository.clearAll()
+
+                    restoredSettlements.forEach { settlement ->
+                        val entity = SettlementEntity.fromData(settlement)
+                        repository.addTrip(entity)
+                    }
+
+                    _backupState.value = BackupState.Success("${restoredSettlements.size}건의 정산 데이터를 복원했습니다")
+                    Log.d("SettlementViewModel", "복원 성공: ${restoredSettlements.size}건")
+                } else {
+                    val error = result.exceptionOrNull()?.message ?: "알 수 없는 오류"
+                    _backupState.value = BackupState.Error("복원 실패: $error")
+                    Log.e("SettlementViewModel", "복원 실패", result.exceptionOrNull())
+                }
+            } catch (e: Exception) {
+                _backupState.value = BackupState.Error("복원 중 오류 발생: ${e.message}")
+                Log.e("SettlementViewModel", "복원 예외", e)
+            }
+        }
+    }
+
+    /**
+     * 클라우드 백업 존재 여부 확인
+     */
+    fun checkCloudBackups() {
+        val regionId = currentRegionId
+        val officeId = currentOfficeId
+
+        if (regionId == null || officeId == null) {
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val hasBackups = backupRepository.hasBackups(regionId, officeId)
+                _hasCloudBackups.value = hasBackups
+
+                // 백업 목록도 로드
+                backupRepository.getBackupList(regionId, officeId).collect { backups ->
+                    _backupList.value = backups
+                }
+
+            } catch (e: Exception) {
+                Log.e("SettlementViewModel", "백업 확인 실패", e)
+                _hasCloudBackups.value = false
+            }
+        }
+    }
+
+    /**
+     * 특정 백업 삭제
+     */
+    fun deleteBackup(backupId: String) {
+        val regionId = currentRegionId
+        val officeId = currentOfficeId
+
+        if (regionId == null || officeId == null) {
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val result = backupRepository.deleteBackup(regionId, officeId, backupId)
+
+                if (result.isSuccess) {
+                    _backupState.value = BackupState.Success("백업이 삭제되었습니다")
+                    checkCloudBackups() // 목록 새로고침
+                } else {
+                    val error = result.exceptionOrNull()?.message ?: "알 수 없는 오류"
+                    _backupState.value = BackupState.Error("백업 삭제 실패: $error")
+                }
+            } catch (e: Exception) {
+                _backupState.value = BackupState.Error("백업 삭제 중 오류: ${e.message}")
+                Log.e("SettlementViewModel", "백업 삭제 예외", e)
+            }
+        }
+    }
+
+    /**
+     * 백업 상태 초기화
+     */
+    fun clearBackupState() {
+        _backupState.value = BackupState.Idle
+    }
+
+    /**
+     * 앱 업데이트 감지 시 백업 제안
+     */
+    fun checkForAppUpdateAndSuggestBackup() {
+        val prefs = getApplication<Application>().getSharedPreferences("app_version_prefs", Context.MODE_PRIVATE)
+        val currentVersion = getApplication<Application>().packageManager
+            .getPackageInfo(getApplication<Application>().packageName, 0).versionCode
+        val lastVersion = prefs.getInt("last_version", 0)
+
+        if (currentVersion > lastVersion && _settlementList.value.isNotEmpty()) {
+            // 앱이 업데이트되었고 정산 데이터가 있는 경우
+            _backupState.value = BackupState.Success("앱이 업데이트되었습니다. 정산 데이터를 백업하시겠습니까?")
+
+            // 버전 정보 업데이트
+            prefs.edit().putInt("last_version", currentVersion).apply()
+        }
     }
 }

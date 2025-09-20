@@ -916,6 +916,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 val region = _regionId.value ?: return@launch
                 val office = _officeId.value ?: return@launch
                 val docRef = firestore.collection("shared_calls").document()
+
+                // 마감콜 여부 확인 (원본 callInfo의 callType 또는 출발지/도착지/요금이 모두 비어있는 경우)
+                val isClosingCall = callInfo.callType == "MISSED_AFTER_HOURS" ||
+                                  callInfo.callType == "AFTER_HOURS_QUICK" ||
+                                  (departure.isBlank() && destination.isBlank() && fare == 0)
+
                 val data = hashMapOf(
                     "status" to "OPEN",
                     "departure" to departure,
@@ -927,7 +933,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     "createdBy" to (auth.currentUser?.uid ?: ""),
                     "phoneNumber" to callInfo.phoneNumber,
                     "originalCallId" to callInfo.id,
-                    "timestamp" to Timestamp.now()
+                    "timestamp" to Timestamp.now(),
+                    "callType" to if (isClosingCall) "마감콜" else null
                 )
 
                 docRef.set(data).await()

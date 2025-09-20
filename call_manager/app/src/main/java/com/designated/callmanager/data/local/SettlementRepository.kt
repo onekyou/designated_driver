@@ -20,4 +20,9 @@ class SettlementRepository(private val db: CallManagerDatabase) {
     fun flowTripsBySession(sessionId: String) = db.settlementDao().getTripsBySession(sessionId)
 
     suspend fun insertSession(session: SessionEntity) = db.sessionDao().insert(session)
+
+    // 백업/복원용 함수들 추가
+    suspend fun clearAll() = dao.deleteAll()
+
+    suspend fun addTrip(entity: SettlementEntity) = dao.insert(entity)
 }

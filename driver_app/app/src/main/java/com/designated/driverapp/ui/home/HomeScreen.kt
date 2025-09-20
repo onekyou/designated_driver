@@ -200,12 +200,6 @@ fun HomeScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text("현재 오프라인 상태입니다.", style = MaterialTheme.typography.headlineSmall)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text("온라인으로 전환하여 콜을 받으세요.")
-                        Spacer(modifier = Modifier.height(32.dp))
-                        Button(onClick = { viewModel.updateDriverStatus(DriverStatus.ONLINE) }) {
-                            Text("온라인으로 전환")
-                        }
                     }
                 }
                 else -> {
@@ -433,15 +427,15 @@ fun SettlementSummaryPopup(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         RadioButton(
-                            selected = paymentMethod == "카드",
-                            onClick = { paymentMethod = "카드" },
+                            selected = paymentMethod == "이체",
+                            onClick = { paymentMethod = "이체" },
                             colors = RadioButtonDefaults.colors(
                                 selectedColor = Color(0xFFFFB000),
                                 unselectedColor = Color.Gray
                             )
                         )
                         Text(
-                            "카드 (외상)",
+                            "이체 (외상)",
                             modifier = Modifier.weight(1f),
                             color = Color.White
                         )

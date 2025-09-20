@@ -11,6 +11,9 @@ functions/node_modules/
 
 # --- Sensitive keys ---
 *.keystore
+*.jks
+keystore/
+keystore.properties
 
 # --- OS / Editor files ---
 .DS_Store

@@ -7,7 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -39,23 +39,31 @@ fun PendingDriversScreen(
     val uiState by viewModel.uiState.collectAsState()
     val approvalState by viewModel.approvalState.collectAsState()
 
+    var showApprovalDialog by remember { mutableStateOf(false) }
+    var driverToApprove by remember { mutableStateOf<PendingDriverInfo?>(null) }
+    var processingDriverId by remember { mutableStateOf<String?>(null) }
+
     LaunchedEffect(approvalState) {
         when (val state = approvalState) {
+            is DriverApprovalState.Loading -> {
+                // 처리 중인 기사 ID 설정
+            }
             is DriverApprovalState.Success -> {
-                val message = if (state.approved) "${state.driverName} 기사님을 승인했습니다." else "${state.driverName} 기사님의 가입 요청을 거절했습니다."
+                val message = if (state.approved) "${state.driverName} 기사님을 승인했습니다." else "${state.driverName} 기사님을 삭제했습니다."
                 Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                // processingDriverId를 즉시 null로 하지 않고 잠시 후에 리셋
+                kotlinx.coroutines.delay(2000)
+                processingDriverId = null
                 viewModel.resetApprovalState()
             }
             is DriverApprovalState.Error -> {
                 Toast.makeText(context, "오류: ${state.message}", Toast.LENGTH_LONG).show()
+                processingDriverId = null
                 viewModel.resetApprovalState()
             }
             else -> Unit
         }
     }
-
-    var showApprovalDialog by remember { mutableStateOf(false) }
-    var driverToApprove by remember { mutableStateOf<PendingDriverInfo?>(null) }
 
     Scaffold(
         topBar = {
@@ -90,8 +98,9 @@ fun PendingDriversScreen(
                                         driverToApprove = it
                                         showApprovalDialog = true
                                     },
-                                    onRejectClick = { viewModel.rejectDriver(it) },
-                                    isProcessing = approvalState is DriverApprovalState.Loading
+                                    onDeleteClick = { viewModel.deleteDriver(it) },
+                                    isProcessing = approvalState is DriverApprovalState.Loading,
+                                    processingDriverId = processingDriverId
                                 )
                             }
                         }
@@ -121,6 +130,7 @@ fun PendingDriversScreen(
             confirmButton = {
                 Button(
                     onClick = {
+                        processingDriverId = driverToApprove!!.authUid
                         viewModel.approveDriver(driverToApprove!!)
                         showApprovalDialog = false
                     },
@@ -146,8 +156,9 @@ fun PendingDriversScreen(
 fun PendingDriverCard(
     driverInfo: PendingDriverInfo,
     onApproveClick: (PendingDriverInfo) -> Unit,
-    onRejectClick: (PendingDriverInfo) -> Unit,
-    isProcessing: Boolean
+    onDeleteClick: (PendingDriverInfo) -> Unit,
+    isProcessing: Boolean,
+    processingDriverId: String? = null
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -159,6 +170,7 @@ fun PendingDriverCard(
             Text("연락처: ${driverInfo.phoneNumber}", style = MaterialTheme.typography.bodyMedium)
             Text("이메일: ${driverInfo.email}", style = MaterialTheme.typography.bodyMedium)
             Text("요청 유형: ${driverInfo.driverType}", style = MaterialTheme.typography.bodyMedium)
+            Text("상태: ${driverInfo.status}", style = MaterialTheme.typography.bodyMedium)
              driverInfo.requestedAt?.toDate()?.let {
                  Text("신청일시: ${DateFormat.format("yyyy-MM-dd hh:mm a", it)}", style = MaterialTheme.typography.bodySmall)
              }
@@ -170,23 +182,29 @@ fun PendingDriverCard(
             ) {
                 Button(
                     onClick = { onApproveClick(driverInfo) },
-                    enabled = !isProcessing,
+                    enabled = !isProcessing &&
+                             driverInfo.status == "승인대기중" &&
+                             processingDriverId != driverInfo.authUid,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                 ) {
-                    Icon(Icons.Filled.Check, contentDescription = "승인", modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("승인")
+                    if (processingDriverId == driverInfo.authUid && isProcessing) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Filled.Check, contentDescription = "승인", modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("승인")
+                    }
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 OutlinedButton(
-                    onClick = { onRejectClick(driverInfo) },
+                    onClick = { onDeleteClick(driverInfo) },
                     enabled = !isProcessing,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Icon(Icons.Filled.Close, contentDescription = "거절", modifier = Modifier.size(18.dp))
+                    Icon(Icons.Filled.Delete, contentDescription = "삭제", modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("거절")
+                    Text("삭제")
                 }
             }
         }

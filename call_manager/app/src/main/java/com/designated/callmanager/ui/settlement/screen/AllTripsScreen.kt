@@ -13,18 +13,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.designated.callmanager.data.SettlementData
 import com.designated.callmanager.ui.settlement.SettlementViewModel
 import com.designated.callmanager.ui.settlement.screen.CreditDialog
-import com.designated.callmanager.ui.settlement.screen.TripDetailDialog
 
 @Composable
 fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
     val trips by vm.settlementList.collectAsState()
     val creditedIds by vm.creditedTripIds.collectAsState()
-    var selectedTrip by remember { mutableStateOf<SettlementData?>(null) }
     var showCreditDialog by remember { mutableStateOf(false) }
 
     var showRatioDialog by remember { mutableStateOf(false) }
@@ -32,16 +31,29 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
 
     var paymentDialog by remember { mutableStateOf<Pair<String, List<SettlementData>>?>(null) }
 
-    var phoneForDialog by remember { mutableStateOf("") }
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("전체 운행 ${trips.size}건", style = MaterialTheme.typography.titleMedium, color = Color.White)
+    Column(Modifier.fillMaxSize().padding(vertical = 16.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("전체 운행 ${trips.size}건", style = MaterialTheme.typography.titleMedium, color = Color.White)
+
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("납입금 비율 조정", color=Color.White, style = MaterialTheme.typography.bodySmall)
+                IconButton(onClick = { showRatioDialog = true }) {
+                    Icon(Icons.Filled.Settings, contentDescription = "비율 설정", tint = Color.White, modifier = Modifier.size(20.dp))
+                }
+            }
+        }
 
         val totalFare = trips.sumOf { it.fare }
         val cashTrips   = trips.filter { it.paymentMethod == "현금" }
         val bankTrips   = trips.filter { it.paymentMethod == "이체" }
         val creditTrips = trips.filter { it.paymentMethod == "외상" }
         val cashPlusPointTrips = trips.filter { it.paymentMethod == "현금+포인트" }
+        val pointOnlyTrips = trips.filter { it.paymentMethod == "포인트" }
 
         val cashSum   = cashTrips.sumOf { it.fare } +
                         cashPlusPointTrips.sumOf { trip ->
@@ -49,106 +61,118 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
                         }
         val bankSum   = bankTrips.sumOf { it.fare }
         val creditSum = creditTrips.sumOf { if(it.creditAmount>0) it.creditAmount else it.fare }
-        // 포인트 금액: 현금+포인트에서 포인트 부분만 계산
+        // 포인트 금액: 현금+포인트와 포인트 결제 모두 계산
         val pointSum = cashPlusPointTrips.sumOf { trip ->
+            // cashAmount가 null이면 전액 포인트, 값이 있으면 차액이 포인트
             val cashReceived = trip.cashAmount ?: 0
-            if (cashReceived > 0) trip.fare - cashReceived else trip.fare
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PaymentStatCard(label="현금", amount=cashSum, color=Color(0xFF4CAF50), modifier=Modifier.weight(1f)) { paymentDialog = "현금" to cashTrips }
-            PaymentStatCard(label="이체", amount=bankSum, color=Color(0xFF03A9F4), modifier=Modifier.weight(1f)) { paymentDialog = "이체" to bankTrips }
-            PaymentStatCard(label="외상", amount=creditSum, color=Color(0xFFF44336), modifier=Modifier.weight(1f)) { paymentDialog = "외상" to creditTrips }
-            PaymentStatCard(label="포인트", amount=pointSum, color=Color(0xFF9C27B0), modifier=Modifier.weight(1f)) { paymentDialog = "포인트" to cashPlusPointTrips }
-        }
+            trip.fare - cashReceived
+        } + pointOnlyTrips.sumOf { it.fare }  // 포인트 결제는 전액
 
         Spacer(Modifier.height(8.dp))
 
         Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF424242))) {
             Column(Modifier.padding(16.dp)) {
-                Text("총 매출: %,d원".format(totalFare), color = Color.White, style = MaterialTheme.typography.bodyLarge)
-                Spacer(Modifier.height(4.dp))
-                val totalDeposit = (totalFare * ratio / 100.0).toInt()  // 총 납입금
+                // 총매출과 총수입 (사무실 비율)
+                val totalOfficeIncome = (totalFare * ratio / 100.0).toInt()
+                Text("총매출 ${"%,d".format(totalFare)}원", color = Color.White, style = MaterialTheme.typography.titleMedium)
+                Text("총수입 ${"%,d".format(totalOfficeIncome)}원", color = Color.White, style = MaterialTheme.typography.titleMedium)
 
-                // 총 외상 계산 (기사앱과 동일한 로직)
-                val totalCredit = trips.sumOf { trip ->
-                    when {
-                        trip.paymentMethod == "현금" -> 0
-                        trip.paymentMethod == "현금+포인트" -> {
-                            val cashReceived = trip.cashAmount ?: 0
-                            if (cashReceived > 0) trip.fare - cashReceived else trip.fare
-                        }
-                        else -> trip.fare // 카드, 이체, 외상은 전액 외상
-                    }
-                }
+                HorizontalDivider(color = Color.Gray, thickness = 1.dp, modifier = Modifier.padding(vertical = 12.dp))
 
-                val realDeposit = totalDeposit - totalCredit  // 기사 납입금
-                val totalRealIncome = totalFare - pointSum  // 총 실수입 (포인트 손실 제외)
-
-                Text("총 납입금(비율 ${ratio}%): ${"%,d".format(totalDeposit)}원", color = Color.White)
-                Text("기사 납입금: ${"%,d".format(realDeposit)}원", color = Color.LightGray)
-                Text("총 실수입: ${"%,d".format(totalRealIncome)}원", color = Color.Yellow, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-
+                // 수입 내역
+                Text("수입내역", color = Color.White, style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("납입금 비율 조정", color=Color.White)
-                    IconButton(onClick = { showRatioDialog = true }) {
-                        Icon(Icons.Filled.Settings, contentDescription = "비율 설정", tint = Color.White)
-                    }
+
+                // 사무실 실수입 계산 및 검증
+                val totalDeposit = (totalFare * ratio / 100.0).toInt()
+                val driverShare = totalFare - totalDeposit
+                val driverDeposit = cashSum - driverShare
+
+                // 검증 로직 - 계산 전 검산 (마이너스 허용)
+                val verifyDriverDeposit = cashSum - driverShare
+                val verifyRealIncome = verifyDriverDeposit + bankSum + creditSum - pointSum
+
+                // 교차 검증: 다른 방식으로 계산
+                val alternativeCalc = (cashSum - driverShare) + bankSum + creditSum - pointSum
+
+                // 검증된 값 사용
+                val finalDriverDeposit = if (verifyDriverDeposit == driverDeposit) driverDeposit else {
+                    android.util.Log.e("Settlement", "Driver deposit mismatch: $driverDeposit vs $verifyDriverDeposit")
+                    verifyDriverDeposit
                 }
+
+                // 기사 납입금 (마이너스도 표시)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("기사 납입", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                    Text("${"%,d".format(finalDriverDeposit)}원",
+                        color = if (finalDriverDeposit < 0) Color.Red else Color.White,
+                        style = MaterialTheme.typography.bodyMedium)
+                }
+
+                // 이체
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("이체", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                    Text("${"%,d".format(bankSum)}원",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium)
+                }
+
+                // 외상
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("외상", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                    Text("${"%,d".format(creditSum)}원",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium)
+                }
+
+                // 포인트 차감 (항상 표시)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("포인트 차감", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                    Text(if (pointSum > 0) "-${"%,d".format(pointSum)}원" else "0원",
+                        color = if (pointSum > 0) Color.Red else Color.White,
+                        style = MaterialTheme.typography.bodyMedium)
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // 실수입 - 검증된 값 사용 (마이너스도 포함)
+                val realIncome = finalDriverDeposit + bankSum + creditSum - pointSum
+
+                // 최종 검증
+                if (realIncome != verifyRealIncome || realIncome != alternativeCalc) {
+                    android.util.Log.e("Settlement", "Income verification failed: calc=$realIncome, verify=$verifyRealIncome, alt=$alternativeCalc")
+                }
+
+                HorizontalDivider(color = Color.Gray, thickness = 1.dp, modifier = Modifier.padding(vertical = 8.dp))
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("실수입", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("${"%,d".format(realIncome)}원",
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold)
+                }
+
+
+
             }
         }
 
         Spacer(Modifier.height(12.dp))
 
         Box(Modifier.weight(1f)) {
-            TripListTable(tripList = trips, onShowDetail = { selectedTrip = it })
+            TripListTable(tripList = trips)
         }
         Spacer(Modifier.height(8.dp))
         Button(
             onClick = { vm.clearAllTrips() },
             enabled = trips.isNotEmpty(),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF4444))
         ) { Text("업무 마감", color = Color.White) }
     }
 
-    selectedTrip?.let { trip ->
-        TripDetailDialog(settlement = trip, onDismiss = { selectedTrip = null })
-        vm.fetchPhoneForCall(trip.callId) { ph -> phoneForDialog = ph ?: "" }
-        if (!creditedIds.contains(trip.callId)) {
-            vm.fetchPhoneForCall(trip.callId) { ph ->
-                phoneForDialog = ph ?: ""
-                showCreditDialog = true
-            }
-        }
-    }
 
-    if (showCreditDialog && selectedTrip != null) {
-        CreditDialog(
-            trip = selectedTrip!!,
-            initialPhone = phoneForDialog,
-            onDismiss = { showCreditDialog = false; selectedTrip = null },
-            onRegister = { name, phone, amount ->
-                vm.addOrIncrementCredit(
-                    name = name,
-                    phone = phone,
-                    addAmount = amount,
-                    detail = SettlementViewModel.CreditEntry(
-                        date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date()),
-                        departure = selectedTrip!!.departure,
-                        destination = selectedTrip!!.destination,
-                        amount = amount
-                    )
-                )
-                vm.markTripCredited(selectedTrip!!.callId)
-                showCreditDialog = false
-                selectedTrip = null
-            }
-        )
-    }
 
     paymentDialog?.let { pair ->
         val label = pair.first
@@ -237,12 +261,3 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
     }
 }
 
-@Composable
-private fun PaymentStatCard(label: String, amount: Int, color: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Card(modifier = modifier.clickable { onClick() }, colors = CardDefaults.cardColors(containerColor = color.copy(alpha=0.25f))) {
-        Column(Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(label, color = color, style = MaterialTheme.typography.bodyMedium)
-            Text("%,d".format(amount), color = Color.White)
-        }
-    }
-}

@@ -27,10 +27,11 @@ fun PendingSettlementsScreen(vm: SettlementViewModel = viewModel()) {
 
     val creditedIds by vm.creditedTripIds.collectAsState()
 
-    val pending = trips.filter { it.paymentMethod in listOf("이체", "외상") && !creditedIds.contains(it.callId) }
+    val pending = trips.filter { it.paymentMethod in listOf("이체", "외상") }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("정산 대기 ${pending.size}건", style = MaterialTheme.typography.titleMedium, color = Color.White)
+        val unprocessedCount = pending.count { !creditedIds.contains(it.callId) }
+        Text("정산 처리 ${pending.size}건 (미처리 ${unprocessedCount}건)", style = MaterialTheme.typography.titleMedium, color = Color.White)
         Spacer(Modifier.height(8.dp))
         if (pending.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -40,6 +41,7 @@ fun PendingSettlementsScreen(vm: SettlementViewModel = viewModel()) {
             LazyColumn(Modifier.weight(1f)) {
                 items(pending) { item ->
                     PendingRow(item,
+                        creditedIds = creditedIds,
                         onCredit = {
                             vm.fetchPhoneForCall(item.callId) { ph ->
                                 phoneForDialog = ph ?: ""
@@ -81,17 +83,19 @@ fun PendingSettlementsScreen(vm: SettlementViewModel = viewModel()) {
 }
 
 @Composable
-private fun PendingRow(item: SettlementData, onCredit: () -> Unit, onConfirm: () -> Unit) {
+private fun PendingRow(item: SettlementData, creditedIds: Set<String>, onCredit: () -> Unit, onConfirm: () -> Unit) {
+    val isProcessed = creditedIds.contains(item.callId)
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A))
+        colors = CardDefaults.cardColors(containerColor = if (isProcessed) Color(0xFF1A3A1A) else Color(0xFF2A2A2A))
     ) {
         Column(Modifier.padding(12.dp)) {
             Row(modifier = Modifier.fillMaxWidth()) {
                 Text(item.customerName, Modifier.weight(1f), color = Color.White)
-                Text("기사 선택: ${item.paymentMethod}", color = Color.Yellow)
+                Text("${item.driverName}: ${item.paymentMethod}", color = Color.Yellow)
             }
             Spacer(Modifier.height(4.dp))
             Row(modifier = Modifier.fillMaxWidth()) {
@@ -101,22 +105,36 @@ private fun PendingRow(item: SettlementData, onCredit: () -> Unit, onConfirm: ()
                     color = Color.LightGray,
                     modifier = Modifier.weight(1f)
                 )
-                Text("${item.fare}원", color = Color.White)
+                Text("${"%,d".format(item.fare)}원", color = Color.White)
             }
             Spacer(Modifier.height(8.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = onConfirm,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
-                ) {
-                    Text("이체 확인", color = Color.White)
+
+            if (isProcessed) {
+                // 이미 처리된 경우
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                    Text("✓ 정산 처리 완료", color = Color.Green, style = MaterialTheme.typography.bodyMedium)
                 }
-                OutlinedButton(
-                    onClick = onCredit,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("외상 처리", color = Color(0xFFFF9800))
+            } else {
+                // 결제방식에 따른 개별 버튼
+                when (item.paymentMethod) {
+                    "이체" -> {
+                        Button(
+                            onClick = onConfirm,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3))
+                        ) {
+                            Text("이체 확인", color = Color.White)
+                        }
+                    }
+                    "외상" -> {
+                        Button(
+                            onClick = onCredit,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
+                        ) {
+                            Text("외상 등록", color = Color.White)
+                        }
+                    }
                 }
             }
         }
