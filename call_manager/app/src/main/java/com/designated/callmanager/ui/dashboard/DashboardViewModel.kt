@@ -396,7 +396,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 return@addSnapshotListener
             }
             if (snapshot != null && snapshot.exists()) {
-                _officeStatus.value = snapshot.getString("status") ?: ""
+                val status = snapshot.getString("status") ?: ""
+                _officeStatus.value = status
+
+                // SharedPreferences에 사무실 상태 캐시 저장
+                val prefs = getApplication<Application>().getSharedPreferences("office_status_cache", Context.MODE_PRIVATE)
+                prefs.edit().putString("current_office_status", status).apply()
             }
         }
 
@@ -782,11 +787,17 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
                 _officeStatus.value = newStatus
 
+                // SharedPreferences에도 즉시 업데이트
+                val prefs = getApplication<Application>().getSharedPreferences("office_status_cache", Context.MODE_PRIVATE)
+                prefs.edit().putString("current_office_status", newStatus).apply()
+
                 officeRef.set(mapOf("status" to newStatus), com.google.firebase.firestore.SetOptions.merge())
                     .addOnSuccessListener {
                     }
                     .addOnFailureListener { e ->
                         _officeStatus.value = currentStatus
+                        // 실패 시 캐시도 롤백
+                        prefs.edit().putString("current_office_status", currentStatus).apply()
                     }
             } catch (e: Exception) {
             }
