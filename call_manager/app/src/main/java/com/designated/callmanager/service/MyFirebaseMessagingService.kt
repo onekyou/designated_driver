@@ -101,6 +101,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             }
             "NEW_SHARED_CALL" -> {
                 Log.d(TAG, "🔔 [DATA_ONLY] NEW_SHARED_CALL 처리 시작")
+                // 사무실 마감 상태 확인
+                if (isOfficeClosed()) {
+                    Log.d(TAG, "🔔 [DATA_ONLY] 사무실 마감 상태 - 공유콜 알림 차단")
+                    return
+                }
                 // Data-only 메시지이므로 항상 커스텀 알림 생성
                 showCustomSharedCallNotification(remoteMessage)
                 Log.d(TAG, "🔔 [DATA_ONLY] NEW_SHARED_CALL 처리 완료")
@@ -443,6 +448,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     private fun handleNewSharedCall(remoteMessage: RemoteMessage, sharedCallId: String) {
+        // 사무실 마감 상태 확인
+        if (isOfficeClosed()) {
+            Log.d(TAG, "사무실 마감 상태 - 공유콜 알림 차단")
+            return
+        }
 
         val departure = remoteMessage.data["departure"] ?: "출발지"
         val destination = remoteMessage.data["destination"] ?: "도착지"
@@ -719,11 +729,36 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     /**
+     * 사무실 마감 상태 확인
+     * SharedPreferences에 캐시된 사무실 상태를 확인
+     */
+    private fun isOfficeClosed(): Boolean {
+        try {
+            val prefs = getSharedPreferences("office_status_cache", Context.MODE_PRIVATE)
+            val status = prefs.getString("current_office_status", "OPEN") ?: "OPEN"
+            Log.d(TAG, "캐시된 사무실 상태: $status")
+
+            val isClosed = status == "CLOSED" || status == "AUTO_SHARING"
+            Log.d(TAG, "사무실 마감 상태: $isClosed")
+            return isClosed
+        } catch (e: Exception) {
+            Log.e(TAG, "사무실 상태 확인 중 오류: ${e.message}")
+            return false
+        }
+    }
+
+    /**
      * Data-only FCM 메시지로부터 커스텀 공유콜 알림 생성
      * 전문가 권장: Ongoing Notification + Full-Screen Intent (향후 추가)
      */
     private fun showCustomSharedCallNotification(remoteMessage: RemoteMessage) {
         Log.d(TAG, "🔔 [CUSTOM] 커스텀 공유콜 알림 생성 시작")
+
+        // 사무실 마감 상태 확인
+        if (isOfficeClosed()) {
+            Log.d(TAG, "🔔 [CUSTOM] 사무실 마감 상태 - 커스텀 공유콜 알림 차단")
+            return
+        }
 
         val data = remoteMessage.data
         val sharedCallId = data["sharedCallId"] ?: return
