@@ -51,8 +51,8 @@ fun PendingDriversScreen(
             is DriverApprovalState.Success -> {
                 val message = if (state.approved) "${state.driverName} 기사님을 승인했습니다." else "${state.driverName} 기사님을 삭제했습니다."
                 Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                // processingDriverId를 즉시 null로 하지 않고 잠시 후에 리셋
-                kotlinx.coroutines.delay(2000)
+                // 성공 후 잠시 delay 후 processingDriverId 리셋
+                kotlinx.coroutines.delay(1000)
                 processingDriverId = null
                 viewModel.resetApprovalState()
             }
@@ -184,6 +184,7 @@ fun PendingDriverCard(
                     onClick = { onApproveClick(driverInfo) },
                     enabled = !isProcessing &&
                              driverInfo.status == "승인대기중" &&
+                             driverInfo.status != "승인완료" &&
                              processingDriverId != driverInfo.authUid,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                 ) {
@@ -192,7 +193,7 @@ fun PendingDriverCard(
                     } else {
                         Icon(Icons.Filled.Check, contentDescription = "승인", modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("승인")
+                        Text(if (driverInfo.status == "승인완료") "승인완료" else "승인")
                     }
                 }
                 Spacer(modifier = Modifier.width(8.dp))

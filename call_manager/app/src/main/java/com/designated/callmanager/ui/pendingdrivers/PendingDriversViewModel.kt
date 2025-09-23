@@ -81,8 +81,8 @@ class PendingDriversViewModel(
                             parsedDriver
                         }
 
-                        // 클라이언트 측에서 상태 필터링
-                        if (finalDriver?.status in listOf("승인대기중", "승인중")) {
+                        // 클라이언트 측에서 상태 필터링 - 승인완료 상태도 포함
+                        if (finalDriver?.status in listOf("승인대기중", "승인중", "승인완료")) {
                             finalDriver
                         } else {
                             null
@@ -164,9 +164,12 @@ class PendingDriversViewModel(
                 }
 
                 try {
-                    pendingDriverDocRef.update("status", "승인중").await()
-                    } catch (e: Exception) {
-                    }
+                    pendingDriverDocRef.delete().await()
+                    android.util.Log.d("PendingDriversViewModel", "pending_drivers에서 기사 문서 삭제 완료")
+                } catch (e: Exception) {
+                    android.util.Log.e("PendingDriversViewModel", "pending_drivers 삭제 실패: ${e.message}", e)
+                    android.util.Log.w("PendingDriversViewModel", "삭제 실패했지만 기사 승인은 완료됨 - 기사 로그인 가능")
+                }
 
                 // 로컬 상태를 먼저 업데이트
                 val currentState = _uiState.value
@@ -183,9 +186,6 @@ class PendingDriversViewModel(
 
                 _approvalState.value = DriverApprovalState.Success(driverInfo.name ?: "(이름 없음)", true)
 
-                // 백그라운드에서 새로고침
-                kotlinx.coroutines.delay(1500)
-                fetchPendingDrivers()
 
             } catch (e: Exception) {
                 _approvalState.value = DriverApprovalState.Error("기사 승인 중 오류 발생: ${e.message}")
@@ -207,7 +207,7 @@ class PendingDriversViewModel(
                 pendingDriverDocRef.delete().await()
 
                 // 승인된 기사라면 기사 컬렉션에서도 삭제
-                if (driverInfo.status == "승인중") {
+                if (driverInfo.status in listOf("승인중", "승인완료")) {
                     val normalizedType = driverInfo.driverType.trim()
                     val driverCollection = when {
                         normalizedType.equals("PICKUP", ignoreCase = true) -> "pickup_drivers"
@@ -240,9 +240,6 @@ class PendingDriversViewModel(
                 }
 
                 _approvalState.value = DriverApprovalState.Success(driverInfo.name ?: "(이름 없음)", false)
-                // 삭제 후 즉시 새로고침하지 않고 잠시 후에 새로고침
-                kotlinx.coroutines.delay(1500)
-                fetchPendingDrivers()
 
             } catch (e: Exception) {
                 _approvalState.value = DriverApprovalState.Error("기사 삭제 중 오류 발생: ${e.message}")
