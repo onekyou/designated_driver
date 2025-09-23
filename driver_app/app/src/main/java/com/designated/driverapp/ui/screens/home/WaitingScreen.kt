@@ -17,7 +17,9 @@ import com.designated.driverapp.model.DriverStatus
 @Composable
 fun WaitingScreen(
     driverStatus: DriverStatus,
-    onGoOnline: () -> Unit
+    onGoOnline: () -> Unit,
+    onCheckPendingDispatch: () -> Unit = {},
+    hasPendingDispatch: Boolean = false
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -32,6 +34,13 @@ fun WaitingScreen(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("배차가 완료되면 알림으로 알려드립니다.")
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(
+                    onClick = onCheckPendingDispatch,
+                    enabled = hasPendingDispatch
+                ) {
+                    Text("배차 확인")
+                }
             }
             else -> {
                 Text(

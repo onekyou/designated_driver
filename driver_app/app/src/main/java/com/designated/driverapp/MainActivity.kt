@@ -102,6 +102,13 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+
+        // 알림 클릭으로 들어온 callId 처리
+        val callId = intent.getStringExtra("callId")
+        if (!callId.isNullOrBlank() && auth.currentUser != null) {
+            Log.d(TAG, "onNewIntent: callId received = $callId")
+            driverViewModel.handleNotificationCallId(callId)
+        }
     }
 
     private fun askNotificationPermission() {

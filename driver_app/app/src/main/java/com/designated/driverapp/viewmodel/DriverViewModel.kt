@@ -685,4 +685,85 @@ class DriverViewModel @Inject constructor(
         } else {
         }
     }
+
+    /**
+     * 알림 클릭으로 들어온 callId를 처리하는 메서드
+     * 해당 callId의 콜 정보를 로드하고 배차팝업을 표시한다
+     */
+    fun handleNotificationCallId(callId: String) {
+        viewModelScope.launch {
+            Log.d(TAG, "handleNotificationCallId: processing callId = $callId")
+            try {
+                val (regionId, officeId) = getDriverLocationInfo()
+                val callDocument = firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
+                    .collection(Constants.COLLECTION_OFFICES).document(officeId)
+                    .collection(Constants.COLLECTION_CALLS).document(callId)
+                    .get()
+                    .await()
+
+                val callInfo = callDocument.toObject(CallInfo::class.java)?.copy(id = callDocument.id)
+
+                if (callInfo != null && callInfo.statusEnum == CallStatus.ASSIGNED) {
+                    // 배차된 콜이면 새로운 콜 팝업으로 표시
+                    _uiState.update { currentState ->
+                        currentState.copy(
+                            newCallPopup = callInfo,
+                            navigateToHome = true
+                        )
+                    }
+                    Log.d(TAG, "handleNotificationCallId: showing popup for assigned call")
+                } else if (callInfo != null) {
+                    // 다른 상태의 콜이면 콜 상세 화면으로 이동
+                    _callDetailsState.value = callInfo
+                    Log.d(TAG, "handleNotificationCallId: loaded call details for status ${callInfo.status}")
+                } else {
+                    Log.w(TAG, "handleNotificationCallId: call not found or invalid")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "handleNotificationCallId: error processing callId", e)
+                _uiState.update { it.copy(errorMessage = "알림 처리 중 오류 발생: ${e.message}") }
+            }
+        }
+    }
+
+    /**
+     * 현재 기사에게 배정된 ASSIGNED 상태의 콜이 있는지 확인하고 팝업으로 표시
+     */
+    fun checkForPendingDispatch() {
+        viewModelScope.launch {
+            try {
+                val (regionId, officeId) = getDriverLocationInfo()
+                val driverId = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
+
+                val assignedCallsQuery = firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
+                    .collection(Constants.COLLECTION_OFFICES).document(officeId)
+                    .collection(Constants.COLLECTION_CALLS)
+                    .whereEqualTo(Constants.FIELD_ASSIGNED_DRIVER_ID, driverId)
+                    .whereEqualTo(Constants.FIELD_STATUS, Constants.STATUS_ASSIGNED)
+                    .get()
+                    .await()
+
+                val assignedCalls = assignedCallsQuery.documents.mapNotNull { doc ->
+                    doc.toObject(CallInfo::class.java)?.copy(id = doc.id)
+                }
+
+                if (assignedCalls.isNotEmpty()) {
+                    // 첫 번째 배정된 콜을 팝업으로 표시
+                    val firstCall = assignedCalls.first()
+                    _uiState.update { currentState ->
+                        currentState.copy(
+                            newCallPopup = firstCall,
+                            navigateToHome = true
+                        )
+                    }
+                    Log.d(TAG, "checkForPendingDispatch: found ${assignedCalls.size} pending calls, showing first one")
+                } else {
+                    Log.d(TAG, "checkForPendingDispatch: no pending assigned calls found")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "checkForPendingDispatch: error checking for pending dispatch", e)
+                _uiState.update { it.copy(errorMessage = "배차 확인 중 오류 발생: ${e.message}") }
+            }
+        }
+    }
 }

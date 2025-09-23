@@ -188,7 +188,9 @@ fun HomeScreen(
                         else -> {
                             WaitingScreen(
                                 driverStatus = uiState.driverStatus,
-                                onGoOnline = { viewModel.updateDriverStatus(DriverStatus.ONLINE) }
+                                onGoOnline = { viewModel.updateDriverStatus(DriverStatus.ONLINE) },
+                                onCheckPendingDispatch = { viewModel.checkForPendingDispatch() },
+                                hasPendingDispatch = uiState.assignedCalls.any { it.statusEnum == CallStatus.ASSIGNED }
                             )
                         }
                     }
@@ -205,7 +207,9 @@ fun HomeScreen(
                 else -> {
                     WaitingScreen(
                         driverStatus = uiState.driverStatus,
-                        onGoOnline = { viewModel.updateDriverStatus(DriverStatus.ONLINE) }
+                        onGoOnline = { viewModel.updateDriverStatus(DriverStatus.ONLINE) },
+                        onCheckPendingDispatch = { viewModel.checkForPendingDispatch() },
+                        hasPendingDispatch = uiState.assignedCalls.any { it.statusEnum == CallStatus.ASSIGNED }
                     )
                 }
             }
