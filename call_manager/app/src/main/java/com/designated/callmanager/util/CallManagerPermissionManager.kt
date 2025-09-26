@@ -96,6 +96,12 @@ class CallManagerPermissionManager(
             title = "SMS 발송",
             description = "자동 문자 발송 기능에 필요합니다.",
             required = false
+        ),
+        PermissionInfo(
+            permission = Manifest.permission.RECORD_AUDIO,
+            title = "음성 인식",
+            description = "음성으로 주소 및 요금을 입력하는 기능에 필요합니다.",
+            required = false
         )
     ).filter { it.permission.isNotEmpty() }
 
@@ -196,7 +202,9 @@ class CallManagerPermissionManager(
 
         return requiredPermissions.filter {
             !it.required && needsPermission(it.permission) &&
-            (isCallDetectionEnabled || it.permission == Manifest.permission.SEND_SMS)
+            (isCallDetectionEnabled ||
+             it.permission == Manifest.permission.SEND_SMS ||
+             it.permission == Manifest.permission.RECORD_AUDIO)
         }
     }
 

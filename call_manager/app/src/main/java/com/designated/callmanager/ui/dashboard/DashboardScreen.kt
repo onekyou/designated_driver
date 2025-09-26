@@ -71,8 +71,21 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material3.Divider
+import androidx.compose.foundation.verticalScroll
+import com.designated.callmanager.util.VoiceInputHelper
+import com.designated.callmanager.util.AddressSearchHelper
+import com.designated.callmanager.data.AddressSearchResult
+import android.speech.SpeechRecognizer
 
 private const val TAG = "DashboardScreen"
+
+// SpeechRecognizer 확장 함수
+fun Context.createSpeechRecognizer(): SpeechRecognizer {
+    return SpeechRecognizer.createSpeechRecognizer(this)
+}
 
 @Composable
 fun CallStatus.getDisplayName(): String {
@@ -1201,50 +1214,271 @@ fun NewCallAssignmentDialog(
         var destination by remember { mutableStateOf("") }
         var fareText by remember { mutableStateOf("") }
 
+        // 음성인식 관련 상태
+        var isRecordingDeparture by remember { mutableStateOf(false) }
+        var isRecordingDestination by remember { mutableStateOf(false) }
+        var isRecordingFare by remember { mutableStateOf(false) }
+
+        // Kakao 주소 검색 결과
+        var departureSearchResults by remember { mutableStateOf<List<AddressSearchResult>>(emptyList()) }
+        var destinationSearchResults by remember { mutableStateOf<List<AddressSearchResult>>(emptyList()) }
+        var showDepartureResults by remember { mutableStateOf(false) }
+        var showDestinationResults by remember { mutableStateOf(false) }
+
         val departureFocusRequester = remember { FocusRequester() }
         val destinationFocusRequester = remember { FocusRequester() }
         val fareFocusRequester = remember { FocusRequester() }
 
+        // Speech recognizer
+        val speechRecognizer = remember { context.createSpeechRecognizer() }
+        val voiceHelper = remember { VoiceInputHelper(context) }
+        val addressSearchHelper = remember { AddressSearchHelper() }
+
         LaunchedEffect(Unit) {
             departureFocusRequester.requestFocus()
+        }
+
+        DisposableEffect(Unit) {
+            onDispose {
+                speechRecognizer.destroy()
+            }
         }
 
         AlertDialog(
             onDismissRequest = { showShareDialog = false },
             title = { Text("공유 정보 입력", fontWeight = FontWeight.Bold) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.verticalScroll(rememberScrollState())
+                ) {
+                    // 출발지 입력
                     OutlinedTextField(
                         value = departure,
-                        onValueChange = { departure = it },
+                        onValueChange = {
+                            departure = it
+                            // 주소 검색
+                            if (it.length >= 2) {
+                                addressSearchHelper.searchAddress(it) { results ->
+                                    departureSearchResults = results
+                                    showDepartureResults = results.isNotEmpty()
+                                }
+                            } else {
+                                showDepartureResults = false
+                            }
+                        },
                         label = { Text("출발지") },
                         placeholder = { Text("예: 서울역") },
-                        modifier = Modifier.focusRequester(departureFocusRequester),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(departureFocusRequester),
+                        trailingIcon = {
+                            Row {
+                                // 음성 입력 버튼
+                                IconButton(onClick = {
+                                    if (!isRecordingDeparture) {
+                                        voiceHelper.startListening { result ->
+                                            departure = result
+                                            isRecordingDeparture = false
+                                            // 음성인식 결과로 주소 검색
+                                            addressSearchHelper.searchAddress(result) { results ->
+                                                departureSearchResults = results
+                                                showDepartureResults = results.isNotEmpty()
+                                            }
+                                        }
+                                        isRecordingDeparture = true
+                                    } else {
+                                        voiceHelper.stopListening()
+                                        isRecordingDeparture = false
+                                    }
+                                }) {
+                                    Icon(
+                                        Icons.Default.Mic,
+                                        contentDescription = "음성 입력",
+                                        tint = if (isRecordingDeparture) Color.Red else MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                // 삭제 버튼
+                                if (departure.isNotEmpty()) {
+                                    IconButton(onClick = {
+                                        departure = ""
+                                        showDepartureResults = false
+                                    }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "지우기")
+                                    }
+                                }
+                            }
+                        },
                         keyboardOptions = KeyboardOptions(
-                            imeAction = ImeAction.Next
+                            imeAction = ImeAction.Next,
+                            keyboardType = KeyboardType.Text,
+                            capitalization = KeyboardCapitalization.None
                         ),
                         keyboardActions = KeyboardActions(
                             onNext = { destinationFocusRequester.requestFocus() }
                         )
                     )
+
+                    // 출발지 검색 결과
+                    if (showDepartureResults) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 150.dp)
+                        ) {
+                            LazyColumn {
+                                items(departureSearchResults) { result ->
+                                    Text(
+                                        text = result.address,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                departure = result.address
+                                                showDepartureResults = false
+                                                destinationFocusRequester.requestFocus()
+                                            }
+                                            .padding(12.dp),
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Divider()
+                                }
+                            }
+                        }
+                    }
+
+                    // 도착지 입력
                     OutlinedTextField(
                         value = destination,
-                        onValueChange = { destination = it },
+                        onValueChange = {
+                            destination = it
+                            // 주소 검색
+                            if (it.length >= 2) {
+                                addressSearchHelper.searchAddress(it) { results ->
+                                    destinationSearchResults = results
+                                    showDestinationResults = results.isNotEmpty()
+                                }
+                            } else {
+                                showDestinationResults = false
+                            }
+                        },
                         label = { Text("도착지") },
                         placeholder = { Text("예: 강남역") },
-                        modifier = Modifier.focusRequester(destinationFocusRequester),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(destinationFocusRequester),
+                        trailingIcon = {
+                            Row {
+                                // 음성 입력 버튼
+                                IconButton(onClick = {
+                                    if (!isRecordingDestination) {
+                                        voiceHelper.startListening { result ->
+                                            destination = result
+                                            isRecordingDestination = false
+                                            // 음성인식 결과로 주소 검색
+                                            addressSearchHelper.searchAddress(result) { results ->
+                                                destinationSearchResults = results
+                                                showDestinationResults = results.isNotEmpty()
+                                            }
+                                        }
+                                        isRecordingDestination = true
+                                    } else {
+                                        voiceHelper.stopListening()
+                                        isRecordingDestination = false
+                                    }
+                                }) {
+                                    Icon(
+                                        Icons.Default.Mic,
+                                        contentDescription = "음성 입력",
+                                        tint = if (isRecordingDestination) Color.Red else MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                // 삭제 버튼
+                                if (destination.isNotEmpty()) {
+                                    IconButton(onClick = {
+                                        destination = ""
+                                        showDestinationResults = false
+                                    }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "지우기")
+                                    }
+                                }
+                            }
+                        },
                         keyboardOptions = KeyboardOptions(
-                            imeAction = ImeAction.Next
+                            imeAction = ImeAction.Next,
+                            keyboardType = KeyboardType.Text,
+                            capitalization = KeyboardCapitalization.None
                         ),
                         keyboardActions = KeyboardActions(
                             onNext = { fareFocusRequester.requestFocus() }
                         )
                     )
+
+                    // 도착지 검색 결과
+                    if (showDestinationResults) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 150.dp)
+                        ) {
+                            LazyColumn {
+                                items(destinationSearchResults) { result ->
+                                    Text(
+                                        text = result.address,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                destination = result.address
+                                                showDestinationResults = false
+                                                fareFocusRequester.requestFocus()
+                                            }
+                                            .padding(12.dp),
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Divider()
+                                }
+                            }
+                        }
+                    }
+
+                    // 요금 입력
                     OutlinedTextField(
                         value = fareText,
                         onValueChange = { fareText = it.filter { c -> c.isDigit() } },
                         label = { Text("요금") },
-                        modifier = Modifier.focusRequester(fareFocusRequester),
+                        placeholder = { Text("예: 30000") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(fareFocusRequester),
+                        trailingIcon = {
+                            Row {
+                                // 음성 입력 버튼
+                                IconButton(onClick = {
+                                    if (!isRecordingFare) {
+                                        voiceHelper.startListening { result ->
+                                            // 한국어 숫자를 아라비아 숫자로 변환
+                                            fareText = voiceHelper.convertKoreanNumberToDigit(result)
+                                            isRecordingFare = false
+                                        }
+                                        isRecordingFare = true
+                                    } else {
+                                        voiceHelper.stopListening()
+                                        isRecordingFare = false
+                                    }
+                                }) {
+                                    Icon(
+                                        Icons.Default.Mic,
+                                        contentDescription = "음성 입력",
+                                        tint = if (isRecordingFare) Color.Red else MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                // 삭제 버튼
+                                if (fareText.isNotEmpty()) {
+                                    IconButton(onClick = { fareText = "" }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "지우기")
+                                    }
+                                }
+                            }
+                        },
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Number,
                             imeAction = ImeAction.Done
