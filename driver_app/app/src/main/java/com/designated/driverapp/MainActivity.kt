@@ -57,6 +57,15 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+    private val requestAudioPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
+            if (isGranted) {
+                Toast.makeText(this, "음성 입력 기능이 활성화되었습니다.", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "음성 입력을 사용하려면 마이크 권한이 필요합니다.", Toast.LENGTH_LONG).show()
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         auth = Firebase.auth
@@ -67,6 +76,7 @@ class MainActivity : ComponentActivity() {
 
         askNotificationPermission()
         askLocationPermission()
+        askAudioPermission()
 
         setContent {
             DriverAppTheme {
@@ -139,6 +149,21 @@ class MainActivity : ComponentActivity() {
             }
             else -> {
                 requestLocationPermissionLauncher.launch(permission)
+            }
+        }
+    }
+
+    private fun askAudioPermission() {
+        val permission = Manifest.permission.RECORD_AUDIO
+        when {
+            ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED -> {
+            }
+            shouldShowRequestPermissionRationale(permission) -> {
+                Toast.makeText(this, "음성으로 주소와 요금을 입력하려면 마이크 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
+                requestAudioPermissionLauncher.launch(permission)
+            }
+            else -> {
+                requestAudioPermissionLauncher.launch(permission)
             }
         }
     }
