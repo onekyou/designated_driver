@@ -179,6 +179,50 @@ service cloud.firestore {
           allow write: if request.auth == null || isOfficeAdmin(regionId, officeId);
         }
       }
+
+      // =============================
+      //  Attribution 시스템 (콜매니저 계획서에 따름)
+      //  • 랜딩페이지에서 생성 허용 (인증 없이)
+      //  • Cloud Functions에서 읽기 허용
+      //  • 관리자 읽기 허용 (수정/삭제 불가 - 무결성 보장)
+      // =============================
+      match /attributions/{attributionId} {
+        // 랜딩페이지에서 익명으로 생성 허용
+        allow create: if true;
+        // 관리자와 Cloud Functions 읽기 허용
+        allow read: if isOfficeAdmin(regionId, officeId) || request.auth == null;
+        // 수정/삭제 불가 (무결성 보장)
+        allow update, delete: if false;
+      }
+
+      // =============================
+      //  Customer 관리 (콜매니저 계획서에 따름)
+      // =============================
+      match /customers/{customerId} {
+        // 해당 사무실 관리자만 읽기/쓰기
+        allow read, write: if isOfficeAdmin(regionId, officeId);
+        // 손님 본인은 자신의 데이터만 읽기 (추후 구현)
+        // allow read: if request.auth.uid == customerId;
+      }
+
+      // =============================
+      //  Point Transactions (콜매니저 계획서에 따름)
+      // =============================
+      match /pointTransactions/{transactionId} {
+        // 관리자만 생성 가능
+        allow create: if isOfficeAdmin(regionId, officeId);
+        // 관리자 읽기 허용
+        allow read: if isOfficeAdmin(regionId, officeId);
+        // 수정/삭제 불가 (이력 보존)
+        allow update, delete: if false;
+      }
+
+      // =============================
+      //  Settings (콜매니저 계획서에 따름)
+      // =============================
+      match /settings/{settingId} {
+        allow read, write: if isOfficeAdmin(regionId, officeId);
+      }
     }
 
     // 공유 콜 규칙 – 관리자만 접근 가능, 기사는 내부콜만 처리

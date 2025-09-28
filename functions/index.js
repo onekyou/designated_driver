@@ -17,6 +17,10 @@ exports.onSharedCallStatusSync = tsIndexModule.onSharedCallStatusSync;
 exports.onSharedCallCompleted = tsIndexModule.onSharedCallCompleted;
 exports.finalizeWorkDay = tsIndexModule.finalizeWorkDay;
 
+// Attribution 시스템 함수들 export
+exports.matchAttribution = tsIndexModule.matchAttribution;
+exports.saveManualAttribution = tsIndexModule.saveManualAttribution;
+
 // Call Detector 종료 알림 전송
 exports.sendCallDetectorTerminationNotification = functions.firestore
     .document('notifications/{notificationId}')
