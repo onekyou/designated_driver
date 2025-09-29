@@ -22,18 +22,22 @@ import com.designated.customer.service.LocationService
 @Composable
 fun MainScreen(
     modifier: Modifier = Modifier,
+    regionId: String,
     officeId: String,
-    phoneNumber: String
+    phoneNumber: String,
+    onLogout: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
 
     // 임시로 ViewModel을 여기서 생성
     val viewModel = remember {
         MainViewModel(
-            callService = CallService(),
+            callService = CallService(regionId = regionId, officeId = officeId),
             locationService = LocationService(context),
+            regionId = regionId,
             officeId = officeId,
-            phoneNumber = phoneNumber
+            phoneNumber = phoneNumber,
+            context = context
         )
     }
     val uiState = viewModel.uiState
