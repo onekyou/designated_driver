@@ -1,5 +1,8 @@
 package com.designated.customer.ui.main
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -30,8 +33,10 @@ data class MainUiState(
 class MainViewModel(
     private val callService: CallService,
     private val locationService: LocationService,
+    private val regionId: String,
     private val officeId: String,
-    private val phoneNumber: String
+    private val phoneNumber: String,
+    private val context: Context? = null
 ) : ViewModel() {
 
     var uiState by mutableStateOf(MainUiState())
@@ -82,13 +87,27 @@ class MainViewModel(
                 val call = CustomerCall(
                     phoneNumber = phoneNumber,
                     officeId = officeId,
+                    regionId = regionId,
                     currentLocation = uiState.currentLocation,
                     destinationLocation = uiState.destinationLocation,
                     timestamp = System.currentTimeMillis(),
-                    status = "REQUESTED"
+                    status = "REQUESTED",
+                    customerId = phoneNumber,
+                    customerGrade = "BRONZE" // TODO: SharedPreferences에서 가져오기
                 )
 
                 val callId = callService.requestCall(call)
+
+                // 실제 전화 걸기 (사무실 전화번호는 추후 Firebase에서 가져옴)
+                // 임시로 테스트 번호 사용
+                val officePhoneNumber = "01012345678" // TODO: Firebase에서 사무실 전화번호 가져오기
+                context?.let {
+                    val intent = Intent(Intent.ACTION_DIAL).apply {
+                        data = Uri.parse("tel:$officePhoneNumber")
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    it.startActivity(intent)
+                }
 
                 // 콜 상태를 업데이트
                 uiState = uiState.copy(
