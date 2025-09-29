@@ -143,6 +143,9 @@ dependencies {
     // Network (Optional, if needed for direct API calls or network checks)
     implementation 'com.squareup.okhttp3:okhttp:4.11.0'
 
+    // QR Code generation (ZXing)
+    implementation 'com.google.zxing:core:3.5.3'
+
     // Testing
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'

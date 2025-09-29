@@ -36,13 +36,11 @@ fun SignUpScreen(
     val signUpState by viewModel.signUpState.collectAsStateWithLifecycle()
 
     val regions by viewModel.regions.collectAsStateWithLifecycle()
-    val offices by viewModel.offices.collectAsStateWithLifecycle()
 
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
 
     var expandedRegion by remember { mutableStateOf(false) }
-    var expandedOffice by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -182,56 +180,15 @@ fun SignUpScreen(
                 }
             }
 
-             ExposedDropdownMenuBox(
-                expanded = expandedOffice,
-                onExpandedChange = { if (viewModel.selectedRegion != null) expandedOffice = !expandedOffice },
-                 modifier = Modifier.fillMaxWidth()
-            ) {
-                OutlinedTextField(
-                    value = viewModel.selectedOffice?.name ?: "사무실 선택",
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("사무실") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedOffice) },
-                    modifier = Modifier.menuAnchor().fillMaxWidth(),
-                    enabled = viewModel.selectedRegion != null && signUpState !is SignUpState.Loading && signUpState !is SignUpState.LoadingOffices
-                )
-                ExposedDropdownMenu(
-                    expanded = expandedOffice,
-                    onDismissRequest = { expandedOffice = false },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                     if (viewModel.selectedRegion == null) {
-                         DropdownMenuItem(
-                            text = { Text("지역을 먼저 선택해주세요.") },
-                            onClick = { },
-                            enabled = false
-                        )
-                    } else if (signUpState is SignUpState.LoadingOffices) {
-                         DropdownMenuItem(
-                            text = { Text("사무실 목록 로딩 중...") },
-                            onClick = { },
-                            enabled = false
-                        )
-                    } else if (offices.isEmpty()) {
-                         DropdownMenuItem(
-                            text = { Text("선택 가능한 사무실이 없습니다.") },
-                            onClick = { },
-                            enabled = false
-                        )
-                    } else {
-                        offices.forEach { office ->
-                            DropdownMenuItem(
-                                text = { Text(office.name) },
-                                onClick = {
-                                    viewModel.onOfficeSelected(office)
-                                    expandedOffice = false
-                                }
-                            )
-                        }
-                    }
-                }
-            }
+             OutlinedTextField(
+                value = viewModel.officeName,
+                onValueChange = { viewModel.officeName = it },
+                label = { Text("사무실 이름") },
+                placeholder = { Text("예: 바로콜 대리운전") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = signUpState !is SignUpState.Loading
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -239,8 +196,7 @@ fun SignUpScreen(
                 onClick = { viewModel.signUp() },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = signUpState != SignUpState.Loading &&
-                          signUpState != SignUpState.LoadingRegions &&
-                          signUpState != SignUpState.LoadingOffices
+                          signUpState != SignUpState.LoadingRegions
             ) {
                 if (signUpState == SignUpState.Loading) {
                      CircularProgressIndicator(modifier = Modifier.size(24.dp))

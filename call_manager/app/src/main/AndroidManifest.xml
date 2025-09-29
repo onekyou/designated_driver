@@ -36,7 +36,10 @@
     
     <!-- SMS 발송 권한 (공유콜 시스템용) -->
     <uses-permission android:name="android.permission.SEND_SMS" />
-    
+
+    <!-- 음성 인식 권한 (음성 입력 기능) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
     <!-- 배터리 최적화 예외 요청 권한 -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     
@@ -181,6 +184,17 @@
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:theme="@style/Theme.CallManager" />
+
+        <!-- FileProvider for QR code sharing -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
 </application>
 
