@@ -1,0 +1,7 @@
+// 프로젝트 루트 build.gradle.kts (buildscript 섹션에 추가)
+
+buildscript {
+    dependencies {
+        classpath("com.google.gms:google-services:4.4.0") // Firebase용 추가
+    }
+}

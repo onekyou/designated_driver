@@ -12,15 +12,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
+    primary = OrangeLight,
     secondary = PurpleGrey80,
     tertiary = Pink80
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
+    primary = Orange,
     secondary = PurpleGrey40,
-    tertiary = Pink40
+    tertiary = Pink40,
+    primaryContainer = OrangeLight.copy(alpha = 0.2f)
 
     /* Other default colors to override
     background = Color(0xFFFFFBFE),
@@ -35,9 +36,9 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun DesignatedCustomerTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = true, // 무조건 다크모드 적용
     // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false, // 커스텀 색상 사용을 위해 false로 변경
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {

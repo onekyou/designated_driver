@@ -5,16 +5,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import com.designated.customer.data.model.AttributionResult
-import com.designated.customer.service.AttributionService
-import com.designated.customer.util.FingerprintManager
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.PhoneAuthCredential
 import com.google.firebase.auth.PhoneAuthOptions
 import com.google.firebase.auth.PhoneAuthProvider
 import com.google.firebase.FirebaseException
-import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 import android.util.Log
 
@@ -24,14 +19,10 @@ data class PhoneAuthUiState(
     val verificationCode: String = "",
     val isCodeSent: Boolean = false,
     val error: String? = null,
-    val isVerified: Boolean = false,
-    val attributionResult: AttributionResult? = null
+    val isVerified: Boolean = false
 )
 
-class PhoneAuthViewModel(
-    private val fingerprintManager: FingerprintManager,
-    private val attributionService: AttributionService
-) : ViewModel() {
+class PhoneAuthViewModel : ViewModel() {
 
     var uiState by mutableStateOf(PhoneAuthUiState())
         private set
@@ -48,31 +39,27 @@ class PhoneAuthViewModel(
     }
 
     fun sendVerificationCode(activity: Activity) {
-        Log.d("PhoneAuthViewModel", "sendVerificationCode 시작")
-
         if (uiState.phoneNumber.isEmpty()) {
-            Log.e("PhoneAuthViewModel", "전화번호가 비어있음")
             uiState = uiState.copy(error = "전화번호를 입력해주세요")
             return
         }
 
         uiState = uiState.copy(isLoading = true, error = null)
 
-        val phoneNumber = formatPhoneNumber(uiState.phoneNumber)
-        Log.d("PhoneAuthViewModel", "포맷된 전화번호: $phoneNumber")
+        val formattedPhoneNumber = formatPhoneNumber(uiState.phoneNumber)
+
         val options = PhoneAuthOptions.newBuilder(auth)
-            .setPhoneNumber(phoneNumber)
+            .setPhoneNumber(formattedPhoneNumber)
             .setTimeout(60L, TimeUnit.SECONDS)
             .setActivity(activity)
             .setCallbacks(object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
                 override fun onVerificationCompleted(credential: PhoneAuthCredential) {
-                    Log.d("PhoneAuthViewModel", "onVerificationCompleted 호출됨")
-                    // 자동 인증 완료
-                    signInWithCredential(credential)
+                    Log.d("PhoneAuth", "인증 자동 완료")
+                    signInWithPhoneAuthCredential(credential)
                 }
 
                 override fun onVerificationFailed(e: FirebaseException) {
-                    Log.e("PhoneAuthViewModel", "onVerificationFailed: ${e.message}", e)
+                    Log.e("PhoneAuth", "인증 실패", e)
                     uiState = uiState.copy(
                         isLoading = false,
                         error = "인증 실패: ${e.message}"
@@ -83,7 +70,7 @@ class PhoneAuthViewModel(
                     verificationId: String,
                     token: PhoneAuthProvider.ForceResendingToken
                 ) {
-                    Log.d("PhoneAuthViewModel", "onCodeSent 호출됨. verificationId: $verificationId")
+                    Log.d("PhoneAuth", "인증 코드 전송됨")
                     this@PhoneAuthViewModel.verificationId = verificationId
                     uiState = uiState.copy(
                         isLoading = false,
@@ -104,52 +91,33 @@ class PhoneAuthViewModel(
 
         val verificationId = this.verificationId
         if (verificationId == null) {
-            uiState = uiState.copy(error = "인증 과정에서 오류가 발생했습니다")
+            uiState = uiState.copy(error = "인증 세션이 만료되었습니다. 다시 시도해주세요")
             return
         }
 
         uiState = uiState.copy(isLoading = true, error = null)
 
         val credential = PhoneAuthProvider.getCredential(verificationId, uiState.verificationCode)
-        signInWithCredential(credential)
+        signInWithPhoneAuthCredential(credential)
     }
 
-    private fun signInWithCredential(credential: PhoneAuthCredential) {
+    private fun signInWithPhoneAuthCredential(credential: PhoneAuthCredential) {
         auth.signInWithCredential(credential)
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
-                    uiState = uiState.copy(isVerified = true)
-                    // 어트리뷰션 매칭 시작
-                    performAttribution()
+                    Log.d("PhoneAuth", "인증 성공")
+                    uiState = uiState.copy(
+                        isLoading = false,
+                        isVerified = true
+                    )
                 } else {
+                    Log.e("PhoneAuth", "로그인 실패", task.exception)
                     uiState = uiState.copy(
                         isLoading = false,
                         error = "인증 실패: ${task.exception?.message}"
                     )
                 }
             }
-    }
-
-    private fun performAttribution() {
-        viewModelScope.launch {
-            try {
-                val fingerprint = fingerprintManager.collectFingerprint()
-                val result = attributionService.matchAttribution(
-                    fingerprint = fingerprint,
-                    phoneNumber = uiState.phoneNumber
-                )
-
-                uiState = uiState.copy(
-                    isLoading = false,
-                    attributionResult = result
-                )
-            } catch (e: Exception) {
-                uiState = uiState.copy(
-                    isLoading = false,
-                    error = "사무실 연결 중 오류가 발생했습니다: ${e.message}"
-                )
-            }
-        }
     }
 
     private fun formatPhoneNumber(phoneNumber: String): String {
@@ -162,28 +130,7 @@ class PhoneAuthViewModel(
         }
     }
 
-    fun selectOffice(officeId: String) {
-        viewModelScope.launch {
-            val success = attributionService.saveOfficeSelection(
-                phoneNumber = uiState.phoneNumber,
-                officeId = officeId,
-                reason = "manual_selection"
-            )
-
-            if (success) {
-                uiState = uiState.copy(
-                    attributionResult = AttributionResult(
-                        success = true,
-                        officeId = officeId,
-                        score = null,
-                        confidence = "MANUAL"
-                    )
-                )
-            } else {
-                uiState = uiState.copy(
-                    error = "사무실 선택 저장에 실패했습니다"
-                )
-            }
-        }
+    fun clearError() {
+        uiState = uiState.copy(error = null)
     }
 }

@@ -57,8 +57,25 @@ fun OfficeSelectionScreen(
             text = "서비스를 이용하실 대리운전 사무실을 선택해주세요.",
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 24.dp)
+            modifier = Modifier.padding(bottom = 16.dp)
         )
+
+        // 테스트용 버튼
+        Button(
+            onClick = {
+                onOfficeSelected("testOffice", "testRegion")
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.secondary
+            )
+        ) {
+            Text("🧪 테스트 사무실로 바로 이동 (개발용)")
+        }
+
+        Divider(modifier = Modifier.padding(bottom = 8.dp))
 
         // 지역 선택 탭
         var selectedRegion by remember { mutableStateOf("seoul") }
