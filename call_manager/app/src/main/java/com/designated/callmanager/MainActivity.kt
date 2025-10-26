@@ -73,6 +73,8 @@ import com.designated.callmanager.service.CallManagerService
 import com.designated.callmanager.ui.dashboard.DashboardScreen
 import com.designated.callmanager.ui.dashboard.DashboardViewModel
 import com.designated.callmanager.ui.drivermanagement.DriverManagementScreen
+import com.designated.callmanager.ui.customer.CustomerManagementScreen
+import com.designated.callmanager.ui.attribution.AttributionManagementScreen
 import com.designated.callmanager.ui.login.LoginScreen
 import com.designated.callmanager.ui.login.LoginViewModel
 import com.designated.callmanager.ui.pendingdrivers.PendingDriversScreen
@@ -105,12 +107,16 @@ enum class Screen {
     PendingDrivers,
     Settlement,
     ExcludeNumber,
-    ContactSelection
+    ContactSelection,
+    CustomerManagement,
+    AttributionManagement
 }
 
 sealed class NavigationParams {
     object None : NavigationParams()
     data class DriverManagement(val regionId: String, val officeId: String) : NavigationParams()
+    data class CustomerManagement(val regionId: String, val officeId: String) : NavigationParams()
+    data class AttributionManagement(val regionId: String, val officeId: String) : NavigationParams()
 }
 
 class MainActivity : ComponentActivity() {
@@ -278,7 +284,7 @@ class MainActivity : ComponentActivity() {
                             Screen.Settings -> {
                                 screenState = Screen.Dashboard
                             }
-                            Screen.Settlement, Screen.PendingDrivers, Screen.ExcludeNumber -> {
+                            Screen.Settlement, Screen.PendingDrivers, Screen.ExcludeNumber, Screen.CustomerManagement, Screen.AttributionManagement -> {
                                 screenState = Screen.Settings
                             }
                             Screen.ContactSelection -> {
@@ -337,6 +343,14 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onNavigateToExcludeNumber = {
                                     screenState = Screen.ExcludeNumber
+                                },
+                                onNavigateToCustomerManagement = { regionId, officeId ->
+                                    navigationParams = NavigationParams.CustomerManagement(regionId, officeId)
+                                    screenState = Screen.CustomerManagement
+                                },
+                                onNavigateToAttributionManagement = { regionId, officeId ->
+                                    navigationParams = NavigationParams.AttributionManagement(regionId, officeId)
+                                    screenState = Screen.AttributionManagement
                                 }
                             )
                         }
@@ -373,6 +387,44 @@ class MainActivity : ComponentActivity() {
                             com.designated.callmanager.ui.excludenumber.ContactSelectionScreen(
                                 onNavigateBack = { screenState = Screen.ExcludeNumber }
                             )
+                        }
+                        Screen.CustomerManagement -> {
+                            val params = navigationParams
+                            if (params is NavigationParams.CustomerManagement) {
+                                CustomerManagementScreen(
+                                    regionId = params.regionId,
+                                    officeId = params.officeId,
+                                    onNavigateBack = { screenState = Screen.Settings },
+                                    onCustomerClick = { customer ->
+                                        // TODO: 고객 상세 화면으로 이동
+                                        Toast.makeText(
+                                            this@MainActivity,
+                                            "${customer.name} (${customer.phoneNumber})",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                )
+                            } else {
+                                LaunchedEffect(Unit) {
+                                    Toast.makeText(this@MainActivity, "잘못된 접근입니다. 이전 화면으로 돌아갑니다.", Toast.LENGTH_SHORT).show()
+                                    screenState = Screen.Settings
+                                }
+                            }
+                        }
+                        Screen.AttributionManagement -> {
+                            val params = navigationParams
+                            if (params is NavigationParams.AttributionManagement) {
+                                AttributionManagementScreen(
+                                    regionId = params.regionId,
+                                    officeId = params.officeId,
+                                    onNavigateBack = { screenState = Screen.Settings }
+                                )
+                            } else {
+                                LaunchedEffect(Unit) {
+                                    Toast.makeText(this@MainActivity, "잘못된 접근입니다. 이전 화면으로 돌아갑니다.", Toast.LENGTH_SHORT).show()
+                                    screenState = Screen.Settings
+                                }
+                            }
                         }
                     }
                 }

@@ -77,33 +77,33 @@ fun OfficeSelectionScreen(
 
         Divider(modifier = Modifier.padding(bottom = 8.dp))
 
-        // 지역 선택 탭
-        var selectedRegion by remember { mutableStateOf("seoul") }
+        // 지역 선택 탭 (실제 Firebase 리전 사용)
+        var selectedRegion by remember { mutableStateOf("Hongchon") }
 
         TabRow(
-            selectedTabIndex = if (selectedRegion == "seoul") 0 else 1
+            selectedTabIndex = if (selectedRegion == "Hongchon") 0 else 1
         ) {
             Tab(
-                selected = selectedRegion == "seoul",
+                selected = selectedRegion == "Hongchon",
                 onClick = {
-                    selectedRegion = "seoul"
-                    viewModel.loadOffices("seoul")
+                    selectedRegion = "Hongchon"
+                    viewModel.loadOffices("Hongchon")
                 }
             ) {
                 Text(
-                    "서울",
+                    "홍천",
                     modifier = Modifier.padding(vertical = 16.dp)
                 )
             }
             Tab(
-                selected = selectedRegion == "gyeonggi",
+                selected = selectedRegion == "yangpyong",
                 onClick = {
-                    selectedRegion = "gyeonggi"
-                    viewModel.loadOffices("gyeonggi")
+                    selectedRegion = "yangpyong"
+                    viewModel.loadOffices("yangpyong")
                 }
             ) {
                 Text(
-                    "경기",
+                    "양평",
                     modifier = Modifier.padding(vertical = 16.dp)
                 )
             }

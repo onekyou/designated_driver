@@ -115,6 +115,12 @@ class PreferencesManager(context: Context) {
             remove(KEY_CUSTOMER_GRADE)
             remove(KEY_HOME_ADDRESS)
             remove(KEY_FAVORITE_ADDRESSES)
+            remove(KEY_OFFICE_ID)
+            remove(KEY_REGION_ID)
+            remove(KEY_OFFICE_PHONE)
+            remove(KEY_BANK_NAME)
+            remove(KEY_ACCOUNT_NUMBER)
+            remove(KEY_ACCOUNT_HOLDER)
             apply()
         }
     }

@@ -41,6 +41,7 @@ fun SignUpScreen(
     var confirmPasswordVisible by remember { mutableStateOf(false) }
 
     var expandedRegion by remember { mutableStateOf(false) }
+    var expandedBank by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -185,6 +186,86 @@ fun SignUpScreen(
                 onValueChange = { viewModel.officeName = it },
                 label = { Text("사무실 이름") },
                 placeholder = { Text("예: 바로콜 대리운전") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = signUpState !is SignUpState.Loading
+            )
+
+            OutlinedTextField(
+                value = viewModel.officePhone,
+                onValueChange = { viewModel.officePhone = it },
+                label = { Text("사무실 전화번호") },
+                placeholder = { Text("예: 031-123-4567") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                modifier = Modifier.fillMaxWidth(),
+                enabled = signUpState !is SignUpState.Loading
+            )
+
+            ExposedDropdownMenuBox(
+                expanded = expandedBank,
+                onExpandedChange = { expandedBank = it && signUpState !is SignUpState.Loading },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = viewModel.bankName.ifEmpty { "은행 선택" },
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("입금 은행") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedBank) },
+                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                    enabled = signUpState !is SignUpState.Loading
+                )
+                ExposedDropdownMenu(
+                    expanded = expandedBank,
+                    onDismissRequest = { expandedBank = false },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    KoreanBanks.banks.forEach { bank ->
+                        DropdownMenuItem(
+                            text = { Text(bank) },
+                            onClick = {
+                                viewModel.bankName = bank
+                                expandedBank = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            OutlinedTextField(
+                value = viewModel.accountNumber,
+                onValueChange = { viewModel.accountNumber = it },
+                label = { Text("계좌번호") },
+                placeholder = { Text("예: 123-456-789012") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+                enabled = signUpState !is SignUpState.Loading
+            )
+
+            OutlinedTextField(
+                value = viewModel.confirmAccountNumber,
+                onValueChange = { viewModel.confirmAccountNumber = it },
+                label = { Text("계좌번호 확인") },
+                placeholder = { Text("계좌번호를 다시 입력하세요") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+                enabled = signUpState !is SignUpState.Loading,
+                isError = viewModel.confirmAccountNumber.isNotEmpty() && viewModel.accountNumber != viewModel.confirmAccountNumber,
+                supportingText = {
+                    if (viewModel.confirmAccountNumber.isNotEmpty() && viewModel.accountNumber != viewModel.confirmAccountNumber) {
+                        Text("계좌번호가 일치하지 않습니다", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            )
+
+            OutlinedTextField(
+                value = viewModel.accountHolder,
+                onValueChange = { viewModel.accountHolder = it },
+                label = { Text("예금주") },
+                placeholder = { Text("예: 홍길동") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = signUpState !is SignUpState.Loading

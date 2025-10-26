@@ -31,6 +31,9 @@ data class MainUiState(
     val isLoadingCall: Boolean = false,
     val callStatus: CallStatus? = null,
     val error: String? = null,
+    // 사무실 정보
+    val officeName: String = "",
+    val regionName: String = "",
     // 포인트 관련 상태
     val customerPoints: CustomerPoints? = null,
     val isLoadingPoints: Boolean = false,
@@ -88,6 +91,8 @@ class MainViewModel(
     val accountHolder: String get() = customerInfo?.accountHolder ?: ""
 
     init {
+        // 사무실 정보 로드
+        loadOfficeInfo()
         // 활성 콜 상태 모니터링 시작
         monitorCallStatus()
         // 포인트 정보 로드
@@ -109,6 +114,45 @@ class MainViewModel(
                 homeAddress = it.getHomeAddress(),
                 favoriteAddresses = it.getFavoriteAddresses()
             )
+        }
+    }
+
+    /**
+     * Firebase에서 사무실 정보 로드
+     */
+    private fun loadOfficeInfo() {
+        viewModelScope.launch {
+            try {
+                val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                val officeDoc = firestore
+                    .collection("regions")
+                    .document(regionId)
+                    .collection("offices")
+                    .document(officeId)
+                    .get()
+                    .await()
+
+                if (officeDoc.exists()) {
+                    val officeName = officeDoc.getString("name") ?: officeId
+                    val regionName = when(regionId) {
+                        "seoul" -> "서울"
+                        "gyeonggi" -> "경기"
+                        "Hongchon" -> "홍천"
+                        else -> regionId
+                    }
+
+                    uiState = uiState.copy(
+                        officeName = officeName,
+                        regionName = regionName
+                    )
+                }
+            } catch (e: Exception) {
+                // 사무실 정보 로드 실패 시 ID 표시
+                uiState = uiState.copy(
+                    officeName = officeId,
+                    regionName = regionId
+                )
+            }
         }
     }
 
@@ -203,24 +247,32 @@ class MainViewModel(
     }
 
     fun cancelCall() {
-        val currentCallId = uiState.callStatus?.callId ?: return
+        val currentCallId = uiState.callStatus?.callId ?: run {
+            android.util.Log.d("MainViewModel", "cancelCall: callId is null")
+            return
+        }
+
+        android.util.Log.d("MainViewModel", "cancelCall started: callId=$currentCallId")
 
         viewModelScope.launch {
             try {
                 val success = callService.cancelCall(currentCallId)
+                android.util.Log.d("MainViewModel", "cancelCall result: success=$success")
 
                 if (success) {
+                    // 취소 성공 시 callStatus를 null로 설정하여 UI에서 제거
                     uiState = uiState.copy(
-                        callStatus = uiState.callStatus?.copy(
-                            state = CallState.CANCELLED
-                        )
+                        callStatus = null
                     )
+                    android.util.Log.d("MainViewModel", "callStatus set to null")
                 } else {
                     uiState = uiState.copy(
                         error = "콜 취소에 실패했습니다"
                     )
+                    android.util.Log.e("MainViewModel", "cancelCall failed")
                 }
             } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "cancelCall exception: ${e.message}", e)
                 uiState = uiState.copy(
                     error = "콜 취소 중 오류가 발생했습니다: ${e.message}"
                 )

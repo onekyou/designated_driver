@@ -34,6 +34,7 @@ class CallService(
     }
 
     suspend fun cancelCall(callId: String): Boolean {
+        android.util.Log.d("CallService", "cancelCall: callId=$callId, regionId=$regionId, officeId=$officeId")
         return try {
             firestore
                 .collection("regions").document(regionId)
@@ -42,8 +43,10 @@ class CallService(
                 .document(callId)
                 .update("status", "CANCELLED")
                 .await()
+            android.util.Log.d("CallService", "cancelCall: success")
             true
         } catch (e: Exception) {
+            android.util.Log.e("CallService", "cancelCall: failed", e)
             false
         }
     }

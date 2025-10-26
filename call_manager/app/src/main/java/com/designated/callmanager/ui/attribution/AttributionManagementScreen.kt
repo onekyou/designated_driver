@@ -1,7 +1,9 @@
 package com.designated.callmanager.ui.attribution
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -19,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -86,13 +89,63 @@ fun AttributionManagementScreen(
                     OfficeStatusSection(kpiMetrics = kpiMetrics)
                 }
 
-                // QR 코드 관리 섹션 (읽기 전용)
+                // QR 코드 관리 섹션
                 item {
+                    val qrCodeBitmap by viewModel.qrCodeBitmap.collectAsStateWithLifecycle()
+                    val officePhone by viewModel.officePhone.collectAsStateWithLifecycle()
+                    val bankName by viewModel.bankName.collectAsStateWithLifecycle()
+                    val accountNumber by viewModel.accountNumber.collectAsStateWithLifecycle()
+                    val accountHolder by viewModel.accountHolder.collectAsStateWithLifecycle()
+                    var showEditDialog by remember { mutableStateOf(false) }
+                    val context = androidx.compose.ui.platform.LocalContext.current
+
                     QRCodeManagementSection(
                         officeSettings = officeSettings,
+                        qrCodeBitmap = qrCodeBitmap,
                         onDownloadQR = { viewModel.downloadQRCode() },
-                        onShareQR = { viewModel.shareQRCode() }
+                        onShareQR = { viewModel.shareQRCode() },
+                        onEditOfficeInfo = { showEditDialog = true }
                     )
+
+                    if (showEditDialog) {
+                        OfficeInfoEditDialog(
+                            phone = officePhone,
+                            bankName = bankName,
+                            accountNumber = accountNumber,
+                            accountHolder = accountHolder,
+                            onPhoneChange = { viewModel.updatePhoneInput(it) },
+                            onBankNameChange = { viewModel.updateBankNameInput(it) },
+                            onAccountNumberChange = { viewModel.updateAccountNumberInput(it) },
+                            onAccountHolderChange = { viewModel.updateAccountHolderInput(it) },
+                            onDismiss = { showEditDialog = false },
+                            onSave = {
+                                viewModel.updateOfficeInfo(
+                                    regionId = regionId,
+                                    officeId = officeId,
+                                    phone = officePhone,
+                                    bank = bankName,
+                                    account = accountNumber,
+                                    holder = accountHolder,
+                                    onSuccess = {
+                                        showEditDialog = false
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            "사무실 정보가 업데이트되었습니다",
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
+                                    },
+                                    onError = { error ->
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            "오류: $error",
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                )
+                            },
+                            isLoading = isLoading
+                        )
+                    }
                 }
 
                 // 랜딩 페이지 관리 섹션 (읽기 전용)
@@ -205,9 +258,13 @@ fun SimpleStatusCard(item: SimpleStatusItem) {
 @Composable
 fun QRCodeManagementSection(
     officeSettings: OfficeSettings?,
+    qrCodeBitmap: android.graphics.Bitmap?,
     onDownloadQR: () -> Unit,
-    onShareQR: () -> Unit
+    onShareQR: () -> Unit,
+    onEditOfficeInfo: () -> Unit
 ) {
+    var showQRDialog by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -244,14 +301,15 @@ fun QRCodeManagementSection(
                         RoundedCornerShape(8.dp)
                     )
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color.White),
+                    .background(Color.White)
+                    .clickable(enabled = qrCodeBitmap != null) { showQRDialog = true },
                 contentAlignment = Alignment.Center
             ) {
-                if (officeSettings?.qrCode?.isNotEmpty() == true) {
-                    Text(
-                        "QR 코드",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Color.Black
+                if (qrCodeBitmap != null) {
+                    Image(
+                        bitmap = qrCodeBitmap.asImageBitmap(),
+                        contentDescription = "QR 코드",
+                        modifier = Modifier.fillMaxSize()
                     )
                 } else {
                     Column(
@@ -274,7 +332,7 @@ fun QRCodeManagementSection(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // QR 코드 액션 버튼들 (다운로드, 공유만 제공)
+            // QR 코드 액션 버튼들
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -298,7 +356,27 @@ fun QRCodeManagementSection(
                     Text("공유")
                 }
             }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 사무실 정보 수정 버튼
+            Button(
+                onClick = onEditOfficeInfo,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("사무실 정보 수정")
+            }
         }
+    }
+
+    // QR 코드 확대 다이얼로그
+    if (showQRDialog && qrCodeBitmap != null) {
+        QRCodeEnlargedDialog(
+            qrCodeBitmap = qrCodeBitmap,
+            onDismiss = { showQRDialog = false }
+        )
     }
 }
 
@@ -633,3 +711,163 @@ fun AttributionSourceBadge(source: String) {
     }
 }
 
+
+@Composable
+fun QRCodeEnlargedDialog(
+    qrCodeBitmap: android.graphics.Bitmap,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("닫기")
+            }
+        },
+        title = {
+            Text(
+                "QR 코드",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .background(Color.White, RoundedCornerShape(8.dp))
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    bitmap = qrCodeBitmap.asImageBitmap(),
+                    contentDescription = "확대된 QR 코드",
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun OfficeInfoEditDialog(
+    phone: String,
+    bankName: String,
+    accountNumber: String,
+    accountHolder: String,
+    onPhoneChange: (String) -> Unit,
+    onBankNameChange: (String) -> Unit,
+    onAccountNumberChange: (String) -> Unit,
+    onAccountHolderChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onSave: () -> Unit,
+    isLoading: Boolean
+) {
+    AlertDialog(
+        onDismissRequest = { if (!isLoading) onDismiss() }
+    ) {
+        Card {
+            Column(
+                modifier = Modifier
+                    .padding(24.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    "사무실 정보 수정",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    "수정 후 QR 코드가 자동으로 재생성됩니다",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = phone,
+                    onValueChange = onPhoneChange,
+                    label = { Text("사무실 전화번호") },
+                    placeholder = { Text("예: 031-123-4567") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isLoading
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = bankName,
+                    onValueChange = onBankNameChange,
+                    label = { Text("입금 은행") },
+                    placeholder = { Text("예: 국민은행") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isLoading
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = accountNumber,
+                    onValueChange = onAccountNumberChange,
+                    label = { Text("계좌번호") },
+                    placeholder = { Text("예: 123-456-789012") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isLoading
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = accountHolder,
+                    onValueChange = onAccountHolderChange,
+                    label = { Text("예금주") },
+                    placeholder = { Text("예: 홍길동") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isLoading
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        enabled = !isLoading
+                    ) {
+                        Text("취소")
+                    }
+                    Button(
+                        onClick = onSave,
+                        modifier = Modifier.weight(1f),
+                        enabled = !isLoading && phone.isNotBlank() &&
+                                 bankName.isNotBlank() &&
+                                 accountNumber.isNotBlank() &&
+                                 accountHolder.isNotBlank()
+                    ) {
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        } else {
+                            Text("저장")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

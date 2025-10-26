@@ -84,19 +84,6 @@ fun PhoneAuthScreen(
                     Text("인증번호 발송")
                 }
             }
-
-            // 테스트용 버튼
-            OutlinedButton(
-                onClick = { onAuthSuccess("01012345678") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.secondary
-                )
-            ) {
-                Text("🧪 테스트 계정으로 바로 로그인 (개발용)")
-            }
         } else {
             // 인증번호 입력 단계
             Text(

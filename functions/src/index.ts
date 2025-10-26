@@ -1459,21 +1459,97 @@ export const matchAttribution = onCall(
     logger.warn(`[matchAttribution] 시작 - phoneNumber: ${phoneNumber}`);
 
     try {
-      // 콜매니저 계획서에 맞는 올바른 경로에서 attribution 데이터 찾기
-      // regions/seoul/offices/TEST_OFFICE/attributions/
-      const attributionsSnapshot = await admin
-        .firestore()
-        .collection("regions").doc("seoul")
-        .collection("offices").doc("TEST_OFFICE")
-        .collection("attributions")
-        .get();
+      // 모든 지역의 모든 사무실에서 attribution 데이터 찾기
+      const db = admin.firestore();
+      const regionsSnapshot = await db.collection("regions").get();
 
       let bestMatch: any = null;
       let bestScore = 0;
+      let totalAttributions = 0;
 
-      logger.warn(`[matchAttribution] 처리할 문서 개수: ${attributionsSnapshot.size}개`);
+      logger.warn(`[matchAttribution] 검색할 지역 수: ${regionsSnapshot.size}개`);
 
-      if (attributionsSnapshot.empty) {
+      // 모든 지역 순회
+      for (const regionDoc of regionsSnapshot.docs) {
+        const regionId = regionDoc.id;
+        logger.info(`[matchAttribution] 지역 확인: ${regionId}`);
+
+        // 해당 지역의 모든 사무실 순회
+        const officesSnapshot = await db
+          .collection("regions").doc(regionId)
+          .collection("offices")
+          .get();
+
+        logger.info(`[matchAttribution] ${regionId} 지역의 사무실 수: ${officesSnapshot.size}개`);
+
+        for (const officeDoc of officesSnapshot.docs) {
+          const officeId = officeDoc.id;
+
+          // 각 사무실의 attributions 확인
+          const attributionsSnapshot = await db
+            .collection("regions").doc(regionId)
+            .collection("offices").doc(officeId)
+            .collection("attributions")
+            .get();
+
+          if (!attributionsSnapshot.empty) {
+            logger.info(`[matchAttribution] ${regionId}/${officeId} - Attribution 데이터: ${attributionsSnapshot.size}개`);
+            totalAttributions += attributionsSnapshot.size;
+
+            attributionsSnapshot.forEach((doc) => {
+              const attribution = doc.data();
+
+              // Option 2: 만료된 핑거프린트는 스킵
+              if (attribution.expiresAt) {
+                const expiresAtMillis = attribution.expiresAt.toMillis ? attribution.expiresAt.toMillis() : attribution.expiresAt;
+                const now = Date.now();
+                if (now > expiresAtMillis) {
+                  logger.info(`[matchAttribution] 만료된 핑거프린트 스킵 - 문서 ${doc.id} (만료: ${new Date(expiresAtMillis).toISOString()})`);
+                  return;
+                }
+              }
+
+              const score = calculateAttributionScore(attribution, fingerprint);
+
+              logger.info(`[matchAttribution] 문서 ${doc.id} (${regionId}/${officeId}):`, {
+                source: attribution.source,
+                score: score,
+                fingerprintData: {
+                  screenResolution: fingerprint.screenResolution,
+                  timezone: fingerprint.timezone,
+                  language: fingerprint.language
+                },
+                attributionData: {
+                  screenResolution: attribution.screenResolution,
+                  timezone: attribution.timezone,
+                  language: attribution.language
+                }
+              });
+
+              // 점수가 더 높거나, 같은 점수일 때는 최신 것을 선택
+              const isNewBetter = score > bestScore ||
+                (score === bestScore && attribution.createdAt && bestMatch?.createdAt &&
+                 attribution.createdAt.toMillis() > bestMatch.createdAt.toMillis());
+
+              if (isNewBetter) {
+                bestScore = score;
+                bestMatch = {
+                  id: doc.id,
+                  ...attribution,
+                  regionId: regionId,
+                  officeId: officeId
+                };
+
+                logger.info(`[matchAttribution] 새로운 bestMatch 발견! 점수: ${bestScore}, regionId: ${regionId}, officeId: ${officeId}, createdAt: ${attribution.createdAt ? new Date(attribution.createdAt.toMillis()).toISOString() : 'N/A'}`);
+              }
+            });
+          }
+        }
+      }
+
+      logger.warn(`[matchAttribution] 전체 처리한 attribution 문서 개수: ${totalAttributions}개`);
+
+      if (totalAttributions === 0) {
         logger.info('[matchAttribution] 처리할 문서가 없어 함수를 조기 종료합니다.');
         return {
           success: false,
@@ -1483,50 +1559,17 @@ export const matchAttribution = onCall(
         };
       }
 
-      attributionsSnapshot.forEach((doc) => {
-        const attribution = doc.data();
-        const score = calculateAttributionScore(attribution, fingerprint);
-
-        logger.info(`[matchAttribution] 문서 ${doc.id}:`, {
-          source: attribution.source,
-          officeCode: attribution.officeCode,
-          officeId: attribution.officeId,
-          score: score,
-          fingerprintData: {
-            screenResolution: fingerprint.screenResolution,
-            timezone: fingerprint.timezone,
-            language: fingerprint.language
-          },
-          attributionData: {
-            screenResolution: attribution.screenResolution,
-            timezone: attribution.timezone,
-            language: attribution.language
-          }
-        });
-
-        if (score > bestScore) {
-          bestScore = score;
-          bestMatch = {
-            id: doc.id,
-            ...attribution,
-            officeId: attribution.officeId || attribution.officeCode || "TEST_OFFICE"
-          };
-
-          // 👇 바로 이 위치에 로그 추가!
-          logger.info(`[matchAttribution] 새로운 bestMatch 발견! 점수: ${bestScore}, 데이터:`, JSON.stringify(bestMatch));
-        }
-      });
-
       logger.info(`[matchAttribution] 최고 점수: ${bestScore}점`);
       logger.info(`[matchAttribution] bestMatch 상태:`, bestMatch ? `존재 - officeId: ${bestMatch.officeId}` : "null");
 
       // 10점 이상이면 자동 매칭 (테스트용으로 임시 조정)
       if (bestScore >= 10 && bestMatch) {
-        logger.info(`[matchAttribution] 자동 매칭 성공 - officeId: ${bestMatch.officeId}`);
+        logger.info(`[matchAttribution] 자동 매칭 성공 - regionId: ${bestMatch.regionId}, officeId: ${bestMatch.officeId}`);
 
         // attributions 컬렉션에 저장
         await admin.firestore().collection("attributions").add({
           phoneNumber,
+          regionId: bestMatch.regionId,
           officeId: bestMatch.officeId,
           fingerprintId: bestMatch.id,
           attributionScore: bestScore,
@@ -1537,29 +1580,20 @@ export const matchAttribution = onCall(
 
         return {
           success: true,
+          regionId: bestMatch.regionId,
           officeId: bestMatch.officeId,
           score: bestScore,
           confidence: "HIGH"
         };
       }
-      // bestMatch가 null이지만 10점인 경우 강제 매칭
-      else if (bestScore >= 10) {
-        logger.info(`[matchAttribution] bestMatch null이지만 강제 매칭 - TEST_OFFICE 사용`);
-
-        return {
-          success: true,
-          officeId: "TEST_OFFICE",
-          score: bestScore,
-          confidence: "FORCED"
-        };
-      }
       // 50-69점이면 수동 확인 필요
       else if (bestScore >= 50 && bestMatch) {
-        logger.info(`[matchAttribution] 수동 확인 필요 - officeId: ${bestMatch.officeId}, score: ${bestScore}`);
+        logger.info(`[matchAttribution] 수동 확인 필요 - regionId: ${bestMatch.regionId}, officeId: ${bestMatch.officeId}, score: ${bestScore}`);
 
         return {
           success: false,
           requiresManualConfirmation: true,
+          regionId: bestMatch.regionId,
           officeId: bestMatch.officeId,
           score: bestScore,
           confidence: "MEDIUM"
@@ -1612,6 +1646,106 @@ export const saveManualAttribution = onCall(
       return { success: true };
     } catch (error) {
       logger.error(`[saveManualAttribution] 오류:`, error);
+      return { success: false, error };
+    }
+  }
+);
+
+// 토큰 기반 Attribution 매칭 함수
+export const matchByToken = onCall(
+  { region: "asia-northeast3" },
+  async (request) => {
+    const { token } = request.data;
+
+    logger.info(`[matchByToken] 토큰 매칭 시작 - token: ${token}`);
+
+    try {
+      if (!token) {
+        logger.warn(`[matchByToken] 토큰이 제공되지 않음`);
+        return {
+          success: false,
+          message: "토큰이 제공되지 않았습니다"
+        };
+      }
+
+      // attributionTokens 컬렉션에서 토큰 조회
+      const db = admin.firestore();
+      const tokenDoc = await db.collection("attributionTokens").doc(token).get();
+
+      if (!tokenDoc.exists) {
+        logger.warn(`[matchByToken] 유효하지 않은 토큰: ${token}`);
+        return {
+          success: false,
+          message: "유효하지 않은 QR 코드입니다"
+        };
+      }
+
+      const tokenData = tokenDoc.data()!;
+
+      // 만료 확인
+      const now = admin.firestore.Timestamp.now();
+      if (tokenData.expiresAt && tokenData.expiresAt < now) {
+        logger.warn(`[matchByToken] 만료된 토큰: ${token}`);
+        return {
+          success: false,
+          message: "만료된 QR 코드입니다 (7일 경과)"
+        };
+      }
+
+      // 이미 사용된 토큰인지 확인 (선택적 - 재사용 허용하려면 주석 처리)
+      if (tokenData.status === "claimed") {
+        logger.info(`[matchByToken] 이미 사용된 토큰이지만 재사용 허용: ${token}`);
+        // return {
+        //   success: false,
+        //   message: "이미 사용된 QR 코드입니다"
+        // };
+      }
+
+      // 성공 응답
+      logger.info(`[matchByToken] 매칭 성공 - regionId: ${tokenData.regionId}, officeId: ${tokenData.officeId}`);
+
+      return {
+        success: true,
+        regionId: tokenData.regionId,
+        officeId: tokenData.officeId,
+        officePhone: tokenData.officePhone || "",
+        bankName: tokenData.bankName || "",
+        accountNumber: tokenData.accountNumber || "",
+        accountHolder: tokenData.accountHolder || ""
+      };
+
+    } catch (error) {
+      logger.error(`[matchByToken] 오류 발생:`, error);
+      return {
+        success: false,
+        message: "토큰 처리 중 오류가 발생했습니다",
+        error: error
+      };
+    }
+  }
+);
+
+// 토큰 상태 업데이트 함수 (앱에서 호출)
+export const claimToken = onCall(
+  { region: "asia-northeast3" },
+  async (request) => {
+    const { token, phoneNumber } = request.data;
+
+    logger.info(`[claimToken] 토큰 사용 처리 - token: ${token}, phoneNumber: ${phoneNumber}`);
+
+    try {
+      const db = admin.firestore();
+      await db.collection("attributionTokens").doc(token).update({
+        status: "claimed",
+        claimedAt: admin.firestore.FieldValue.serverTimestamp(),
+        claimedBy: phoneNumber || "unknown"
+      });
+
+      logger.info(`[claimToken] 토큰 사용 처리 완료`);
+      return { success: true };
+
+    } catch (error) {
+      logger.error(`[claimToken] 오류 발생:`, error);
       return { success: false, error };
     }
   }

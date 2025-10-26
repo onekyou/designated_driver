@@ -43,11 +43,27 @@ class AttributionManagementViewModel(application: Application) : AndroidViewMode
     private val _officeSettings = MutableStateFlow<OfficeSettings?>(null)
     val officeSettings = _officeSettings.asStateFlow()
 
+    private val _qrCodeBitmap = MutableStateFlow<Bitmap?>(null)
+    val qrCodeBitmap = _qrCodeBitmap.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading = _isLoading.asStateFlow()
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage = _errorMessage.asStateFlow()
+
+    // 사무실 정보 (수정 가능)
+    private val _officePhone = MutableStateFlow("")
+    val officePhone = _officePhone.asStateFlow()
+
+    private val _bankName = MutableStateFlow("")
+    val bankName = _bankName.asStateFlow()
+
+    private val _accountNumber = MutableStateFlow("")
+    val accountNumber = _accountNumber.asStateFlow()
+
+    private val _accountHolder = MutableStateFlow("")
+    val accountHolder = _accountHolder.asStateFlow()
 
     private val TAG = "AttributionManagementVM"
 
@@ -132,7 +148,23 @@ class AttributionManagementViewModel(application: Application) : AndroidViewMode
 
     private suspend fun loadOfficeSettings(regionId: String, officeId: String) {
         try {
-            // 기존 오피스 설정 로드 로직 (QR 코드 등)
+            // 1. 사무실 기본 정보 로드
+            val officeDoc = Firebase.firestore
+                .collection("regions")
+                .document(regionId)
+                .collection("offices")
+                .document(officeId)
+                .get()
+                .await()
+
+            if (officeDoc.exists()) {
+                _officePhone.value = officeDoc.getString("phone") ?: ""
+                _bankName.value = officeDoc.getString("bankName") ?: ""
+                _accountNumber.value = officeDoc.getString("accountNumber") ?: ""
+                _accountHolder.value = officeDoc.getString("accountHolder") ?: ""
+            }
+
+            // 2. QR 설정 로드
             val settingsDoc = Firebase.firestore
                 .collection("regions")
                 .document(regionId)
@@ -152,8 +184,17 @@ class AttributionManagementViewModel(application: Application) : AndroidViewMode
                     attributionThreshold = settingsDoc.getLong("attributionThreshold")?.toInt() ?: 70
                 )
                 _officeSettings.value = settings
+
+                // QR 코드 Bitmap 생성
+                if (settings.qrCode.isNotEmpty()) {
+                    withContext(Dispatchers.Default) {
+                        val bitmap = QRCodeGenerator.generateQRCodeBitmap(settings.qrCode, 512)
+                        _qrCodeBitmap.value = bitmap
+                    }
+                }
             } else {
                 _officeSettings.value = OfficeSettings(officeId = officeId)
+                _qrCodeBitmap.value = null
             }
 
         } catch (e: Exception) {
@@ -169,6 +210,123 @@ class AttributionManagementViewModel(application: Application) : AndroidViewMode
     fun clearError() {
         _errorMessage.value = null
     }
+
+    // 사무실 정보 업데이트 함수
+    fun updateOfficeInfo(
+        regionId: String,
+        officeId: String,
+        phone: String,
+        bank: String,
+        account: String,
+        holder: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+
+                // 1. 사무실 기본 정보 업데이트
+                Firebase.firestore
+                    .collection("regions")
+                    .document(regionId)
+                    .collection("offices")
+                    .document(officeId)
+                    .update(
+                        mapOf(
+                            "phone" to phone,
+                            "bankName" to bank,
+                            "accountNumber" to account,
+                            "accountHolder" to holder
+                        )
+                    )
+                    .await()
+
+                // 2. 토큰 생성 및 Firestore에 저장
+                val token = java.util.UUID.randomUUID().toString()
+                val tokenData = mapOf(
+                    "token" to token,
+                    "officeId" to officeId,
+                    "regionId" to regionId,
+                    "officePhone" to phone,
+                    "bankName" to bank,
+                    "accountNumber" to account,
+                    "accountHolder" to holder,
+                    "createdAt" to com.google.firebase.Timestamp.now(),
+                    "expiresAt" to com.google.firebase.Timestamp(
+                        System.currentTimeMillis() / 1000 + 7 * 24 * 60 * 60, // 7일 후
+                        0
+                    ),
+                    "status" to "pending"
+                )
+
+                Firebase.firestore
+                    .collection("attributionTokens")
+                    .document(token)
+                    .set(tokenData)
+                    .await()
+
+                android.util.Log.d(TAG, "토큰 생성 완료: $token")
+
+                // 3. QR 코드 URL 재생성 (토큰 포함)
+                val landingPageUrl = "https://calldetector-5d61e.web.app/?token=$token"
+
+                // 4. QR 설정 업데이트
+                Firebase.firestore
+                    .collection("regions")
+                    .document(regionId)
+                    .collection("offices")
+                    .document(officeId)
+                    .collection("settings")
+                    .document("attribution")
+                    .update(
+                        mapOf(
+                            "qrCode" to landingPageUrl,
+                            "landingPageUrl" to landingPageUrl
+                        )
+                    )
+                    .await()
+
+                // 5. 로컬 상태 업데이트
+                _officePhone.value = phone
+                _bankName.value = bank
+                _accountNumber.value = account
+                _accountHolder.value = holder
+
+                // 6. QR 코드 재생성
+                val newSettings = _officeSettings.value?.copy(
+                    qrCode = landingPageUrl,
+                    landingPageUrl = landingPageUrl
+                )
+                _officeSettings.value = newSettings
+
+                withContext(Dispatchers.Default) {
+                    val bitmap = QRCodeGenerator.generateQRCodeBitmap(landingPageUrl, 512)
+                    _qrCodeBitmap.value = bitmap
+                    cachedQRBitmap = null // 캐시 초기화
+                }
+
+                withContext(Dispatchers.Main) {
+                    onSuccess()
+                    android.util.Log.d(TAG, "사무실 정보 업데이트 및 QR 재생성 완료")
+                }
+
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "사무실 정보 업데이트 실패", e)
+                withContext(Dispatchers.Main) {
+                    onError(e.message ?: "알 수 없는 오류")
+                }
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    // 사무실 정보 입력 업데이트 (UI용)
+    fun updatePhoneInput(value: String) { _officePhone.value = value }
+    fun updateBankNameInput(value: String) { _bankName.value = value }
+    fun updateAccountNumberInput(value: String) { _accountNumber.value = value }
+    fun updateAccountHolderInput(value: String) { _accountHolder.value = value }
 
     // QR 코드 다운로드/공유/인쇄 함수들 (읽기 전용)
     private var cachedQRBitmap: Bitmap? = null

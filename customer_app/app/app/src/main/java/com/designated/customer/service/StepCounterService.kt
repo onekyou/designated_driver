@@ -8,7 +8,6 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.util.Log
 import com.designated.customer.data.repository.StepRepository
 import com.google.android.gms.location.ActivityRecognition
 import com.google.android.gms.location.ActivityTransition
@@ -77,7 +76,6 @@ class StepCounterService(
     val currentActivity: StateFlow<String> = _currentActivity
 
     companion object {
-        private const val TAG = "StepCounterService"
         private const val KEY_INITIAL_STEPS = "initial_steps"
         private const val KEY_LAST_DATE = "last_date"
         private const val KEY_TODAY_STEPS = "today_steps"
@@ -85,13 +83,6 @@ class StepCounterService(
     }
 
     init {
-        Log.d(TAG, "Step Counter Sensor: ${stepCounterSensor?.name ?: "NOT AVAILABLE"}")
-        Log.d(TAG, "Step Detector Sensor: ${stepDetectorSensor?.name ?: "NOT AVAILABLE"}")
-
-        if (stepCounterSensor == null && stepDetectorSensor == null) {
-            Log.w(TAG, "No step sensors available on this device")
-        }
-
         // 저장된 활동 상태 로드
         isWalkingOrRunning = prefs.getBoolean(KEY_IS_WALKING, true)
 
@@ -112,7 +103,6 @@ class StepCounterService(
                 android.content.pm.PackageManager.PERMISSION_GRANTED
 
             if (!hasPermission) {
-                Log.w(TAG, "ACTIVITY_RECOGNITION permission not granted - skipping Activity Recognition")
                 return
             }
         }
@@ -169,15 +159,15 @@ class StepCounterService(
                 .requestActivityUpdates(5000L, createActivityPendingIntent())
 
             task.addOnSuccessListener {
-                Log.d(TAG, "Activity Recognition started successfully")
+                // Activity Recognition 시작됨
             }
 
             task.addOnFailureListener { e ->
-                Log.e(TAG, "Failed to start Activity Recognition", e)
+                // Activity Recognition 시작 실패
             }
 
         } catch (e: Exception) {
-            Log.e(TAG, "Error starting Activity Recognition", e)
+            // Activity Recognition 오류
         }
     }
 
@@ -204,51 +194,39 @@ class StepCounterService(
             DetectedActivity.WALKING, DetectedActivity.RUNNING -> {
                 isWalkingOrRunning = true
                 _currentActivity.value = if (activityType == DetectedActivity.WALKING) "WALKING" else "RUNNING"
-                Log.d(TAG, "Activity: ${_currentActivity.value} - Step counting ENABLED")
             }
             DetectedActivity.IN_VEHICLE -> {
                 isWalkingOrRunning = false
                 _currentActivity.value = "IN_VEHICLE"
-                Log.d(TAG, "Activity: IN_VEHICLE - Step counting DISABLED")
             }
             DetectedActivity.ON_BICYCLE -> {
                 isWalkingOrRunning = false
                 _currentActivity.value = "ON_BICYCLE"
-                Log.d(TAG, "Activity: ON_BICYCLE - Step counting DISABLED")
             }
             DetectedActivity.STILL -> {
                 isWalkingOrRunning = true // 정지 상태에서는 다시 활성화 (걷다가 멈춘 경우)
                 _currentActivity.value = "STILL"
-                Log.d(TAG, "Activity: STILL - Step counting ENABLED")
             }
             else -> {
                 isWalkingOrRunning = true // 알 수 없는 상태는 카운트 허용
                 _currentActivity.value = "UNKNOWN"
-                Log.d(TAG, "Activity: UNKNOWN - Step counting ENABLED")
             }
         }
 
         // 상태 저장
         prefs.edit().putBoolean(KEY_IS_WALKING, isWalkingOrRunning).apply()
-
-        // 상태 변경 로그
-        if (previousState != isWalkingOrRunning) {
-            Log.i(TAG, "Step counting state changed: ${if (isWalkingOrRunning) "ENABLED" else "DISABLED"}")
-        }
     }
 
     /**
      * 센서 리스닝 시작 (재시도 로직 포함)
      */
     fun startListening() {
-        Log.d(TAG, "startListening() called")
-
         // 먼저 기존 리스너 완전히 제거
         try {
             sensorManager.unregisterListener(this)
             Thread.sleep(100) // 100ms 대기 (센서 리소스 해제 시간)
         } catch (e: Exception) {
-            Log.e(TAG, "Error unregistering listener", e)
+            // 리스너 해제 오류
         }
 
         var registeredCount = 0
@@ -257,7 +235,6 @@ class StepCounterService(
         // 1. Step Detector 등록 (즉각 반응용) - 재시도
         stepDetectorSensor?.let { sensor ->
             for (retry in 1..maxRetries) {
-                Log.d(TAG, "Registering Step Detector: ${sensor.name} (attempt $retry)")
                 val registered = sensorManager.registerListener(
                     this,
                     sensor,
@@ -265,10 +242,8 @@ class StepCounterService(
                 )
                 if (registered) {
                     registeredCount++
-                    Log.d(TAG, "✅ Step Detector registered (INSTANT updates)")
                     break
                 } else {
-                    Log.e(TAG, "❌ Failed to register Step Detector (attempt $retry)")
                     if (retry < maxRetries) {
                         Thread.sleep(100) // 재시도 전 대기
                     }
@@ -279,7 +254,6 @@ class StepCounterService(
         // 2. Step Counter 등록 (정확한 총 걸음수용) - 재시도
         stepCounterSensor?.let { sensor ->
             for (retry in 1..maxRetries) {
-                Log.d(TAG, "Registering Step Counter: ${sensor.name} (attempt $retry)")
                 val registered = sensorManager.registerListener(
                     this,
                     sensor,
@@ -287,23 +261,14 @@ class StepCounterService(
                 )
                 if (registered) {
                     registeredCount++
-                    Log.d(TAG, "✅ Step Counter registered (ACCURATE count, GAME delay)")
                     loadInitialSteps()
                     break
                 } else {
-                    Log.e(TAG, "❌ Failed to register Step Counter (attempt $retry)")
                     if (retry < maxRetries) {
                         Thread.sleep(100) // 재시도 전 대기
                     }
                 }
             }
-        }
-
-        if (registeredCount == 0) {
-            Log.w(TAG, "⚠️ No sensors registered after $maxRetries retries")
-            Log.w(TAG, "Available sensors: ${sensorManager.getSensorList(Sensor.TYPE_ALL).map { it.name }}")
-        } else {
-            Log.i(TAG, "🎉 Successfully registered $registeredCount sensor(s)")
         }
     }
 
@@ -318,16 +283,14 @@ class StepCounterService(
             ActivityRecognition.getClient(context)
                 .removeActivityUpdates(createActivityPendingIntent())
                 .addOnSuccessListener {
-                    Log.d(TAG, "Activity Recognition stopped")
+                    // Activity Recognition 중지됨
                 }
         } catch (e: Exception) {
-            Log.e(TAG, "Error stopping Activity Recognition", e)
+            // Activity Recognition 중지 오류
         }
 
         // Receiver 등록 해제
         ActivityRecognitionReceiver.unregisterService()
-
-        Log.d(TAG, "Step counter sensor unregistered")
     }
 
     /**
@@ -341,7 +304,6 @@ class StepCounterService(
                     if (isWalkingOrRunning) {
                         _currentSteps.value++
                         updateSessionSteps()
-                        Log.d(TAG, "👣 Step detected! Current: ${_currentSteps.value}")
                     }
                 }
 
@@ -359,15 +321,12 @@ class StepCounterService(
                     // 차이가 2걸음 이상 나면 보정
                     val difference = kotlin.math.abs(accurateSteps - currentDisplayedSteps)
                     if (difference >= 2) {
-                        Log.w(TAG, "⚠️ 보정 필요: 표시값=$currentDisplayedSteps, 정확값=$accurateSteps (차이=$difference)")
                         _currentSteps.value = accurateSteps
                         updateSessionSteps()
                     }
 
                     // DB 저장은 조건부
                     saveStepsIfNeeded(accurateSteps)
-
-                    Log.d(TAG, "📊 Accurate: $accurateSteps (total: $totalStepsSinceBoot, displayed: ${_currentSteps.value})")
                 }
             }
         }
@@ -383,7 +342,7 @@ class StepCounterService(
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        Log.d(TAG, "Sensor accuracy changed: $accuracy")
+        // 센서 정확도 변경됨
     }
 
     /**
@@ -398,7 +357,6 @@ class StepCounterService(
             initialSteps = prefs.getInt(KEY_INITIAL_STEPS, 0)
             val cachedSteps = prefs.getInt(KEY_TODAY_STEPS, 0)
             _currentSteps.value = cachedSteps
-            Log.d(TAG, "Loaded cached steps: $cachedSteps")
         } else {
             // 날짜가 바뀌었으면 리셋 (다음 센서 이벤트에서 초기화)
             initialSteps = 0
@@ -407,7 +365,6 @@ class StepCounterService(
                 .putString(KEY_LAST_DATE, today)
                 .putInt(KEY_TODAY_STEPS, 0)
                 .apply()
-            Log.d(TAG, "Date changed - reset steps")
         }
     }
 
@@ -428,8 +385,6 @@ class StepCounterService(
                 .putInt(KEY_INITIAL_STEPS, totalSteps)
                 .putInt(KEY_TODAY_STEPS, 0)
                 .apply()
-
-            Log.d(TAG, "Daily reset - new date: $today, initial steps: $totalSteps")
         } else if (initialSteps == 0) {
             // 첫 실행 시 초기값 설정
             val cachedSteps = prefs.getInt(KEY_TODAY_STEPS, 0)
@@ -438,8 +393,6 @@ class StepCounterService(
             prefs.edit()
                 .putInt(KEY_INITIAL_STEPS, initialSteps)
                 .apply()
-
-            Log.d(TAG, "Initial steps set: $initialSteps")
         }
     }
 
@@ -464,8 +417,6 @@ class StepCounterService(
             // 저장 시점 기록
             lastSavedSteps = steps
             lastSaveTime = currentTime
-
-            Log.d(TAG, "💾 Saved to DB: $steps steps (diff: $stepDifference, time: ${timeDifference}ms)")
         }
     }
 
@@ -477,7 +428,7 @@ class StepCounterService(
             try {
                 repository.updateSteps(steps)
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to save steps to database", e)
+                // DB 저장 실패
             }
         }
     }
@@ -499,28 +450,12 @@ class StepCounterService(
     }
 
     /**
-     * 수동으로 걸음 수 리셋 (테스트용)
-     */
-    fun resetSteps() {
-        initialSteps = 0
-        _currentSteps.value = 0
-
-        prefs.edit()
-            .clear()
-            .putString(KEY_LAST_DATE, getCurrentDate())
-            .apply()
-
-        Log.d(TAG, "Steps manually reset")
-    }
-
-    /**
      * 새로운 세션 시작 (현재 걸음수를 시작점으로 설정)
      */
     fun startNewSession() {
         sessionStartSteps = _currentSteps.value
         _sessionSteps.value = 0
         _isSessionActive.value = true
-        Log.d(TAG, "🎯 New session started at ${sessionStartSteps} steps")
     }
 
     /**
@@ -529,7 +464,6 @@ class StepCounterService(
     fun resetSession() {
         sessionStartSteps = _currentSteps.value
         _sessionSteps.value = 0
-        Log.d(TAG, "🔄 Session reset at ${sessionStartSteps} steps")
     }
 
     /**
@@ -539,7 +473,6 @@ class StepCounterService(
         _isSessionActive.value = false
         sessionStartSteps = 0
         _sessionSteps.value = 0
-        Log.d(TAG, "⏹️ Session ended")
     }
 
     /**

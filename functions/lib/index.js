@@ -41,7 +41,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.testFcmMessage = exports.migratePickupDrivers = exports.onDesignatedDriverStatusChange = exports.onPickupDriverStatusChange = exports.refreshAgoraToken = exports.generateAgoraToken = exports.finalizeWorkDay = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.onSharedCallCreated = exports.oncallassigned = void 0;
+exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.onDesignatedDriverStatusChange = exports.onPickupDriverStatusChange = exports.refreshAgoraToken = exports.generateAgoraToken = exports.finalizeWorkDay = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.onSharedCallCreated = exports.oncallassigned = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const admin = __importStar(require("firebase-admin"));
@@ -984,8 +984,7 @@ var pttSignaling_1 = require("./pttSignaling");
 Object.defineProperty(exports, "onPickupDriverStatusChange", { enumerable: true, get: function () { return pttSignaling_1.onPickupDriverStatusChange; } });
 Object.defineProperty(exports, "onDesignatedDriverStatusChange", { enumerable: true, get: function () { return pttSignaling_1.onDesignatedDriverStatusChange; } });
 // 픽업 기사 데이터 마이그레이션 함수 (한 번만 실행)
-const https_2 = require("firebase-functions/v2/https");
-exports.migratePickupDrivers = (0, https_2.onCall)({
+exports.migratePickupDrivers = (0, https_1.onCall)({
     region: "asia-northeast3",
 }, async (request) => {
     logger.info("픽업 기사 데이터 마이그레이션 시작");
@@ -1087,6 +1086,369 @@ exports.testFcmMessage = (0, https_1.onRequest)({ region: "asia-northeast3" }, a
             success: false,
             error: error
         });
+    }
+});
+// 어트리뷰션 점수 계산 함수 (웹과 앱 두 형식 모두 지원)
+function calculateAttributionScore(attribution, currentFingerprint) {
+    var _a;
+    let score = 0;
+    const scoreDetails = [];
+    logger.info(`[점수계산] 시작 - source: ${attribution.source}`);
+    logger.info(`[점수계산] attribution 데이터:`, {
+        screenResolution: attribution.screenResolution,
+        timezone: attribution.timezone,
+        language: attribution.language,
+        platform: attribution.platform,
+        userAgent: (_a = attribution.userAgent) === null || _a === void 0 ? void 0 : _a.substring(0, 100),
+        androidId: attribution.androidId,
+        deviceModel: attribution.deviceModel,
+        osVersion: attribution.osVersion
+    });
+    logger.info(`[점수계산] currentFingerprint 데이터:`, {
+        screenResolution: currentFingerprint.screenResolution,
+        timezone: currentFingerprint.timezone,
+        language: currentFingerprint.language,
+        androidId: currentFingerprint.androidId,
+        deviceModel: currentFingerprint.deviceModel,
+        osVersion: currentFingerprint.osVersion
+    });
+    // 웹에서 수집한 데이터인지 확인 (source: 'landing')
+    if (attribution.source === 'landing') {
+        // 화면 해상도 매칭 (30점)
+        if (attribution.screenResolution === currentFingerprint.screenResolution) {
+            score += 30;
+            scoreDetails.push("화면해상도(30)");
+            logger.info(`[점수계산] 화면해상도 매칭: ${attribution.screenResolution} = ${currentFingerprint.screenResolution} (+30점)`);
+        }
+        else {
+            logger.info(`[점수계산] 화면해상도 불일치: ${attribution.screenResolution} ≠ ${currentFingerprint.screenResolution}`);
+        }
+        // 타임존 매칭 (30점)
+        if (attribution.timezone === currentFingerprint.timezone) {
+            score += 30;
+            scoreDetails.push("타임존(30)");
+            logger.info(`[점수계산] 타임존 매칭: ${attribution.timezone} = ${currentFingerprint.timezone} (+30점)`);
+        }
+        else {
+            logger.info(`[점수계산] 타임존 불일치: ${attribution.timezone} ≠ ${currentFingerprint.timezone}`);
+        }
+        // 언어 매칭 (20점)
+        if (attribution.language === currentFingerprint.language) {
+            score += 20;
+            scoreDetails.push("언어(20)");
+            logger.info(`[점수계산] 언어 매칭: ${attribution.language} = ${currentFingerprint.language} (+20점)`);
+        }
+        else {
+            logger.info(`[점수계산] 언어 불일치: ${attribution.language} ≠ ${currentFingerprint.language}`);
+        }
+        // 플랫폼 매칭 - 웹은 Win32, 앱은 Android이므로 교차 플랫폼 보너스
+        if (attribution.platform && attribution.platform.includes("Win") &&
+            currentFingerprint.deviceModel) {
+            score += 20;
+            scoreDetails.push("교차플랫폼(20)");
+            logger.info(`[점수계산] 교차 플랫폼 보너스: Win → Android (+20점)`);
+        }
+        else {
+            logger.info(`[점수계산] 교차 플랫폼 조건 불충족: platform=${attribution.platform}, deviceModel=${currentFingerprint.deviceModel}`);
+        }
+        // userAgent에서 추출 가능한 정보 매칭
+        if (attribution.userAgent && currentFingerprint.osVersion) {
+            if (attribution.userAgent.includes("Android") ||
+                attribution.userAgent.includes("Mobile")) {
+                score += 10;
+                scoreDetails.push("UserAgent(10)");
+                logger.info(`[점수계산] UserAgent 모바일 매칭 (+10점)`);
+            }
+            else {
+                logger.info(`[점수계산] UserAgent 모바일 불일치: ${attribution.userAgent.substring(0, 50)}`);
+            }
+        }
+        else {
+            logger.info(`[점수계산] UserAgent 조건 불충족: userAgent=${!!attribution.userAgent}, osVersion=${!!currentFingerprint.osVersion}`);
+        }
+    }
+    else {
+        // 앱에서 수집한 데이터 (기존 로직)
+        logger.info(`[점수계산] 앱 데이터 매칭 시작`);
+        // Android ID 매칭 (40점)
+        if (attribution.androidId === currentFingerprint.androidId) {
+            score += 40;
+            scoreDetails.push("AndroidID(40)");
+            logger.info(`[점수계산] AndroidID 매칭 (+40점)`);
+        }
+        // 디바이스 모델 매칭 (20점)
+        if (attribution.deviceModel === currentFingerprint.deviceModel) {
+            score += 20;
+            scoreDetails.push("기기모델(20)");
+            logger.info(`[점수계산] 기기모델 매칭 (+20점)`);
+        }
+        // OS 버전 매칭 (10점)
+        if (attribution.osVersion === currentFingerprint.osVersion) {
+            score += 10;
+            scoreDetails.push("OS버전(10)");
+            logger.info(`[점수계산] OS버전 매칭 (+10점)`);
+        }
+        // 화면 해상도 매칭 (15점)
+        if (attribution.screenResolution === currentFingerprint.screenResolution) {
+            score += 15;
+            scoreDetails.push("화면해상도(15)");
+            logger.info(`[점수계산] 화면해상도 매칭 (+15점)`);
+        }
+        // 타임존 매칭 (10점)
+        if (attribution.timezone === currentFingerprint.timezone) {
+            score += 10;
+            scoreDetails.push("타임존(10)");
+            logger.info(`[점수계산] 타임존 매칭 (+10점)`);
+        }
+        // 언어 매칭 (5점)
+        if (attribution.language === currentFingerprint.language) {
+            score += 5;
+            scoreDetails.push("언어(5)");
+            logger.info(`[점수계산] 언어 매칭 (+5점)`);
+        }
+    }
+    logger.info(`[점수계산] 최종 점수: ${score}점, 세부: [${scoreDetails.join(", ")}]`);
+    return score;
+}
+// 어트리뷰션 매칭 함수
+exports.matchAttribution = (0, https_1.onCall)({ region: "asia-northeast3" }, async (request) => {
+    logger.warn(`[matchAttribution] 함수 호출됨 - 전체 데이터:`, JSON.stringify(request.data));
+    const { fingerprint, phoneNumber } = request.data;
+    logger.warn(`[matchAttribution] 시작 - phoneNumber: ${phoneNumber}`);
+    try {
+        // 모든 지역의 모든 사무실에서 attribution 데이터 찾기
+        const db = admin.firestore();
+        const regionsSnapshot = await db.collection("regions").get();
+        let bestMatch = null;
+        let bestScore = 0;
+        let totalAttributions = 0;
+        logger.warn(`[matchAttribution] 검색할 지역 수: ${regionsSnapshot.size}개`);
+        // 모든 지역 순회
+        for (const regionDoc of regionsSnapshot.docs) {
+            const regionId = regionDoc.id;
+            logger.info(`[matchAttribution] 지역 확인: ${regionId}`);
+            // 해당 지역의 모든 사무실 순회
+            const officesSnapshot = await db
+                .collection("regions").doc(regionId)
+                .collection("offices")
+                .get();
+            logger.info(`[matchAttribution] ${regionId} 지역의 사무실 수: ${officesSnapshot.size}개`);
+            for (const officeDoc of officesSnapshot.docs) {
+                const officeId = officeDoc.id;
+                // 각 사무실의 attributions 확인
+                const attributionsSnapshot = await db
+                    .collection("regions").doc(regionId)
+                    .collection("offices").doc(officeId)
+                    .collection("attributions")
+                    .get();
+                if (!attributionsSnapshot.empty) {
+                    logger.info(`[matchAttribution] ${regionId}/${officeId} - Attribution 데이터: ${attributionsSnapshot.size}개`);
+                    totalAttributions += attributionsSnapshot.size;
+                    attributionsSnapshot.forEach((doc) => {
+                        const attribution = doc.data();
+                        // Option 2: 만료된 핑거프린트는 스킵
+                        if (attribution.expiresAt) {
+                            const expiresAtMillis = attribution.expiresAt.toMillis ? attribution.expiresAt.toMillis() : attribution.expiresAt;
+                            const now = Date.now();
+                            if (now > expiresAtMillis) {
+                                logger.info(`[matchAttribution] 만료된 핑거프린트 스킵 - 문서 ${doc.id} (만료: ${new Date(expiresAtMillis).toISOString()})`);
+                                return;
+                            }
+                        }
+                        const score = calculateAttributionScore(attribution, fingerprint);
+                        logger.info(`[matchAttribution] 문서 ${doc.id} (${regionId}/${officeId}):`, {
+                            source: attribution.source,
+                            score: score,
+                            fingerprintData: {
+                                screenResolution: fingerprint.screenResolution,
+                                timezone: fingerprint.timezone,
+                                language: fingerprint.language
+                            },
+                            attributionData: {
+                                screenResolution: attribution.screenResolution,
+                                timezone: attribution.timezone,
+                                language: attribution.language
+                            }
+                        });
+                        // 점수가 더 높거나, 같은 점수일 때는 최신 것을 선택
+                        const isNewBetter = score > bestScore ||
+                            (score === bestScore && attribution.createdAt && (bestMatch === null || bestMatch === void 0 ? void 0 : bestMatch.createdAt) &&
+                                attribution.createdAt.toMillis() > bestMatch.createdAt.toMillis());
+                        if (isNewBetter) {
+                            bestScore = score;
+                            bestMatch = Object.assign(Object.assign({ id: doc.id }, attribution), { regionId: regionId, officeId: officeId });
+                            logger.info(`[matchAttribution] 새로운 bestMatch 발견! 점수: ${bestScore}, regionId: ${regionId}, officeId: ${officeId}, createdAt: ${attribution.createdAt ? new Date(attribution.createdAt.toMillis()).toISOString() : 'N/A'}`);
+                        }
+                    });
+                }
+            }
+        }
+        logger.warn(`[matchAttribution] 전체 처리한 attribution 문서 개수: ${totalAttributions}개`);
+        if (totalAttributions === 0) {
+            logger.info('[matchAttribution] 처리할 문서가 없어 함수를 조기 종료합니다.');
+            return {
+                success: false,
+                requiresManualEntry: true,
+                score: 0,
+                confidence: "NO_DATA"
+            };
+        }
+        logger.info(`[matchAttribution] 최고 점수: ${bestScore}점`);
+        logger.info(`[matchAttribution] bestMatch 상태:`, bestMatch ? `존재 - officeId: ${bestMatch.officeId}` : "null");
+        // 10점 이상이면 자동 매칭 (테스트용으로 임시 조정)
+        if (bestScore >= 10 && bestMatch) {
+            logger.info(`[matchAttribution] 자동 매칭 성공 - regionId: ${bestMatch.regionId}, officeId: ${bestMatch.officeId}`);
+            // attributions 컬렉션에 저장
+            await admin.firestore().collection("attributions").add({
+                phoneNumber,
+                regionId: bestMatch.regionId,
+                officeId: bestMatch.officeId,
+                fingerprintId: bestMatch.id,
+                attributionScore: bestScore,
+                source: "automatic",
+                linkedAt: admin.firestore.FieldValue.serverTimestamp(),
+                deviceFingerprint: fingerprint
+            });
+            return {
+                success: true,
+                regionId: bestMatch.regionId,
+                officeId: bestMatch.officeId,
+                score: bestScore,
+                confidence: "HIGH"
+            };
+        }
+        // 50-69점이면 수동 확인 필요
+        else if (bestScore >= 50 && bestMatch) {
+            logger.info(`[matchAttribution] 수동 확인 필요 - regionId: ${bestMatch.regionId}, officeId: ${bestMatch.officeId}, score: ${bestScore}`);
+            return {
+                success: false,
+                requiresManualConfirmation: true,
+                regionId: bestMatch.regionId,
+                officeId: bestMatch.officeId,
+                score: bestScore,
+                confidence: "MEDIUM"
+            };
+        }
+        // 50점 미만이면 수동 입력 필요
+        else {
+            logger.info(`[matchAttribution] 수동 입력 필요 - 최고 점수: ${bestScore}`);
+            return {
+                success: false,
+                requiresManualEntry: true,
+                score: bestScore,
+                confidence: "LOW"
+            };
+        }
+    }
+    catch (error) {
+        logger.error(`[matchAttribution] 오류 발생:`, error);
+        return {
+            success: false,
+            requiresManualEntry: true,
+            score: 0,
+            confidence: "ERROR",
+            error: error
+        };
+    }
+});
+// 수동 사무실 선택 저장 함수
+exports.saveManualAttribution = (0, https_1.onCall)({ region: "asia-northeast3" }, async (request) => {
+    const { phoneNumber, officeId, reason } = request.data;
+    logger.info(`[saveManualAttribution] 수동 선택 저장 - phoneNumber: ${phoneNumber}, officeId: ${officeId}`);
+    try {
+        await admin.firestore().collection("attributions").add({
+            phoneNumber,
+            officeId,
+            source: "manual",
+            reason,
+            linkedAt: admin.firestore.FieldValue.serverTimestamp(),
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+        return { success: true };
+    }
+    catch (error) {
+        logger.error(`[saveManualAttribution] 오류:`, error);
+        return { success: false, error };
+    }
+});
+// 토큰 기반 Attribution 매칭 함수
+exports.matchByToken = (0, https_1.onCall)({ region: "asia-northeast3" }, async (request) => {
+    const { token } = request.data;
+    logger.info(`[matchByToken] 토큰 매칭 시작 - token: ${token}`);
+    try {
+        if (!token) {
+            logger.warn(`[matchByToken] 토큰이 제공되지 않음`);
+            return {
+                success: false,
+                message: "토큰이 제공되지 않았습니다"
+            };
+        }
+        // attributionTokens 컬렉션에서 토큰 조회
+        const db = admin.firestore();
+        const tokenDoc = await db.collection("attributionTokens").doc(token).get();
+        if (!tokenDoc.exists) {
+            logger.warn(`[matchByToken] 유효하지 않은 토큰: ${token}`);
+            return {
+                success: false,
+                message: "유효하지 않은 QR 코드입니다"
+            };
+        }
+        const tokenData = tokenDoc.data();
+        // 만료 확인
+        const now = admin.firestore.Timestamp.now();
+        if (tokenData.expiresAt && tokenData.expiresAt < now) {
+            logger.warn(`[matchByToken] 만료된 토큰: ${token}`);
+            return {
+                success: false,
+                message: "만료된 QR 코드입니다 (7일 경과)"
+            };
+        }
+        // 이미 사용된 토큰인지 확인 (선택적 - 재사용 허용하려면 주석 처리)
+        if (tokenData.status === "claimed") {
+            logger.info(`[matchByToken] 이미 사용된 토큰이지만 재사용 허용: ${token}`);
+            // return {
+            //   success: false,
+            //   message: "이미 사용된 QR 코드입니다"
+            // };
+        }
+        // 성공 응답
+        logger.info(`[matchByToken] 매칭 성공 - regionId: ${tokenData.regionId}, officeId: ${tokenData.officeId}`);
+        return {
+            success: true,
+            regionId: tokenData.regionId,
+            officeId: tokenData.officeId,
+            officePhone: tokenData.officePhone || "",
+            bankName: tokenData.bankName || "",
+            accountNumber: tokenData.accountNumber || "",
+            accountHolder: tokenData.accountHolder || ""
+        };
+    }
+    catch (error) {
+        logger.error(`[matchByToken] 오류 발생:`, error);
+        return {
+            success: false,
+            message: "토큰 처리 중 오류가 발생했습니다",
+            error: error
+        };
+    }
+});
+// 토큰 상태 업데이트 함수 (앱에서 호출)
+exports.claimToken = (0, https_1.onCall)({ region: "asia-northeast3" }, async (request) => {
+    const { token, phoneNumber } = request.data;
+    logger.info(`[claimToken] 토큰 사용 처리 - token: ${token}, phoneNumber: ${phoneNumber}`);
+    try {
+        const db = admin.firestore();
+        await db.collection("attributionTokens").doc(token).update({
+            status: "claimed",
+            claimedAt: admin.firestore.FieldValue.serverTimestamp(),
+            claimedBy: phoneNumber || "unknown"
+        });
+        logger.info(`[claimToken] 토큰 사용 처리 완료`);
+        return { success: true };
+    }
+    catch (error) {
+        logger.error(`[claimToken] 오류 발생:`, error);
+        return { success: false, error };
     }
 });
 const _forceDeploy = Date.now() + 1000000; // 배포 강제용 더미 변수

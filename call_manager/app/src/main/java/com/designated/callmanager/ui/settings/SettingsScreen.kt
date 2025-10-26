@@ -19,6 +19,8 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -45,6 +47,8 @@ fun SettingsScreen(
     onNavigateToPendingDrivers: (regionId: String, officeId: String) -> Unit,
     onNavigateToSettlement: () -> Unit,
     onNavigateToExcludeNumber: () -> Unit = {},
+    onNavigateToCustomerManagement: (regionId: String, officeId: String) -> Unit = { _, _ -> },
+    onNavigateToAttributionManagement: (regionId: String, officeId: String) -> Unit = { _, _ -> },
 ) {
     val settlementViewModel: SettlementViewModel = viewModel()
     val context = LocalContext.current
@@ -238,6 +242,28 @@ fun SettingsScreen(
                     onClick = {
                         if (regionId != null && officeId != null) {
                             onNavigateToPendingDrivers(regionId!!, officeId!!)
+                        }
+                    }
+                )
+
+                SettingsNavigationItem(
+                    title = "손님 관리",
+                    description = "고객 정보, 포인트 관리",
+                    icon = Icons.Filled.People,
+                    onClick = {
+                        if (regionId != null && officeId != null) {
+                            onNavigateToCustomerManagement(regionId!!, officeId!!)
+                        }
+                    }
+                )
+
+                SettingsNavigationItem(
+                    title = "어트리뷰션 관리",
+                    description = "QR 코드, KPI 모니터링",
+                    icon = Icons.Filled.Analytics,
+                    onClick = {
+                        if (regionId != null && officeId != null) {
+                            onNavigateToAttributionManagement(regionId!!, officeId!!)
                         }
                     }
                 )

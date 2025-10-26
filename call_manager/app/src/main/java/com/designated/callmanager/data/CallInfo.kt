@@ -45,7 +45,17 @@ data class CallInfo(
 
     // 콜 생성 출처 플래그
     @PropertyName("fromCallDetector") var fromCallDetector: Boolean? = null,
-    @PropertyName("fromCallManager") var fromCallManager: Boolean? = null
+    @PropertyName("fromCallManager") var fromCallManager: Boolean? = null,
+
+    // 손님앱 관련 필드 추가
+    @PropertyName("customerId") var customerId: String? = null,
+    @PropertyName("customerGrade") var customerGrade: String? = null,
+    @PropertyName("createdFrom") var createdFrom: String? = "phone", // phone/customer_app/landing
+    @PropertyName("pointsEarned") var pointsEarned: Int? = null,
+    @PropertyName("pointsUsed") var pointsUsed: Int? = null,
+    @PropertyName("isAppCustomer") var isAppCustomer: Boolean? = false,
+    @PropertyName("attributionScore") var attributionScore: Int? = null, // 70점 기준 매칭 점수
+    @PropertyName("attributionSource") var attributionSource: String? = null // landing/qr_scan/referral
 ) {
     // constructor() : this("", "", "", Timestamp.now(), CallStatus.PENDING.value)
 }

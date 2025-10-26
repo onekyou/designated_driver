@@ -1,17 +1,13 @@
 package com.designated.customer.ui.profile
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.designated.customer.service.PointService
+import kotlinx.coroutines.tasks.await
 
 @Composable
 fun ProfileScreen(
@@ -30,11 +27,59 @@ fun ProfileScreen(
     onLogout: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var showLogoutDialog by remember { mutableStateOf(false) }
+    var officeName by remember { mutableStateOf(officeId) }
+    var regionName by remember { mutableStateOf(regionId) }
+    var customerName by remember { mutableStateOf("고객님") }
 
-    // 로그아웃 다이얼로그에서 백버튼 처리
-    BackHandler(enabled = showLogoutDialog) {
-        showLogoutDialog = false
+    // Firebase에서 사무실 정보 및 고객 정보 로드
+    LaunchedEffect(officeId, regionId) {
+        try {
+            val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+            val userId = auth.currentUser?.uid
+
+            // 사무실 정보 로드
+            val officeDoc = firestore
+                .collection("regions")
+                .document(regionId)
+                .collection("offices")
+                .document(officeId)
+                .get()
+                .await()
+
+            if (officeDoc.exists()) {
+                officeName = officeDoc.getString("name") ?: officeId
+            }
+
+            // 고객 정보 로드 (닉네임)
+            if (userId != null) {
+                val customerDoc = firestore
+                    .collection("regions")
+                    .document(regionId)
+                    .collection("offices")
+                    .document(officeId)
+                    .collection("customers")
+                    .document(userId)
+                    .get()
+                    .await()
+
+                if (customerDoc.exists()) {
+                    val name = customerDoc.getString("name")
+                    if (!name.isNullOrBlank()) {
+                        customerName = name
+                    }
+                }
+            }
+
+            regionName = when(regionId) {
+                "seoul" -> "서울"
+                "gyeonggi" -> "경기"
+                "Hongchon" -> "홍천"
+                else -> regionId
+            }
+        } catch (e: Exception) {
+            // 실패 시 기본값 사용
+        }
     }
 
     Column(
@@ -54,52 +99,23 @@ fun ProfileScreen(
 
         // 프로필 카드
         ProfileInfoCard(
+            customerName = customerName,
             phoneNumber = phoneNumber,
-            regionId = regionId,
-            officeId = officeId
+            regionName = regionName,
+            officeName = officeName
         )
 
         // 앱 정보 카드
         AppInfoCard()
-
-        // 설정 메뉴
-        SettingsMenuCard(
-            onLogoutClick = { showLogoutDialog = true }
-        )
-    }
-
-    // 로그아웃 확인 다이얼로그
-    if (showLogoutDialog) {
-        AlertDialog(
-            onDismissRequest = { showLogoutDialog = false },
-            title = { Text("로그아웃") },
-            text = { Text("정말 로그아웃하시겠습니까?") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showLogoutDialog = false
-                        onLogout()
-                    }
-                ) {
-                    Text("확인")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showLogoutDialog = false }
-                ) {
-                    Text("취소")
-                }
-            }
-        )
     }
 }
 
 @Composable
 private fun ProfileInfoCard(
+    customerName: String,
     phoneNumber: String,
-    regionId: String,
-    officeId: String
+    regionName: String,
+    officeName: String
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -123,7 +139,7 @@ private fun ProfileInfoCard(
 
                 Column {
                     Text(
-                        text = "고객님",
+                        text = customerName,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -142,13 +158,13 @@ private fun ProfileInfoCard(
             ProfileInfoRow(
                 icon = Icons.Default.LocationOn,
                 label = "연결된 사무실",
-                value = officeId
+                value = officeName
             )
 
             ProfileInfoRow(
                 icon = Icons.Default.Phone,
                 label = "지역",
-                value = regionId
+                value = regionName
             )
         }
     }
@@ -250,57 +266,3 @@ private fun AppInfoCard() {
     }
 }
 
-@Composable
-private fun SettingsMenuCard(
-    onLogoutClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    Icons.Default.Settings,
-                    contentDescription = "설정",
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "설정",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // 로그아웃 버튼
-            Button(
-                onClick = onLogoutClick,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error
-                ),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Icon(
-                    Icons.Default.ExitToApp,
-                    contentDescription = "로그아웃",
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "로그아웃",
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
-    }
-}

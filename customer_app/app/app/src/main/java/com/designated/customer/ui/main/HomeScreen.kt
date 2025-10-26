@@ -113,7 +113,7 @@ fun HomeScreen(
             ) {
                 Column {
                     Text(
-                        text = officeId,
+                        text = uiState.officeName.ifEmpty { officeId },
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
                     )

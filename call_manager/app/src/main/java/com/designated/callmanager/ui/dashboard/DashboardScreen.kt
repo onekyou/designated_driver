@@ -696,6 +696,7 @@ fun CallCard(call: CallInfo, onCallClick: (CallInfo) -> Unit) {
                 }) ?: "정보 없음"
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // 공유콜 아이콘
                     if (call.callType == "SHARED") {
                         Icon(
                             imageVector = Icons.Default.Share,
@@ -705,12 +706,30 @@ fun CallCard(call: CallInfo, onCallClick: (CallInfo) -> Unit) {
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                     }
+
+                    // 앱 콜 아이콘 (고객앱/랜딩페이지에서 온 콜)
+                    if (call.createdFrom == "customer_app" || call.createdFrom == "landing") {
+                        Icon(
+                            imageVector = Icons.Default.PhoneAndroid,
+                            contentDescription = "앱 콜",
+                            modifier = Modifier.size(16.dp),
+                            tint = Color(0xFF4CAF50) // 초록색
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+
                     Text(
                         text = displayText,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
+
+                    // 고객 등급 표시
+                    call.customerGrade?.let { grade ->
+                        Spacer(modifier = Modifier.width(6.dp))
+                        CustomerGradeBadge(grade = grade)
+                    }
                 }
                 Text(
                     text = formatTimeAgo(call.timestamp.toDate().time),
@@ -722,6 +741,15 @@ fun CallCard(call: CallInfo, onCallClick: (CallInfo) -> Unit) {
                         text = "배정: $it",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFFFFAB00)
+                    )
+                }
+
+                // 어트리뷰션 점수 표시
+                call.attributionScore?.let { score ->
+                    Text(
+                        text = "매칭점수: ${score}점",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (score >= 70) Color(0xFF4CAF50) else Color(0xFFFF9800)
                     )
                 }
             }
@@ -2172,5 +2200,33 @@ fun PreviousDayClosingDialog(
             }
         }
     )
+}
+
+@Composable
+fun CustomerGradeBadge(grade: String) {
+    val (emoji, text, color) = when (grade) {
+        "bronze" -> Triple("🥉", "브론즈", Color(0xFFCD7F32))
+        "silver" -> Triple("🥈", "실버", Color(0xFFC0C0C0))
+        "gold" -> Triple("🥇", "골드", Color(0xFFFFD700))
+        "vip" -> Triple("⭐", "VIP", Color(0xFFFF6B35))
+        else -> Triple("", "기본", MaterialTheme.colorScheme.outline)
+    }
+
+    Box(
+        modifier = Modifier
+            .background(
+                color.copy(alpha = 0.2f),
+                RoundedCornerShape(8.dp)
+            )
+            .padding(horizontal = 4.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = if (emoji.isNotEmpty()) emoji else text,
+            style = MaterialTheme.typography.labelSmall,
+            color = color,
+            fontWeight = FontWeight.Medium,
+            fontSize = 10.sp
+        )
+    }
 }
 

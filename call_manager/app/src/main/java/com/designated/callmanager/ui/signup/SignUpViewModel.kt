@@ -23,6 +23,32 @@ import kotlinx.coroutines.tasks.await
 
 data class RegionItem(val id: String, val name: String)
 
+object KoreanBanks {
+    val banks = listOf(
+        "NH농협은행",
+        "카카오뱅크",
+        "토스뱅크",
+        "케이뱅크",
+        "KB국민은행",
+        "신한은행",
+        "우리은행",
+        "하나은행",
+        "IBK기업은행",
+        "새마을금고",
+        "신협",
+        "수협은행",
+        "우체국",
+        "부산은행",
+        "경남은행",
+        "대구은행",
+        "광주은행",
+        "전북은행",
+        "제주은행",
+        "SC제일은행",
+        "한국씨티은행"
+    )
+}
+
 sealed class SignUpState {
     object Idle : SignUpState()
     object LoadingRegions : SignUpState()
@@ -41,6 +67,11 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
     var confirmPassword by mutableStateOf("")
     var adminName by mutableStateOf("")
     var officeName by mutableStateOf("")
+    var officePhone by mutableStateOf("")
+    var bankName by mutableStateOf("")
+    var accountNumber by mutableStateOf("")
+    var confirmAccountNumber by mutableStateOf("")
+    var accountHolder by mutableStateOf("")
 
     private val _regions = MutableStateFlow<List<RegionItem>>(emptyList())
     val regions: StateFlow<List<RegionItem>> = _regions.asStateFlow()
@@ -107,6 +138,26 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
             _signUpState.value = SignUpState.Error("사무실 이름을 입력해주세요.")
             return
         }
+        if (officePhone.isBlank()) {
+            _signUpState.value = SignUpState.Error("사무실 전화번호를 입력해주세요.")
+            return
+        }
+        if (bankName.isBlank()) {
+            _signUpState.value = SignUpState.Error("은행명을 입력해주세요.")
+            return
+        }
+        if (accountNumber.isBlank()) {
+            _signUpState.value = SignUpState.Error("계좌번호를 입력해주세요.")
+            return
+        }
+        if (accountNumber != confirmAccountNumber) {
+            _signUpState.value = SignUpState.Error("계좌번호가 일치하지 않습니다.")
+            return
+        }
+        if (accountHolder.isBlank()) {
+            _signUpState.value = SignUpState.Error("예금주를 입력해주세요.")
+            return
+        }
 
         _signUpState.value = SignUpState.Loading
         viewModelScope.launch {
@@ -124,6 +175,10 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
 
                     val officeData = hashMapOf(
                         "name" to officeName,
+                        "phone" to officePhone,
+                        "bankName" to bankName,
+                        "accountNumber" to accountNumber,
+                        "accountHolder" to accountHolder,
                         "createdAt" to com.google.firebase.Timestamp.now(),
                         "createdBy" to newUser.uid
                     )
@@ -142,7 +197,14 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
                     db.collection("admins").document(newUser.uid).set(adminData).await()
 
                     // 4. QR 코드 자동 생성 및 저장
-                    generateAndSaveQRCode(currentSelectedRegion.id, newOfficeId)
+                    generateAndSaveQRCode(
+                        currentSelectedRegion.id,
+                        newOfficeId,
+                        officePhone,
+                        bankName,
+                        accountNumber,
+                        accountHolder
+                    )
 
                     _signUpState.value = SignUpState.Success
                 } else {
@@ -155,10 +217,21 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    private suspend fun generateAndSaveQRCode(regionId: String, officeId: String) {
+    private suspend fun generateAndSaveQRCode(
+        regionId: String,
+        officeId: String,
+        phone: String,
+        bank: String,
+        account: String,
+        holder: String
+    ) {
         try {
-            // 랜딩 페이지 URL 생성 (Vercel 배포 주소)
-            val landingPageUrl = "https://designated-driver.vercel.app/$regionId/$officeId"
+            // 랜딩 페이지 URL 생성 (Firebase Hosting) - Query Parameter 방식
+            val landingPageUrl = "https://calldetector-5d61e.web.app/?r=$regionId&o=$officeId" +
+                    "&phone=${android.net.Uri.encode(phone)}" +
+                    "&bank=${android.net.Uri.encode(bank)}" +
+                    "&account=${android.net.Uri.encode(account)}" +
+                    "&holder=${android.net.Uri.encode(holder)}"
 
             // QR 코드 데이터 = 랜딩 페이지 URL (동일하게)
             val qrData = landingPageUrl

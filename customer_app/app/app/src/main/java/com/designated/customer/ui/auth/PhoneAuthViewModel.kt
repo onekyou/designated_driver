@@ -11,7 +11,6 @@ import com.google.firebase.auth.PhoneAuthOptions
 import com.google.firebase.auth.PhoneAuthProvider
 import com.google.firebase.FirebaseException
 import java.util.concurrent.TimeUnit
-import android.util.Log
 
 data class PhoneAuthUiState(
     val isLoading: Boolean = false,
@@ -54,12 +53,10 @@ class PhoneAuthViewModel : ViewModel() {
             .setActivity(activity)
             .setCallbacks(object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
                 override fun onVerificationCompleted(credential: PhoneAuthCredential) {
-                    Log.d("PhoneAuth", "인증 자동 완료")
                     signInWithPhoneAuthCredential(credential)
                 }
 
                 override fun onVerificationFailed(e: FirebaseException) {
-                    Log.e("PhoneAuth", "인증 실패", e)
                     uiState = uiState.copy(
                         isLoading = false,
                         error = "인증 실패: ${e.message}"
@@ -70,7 +67,6 @@ class PhoneAuthViewModel : ViewModel() {
                     verificationId: String,
                     token: PhoneAuthProvider.ForceResendingToken
                 ) {
-                    Log.d("PhoneAuth", "인증 코드 전송됨")
                     this@PhoneAuthViewModel.verificationId = verificationId
                     uiState = uiState.copy(
                         isLoading = false,
@@ -105,13 +101,11 @@ class PhoneAuthViewModel : ViewModel() {
         auth.signInWithCredential(credential)
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
-                    Log.d("PhoneAuth", "인증 성공")
                     uiState = uiState.copy(
                         isLoading = false,
                         isVerified = true
                     )
                 } else {
-                    Log.e("PhoneAuth", "로그인 실패", task.exception)
                     uiState = uiState.copy(
                         isLoading = false,
                         error = "인증 실패: ${task.exception?.message}"

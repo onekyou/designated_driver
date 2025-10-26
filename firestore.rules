@@ -107,9 +107,13 @@ service cloud.firestore {
            resource.data.callType == "SHARED");
 
         // 콜 업데이트 (상태 머신):
-        // 관리자 또는 배정된 기사만 업데이트 가능
+        // 관리자, 배정된 기사, 또는 고객 본인이 업데이트 가능
         allow update: if
           isOfficeAdmin(regionId, officeId) ||
+          // 고객이 자신의 REQUESTED 콜을 취소하는 경우
+          (isAuthenticated() &&
+           resource.data.status == "REQUESTED" &&
+           request.resource.data.status == "CANCELLED") ||
           (
             // 업데이트 요청자가 해당 콜에 배정된 기사인지 확인
             isAuthenticated() && resource.data.assignedDriverId == request.auth.uid &&
@@ -122,15 +126,15 @@ service cloud.firestore {
               // 기사가 운행 취소할 때: ACCEPTED → HOLD 허용
               (resource.data.status == "ACCEPTED" && request.resource.data.status == "HOLD") ||
               // 기사가 공유콜을 취소할 때: ASSIGNED/ACCEPTED → CANCELLED_BY_DRIVER 허용
-              ((resource.data.status == "ASSIGNED" || resource.data.status == "ACCEPTED") && 
-               request.resource.data.status == "CANCELLED_BY_DRIVER" && 
+              ((resource.data.status == "ASSIGNED" || resource.data.status == "ACCEPTED") &&
+               request.resource.data.status == "CANCELLED_BY_DRIVER" &&
                resource.data.callType == "SHARED")
             )
           ) ||
           // 공유콜 취소 시 원본 사무실 콜을 원래 상태로 복구 허용
           // 기사가 공유콜을 취소할 때 원본 사무실의 콜을 복구할 수 있도록 허용
-          (isAuthenticated() && 
-           resource.data.callType == "SHARED" && 
+          (isAuthenticated() &&
+           resource.data.callType == "SHARED" &&
            request.resource.data.status == "SHARED" &&
            request.resource.data.status == "WAITING" &&
            request.resource.data.cancelReason != null);
@@ -196,13 +200,22 @@ service cloud.firestore {
       }
 
       // =============================
-      //  Customer 관리 (콜매니저 계획서에 따름)
+      //  Customer 관리 (익명 인증 + 프로필 입력 방식)
       // =============================
       match /customers/{customerId} {
-        // 해당 사무실 관리자만 읽기/쓰기
+        // 관리자는 모든 고객 정보 읽기/쓰기 가능
         allow read, write: if isOfficeAdmin(regionId, officeId);
-        // 손님 본인은 자신의 데이터만 읽기 (추후 구현)
-        // allow read: if request.auth.uid == customerId;
+
+        // 고객 본인은 자신의 데이터만 읽기 가능 (customerId = userId)
+        allow read: if isAuthenticated() && request.auth.uid == customerId;
+
+        // 익명 인증된 사용자는 자신의 프로필 생성 가능 (최초 1회)
+        allow create: if isAuthenticated() &&
+                        request.auth.uid == customerId &&
+                        request.resource.data.id == customerId;
+
+        // 고객 본인은 자신의 프로필 수정 가능
+        allow update: if isAuthenticated() && request.auth.uid == customerId;
       }
 
       // =============================
@@ -257,6 +270,23 @@ service cloud.firestore {
       allow read: if isAnyAdmin();
       // Cloud Functions(서버)만 생성/수정 가능
       allow write: if request.auth == null;
+    }
+
+    // =============================
+    //  Attribution Tokens (토큰 기반 Attribution 시스템)
+    //  • 관리자가 토큰 생성 (QR 코드용)
+    //  • 랜딩페이지와 Cloud Functions에서 읽기
+    //  • Cloud Functions에서 상태 업데이트 (claimed)
+    // =============================
+    match /attributionTokens/{tokenId} {
+      // 관리자만 토큰 생성 가능
+      allow create: if isAnyAdmin();
+      // 관리자, 랜딩페이지(인증 없음), Cloud Functions 읽기 허용
+      allow read: if isAnyAdmin() || request.auth == null || true;
+      // Cloud Functions만 상태 업데이트 가능
+      allow update: if request.auth == null;
+      // 삭제 불가 (이력 보존)
+      allow delete: if false;
     }
   }
 }
