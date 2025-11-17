@@ -23,6 +23,9 @@ import javax.inject.Inject
 import android.content.SharedPreferences
 import com.google.firebase.messaging.FirebaseMessaging
 import com.designated.driverapp.data.Constants
+import com.designated.driverapp.util.SecurePreferencesManager
+import com.designated.driverapp.util.SessionManager
+import com.designated.driverapp.data.model.UserSession
 
 sealed class LoginState {
     object Idle : LoginState()
@@ -35,7 +38,9 @@ sealed class LoginState {
 class LoginViewModel @Inject constructor(
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
-    private val sharedPreferences: SharedPreferences
+    private val sharedPreferences: SharedPreferences,
+    private val securePreferences: SecurePreferencesManager,
+    private val sessionManager: SessionManager
 ) : ViewModel() {
     private val TAG = "LoginViewModel"
 
@@ -47,17 +52,16 @@ class LoginViewModel @Inject constructor(
     var autoLogin by mutableStateOf(false)
 
     init {
-
-        autoLogin = sharedPreferences.getBoolean("auto_login", false)
+        // 암호화된 저장소에서 자동 로그인 정보 로드
+        autoLogin = securePreferences.isAutoLoginEnabled()
 
         if (autoLogin) {
-            val savedIdentifier = sharedPreferences.getString("identifier", "")
-            val savedPassword = sharedPreferences.getString("password", "")
+            val savedIdentifier = securePreferences.getSavedIdentifier()
+            val savedPassword = securePreferences.getSavedPassword()
             if (!savedIdentifier.isNullOrBlank()) {
                 email = savedIdentifier
                 password = savedPassword ?: ""
             }
-        } else {
         }
     }
 
@@ -71,25 +75,69 @@ class LoginViewModel @Inject constructor(
         _loginState.value = LoginState.Loading
         viewModelScope.launch {
             try {
+                // 1. Firebase 온라인 로그인 시도
                 auth.signInWithEmailAndPassword(email, password)
                     .addOnCompleteListener { task ->
                         if (task.isSuccessful) {
                             val userId = auth.currentUser?.uid
 
                             if (userId != null) {
-
                                 checkPendingStatusAndProceed(userId)
-
                             } else {
                                 _loginState.value = LoginState.Error("로그인 처리 중 오류가 발생했습니다. (UID 누락)")
                             }
                         } else {
-                            _loginState.value = LoginState.Error(task.exception?.message ?: "로그인에 실패했습니다.")
+                            // 2. 온라인 로그인 실패 시 오프라인 로그인 시도
+                            val exception = task.exception
+                            if (isNetworkError(exception) && sessionManager.canLoginOffline()) {
+                                attemptOfflineLogin()
+                            } else {
+                                _loginState.value = LoginState.Error(exception?.message ?: "로그인에 실패했습니다.")
+                            }
                         }
                     }
             } catch (e: Exception) {
-                _loginState.value = LoginState.Error(e.message ?: "알 수 없는 오류가 발생했습니다.")
+                // 3. 예외 발생 시 오프라인 로그인 시도
+                if (sessionManager.canLoginOffline()) {
+                    attemptOfflineLogin()
+                } else {
+                    _loginState.value = LoginState.Error(e.message ?: "알 수 없는 오류가 발생했습니다.")
+                }
             }
+        }
+    }
+
+    /**
+     * 네트워크 오류 여부 확인
+     */
+    private fun isNetworkError(exception: Exception?): Boolean {
+        val message = exception?.message?.lowercase() ?: return false
+        return message.contains("network") ||
+               message.contains("timeout") ||
+               message.contains("unable to resolve host")
+    }
+
+    /**
+     * 오프라인 로그인 시도 (캐시된 세션 사용)
+     */
+    private fun attemptOfflineLogin() {
+        val cachedSession = sessionManager.currentSession.value
+
+        if (cachedSession != null && cachedSession.email == email) {
+            // 캐시된 세션의 이메일과 입력한 이메일이 일치하면 오프라인 로그인 허용
+            Log.d(TAG, "오프라인 로그인 성공: ${cachedSession.email}")
+
+            _loginState.value = LoginState.Success(
+                regionId = cachedSession.regionId,
+                officeId = cachedSession.officeId,
+                driverId = cachedSession.driverId,
+                needsTokenUpdate = false
+            )
+
+            // 오프라인 상태 업데이트
+            sessionManager.setOnlineStatus(false)
+        } else {
+            _loginState.value = LoginState.Error("오프라인 상태에서는 이전에 로그인한 계정만 사용할 수 있습니다.")
         }
     }
 
@@ -137,29 +185,38 @@ class LoginViewModel @Inject constructor(
                     }
 
                     if (!regionId.isNullOrBlank() && !officeId.isNullOrBlank()) {
+                        // 일반 정보는 일반 SharedPreferences에 저장
                         sharedPreferences.edit().apply {
                             putString("regionId", regionId)
                             putString("officeId", officeId)
                             putString("driverId", userId)
-                             if (autoLogin) {
-                                 putBoolean("auto_login", true)
-                                 putString("identifier", email)
-                                 putString("password", password)
-                             } else {
-                                 remove("auto_login")
-                                 remove("identifier")
-                                 remove("password")
-                             }
                             apply()
                         }
 
+                        // 민감 정보(비밀번호)는 암호화된 저장소에 저장
+                        if (autoLogin) {
+                            securePreferences.saveAutoLoginCredentials(email, password)
+                        } else {
+                            securePreferences.clearAutoLoginCredentials()
+                        }
+
                         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-                            if (!task.isSuccessful) {
-                                _loginState.value = LoginState.Success(regionId, officeId, userId, false)
-                                return@addOnCompleteListener
-                            }
-                            val localFcmToken = task.result
+                            val localFcmToken = if (task.isSuccessful) task.result else null
                             val needsUpdate = serverFcmToken.isNullOrBlank() || serverFcmToken != localFcmToken
+
+                            // 세션 저장 (오프라인 로그인 지원)
+                            val session = UserSession(
+                                userId = userId,
+                                email = email,
+                                regionId = regionId,
+                                officeId = officeId,
+                                driverId = userId,
+                                driverName = driverName,
+                                fcmToken = localFcmToken,
+                                lastLoginTime = System.currentTimeMillis(),
+                                isOnline = true
+                            )
+                            sessionManager.saveSession(session)
 
                             _loginState.value = LoginState.Success(regionId, officeId, userId, needsUpdate)
 
@@ -191,6 +248,16 @@ class LoginViewModel @Inject constructor(
     }
 
     fun resetLoginState() {
+        _loginState.value = LoginState.Idle
+    }
+
+    /**
+     * 로그아웃 - 세션 삭제
+     */
+    fun logout() {
+        auth.signOut()
+        sessionManager.clearSession()
+        securePreferences.clearAutoLoginCredentials()
         _loginState.value = LoginState.Idle
     }
 }
