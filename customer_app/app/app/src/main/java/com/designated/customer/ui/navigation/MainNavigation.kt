@@ -53,6 +53,27 @@ fun MainNavigation(
     var selectedTab by remember { mutableStateOf(NavTab.HOME) }
     // var gameRoute by remember { mutableStateOf(GameRoute.NONE) }  // 게임 라우트 주석처리
 
+    // 알림 클릭 시 HOME 탭으로 강제 이동하기 위한 브로드캐스트 수신
+    val context = androidx.compose.ui.platform.LocalContext.current
+    DisposableEffect(Unit) {
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+                // 알림 클릭 시 HOME 탭으로 이동
+                selectedTab = NavTab.HOME
+            }
+        }
+        val filter = android.content.IntentFilter().apply {
+            addAction("com.designated.customer.NAVIGATE_TO_HOME")
+        }
+        androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(context)
+            .registerReceiver(receiver, filter)
+
+        onDispose {
+            androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(context)
+                .unregisterReceiver(receiver)
+        }
+    }
+
     // 백버튼 핸들링: 홈 탭이 아닐 때 홈으로 이동
     BackHandler(enabled = selectedTab != NavTab.HOME) {
         selectedTab = NavTab.HOME

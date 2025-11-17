@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -48,7 +49,9 @@ class ProfileSetupViewModel : ViewModel() {
     fun saveProfile(
         regionId: String,
         officeId: String,
-        attributionToken: String? = null
+        attributionToken: String? = null,
+        driverId: String? = null,
+        driverName: String? = null
     ) {
         val state = _uiState.value
 
@@ -80,13 +83,21 @@ class ProfileSetupViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
+                // FCM 토큰 가져오기
+                val fcmToken = try {
+                    FirebaseMessaging.getInstance().token.await()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to get FCM token", e)
+                    null
+                }
+
                 // Firestore에 고객 정보 저장
                 val now = Timestamp.now()
                 val customerData = hashMapOf(
                     "id" to userId,
                     "phoneNumber" to state.phoneNumber,
                     "name" to state.nickname,
-                    "address" to state.address,
+                    "homeAddress" to state.address,  // homeAddress로 저장
                     "grade" to "bronze",
                     "points" to 0,
                     "totalRides" to 0,
@@ -97,12 +108,30 @@ class ProfileSetupViewModel : ViewModel() {
                     "attributionScore" to null,
                     "registeredAt" to now,
                     "lastRideAt" to null,
-                    "lastActiveAt" to now  // 마지막 활동 시간 추가
+                    "lastActiveAt" to now,  // 마지막 활동 시간 추가
+                    // 사무실 연락처 정보는 기본값으로 빈 문자열 설정
+                    "officePhone" to "",
+                    "bankName" to "",
+                    "accountNumber" to "",
+                    "accountHolder" to ""
                 )
 
                 // 토큰이 있으면 추가
                 if (attributionToken != null) {
                     customerData["attributionToken"] = attributionToken
+                }
+
+                // 기사 추천 정보가 있으면 추가
+                if (driverId != null && driverName != null) {
+                    customerData["referralDriverId"] = driverId
+                    customerData["referralDriverName"] = driverName
+                    customerData["attributionDate"] = now
+                }
+
+                // FCM 토큰이 있으면 추가
+                if (fcmToken != null) {
+                    customerData["fcmToken"] = fcmToken
+                    Log.d(TAG, "FCM token added to customer data")
                 }
 
                 db.collection("regions")
@@ -113,6 +142,26 @@ class ProfileSetupViewModel : ViewModel() {
                     .document(userId)
                     .set(customerData)
                     .await()
+
+                // customerInfo 컬렉션에도 FCM 토큰 저장 (functions에서 조회용)
+                if (fcmToken != null) {
+                    db.collection("regions")
+                        .document(regionId)
+                        .collection("offices")
+                        .document(officeId)
+                        .collection("customerInfo")
+                        .document(state.phoneNumber)
+                        .set(
+                            mapOf(
+                                "fcmToken" to fcmToken,
+                                "phoneNumber" to state.phoneNumber,
+                                "updatedAt" to now
+                            ),
+                            com.google.firebase.firestore.SetOptions.merge()
+                        )
+                        .await()
+                    Log.d(TAG, "FCM token saved to customerInfo collection")
+                }
 
                 Log.d(TAG, "Customer profile saved successfully: $userId")
 

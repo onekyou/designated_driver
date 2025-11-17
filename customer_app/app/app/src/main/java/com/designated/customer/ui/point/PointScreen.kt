@@ -1,16 +1,15 @@
 package com.designated.customer.ui.point
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -28,41 +27,26 @@ fun PointScreen(
     officeId: String,
     modifier: Modifier = Modifier
 ) {
-    var showPointHistory by remember { mutableStateOf(false) }
-
-    // 포인트 내역 화면에서 백버튼 처리
-    BackHandler(enabled = showPointHistory) {
-        showPointHistory = false
-    }
-
-    if (showPointHistory) {
-        PointHistoryScreen(
-            phoneNumber = phoneNumber,
-            regionId = regionId,
-            officeId = officeId,
-            onBackClick = { showPointHistory = false }
-        )
-        return
-    }
-
     val pointService = remember { PointService(regionId = regionId, officeId = officeId) }
     var customerPoints by remember { mutableStateOf<com.designated.customer.data.model.CustomerPoints?>(null) }
     var isLoading by remember { mutableStateOf(true) }
+    var isRefreshing by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
 
-    // 포인트 정보 로드
-    LaunchedEffect(phoneNumber) {
+    // ✅ 포인트 정보 로드 함수
+    val loadPoints: suspend () -> Unit = {
         try {
+            isRefreshing = true
             customerPoints = pointService.getCustomerPoints(phoneNumber)
         } finally {
             isLoading = false
+            isRefreshing = false
         }
     }
 
-    // 실시간 포인트 모니터링
+    // ✅ 초기 로드 (1회만)
     LaunchedEffect(phoneNumber) {
-        pointService.observeCustomerPoints(phoneNumber).collect { points ->
-            customerPoints = points
-        }
+        loadPoints()
     }
 
     Column(
@@ -84,7 +68,13 @@ fun PointScreen(
         PointCard(
             customerPoints = customerPoints,
             isLoading = isLoading,
-            onPointHistoryClick = { showPointHistory = true },
+            onRefresh = {
+                // ✅ 새로고침 버튼 클릭 시
+                coroutineScope.launch {
+                    loadPoints()
+                }
+            },
+            isRefreshing = isRefreshing,
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -93,11 +83,6 @@ fun PointScreen(
 
         // 포인트 사용 안내 카드
         PointUsageInfoCard()
-
-        // 빠른 액션 버튼들
-        QuickActionButtons(
-            onPointHistoryClick = { showPointHistory = true }
-        )
     }
 }
 
@@ -199,45 +184,6 @@ private fun PointUsageInfoCard() {
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
                     modifier = Modifier.padding(vertical = 2.dp)
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun QuickActionButtons(
-    onPointHistoryClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Text(
-                text = "빠른 액션",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
-
-            Button(
-                onClick = onPointHistoryClick,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
-                )
-            ) {
-                Icon(
-                    Icons.Default.List,
-                    contentDescription = "포인트 내역",
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("포인트 사용 내역 보기")
             }
         }
     }

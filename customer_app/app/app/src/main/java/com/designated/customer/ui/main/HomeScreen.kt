@@ -8,10 +8,12 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.offset
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Phone
@@ -21,6 +23,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,6 +33,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.*
 import java.text.NumberFormat
 import com.designated.customer.service.CallService
 import com.designated.customer.service.LocationService
@@ -40,6 +45,7 @@ import com.designated.customer.data.database.StepDatabase
 import com.designated.customer.ui.components.StepCounterCard
 import com.designated.customer.ui.components.StepDetailBottomSheet
 import androidx.compose.ui.graphics.Color
+import com.designated.customer.util.VoiceInputHelper
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -60,12 +66,23 @@ fun HomeScreen(
         null
     }
 
+    // 위치 권한 (현재 위치 사용)
+    val locationPermission = rememberPermissionState(android.Manifest.permission.ACCESS_FINE_LOCATION)
+
+    // 음성 인식 권한
+    val audioPermission = rememberPermissionState(android.Manifest.permission.RECORD_AUDIO)
+
+    // VoiceInputHelper 초기화
+    val voiceInputHelper = remember { VoiceInputHelper(context) }
+
+    // Service 바인딩 상태
+    var stepService by remember { mutableStateOf<StepCounterService?>(null) }
+
     // ViewModel 생성
-    val viewModel = remember {
+    val viewModel = remember(customerInfo, stepService) {
         // 만보기 관련 초기화
         val stepDatabase = StepDatabase.getInstance(context)
         val stepRepository = StepRepository(stepDatabase.stepDao())
-        val stepService = StepCounterService(context, stepRepository)
 
         MainViewModel(
             callService = CallService(regionId = regionId, officeId = officeId),
@@ -82,12 +99,47 @@ fun HomeScreen(
     }
     val uiState = viewModel.uiState
 
+    // Service 바인딩
+    DisposableEffect(Unit) {
+        val serviceConnection = object : android.content.ServiceConnection {
+            override fun onServiceConnected(name: android.content.ComponentName?, binder: android.os.IBinder?) {
+                val localBinder = binder as? StepCounterService.LocalBinder
+                stepService = localBinder?.getService()
+                android.util.Log.d("HomeScreen", "StepCounterService 바인딩 성공")
+            }
+
+            override fun onServiceDisconnected(name: android.content.ComponentName?) {
+                stepService = null
+                android.util.Log.d("HomeScreen", "StepCounterService 바인딩 해제")
+            }
+        }
+
+        val intent = android.content.Intent(context, StepCounterService::class.java)
+        context.bindService(intent, serviceConnection, android.content.Context.BIND_AUTO_CREATE)
+
+        onDispose {
+            context.unbindService(serviceConnection)
+        }
+    }
+
     // 권한 요청
     LaunchedEffect(Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             if (activityRecognitionPermission?.status?.isGranted == false) {
                 activityRecognitionPermission.launchPermissionRequest()
             }
+        }
+    }
+
+    // customerInfo가 변경될 때 homeAddress 로그 출력
+    LaunchedEffect(customerInfo) {
+        android.util.Log.d("HomeScreen", "customerInfo changed - homeAddress: ${customerInfo?.homeAddress}")
+    }
+
+    // VoiceInputHelper cleanup
+    DisposableEffect(Unit) {
+        onDispose {
+            voiceInputHelper.destroy()
         }
     }
 
@@ -177,15 +229,6 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // 콜 상태 표시
-            if (uiState.callStatus != null) {
-                CallStatusCard(
-                    status = uiState.callStatus,
-                    onCancelCall = viewModel::cancelCall
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
             // 에러 메시지
             if (uiState.error != null) {
                 Card(
@@ -201,6 +244,26 @@ fun HomeScreen(
                     )
                 }
             }
+        }
+
+        // 콜 상태 다이얼로그 (운행 완료 시 자동으로 닫힘)
+        if (uiState.callStatus != null && uiState.callStatus.state != CallState.COMPLETED) {
+            CallStatusDialog(
+                status = uiState.callStatus,
+                onCancelCall = viewModel::cancelCall,
+                onDismiss = { /* 다이얼로그는 자동으로 닫히지 않음 */ }
+            )
+        }
+
+        // 포인트 적립 완료 팝업
+        if (uiState.showPointsEarnedDialog) {
+            PointsEarnedDialog(
+                earnedPoints = uiState.earnedPoints,
+                fare = uiState.rideCompletedFare,
+                currentPoints = uiState.customerPoints?.currentPoints ?: 0,
+                usedPoints = uiState.usedPoints,  // ✅ 추가: 사용한 포인트 전달
+                onDismiss = viewModel::dismissPointsEarnedDialog
+            )
         }
 
         // 만보기 상세 정보 바텀시트
@@ -223,7 +286,14 @@ fun HomeScreen(
                 destinationLocation = uiState.destinationLocation,
                 onCurrentLocationChange = viewModel::updateCurrentLocation,
                 onDestinationLocationChange = viewModel::updateDestinationLocation,
-                onGetCurrentLocation = viewModel::getCurrentLocation,
+                onGetCurrentLocation = {
+                    // 위치 권한 체크 및 요청
+                    if (locationPermission.status.isGranted) {
+                        viewModel.getCurrentLocation()
+                    } else {
+                        locationPermission.launchPermissionRequest()
+                    }
+                },
                 isLoadingLocation = uiState.isLoadingLocation,
                 onCallPressed = viewModel::requestCall,
                 isEnabled = uiState.canRequestCall,
@@ -232,9 +302,42 @@ fun HomeScreen(
                 onDismiss = viewModel::toggleLocationCard,
                 homeAddress = uiState.homeAddress,
                 onHomeAddressClick = viewModel::onHomeAddressClick,
-                onEditHomeAddress = viewModel::onEditHomeAddress,
-                onFavoriteAddressClick = viewModel::openFavoriteAddressSheet
+                // 음성 인식 관련
+                isRecordingDeparture = uiState.isRecordingDeparture,
+                isRecordingDestination = uiState.isRecordingDestination,
+                onStartRecordingDeparture = {
+                    if (audioPermission.status.isGranted) {
+                        viewModel.startRecordingDeparture()
+                        voiceInputHelper.startListening { result ->
+                            viewModel.stopRecordingDeparture(result)
+                        }
+                    } else {
+                        audioPermission.launchPermissionRequest()
+                    }
+                },
+                onStartRecordingDestination = {
+                    if (audioPermission.status.isGranted) {
+                        viewModel.startRecordingDestination()
+                        voiceInputHelper.startListening { result ->
+                            viewModel.stopRecordingDestination(result)
+                        }
+                    } else {
+                        audioPermission.launchPermissionRequest()
+                    }
+                },
+                onStopRecording = {
+                    voiceInputHelper.stopListening()
+                    viewModel.cancelRecording()
+                }
             )
+        }
+
+        // 위치 권한이 부여된 후 자동으로 현재 위치 가져오기
+        LaunchedEffect(locationPermission.status.isGranted) {
+            if (locationPermission.status.isGranted && uiState.showLocationCard && uiState.currentLocation.isEmpty()) {
+                // 권한이 방금 부여되었고, 바텀시트가 열려있고, 출발지가 비어있으면 자동으로 위치 가져오기
+                viewModel.getCurrentLocation()
+            }
         }
 
         // 집주소 다이얼로그
@@ -246,16 +349,6 @@ fun HomeScreen(
             )
         }
 
-        // 즐겨찾기 바텀시트
-        if (uiState.showFavoriteAddressSheet) {
-            FavoriteAddressBottomSheet(
-                favoriteAddresses = uiState.favoriteAddresses,
-                onSelectAddress = viewModel::selectFavoriteAddress,
-                onAddAddress = viewModel::addFavoriteAddress,
-                onDeleteAddress = viewModel::deleteFavoriteAddress,
-                onDismiss = viewModel::closeFavoriteAddressSheet
-            )
-        }
     }
 }
 
@@ -269,9 +362,9 @@ private fun StepCounterButton(
     val targetSteps = 10000
     val progress = (steps.toFloat() / targetSteps).coerceIn(0f, 1f)
 
-    // 명시적인 주황색 정의
-    val orangeColor = Color(0xFFFFAB00)
-    val orangeLight = Color(0xFFFFD54F)
+    // 메인 컬러 사용
+    val mainColor = MaterialTheme.colorScheme.primary
+    val lightColor = MaterialTheme.colorScheme.primaryContainer
 
     Box(
         modifier = modifier
@@ -284,10 +377,10 @@ private fun StepCounterButton(
             modifier = Modifier.fillMaxSize(),
             shape = CircleShape,
             colors = ButtonDefaults.outlinedButtonColors(
-                containerColor = orangeLight.copy(alpha = 0.2f),
-                contentColor = orangeColor
+                containerColor = lightColor.copy(alpha = 0.3f),
+                contentColor = mainColor
             ),
-            border = BorderStroke(0.dp, orangeColor),
+            border = BorderStroke(0.dp, mainColor),
             contentPadding = PaddingValues(0.dp)
         ) {
             Box(
@@ -308,7 +401,7 @@ private fun StepCounterButton(
                     progress = { progress },
                     modifier = Modifier.size(145.dp),
                     strokeWidth = 10.dp,
-                    color = orangeColor
+                    color = mainColor
                 )
 
                 // 중앙 내용
@@ -320,14 +413,14 @@ private fun StepCounterButton(
                         Icons.Default.Settings,
                         contentDescription = "만보기",
                         modifier = Modifier.size(40.dp),
-                        tint = orangeColor
+                        tint = mainColor
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = NumberFormat.getNumberInstance(java.util.Locale.KOREA).format(steps),
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
-                        color = orangeColor
+                        color = mainColor
                     )
                 }
             }
@@ -342,9 +435,9 @@ private fun CircularMenuButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // 명시적인 주황색 정의
-    val orangeColor = Color(0xFFFFAB00)
-    val orangeLight = Color(0xFFFFD54F)
+    // 메인 컬러 사용
+    val mainColor = MaterialTheme.colorScheme.primary
+    val lightColor = MaterialTheme.colorScheme.primaryContainer
 
     Box(
         modifier = modifier
@@ -357,10 +450,10 @@ private fun CircularMenuButton(
             modifier = Modifier.fillMaxSize(),
             shape = CircleShape,
             colors = ButtonDefaults.outlinedButtonColors(
-                containerColor = orangeLight.copy(alpha = 0.2f),
-                contentColor = orangeColor
+                containerColor = lightColor.copy(alpha = 0.3f),
+                contentColor = mainColor
             ),
-            border = BorderStroke(3.dp, orangeColor),
+            border = BorderStroke(3.dp, mainColor),
             contentPadding = PaddingValues(0.dp)
         ) {
             Box(
@@ -375,14 +468,14 @@ private fun CircularMenuButton(
                         icon,
                         contentDescription = label,
                         modifier = Modifier.size(50.dp),
-                        tint = orangeColor
+                        tint = mainColor
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = label,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = orangeColor
+                        color = mainColor
                     )
                 }
             }
@@ -400,8 +493,12 @@ private fun LocationInputSection(
     isLoadingLocation: Boolean,
     homeAddress: String,
     onHomeAddressClick: () -> Unit,
-    onEditHomeAddress: () -> Unit,
-    onFavoriteAddressClick: () -> Unit
+    // 음성 인식 관련
+    isRecordingDeparture: Boolean,
+    isRecordingDestination: Boolean,
+    onStartRecordingDeparture: () -> Unit,
+    onStartRecordingDestination: () -> Unit,
+    onStopRecording: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -419,7 +516,7 @@ private fun LocationInputSection(
                 modifier = Modifier.padding(bottom = 16.dp)
             )
 
-            // 출발지 (우측에 위치 아이콘)
+            // 출발지 (우측에 위치 아이콘, 음성 인식 아이콘)
             OutlinedTextField(
                 value = currentLocation,
                 onValueChange = onCurrentLocationChange,
@@ -427,21 +524,41 @@ private fun LocationInputSection(
                 placeholder = { Text("현재 위치를 입력하세요") },
                 modifier = Modifier.fillMaxWidth(),
                 trailingIcon = {
-                    IconButton(
-                        onClick = onGetCurrentLocation,
-                        enabled = !isLoadingLocation
-                    ) {
-                        if (isLoadingLocation) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        } else {
+                    Row {
+                        // 음성 인식 아이콘
+                        IconButton(
+                            onClick = {
+                                if (isRecordingDeparture) {
+                                    onStopRecording()
+                                } else {
+                                    onStartRecordingDeparture()
+                                }
+                            }
+                        ) {
                             Icon(
-                                Icons.Default.LocationOn,
-                                contentDescription = "현재 위치",
-                                tint = Color(0xFFFFAB00)
+                                Icons.Default.Mic,
+                                contentDescription = "음성 입력",
+                                tint = if (isRecordingDeparture) Color.Red else Color(0xFFFFAB00)
                             )
+                        }
+
+                        // 현재 위치 아이콘
+                        IconButton(
+                            onClick = onGetCurrentLocation,
+                            enabled = !isLoadingLocation
+                        ) {
+                            if (isLoadingLocation) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            } else {
+                                Icon(
+                                    Icons.Default.LocationOn,
+                                    contentDescription = "현재 위치",
+                                    tint = Color(0xFFFFAB00)
+                                )
+                            }
                         }
                     }
                 }
@@ -449,7 +566,7 @@ private fun LocationInputSection(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 목적지 (우측에 집주소, 즐겨찾기 아이콘)
+            // 목적지 (우측에 음성 인식, 집주소 아이콘)
             OutlinedTextField(
                 value = destinationLocation,
                 onValueChange = onDestinationLocationChange,
@@ -458,31 +575,28 @@ private fun LocationInputSection(
                 modifier = Modifier.fillMaxWidth(),
                 trailingIcon = {
                     Row {
-                        // 집주소 아이콘
+                        // 음성 인식 아이콘
+                        IconButton(
+                            onClick = {
+                                if (isRecordingDestination) {
+                                    onStopRecording()
+                                } else {
+                                    onStartRecordingDestination()
+                                }
+                            }
+                        ) {
+                            Icon(
+                                Icons.Default.Mic,
+                                contentDescription = "음성 입력",
+                                tint = if (isRecordingDestination) Color.Red else Color(0xFFFFAB00)
+                            )
+                        }
+
+                        // 집주소 아이콘 (집주소가 있으면 입력, 없으면 다이얼로그)
                         IconButton(onClick = onHomeAddressClick) {
                             Icon(
                                 Icons.Default.Home,
                                 contentDescription = "집주소",
-                                tint = Color(0xFFFFAB00)
-                            )
-                        }
-
-                        // 집주소가 있을 때만 변경 아이콘 표시
-                        if (homeAddress.isNotEmpty()) {
-                            IconButton(onClick = onEditHomeAddress) {
-                                Icon(
-                                    Icons.Default.Edit,
-                                    contentDescription = "집주소 변경",
-                                    tint = Color(0xFFFFAB00)
-                                )
-                            }
-                        }
-
-                        // 즐겨찾기 아이콘
-                        IconButton(onClick = onFavoriteAddressClick) {
-                            Icon(
-                                Icons.Default.Star,
-                                contentDescription = "즐겨찾기",
                                 tint = Color(0xFFFFAB00)
                             )
                         }
@@ -551,69 +665,207 @@ private fun CallButton(
 }
 
 @Composable
-private fun CallStatusCard(
+private fun CallStatusDialog(
     status: CallStatus,
-    onCancelCall: () -> Unit
+    onCancelCall: () -> Unit,
+    onDismiss: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = when (status.state) {
-                CallState.REQUESTED -> MaterialTheme.colorScheme.secondaryContainer
-                CallState.ASSIGNED -> MaterialTheme.colorScheme.primaryContainer
-                CallState.DRIVER_ARRIVING -> MaterialTheme.colorScheme.primaryContainer
-                CallState.IN_PROGRESS -> MaterialTheme.colorScheme.tertiaryContainer
-                CallState.COMPLETED -> MaterialTheme.colorScheme.primaryContainer
-                CallState.CANCELLED -> MaterialTheme.colorScheme.errorContainer
-            }
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = status.getStatusText(),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
+    // 깜박이는 애니메이션 (0.5초 주기)
+    val infiniteTransition = rememberInfiniteTransition(label = "blink")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.3f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(500, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "alpha"
+    )
 
-                if (status.state == CallState.REQUESTED) {
-                    TextButton(onClick = onCancelCall) {
-                        Text("취소")
+    // 커스텀 다이얼로그를 Box로 구현하여 위치 조정
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        // 배경 dim 효과
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.5f))
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                ) {
+                    // 배경 클릭 시 REQUESTED 상태에서만 닫기
+                    if (status.state == CallState.REQUESTED) {
+                        onDismiss()
                     }
                 }
-            }
+        )
 
-            if (status.driverInfo != null) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "기사: ${status.driverInfo.name}",
-                    fontSize = 14.sp
+        // AlertDialog 스타일의 다이얼로그 (하단에 위치)
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 40.dp)
+                .padding(bottom = 180.dp),  // 하단에서 180dp 위 (앱호출/전화호출 버튼 가리기)
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // 아이콘 (REQUESTED 상태에서 깜박임)
+                Icon(
+                    imageVector = when (status.state) {
+                        CallState.REQUESTED -> Icons.Default.Phone
+                        CallState.ASSIGNED, CallState.DRIVER_ARRIVING -> Icons.Default.LocationOn
+                        CallState.IN_PROGRESS -> Icons.Default.Phone
+                        else -> Icons.Default.Phone
+                    },
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .graphicsLayer(alpha = if (status.state == CallState.REQUESTED) alpha else 1f),
+                    tint = MaterialTheme.colorScheme.primary  // 모든 상태에서 메인 컬러 사용
                 )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 제목 (REQUESTED 상태에서 깜박임)
                 Text(
-                    text = "차량: ${status.driverInfo.vehicleNumber}",
-                    fontSize = 14.sp
+                    text = status.getStatusText(),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.graphicsLayer(alpha = if (status.state == CallState.REQUESTED) alpha else 1f)
                 )
-                if (status.driverInfo.phoneNumber.isNotEmpty()) {
-                    Text(
-                        text = "연락처: ${status.driverInfo.phoneNumber}",
-                        fontSize = 14.sp
-                    )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 내용
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,  // 중앙 정렬로 변경
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (status.driverInfo != null) {
+                        Column(
+                            horizontalAlignment = Alignment.Start,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "배정된 기사 정보",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // 기사 정보 카드
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        text = "${status.driverInfo.name} 기사",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+
+                                    if (status.driverInfo.phoneNumber.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(12.dp))
+
+                                        // 전화 버튼
+                                        val context = LocalContext.current
+                                        Button(
+                                            onClick = {
+                                                val intent = Intent(Intent.ACTION_DIAL).apply {
+                                                    data = Uri.parse("tel:${status.driverInfo.phoneNumber}")
+                                                }
+                                                context.startActivity(intent)
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = MaterialTheme.colorScheme.primary
+                                            )
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Phone,
+                                                contentDescription = "전화하기",
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = "기사에게 전화하기",
+                                                fontSize = 16.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (status.estimatedArrivalTime > 0) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Column(
+                            horizontalAlignment = Alignment.Start,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "예상 도착 시간",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "${status.estimatedArrivalTime}분",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    if (status.state == CallState.REQUESTED) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "기사 배정을 기다리고 있습니다...",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center  // 중앙 정렬
+                        )
+                    }
                 }
-            }
 
-            if (status.estimatedArrivalTime > 0) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "예상 도착: ${status.estimatedArrivalTime}분",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // 버튼
+                if (status.state == CallState.REQUESTED) {
+                    TextButton(
+                        onClick = onCancelCall,
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text("콜 취소")
+                    }
+                } else {
+                    TextButton(onClick = onDismiss) {
+                        Text("확인")
+                    }
+                }
             }
         }
     }
@@ -635,8 +887,12 @@ private fun LocationBottomSheet(
     onDismiss: () -> Unit,
     homeAddress: String,
     onHomeAddressClick: () -> Unit,
-    onEditHomeAddress: () -> Unit,
-    onFavoriteAddressClick: () -> Unit
+    // 음성 인식 관련
+    isRecordingDeparture: Boolean,
+    isRecordingDestination: Boolean,
+    onStartRecordingDeparture: () -> Unit,
+    onStartRecordingDestination: () -> Unit,
+    onStopRecording: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
 
@@ -671,8 +927,11 @@ private fun LocationBottomSheet(
                 isLoadingLocation = isLoadingLocation,
                 homeAddress = homeAddress,
                 onHomeAddressClick = onHomeAddressClick,
-                onEditHomeAddress = onEditHomeAddress,
-                onFavoriteAddressClick = onFavoriteAddressClick
+                isRecordingDeparture = isRecordingDeparture,
+                isRecordingDestination = isRecordingDestination,
+                onStartRecordingDeparture = onStartRecordingDeparture,
+                onStartRecordingDestination = onStartRecordingDestination,
+                onStopRecording = onStopRecording
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -738,180 +997,164 @@ private fun HomeAddressDialog(
 }
 
 /**
- * 즐겨찾기 주소 바텀시트
+ * 포인트 적립/사용 완료 팝업
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FavoriteAddressBottomSheet(
-    favoriteAddresses: List<String>,
-    onSelectAddress: (String) -> Unit,
-    onAddAddress: (String) -> Unit,
-    onDeleteAddress: (String) -> Unit,
+private fun PointsEarnedDialog(
+    earnedPoints: Int,
+    fare: Int,
+    currentPoints: Int,
+    usedPoints: Int = 0,  // ✅ 추가: 사용한 포인트
     onDismiss: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
-    var showAddDialog by remember { mutableStateOf(false) }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Text(
-                text = "즐겨찾기",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-
-            // 즐겨찾기 목록
-            if (favoriteAddresses.isEmpty()) {
-                Text(
-                    text = "저장된 즐겨찾기가 없습니다",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 32.dp),
-                    style = MaterialTheme.typography.bodyLarge
-                )
-            } else {
-                favoriteAddresses.forEach { address ->
-                    FavoriteAddressItem(
-                        address = address,
-                        onSelect = { onSelectAddress(address) },
-                        onDelete = { onDeleteAddress(address) }
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 추가 버튼
-            OutlinedButton(
-                onClick = { showAddDialog = true },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = Color(0xFFFFAB00)
-                ),
-                border = BorderStroke(1.dp, Color(0xFFFFAB00))
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "추가"
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("새 즐겨찾기 추가")
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
-        }
-    }
-
-    // 즐겨찾기 추가 다이얼로그
-    if (showAddDialog) {
-        AddFavoriteDialog(
-            onAdd = { address ->
-                onAddAddress(address)
-                showAddDialog = false
-            },
-            onDismiss = { showAddDialog = false }
-        )
-    }
-}
-
-/**
- * 즐겨찾기 항목
- */
-@Composable
-private fun FavoriteAddressItem(
-    address: String,
-    onSelect: () -> Unit,
-    onDelete: () -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextButton(
-                onClick = onSelect,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = address,
-                    modifier = Modifier.fillMaxWidth(),
-                    style = MaterialTheme.typography.bodyLarge
-                )
-            }
-
-            IconButton(onClick = onDelete) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "삭제",
-                    tint = MaterialTheme.colorScheme.error
-                )
-            }
-        }
-    }
-}
-
-/**
- * 즐겨찾기 추가 다이얼로그
- */
-@Composable
-private fun AddFavoriteDialog(
-    onAdd: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var address by remember { mutableStateOf("") }
+    // 포인트 사용만 있고 적립이 없는 경우 (콜 요청 시)
+    val isPointUsageOnly = usedPoints > 0 && earnedPoints == 0 && fare == 0
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("확인", fontWeight = FontWeight.Bold)
+            }
+        },
+        icon = {
+            Icon(
+                imageVector = Icons.Default.Star,
+                contentDescription = if (isPointUsageOnly) "포인트 사용" else "포인트 적립",
+                modifier = Modifier.size(48.dp),
+                tint = if (isPointUsageOnly) Color(0xFFD32F2F) else MaterialTheme.colorScheme.primary
+            )
+        },
         title = {
             Text(
-                text = "즐겨찾기 추가",
-                fontWeight = FontWeight.Bold
+                text = if (isPointUsageOnly) "포인트 사용 완료" else "운행 완료",
+                fontWeight = FontWeight.Bold,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
         },
         text = {
-            OutlinedTextField(
-                value = address,
-                onValueChange = { address = it },
-                label = { Text("주소") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = false,
-                maxLines = 3
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    if (address.isNotBlank()) {
-                        onAdd(address.trim())
-                    }
-                },
-                enabled = address.isNotBlank()
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text("추가")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("취소")
+                Text(
+                    text = if (isPointUsageOnly) "포인트가 사용되었습니다!" else "이용해 주셔서 감사합니다!",
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // 요금 정보 (운행 완료 시에만 표시)
+                if (!isPointUsageOnly) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "이용 요금",
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "${NumberFormat.getNumberInstance(java.util.Locale.KOREA).format(fare)}원",
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+
+                // 사용한 포인트 카드
+                if (usedPoints > 0) {
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFFFEBEE) // 연한 빨간색 배경
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "사용한 포인트",
+                                fontSize = 14.sp,
+                                color = Color(0xFFD32F2F) // 빨간색
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "-${NumberFormat.getNumberInstance(java.util.Locale.KOREA).format(usedPoints)}P",
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFD32F2F) // 빨간색
+                            )
+                        }
+                    }
+                }
+
+                // 적립 포인트 (적립이 있을 때만 표시)
+                if (earnedPoints > 0) {
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "적립 포인트",
+                                    fontSize = 14.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "+${NumberFormat.getNumberInstance(java.util.Locale.KOREA).format(earnedPoints)}P",
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 현재 보유 포인트
+                Text(
+                    text = "현재 보유: ${NumberFormat.getNumberInstance(java.util.Locale.KOREA).format(currentPoints)}P",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     )
 }
+

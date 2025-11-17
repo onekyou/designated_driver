@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.designated.customer.data.model.CustomerCall
+import com.designated.customer.data.model.CustomerGrade
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.*
@@ -281,9 +282,33 @@ private fun CallHistoryItem(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
-                        if (call.pointsUsed > 0) {
+                        // 완료된 콜의 경우 적립 포인트 표시
+                        if (call.status.equals("COMPLETED", ignoreCase = true)) {
+                            val earnedPoints = calculateEarnedPoints(call.fare, call.customerGrade ?: "bronze")
                             Text(
-                                text = "포인트 사용: ${formatNumber(call.pointsUsed)}P",
+                                text = "적립: +${formatNumber(earnedPoints)}P",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF4CAF50)
+                            )
+                        }
+                    }
+
+                    // 포인트 사용 정보
+                    if (call.pointsUsed > 0) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "포인트 사용",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                            Text(
+                                text = "-${formatNumber(call.pointsUsed)}P",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -292,6 +317,23 @@ private fun CallHistoryItem(
 
                     // 할인 정보 표시
                     if (call.discountAmount > 0 && call.finalFare != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "할인 적용",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                            Text(
+                                text = "-${formatNumber(call.discountAmount)}원",
+                                fontSize = 12.sp,
+                                color = Color(0xFF4CAF50)
+                            )
+                        }
                         Spacer(modifier = Modifier.height(4.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -299,13 +341,14 @@ private fun CallHistoryItem(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "할인: -${formatNumber(call.discountAmount)}원",
-                                fontSize = 12.sp,
-                                color = Color(0xFF4CAF50)
+                                text = "최종 결제",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "최종: ${formatNumber(call.finalFare)}원",
-                                fontSize = 14.sp,
+                                text = "${formatNumber(call.finalFare)}원",
+                                fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -389,4 +432,8 @@ private fun formatNumber(number: Int): String {
 private fun formatDate(timestamp: Long): String {
     val format = SimpleDateFormat("MM.dd(E) HH:mm", Locale.KOREA)
     return format.format(Date(timestamp))
+}
+
+private fun calculateEarnedPoints(fare: Int, grade: String): Int {
+    return CustomerGrade.fromString(grade).calculatePoints(fare)
 }

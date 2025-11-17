@@ -24,6 +24,7 @@ class PointService(
      */
     suspend fun getCustomerPoints(phoneNumber: String): CustomerPoints? {
         return try {
+            android.util.Log.d("PointService", "getCustomerPoints 시작: phoneNumber=$phoneNumber")
             val doc = firestore
                 .collection("regions").document(regionId)
                 .collection("offices").document(officeId)
@@ -32,9 +33,14 @@ class PointService(
                 .get()
                 .await()
 
+            android.util.Log.d("PointService", "문서 존재 여부: ${doc.exists()}")
+
             if (doc.exists()) {
-                CustomerPoints.fromMap(doc.data ?: emptyMap())
+                val points = CustomerPoints.fromMap(doc.data ?: emptyMap())
+                android.util.Log.d("PointService", "기존 포인트 정보 반환: $points")
+                points
             } else {
+                android.util.Log.d("PointService", "신규 고객 - 포인트 정보 생성 시작")
                 // 신규 고객인 경우 초기 포인트 정보 생성
                 val newPoints = CustomerPoints(
                     customerId = phoneNumber,
@@ -46,9 +52,11 @@ class PointService(
                     totalCalls = 0
                 )
                 createCustomerPoints(newPoints)
+                android.util.Log.d("PointService", "신규 포인트 정보 생성 완료: $newPoints")
                 newPoints
             }
         } catch (e: Exception) {
+            android.util.Log.e("PointService", "getCustomerPoints 오류", e)
             null
         }
     }
@@ -102,7 +110,14 @@ class PointService(
         description: String? = null
     ): Boolean {
         return try {
-            val points = getCustomerPoints(phoneNumber) ?: return false
+            android.util.Log.d("PointService", "earnPoints 시작: phoneNumber=$phoneNumber, callId=$callId, fare=$fare")
+            val points = getCustomerPoints(phoneNumber)
+            android.util.Log.d("PointService", "고객 포인트 조회 결과: $points")
+
+            if (points == null) {
+                android.util.Log.e("PointService", "고객 포인트 정보를 찾을 수 없습니다")
+                return false
+            }
 
             // 적립 포인트 계산
             val earnAmount = points.calculateEarnPoints(fare)
@@ -156,8 +171,10 @@ class PointService(
                 transaction.set(transactionRef, pointTransaction.toMap())
             }.await()
 
+            android.util.Log.d("PointService", "포인트 적립 성공")
             true
         } catch (e: Exception) {
+            android.util.Log.e("PointService", "포인트 적립 중 오류", e)
             false
         }
     }
@@ -233,6 +250,7 @@ class PointService(
         phoneNumber: String,
         limit: Long = 20
     ): List<PointTransaction> {
+        android.util.Log.d("PointService", "getPointTransactions 시작: phoneNumber=$phoneNumber, regionId=$regionId, officeId=$officeId")
         return try {
             val snapshot = firestore
                 .collection("regions").document(regionId)
@@ -244,10 +262,13 @@ class PointService(
                 .get()
                 .await()
 
-            snapshot.documents.mapNotNull { doc ->
+            val transactions = snapshot.documents.mapNotNull { doc ->
                 doc.data?.let { PointTransaction.fromMap(it) }
             }
+            android.util.Log.d("PointService", "getPointTransactions 완료: ${transactions.size}개의 거래 조회됨")
+            transactions
         } catch (e: Exception) {
+            android.util.Log.e("PointService", "getPointTransactions 오류", e)
             emptyList()
         }
     }

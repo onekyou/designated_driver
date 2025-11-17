@@ -1,5 +1,6 @@
 package com.designated.customer
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -34,6 +35,12 @@ import kotlinx.coroutines.tasks.await
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.ktx.functions
 import com.google.firebase.ktx.Firebase as FirebaseKtx
+import com.google.firebase.messaging.FirebaseMessaging
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 
 // 토큰 매칭 결과 데이터 클래스
 data class TokenMatchResult(
@@ -42,12 +49,26 @@ data class TokenMatchResult(
     val officePhone: String?,
     val bankName: String?,
     val accountNumber: String?,
-    val accountHolder: String?
+    val accountHolder: String?,
+    val referralDriverId: String? = null,    // ✅ 기사 ID 추가
+    val referralDriverName: String? = null   // ✅ 기사 이름 추가
 )
 
-// 토큰 조회 함수 (Firestore에서 최근 토큰 찾기)
+// 토큰 조회 함수 (캐시 우선, 없으면 Firestore에서 조회)
 suspend fun getAttributionToken(context: android.content.Context): String? {
     return try {
+        val prefsManager = com.designated.customer.util.PreferencesManager(context)
+
+        // 1. 먼저 캐시된 토큰 확인 (즉시 반환, 0 reads)
+        val cachedToken = prefsManager.getAttributionToken()
+        if (cachedToken != null) {
+            android.util.Log.d("AttributionToken", "캐시된 토큰 사용: $cachedToken")
+            return cachedToken
+        }
+
+        android.util.Log.d("AttributionToken", "캐시된 토큰 없음, Firestore에서 조회 시작")
+
+        // 2. 캐시 없을 때만 Firestore 조회
         // FingerprintJS 방식으로 디바이스 정보 생성
         val screenResolution = "${android.content.res.Resources.getSystem().displayMetrics.widthPixels}x${android.content.res.Resources.getSystem().displayMetrics.heightPixels}"
         val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
@@ -82,6 +103,8 @@ suspend fun getAttributionToken(context: android.content.Context): String? {
                     val token = attribution.getString("token")
                     if (token != null) {
                         android.util.Log.d("AttributionToken", "토큰 발견: $token (screenResolution: $screenResolution)")
+                        // 3. 조회 성공 시 캐시에 저장
+                        prefsManager.saveAttributionToken(token)
                         return token
                     }
                 }
@@ -115,7 +138,9 @@ suspend fun matchByToken(token: String): TokenMatchResult? {
                 officePhone = responseData["officePhone"] as? String,
                 bankName = responseData["bankName"] as? String,
                 accountNumber = responseData["accountNumber"] as? String,
-                accountHolder = responseData["accountHolder"] as? String
+                accountHolder = responseData["accountHolder"] as? String,
+                referralDriverId = responseData["referralDriverId"] as? String,     // ✅ 기사 ID
+                referralDriverName = responseData["referralDriverName"] as? String  // ✅ 기사 이름
             )
         } else {
             android.util.Log.w("TokenMatching", "매칭 실패: ${responseData?.get("message")}")
@@ -145,25 +170,204 @@ suspend fun claimToken(token: String, phoneNumber: String?) {
 }
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        private const val NOTIFICATION_PERMISSION_REQUEST_CODE = 1001
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         enableEdgeToEdge()
 
+        // 알림 권한 요청 (Android 13+)
+        requestNotificationPermission()
+
+        // FCM 토큰 요청 및 저장
+        requestAndSaveFcmToken()
+
+        // StepCounterService 시작
+        startStepCounterService()
+
         setContent {
             DesignatedCustomerTheme {
-                CustomerApp()
+                CustomerApp(
+                    initialIntent = intent
+                )
             }
         }
+
+        // ✅ 알림 클릭으로 앱이 시작된 경우 Intent 처리 (setContent 이후에 호출)
+        handleNotificationIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // 알림 클릭으로 앱이 이미 실행 중인 경우
+        setIntent(intent)
+
+        // ✅ 알림 클릭 시 Intent extras 확인 및 브로드캐스트 전송
+        handleNotificationIntent(intent)
+    }
+
+    private fun handleNotificationIntent(intent: Intent) {
+        // 포인트 적립 알림 처리
+        if (intent.getBooleanExtra("showPointsDialog", false)) {
+            val fare = intent.getIntExtra("fare", 0)
+            val pointsUsed = intent.getIntExtra("pointsUsed", 0)
+
+            android.util.Log.d("MainActivity", "알림 클릭: 포인트 다이얼로그 표시 - fare=$fare, pointsUsed=$pointsUsed")
+
+            // HOME 탭으로 이동 브로드캐스트 먼저 전송
+            val navigateHomeIntent = Intent("com.designated.customer.NAVIGATE_TO_HOME")
+            androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(this)
+                .sendBroadcast(navigateHomeIntent)
+
+            // LocalBroadcast 전송 (MainViewModel의 리시버가 받아서 처리)
+            val broadcastIntent = Intent("com.designated.customer.RIDE_COMPLETED").apply {
+                putExtra("fare", fare)
+                putExtra("pointsUsed", pointsUsed)
+            }
+            androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(this)
+                .sendBroadcast(broadcastIntent)
+        }
+
+        // 기사 배정 알림 처리
+        if (intent.getBooleanExtra("showDriverAssigned", false)) {
+            val callId = intent.getStringExtra("callId")
+            val driverName = intent.getStringExtra("driverName") ?: ""
+            val driverPhone = intent.getStringExtra("driverPhone") ?: ""
+            val vehicleNumber = intent.getStringExtra("vehicleNumber") ?: ""
+            val driverId = intent.getStringExtra("driverId") ?: ""
+
+            android.util.Log.d("MainActivity", "알림 클릭: 기사 배정 정보 표시 - callId=$callId, driverName=$driverName")
+
+            // HOME 탭으로 이동 브로드캐스트 먼저 전송
+            val navigateHomeIntent = Intent("com.designated.customer.NAVIGATE_TO_HOME")
+            androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(this)
+                .sendBroadcast(navigateHomeIntent)
+
+            // LocalBroadcast 전송 (MainViewModel의 리시버가 받아서 처리)
+            val broadcastIntent = Intent("com.designated.customer.DRIVER_ASSIGNED").apply {
+                putExtra("callId", callId)
+                putExtra("driverName", driverName)
+                putExtra("driverPhone", driverPhone)
+                putExtra("vehicleNumber", vehicleNumber)
+                putExtra("driverId", driverId)
+            }
+            androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(this)
+                .sendBroadcast(broadcastIntent)
+        }
+    }
+
+    /**
+     * 알림 권한 요청 (Android 13+)
+     */
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    NOTIFICATION_PERMISSION_REQUEST_CODE
+                )
+            }
+        }
+    }
+
+    /**
+     * FCM 토큰 요청 및 Firestore에 저장
+     */
+    private fun requestAndSaveFcmToken() {
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (!task.isSuccessful) {
+                android.util.Log.w("FCM", "FCM 토큰 가져오기 실패", task.exception)
+                return@addOnCompleteListener
+            }
+
+            val token = task.result
+            android.util.Log.d("FCM", "FCM 토큰: $token")
+
+            // PreferencesManager에서 phoneNumber, regionId, officeId 가져와서 Firestore에 저장
+            val prefsManager = PreferencesManager(this)
+            val phoneNumber = prefsManager.getPhoneNumber()
+            val regionId = prefsManager.getRegionId()
+            val officeId = prefsManager.getOfficeId()
+
+            if (!phoneNumber.isNullOrEmpty() && !regionId.isNullOrEmpty() && !officeId.isNullOrEmpty()) {
+                saveFcmTokenToFirestore(token, phoneNumber, regionId, officeId)
+            } else {
+                android.util.Log.d("FCM", "아직 사용자 정보 없음 - 나중에 저장됨")
+            }
+        }
+    }
+
+    /**
+     * FCM 토큰을 Firestore에 저장
+     */
+    private fun saveFcmTokenToFirestore(token: String, phoneNumber: String, regionId: String, officeId: String) {
+        com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            .collection("regions").document(regionId)
+            .collection("offices").document(officeId)
+            .collection("customerInfo")
+            .document(phoneNumber)
+            .set(
+                mapOf(
+                    "fcmToken" to token,
+                    "phoneNumber" to phoneNumber,
+                    "updatedAt" to com.google.firebase.Timestamp.now()
+                ),
+                com.google.firebase.firestore.SetOptions.merge()
+            )
+            .addOnSuccessListener {
+                android.util.Log.d("FCM", "FCM 토큰 Firestore 저장 완료")
+            }
+            .addOnFailureListener { e ->
+                android.util.Log.e("FCM", "FCM 토큰 Firestore 저장 실패", e)
+            }
+    }
+
+    /**
+     * StepCounterService 시작
+     */
+    private fun startStepCounterService() {
+        val intent = Intent(this, com.designated.customer.service.StepCounterService::class.java)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // 앱 종료 시 서비스는 유지 (백그라운드에서 계속 실행)
     }
 }
 
 @Composable
-fun CustomerApp() {
+fun CustomerApp(initialIntent: Intent? = null) {
     val context = LocalContext.current
     val preferencesManager = remember { PreferencesManager(context) }
     val coroutineScope = rememberCoroutineScope()
     val auth = FirebaseAuth.getInstance()
+
+    // ✅ Intent 처리는 MainActivity.onCreate() 및 onNewIntent()에서 수행됨
+    // ✅ URL 파라미터 처리: d (driverId), dn (driverName)
+    LaunchedEffect(initialIntent) {
+        initialIntent?.data?.let { uri ->
+            val driverId = uri.getQueryParameter("d")
+            val driverName = uri.getQueryParameter("dn")
+
+            if (!driverId.isNullOrEmpty() && !driverName.isNullOrEmpty()) {
+                android.util.Log.d("DriverReferral", "기사 추천 정보 발견 - driverId=$driverId, driverName=$driverName")
+                preferencesManager.saveDriverReferralInfo(driverId, driverName)
+            }
+        }
+    }
 
     // 사무실 정보: SharedPreferences 또는 Attribution 매칭에서 얻음
     var currentOfficeId by remember { mutableStateOf<String?>(null) }
@@ -172,6 +376,10 @@ fun CustomerApp() {
     var showProfileSetup by remember { mutableStateOf(false) }
     var hasProfileInFirestore by remember { mutableStateOf(false) }
     var attributionToken by remember { mutableStateOf<String?>(null) }
+
+    // 기사 추천 정보
+    var referralDriverId by remember { mutableStateOf<String?>(null) }
+    var referralDriverName by remember { mutableStateOf<String?>(null) }
 
     // 초기화: SharedPreferences에서 값 로드 + 익명 인증 확인
     LaunchedEffect(Unit) {
@@ -210,6 +418,14 @@ fun CustomerApp() {
     LaunchedEffect(Unit) {
         android.util.Log.d("AttributionMatching", "LaunchedEffect started")
 
+        // ✅ 이미 prefs에 사무실 정보가 있으면 매칭 skip (성능 최적화)
+        if (currentOfficeId != null && currentRegionId != null) {
+            android.util.Log.d("AttributionMatching", "SharedPreferences에 사무실 정보 있음 - 매칭 skip (officeId=$currentOfficeId, regionId=$currentRegionId)")
+            hasTriedMatching = true
+            isMatchingAttribution = false
+            return@LaunchedEffect
+        }
+
         if (!hasTriedMatching) {
             hasTriedMatching = true
             isMatchingAttribution = true
@@ -241,10 +457,24 @@ fun CustomerApp() {
                             )
                         }
 
+                        // ✅ 기사 추천 정보 저장
+                        if (tokenResult.referralDriverId != null && tokenResult.referralDriverName != null) {
+                            preferencesManager.saveDriverReferralInfo(
+                                tokenResult.referralDriverId,
+                                tokenResult.referralDriverName
+                            )
+                            android.util.Log.d("AttributionMatching", "토큰 매칭 - 기사 추천 정보 저장: driverId=${tokenResult.referralDriverId}, driverName=${tokenResult.referralDriverName}")
+                        }
+
+                        // 토큰 매칭 성공 시 캐시에 저장 (이미 getAttributionToken에서 저장되지만 명시적으로 재저장)
+                        preferencesManager.saveAttributionToken(token)
+
                         isMatchingAttribution = false
                         return@LaunchedEffect
                     } else {
-                        android.util.Log.w("AttributionMatching", "토큰 매칭 실패, 핑거프린트 매칭으로 폴백")
+                        // 토큰 매칭 실패 시 캐시 삭제 (만료된 토큰)
+                        android.util.Log.w("AttributionMatching", "토큰 매칭 실패, 캐시 삭제 후 핑거프린트 매칭으로 폴백")
+                        preferencesManager.clearAttributionToken()
                     }
                 }
 
@@ -273,6 +503,14 @@ fun CustomerApp() {
                                 result.accountNumber,
                                 result.accountHolder
                             )
+                        }
+
+                        // 기사 추천 정보 저장
+                        if (result.referralDriverId != null && result.referralDriverName != null) {
+                            referralDriverId = result.referralDriverId
+                            referralDriverName = result.referralDriverName
+                            preferencesManager.saveDriverReferralInfo(result.referralDriverId, result.referralDriverName)
+                            android.util.Log.d("AttributionMatching", "기사 추천 정보 저장 - driverId=${result.referralDriverId}, driverName=${result.referralDriverName}")
                         }
                     }
                     is com.designated.customer.service.AttributionMatchingService.MatchResult.NoMatch -> {
@@ -310,6 +548,12 @@ fun CustomerApp() {
                     hasProfileInFirestore = true
                     customerInfo = com.designated.customer.data.model.CustomerInfo.fromMap(doc.data ?: emptyMap())
 
+                    // ✅ 전화번호를 SharedPreferences에 저장 (FCM 토큰 저장에 필요)
+                    customerInfo?.phoneNumber?.let { phone ->
+                        preferencesManager.savePhoneNumber(phone)
+                        android.util.Log.d("ProfileCheck", "전화번호 저장 완료: $phone")
+                    }
+
                     // lastActiveAt 업데이트 (앱 실행 시마다)
                     try {
                         firestore
@@ -329,8 +573,15 @@ fun CustomerApp() {
                     showProfileSetup = true
                 }
             } catch (e: Exception) {
+                // LeftCompositionCancellationException은 Compose 라이프사이클 에러이므로 무시
+                if (e::class.simpleName?.contains("LeftCompositionCancellationException") == true ||
+                    e.message?.contains("left the composition") == true) {
+                    android.util.Log.d("ProfileCheck", "Composition cancelled - 정상 동작, 무시")
+                    return@LaunchedEffect
+                }
+
                 android.util.Log.e("ProfileCheck", "프로필 확인 실패", e)
-                // 에러 시 프로필 입력 화면 표시
+                // 다른 에러 시에만 프로필 입력 화면 표시
                 hasProfileInFirestore = false
                 showProfileSetup = true
             }
@@ -339,7 +590,28 @@ fun CustomerApp() {
 
     Scaffold(modifier = Modifier.fillMaxSize()) { paddingValues ->
         when {
-            // 0. Attribution 매칭 중이면 로딩 화면
+            // 0. 인증 대기 중이면 로딩 화면
+            currentUserId == null -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        androidx.compose.material3.CircularProgressIndicator()
+                        Spacer(modifier = Modifier.height(16.dp))
+                        androidx.compose.material3.Text(
+                            text = "인증 중...",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                }
+            }
+            // 1. Attribution 매칭 중이면 로딩 화면
             isMatchingAttribution -> {
                 Box(
                     modifier = Modifier
@@ -360,7 +632,7 @@ fun CustomerApp() {
                     }
                 }
             }
-            // 1. 프로필 입력이 필요하면 프로필 입력 화면
+            // 2. 프로필 입력이 필요하면 프로필 입력 화면
             showProfileSetup && currentRegionId != null && currentOfficeId != null -> {
                 ProfileSetupScreen(
                     regionId = currentRegionId!!,
@@ -385,6 +657,12 @@ fun CustomerApp() {
 
                                 if (doc.exists()) {
                                     customerInfo = com.designated.customer.data.model.CustomerInfo.fromMap(doc.data ?: emptyMap())
+
+                                    // ✅ 전화번호를 SharedPreferences에 저장 (FCM 토큰 저장에 필요)
+                                    customerInfo?.phoneNumber?.let { phone ->
+                                        preferencesManager.savePhoneNumber(phone)
+                                        android.util.Log.d("ProfileSetup", "전화번호 저장 완료: $phone")
+                                    }
                                 }
 
                                 // 토큰이 있으면 클레임 처리

@@ -22,6 +22,10 @@ fun ProfileSetupScreen(
     modifier: Modifier = Modifier,
     viewModel: ProfileSetupViewModel = viewModel()
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val preferencesManager = remember { com.designated.customer.util.PreferencesManager(context) }
+    val driverId = remember { preferencesManager.getDriverId() }
+    val driverName = remember { preferencesManager.getDriverName() }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     // 저장 성공 시 완료 콜백 호출
@@ -121,7 +125,7 @@ fun ProfileSetupScreen(
             // 시작하기 버튼
             Button(
                 onClick = {
-                    viewModel.saveProfile(regionId, officeId, attributionToken)
+                    viewModel.saveProfile(regionId, officeId, attributionToken, driverId, driverName)
                 },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !uiState.isLoading &&

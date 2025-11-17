@@ -27,8 +27,7 @@ data class CustomerInfo(
     val accountHolder: String = "",    // 예금주
 
     // 주소 정보
-    val homeAddress: String = "",      // 집 주소
-    val favoriteAddresses: List<String> = emptyList() // 즐겨찾기 주소 목록
+    val homeAddress: String = ""      // 집 주소
 ) {
     fun toMap(): Map<String, Any?> {
         return mapOf(
@@ -49,13 +48,17 @@ data class CustomerInfo(
             "bankName" to bankName,
             "accountNumber" to accountNumber,
             "accountHolder" to accountHolder,
-            "homeAddress" to homeAddress,
-            "favoriteAddresses" to favoriteAddresses
+            "homeAddress" to homeAddress
         )
     }
 
     companion object {
         fun fromMap(data: Map<String, Any>): CustomerInfo {
+            // 기존 사용자 호환성을 위해 address 필드도 확인 (homeAddress가 없을 경우)
+            val homeAddr = (data["homeAddress"] as? String)?.takeIf { it.isNotEmpty() }
+                ?: (data["address"] as? String)?.takeIf { it.isNotEmpty() }
+                ?: ""
+
             return CustomerInfo(
                 id = data["id"] as? String ?: "",
                 phoneNumber = data["phoneNumber"] as? String ?: "",
@@ -74,8 +77,7 @@ data class CustomerInfo(
                 bankName = data["bankName"] as? String ?: "",
                 accountNumber = data["accountNumber"] as? String ?: "",
                 accountHolder = data["accountHolder"] as? String ?: "",
-                homeAddress = data["homeAddress"] as? String ?: "",
-                favoriteAddresses = (data["favoriteAddresses"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+                homeAddress = homeAddr
             )
         }
     }

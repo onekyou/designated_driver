@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -24,6 +25,8 @@ fun PointCard(
     customerPoints: CustomerPoints?,
     isLoading: Boolean,
     onPointHistoryClick: () -> Unit = {},
+    onRefresh: () -> Unit = {},  // ✅ 새로고침 콜백 추가
+    isRefreshing: Boolean = false,  // ✅ 새로고침 상태 추가
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -86,18 +89,15 @@ fun PointCard(
                         )
                     }
 
-                    // 포인트 내역 버튼
-                    TextButton(
-                        onClick = onPointHistoryClick,
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                    // 새로고침 버튼
+                    IconButton(
+                        onClick = onRefresh,
+                        enabled = !isRefreshing
                     ) {
-                        Text("내역")
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = "포인트 내역",
-                            modifier = Modifier.size(16.dp).padding(start = 4.dp)
+                            Icons.Default.Refresh,
+                            contentDescription = "새로고침",
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
                 }

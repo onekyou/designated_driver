@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.designated.customer.data.model.CustomerCall
+import com.designated.customer.data.model.CustomerGrade
 import com.designated.customer.service.CallService
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -76,6 +77,8 @@ class CallHistoryViewModel(
     }
 
     private fun calculateSummary(calls: List<CustomerCall>): CallSummary {
+        android.util.Log.d("CallHistoryViewModel", "calculateSummary 시작: 전체 콜 ${calls.size}개")
+
         val currentMonth = Calendar.getInstance().apply {
             set(Calendar.DAY_OF_MONTH, 1)
             set(Calendar.HOUR_OF_DAY, 0)
@@ -85,29 +88,33 @@ class CallHistoryViewModel(
         }.timeInMillis
 
         val completedCalls = calls.filter { it.status.equals("COMPLETED", ignoreCase = true) }
+        android.util.Log.d("CallHistoryViewModel", "완료된 콜: ${completedCalls.size}개")
+
+        completedCalls.forEachIndexed { index, call ->
+            android.util.Log.d("CallHistoryViewModel", "콜 #$index: status=${call.status}, fare=${call.fare}, grade=${call.customerGrade}")
+        }
+
         val thisMonthCalls = completedCalls.filter { it.timestamp >= currentMonth }
 
-        return CallSummary(
+        val summary = CallSummary(
             totalRides = completedCalls.size,
             totalAmount = completedCalls.sumOf { it.fare ?: 0 },
             totalPointsEarned = calculateTotalPointsEarned(completedCalls),
             thisMonthRides = thisMonthCalls.size,
             thisMonthAmount = thisMonthCalls.sumOf { it.fare ?: 0 }
         )
+
+        android.util.Log.d("CallHistoryViewModel", "요약: 총 ${summary.totalRides}건, 총액 ${summary.totalAmount}원, 적립 ${summary.totalPointsEarned}P")
+
+        return summary
     }
 
     private fun calculateTotalPointsEarned(calls: List<CustomerCall>): Int {
         return calls.sumOf { call ->
             val fare = call.fare ?: 0
             val grade = call.customerGrade?.lowercase() ?: "bronze"
-            val rate = when (grade) {
-                "bronze" -> 0.01
-                "silver" -> 0.02
-                "gold" -> 0.03
-                "vip" -> 0.05
-                else -> 0.01
-            }
-            (fare * rate).toInt()
+            // CustomerGrade enum을 사용하여 적립률 계산
+            CustomerGrade.fromString(grade).calculatePoints(fare)
         }
     }
 

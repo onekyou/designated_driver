@@ -29,7 +29,7 @@ class PointHistoryViewModel(
 
     init {
         loadPointHistory()
-        observePointHistory()
+        // ✅ Real-time Listener 제거 - 1회 조회만 수행
     }
 
     private fun loadPointHistory() {
@@ -46,14 +46,6 @@ class PointHistoryViewModel(
                     isLoading = false,
                     error = "포인트 내역을 불러올 수 없습니다: ${e.message}"
                 )
-            }
-        }
-    }
-
-    private fun observePointHistory() {
-        viewModelScope.launch {
-            pointService.observePointTransactions(phoneNumber).collectLatest { transactions ->
-                uiState = uiState.copy(transactions = transactions)
             }
         }
     }

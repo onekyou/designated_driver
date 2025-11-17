@@ -30,7 +30,9 @@ class AttributionMatchingService(
             val bankName: String?,
             val accountNumber: String?,
             val accountHolder: String?,
-            val score: Int
+            val score: Int,
+            val referralDriverId: String? = null,
+            val referralDriverName: String? = null
         ) : MatchResult()
 
         data class NoMatch(val message: String) : MatchResult()
@@ -71,6 +73,8 @@ class AttributionMatchingService(
                 val regionId = data["regionId"] as? String
                 val officeId = data["officeId"] as? String
                 val score = (data["score"] as? Number)?.toInt() ?: 0
+                val referralDriverId = data["referralDriverId"] as? String
+                val referralDriverName = data["referralDriverName"] as? String
 
                 if (regionId != null && officeId != null) {
                     // 사무실 정보 가져오기
@@ -83,7 +87,9 @@ class AttributionMatchingService(
                         bankName = officeInfo["bankName"],
                         accountNumber = officeInfo["accountNumber"],
                         accountHolder = officeInfo["accountHolder"],
-                        score = score
+                        score = score,
+                        referralDriverId = referralDriverId,
+                        referralDriverName = referralDriverName
                     )
                 } else {
                     MatchResult.Error("매칭 데이터가 올바르지 않습니다")

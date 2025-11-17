@@ -2,15 +2,16 @@ package com.designated.customer.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+// 메인 컬러 - 포인트/만보기 색상으로 통일
+val Orange = Color(0xFFFFAB00)  // 포인트/만보기 메인 색상
+val OrangeLight = Color(0xFFFFAB00)  // Light도 동일한 색상으로 통일
+val OrangeDark = Color(0xFFE69500)  // 약간 어두운 버전
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+// Secondary 색상도 동일 색상으로 통일
+val Purple80 = Orange
+val PurpleGrey80 = Orange
+val Pink80 = Orange
 
-// 커스텀 색상
-val Orange = Color(0xFFFFAB00)
-val OrangeLight = Color(0xFFFFD54F)
-val OrangeDark = Color(0xFFF57C00)
+val Purple40 = Orange
+val PurpleGrey40 = Orange
+val Pink40 = Orange

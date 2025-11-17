@@ -31,7 +31,7 @@ data class CustomerCall(
             "phoneNumber" to phoneNumber,
             "officeId" to officeId,
             "regionId" to regionId,
-            "customerAddress" to currentLocation, // 콜매니저 필드명
+            "customerAddress" to currentLocation, // 콜매니저 필드명 (출발지만 저장 - 전화 호출과 동일)
             "departure" to currentLocation,
             "destination" to destinationLocation,
             "timestamp" to com.google.firebase.Timestamp(timestamp / 1000, ((timestamp % 1000) * 1000000).toInt()),
@@ -43,7 +43,7 @@ data class CustomerCall(
             // 콜매니저 호환 필드들
             "createdFrom" to createdFrom,
             "customerId" to customerId,
-            "customerName" to customerName,
+            "customerName" to customerName,  // 고객 이름 (MainViewModel에서 설정)
             "customerGrade" to customerGrade,
             "isAppCustomer" to isAppCustomer,
             "pointsUsed" to pointsUsed,

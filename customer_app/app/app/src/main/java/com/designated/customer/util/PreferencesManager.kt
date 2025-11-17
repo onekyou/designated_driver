@@ -21,6 +21,10 @@ class PreferencesManager(context: Context) {
         private const val KEY_ACCOUNT_HOLDER = "account_holder"
         private const val KEY_HOME_ADDRESS = "home_address"
         private const val KEY_FAVORITE_ADDRESSES = "favorite_addresses"
+        private const val KEY_ATTRIBUTION_TOKEN = "attribution_token"
+        private const val KEY_ATTRIBUTION_TOKEN_TIMESTAMP = "attribution_token_timestamp"
+        private const val KEY_DRIVER_ID = "driver_id"
+        private const val KEY_DRIVER_NAME = "driver_name"
     }
 
     // 사무실 정보 저장/조회
@@ -107,6 +111,50 @@ class PreferencesManager(context: Context) {
         saveFavoriteAddresses(current)
     }
 
+    // Attribution 토큰 저장/조회
+    fun saveAttributionToken(token: String) {
+        prefs.edit().apply {
+            putString(KEY_ATTRIBUTION_TOKEN, token)
+            putLong(KEY_ATTRIBUTION_TOKEN_TIMESTAMP, System.currentTimeMillis())
+            apply()
+        }
+    }
+
+    fun getAttributionToken(): String? {
+        val token = prefs.getString(KEY_ATTRIBUTION_TOKEN, null)
+        val timestamp = prefs.getLong(KEY_ATTRIBUTION_TOKEN_TIMESTAMP, 0)
+
+        // 24시간 이내의 토큰만 유효
+        val twentyFourHoursAgo = System.currentTimeMillis() - (24 * 60 * 60 * 1000)
+        return if (token != null && timestamp > twentyFourHoursAgo) {
+            token
+        } else {
+            // 만료된 토큰 삭제
+            clearAttributionToken()
+            null
+        }
+    }
+
+    fun clearAttributionToken() {
+        prefs.edit().apply {
+            remove(KEY_ATTRIBUTION_TOKEN)
+            remove(KEY_ATTRIBUTION_TOKEN_TIMESTAMP)
+            apply()
+        }
+    }
+
+    // 기사 추천 정보 저장/조회
+    fun saveDriverReferralInfo(driverId: String, driverName: String) {
+        prefs.edit().apply {
+            putString(KEY_DRIVER_ID, driverId)
+            putString(KEY_DRIVER_NAME, driverName)
+            apply()
+        }
+    }
+
+    fun getDriverId(): String? = prefs.getString(KEY_DRIVER_ID, null)
+    fun getDriverName(): String? = prefs.getString(KEY_DRIVER_NAME, null)
+
     // 로그아웃
     fun clearUserData() {
         prefs.edit().apply {
@@ -121,6 +169,10 @@ class PreferencesManager(context: Context) {
             remove(KEY_BANK_NAME)
             remove(KEY_ACCOUNT_NUMBER)
             remove(KEY_ACCOUNT_HOLDER)
+            remove(KEY_ATTRIBUTION_TOKEN)
+            remove(KEY_ATTRIBUTION_TOKEN_TIMESTAMP)
+            remove(KEY_DRIVER_ID)
+            remove(KEY_DRIVER_NAME)
             apply()
         }
     }

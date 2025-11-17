@@ -1,52 +1,93 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { initializeApp } from 'firebase/app'
+import { getFirestore, collection, addDoc } from 'firebase/firestore'
+
+// Firebase 설정
+const firebaseConfig = {
+  apiKey: "AIzaSyDECFwLZJwmROE47BYGwME9qLpvPPgKCa0",
+  authDomain: "calldetector-5d61e.firebaseapp.com",
+  projectId: "calldetector-5d61e",
+  storageBucket: "calldetector-5d61e.firebasestorage.app",
+  messagingSenderId: "403670530829",
+  appId: "1:403670530829:web:e41e3a733e45f24f00ca34"
+}
+
+// Firebase 초기화
+const app = initializeApp(firebaseConfig)
+const db = getFirestore(app)
 
 export default function DownloadPage() {
-  const [regionId, setRegionId] = useState<string>('')
-  const [officeId, setOfficeId] = useState<string>('')
   const [officePhone, setOfficePhone] = useState<string>('')
   const [bankName, setBankName] = useState<string>('')
   const [accountNumber, setAccountNumber] = useState<string>('')
   const [accountHolder, setAccountHolder] = useState<string>('')
-  const [deepLinkUrl, setDeepLinkUrl] = useState<string>('')
+  const [token, setToken] = useState<string>('')
 
   useEffect(() => {
     // URL에서 파라미터 추출
     const params = new URLSearchParams(window.location.search)
-    const r = params.get('r') || ''
-    const o = params.get('o') || ''
-    const phone = params.get('phone') || ''
-    const bank = params.get('bank') || ''
-    const account = params.get('account') || ''
-    const holder = params.get('holder') || ''
+    const tokenParam = params.get('token')
 
-    setRegionId(r)
-    setOfficeId(o)
-    setOfficePhone(phone)
-    setBankName(bank)
-    setAccountNumber(account)
-    setAccountHolder(holder)
+    if (tokenParam) {
+      // 토큰 방식
+      setToken(tokenParam)
+      console.log('토큰 다운로드 페이지:', tokenParam)
+      // 토큰 정보는 앱에서 직접 조회하므로 여기서는 저장만
+    } else {
+      // 기사 추천 방식 확인 (r, o, d, dn 파라미터)
+      const regionId = params.get('r')
+      const officeId = params.get('o')
+      const driverId = params.get('d')
+      const driverName = params.get('dn')
 
-    // 딥링크 URL 생성
-    const deepLink = `designatedcustomer://open?r=${r}&o=${o}&phone=${encodeURIComponent(phone)}&bank=${encodeURIComponent(bank)}&account=${encodeURIComponent(account)}&holder=${encodeURIComponent(holder)}`
-    setDeepLinkUrl(deepLink)
+      if (regionId && officeId) {
+        // 기사 추천 방식 - Firestore에 attribution 생성
+        console.log('기사 추천 다운로드:', {regionId, officeId, driverId, driverName})
+
+        // 화면 해상도 가져오기
+        const screenResolution = `${window.screen.width}x${window.screen.height}`
+
+        // Firestore에 attribution 저장 (앱이 설치 후 자동으로 매칭)
+        const attributionData = {
+          screenResolution: screenResolution,
+          driverId: driverId || null,
+          driverName: driverName || null,
+          createdAt: new Date(),
+          claimed: false
+        }
+
+        // Firestore에 저장
+        addDoc(collection(db, 'regions', regionId, 'offices', officeId, 'attributions'), attributionData)
+          .then(() => {
+            console.log('Attribution 저장 완료:', attributionData)
+          })
+          .catch((error) => {
+            console.error('Attribution 저장 실패:', error)
+          })
+      } else {
+        // 기존 방식 (하위 호환)
+        const phone = params.get('phone') || ''
+        const bank = params.get('bank') || ''
+        const account = params.get('account') || ''
+        const holder = params.get('holder') || ''
+
+        setOfficePhone(phone)
+        setBankName(bank)
+        setAccountNumber(account)
+        setAccountHolder(holder)
+      }
+    }
   }, [])
 
   const handleDownloadAPK = () => {
+    // 토큰을 localStorage에 저장 (앱에서 읽을 수 있도록)
+    if (token) {
+      localStorage.setItem('attribution_token', token)
+      console.log('토큰 저장:', token)
+    }
     window.location.href = 'https://calldetector-5d61e.web.app/customer_app.apk'
-  }
-
-  const handleOpenApp = () => {
-    // 딥링크 실행
-    window.location.href = deepLinkUrl
-
-    // 3초 후에도 앱이 안 열렸으면 APK 다운로드 안내
-    setTimeout(() => {
-      if (confirm('앱이 설치되어 있지 않습니다. APK를 다운로드하시겠습니까?')) {
-        handleDownloadAPK()
-      }
-    }, 3000)
   }
 
   return (
@@ -67,7 +108,7 @@ export default function DownloadPage() {
               앱 다운로드
             </h2>
             <p className="text-gray-600">
-              아래 버튼을 눌러 앱을 설치하거나 실행하세요
+              아래 버튼을 눌러 앱을 다운로드하세요
             </p>
           </div>
 
@@ -76,10 +117,6 @@ export default function DownloadPage() {
             <div className="mb-8 bg-white p-6 rounded-lg shadow-lg max-w-md mx-auto">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">사무실 정보</h3>
               <div className="space-y-3 text-left">
-                <div>
-                  <p className="text-sm text-gray-500">사무실</p>
-                  <p className="text-lg font-semibold text-gray-800">{officeId}</p>
-                </div>
                 <div>
                   <p className="text-sm text-gray-500">전화번호</p>
                   <a href={`tel:${officePhone}`} className="text-lg font-semibold text-blue-600 hover:underline">
@@ -101,38 +138,22 @@ export default function DownloadPage() {
           {/* 버튼 */}
           <div className="space-y-4">
             <button
-              onClick={handleOpenApp}
+              onClick={handleDownloadAPK}
               className="w-full max-w-md bg-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-700 transition-colors shadow-lg"
             >
-              앱 열기 (설치되어 있는 경우)
-            </button>
-
-            <button
-              onClick={handleDownloadAPK}
-              className="w-full max-w-md bg-green-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-green-700 transition-colors shadow-lg"
-            >
-              APK 다운로드 (설치되지 않은 경우)
+              APK 다운로드
             </button>
           </div>
 
           {/* 안내 */}
-          <div className="mt-12 bg-yellow-50 border border-yellow-200 rounded-lg p-6 max-w-md mx-auto">
-            <h3 className="font-semibold text-yellow-900 mb-2">📌 설치 안내</h3>
-            <ol className="text-sm text-yellow-800 text-left space-y-2">
-              <li>1. 앱이 이미 설치되어 있다면 "앱 열기" 버튼을 클릭하세요</li>
-              <li>2. 앱이 설치되어 있지 않다면 "APK 다운로드" 버튼을 클릭하세요</li>
-              <li>3. 다운로드한 APK 파일을 실행하여 앱을 설치하세요</li>
-              <li>4. 설치 후 앱을 실행하면 자동으로 사무실 정보가 설정됩니다</li>
+          <div className="mt-12 bg-blue-50 border border-blue-200 rounded-lg p-6 max-w-md mx-auto">
+            <h3 className="font-semibold text-blue-900 mb-2">📌 설치 안내</h3>
+            <ol className="text-sm text-blue-800 text-left space-y-2">
+              <li>1. "APK 다운로드" 버튼을 클릭하여 앱을 다운로드하세요</li>
+              <li>2. 다운로드한 APK 파일을 실행하여 앱을 설치하세요</li>
+              <li>3. 앱을 실행하면 사무실 정보가 자동으로 연결됩니다</li>
             </ol>
           </div>
-
-          {/* 디버그 정보 (개발 단계) */}
-          {deepLinkUrl && (
-            <div className="mt-8 bg-gray-100 p-4 rounded text-xs text-left max-w-md mx-auto">
-              <p className="font-semibold mb-2">Debug Info:</p>
-              <p className="break-all text-gray-600">{deepLinkUrl}</p>
-            </div>
-          )}
         </div>
       </main>
 

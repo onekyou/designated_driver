@@ -29,35 +29,140 @@ export default function LandingPage() {
   const [accountNumber, setAccountNumber] = useState<string>('')
   const [accountHolder, setAccountHolder] = useState<string>('')
 
+  const [driverId, setDriverId] = useState<string>('')
+  const [driverName, setDriverName] = useState<string>('')
+
   useEffect(() => {
-    // URL에서 regionId와 officeId 파싱
-    // Query Parameter 방식: ?r=regionId&o=officeId&phone=...&bank=...&account=...&holder=...
+    // URL에서 토큰 또는 regionId/officeId 파싱
     const params = new URLSearchParams(window.location.search)
+    const token = params.get('token')
     const r = params.get('r')
     const o = params.get('o')
-    const phone = params.get('phone')
-    const bank = params.get('bank')
-    const account = params.get('account')
-    const holder = params.get('holder')
+    const d = params.get('d')
+    const dn = params.get('dn')
 
     console.log('Current search:', window.location.search)
-    console.log('Parsed params - r:', r, 'o:', o)
+    console.log('Parsed params - token:', token, 'r:', r, 'o:', o, 'd:', d, 'dn:', dn)
 
-    if (r && o) {
-      console.log('Setting regionId:', r, 'officeId:', o)
+    if (token) {
+      // 새 방식: 토큰 기반
+      console.log('토큰 방식 - token:', token)
+      handleTokenFlow(token)
+    } else if (r && o) {
+      // 기존 방식 또는 기사 추천: regionId/officeId (하위 호환)
+      console.log('기존 방식 - regionId:', r, 'officeId:', o)
+      const phone = params.get('phone')
+      const bank = params.get('bank')
+      const account = params.get('account')
+      const holder = params.get('holder')
+
       setRegionId(r)
       setOfficeId(o)
+      if (d) setDriverId(d)
+      if (dn) setDriverName(dn)
       if (phone) setOfficePhone(phone)
       if (bank) setBankName(bank)
       if (account) setAccountNumber(account)
       if (holder) setAccountHolder(holder)
     } else {
-      console.log('Invalid URL - missing r or o parameter')
+      console.log('Invalid URL - missing token or (r and o) parameters')
       setHasError(true)
     }
   }, [])
 
   const [hasCollected, setHasCollected] = useState(false)
+  const [token, setToken] = useState<string>('')
+
+  // 토큰 방식 처리
+  const handleTokenFlow = async (tokenValue: string) => {
+    try {
+      setToken(tokenValue)
+      console.log('토큰 플로우 시작:', tokenValue)
+
+      // 토큰 유효성 확인 및 사무실 정보 가져오기
+      const { doc: docImport, getDoc } = await import('firebase/firestore')
+      const tokenDoc = await getDoc(docImport(db, 'attributionTokens', tokenValue))
+
+      if (!tokenDoc.exists()) {
+        console.error('유효하지 않은 토큰')
+        setHasError(true)
+        return
+      }
+
+      const tokenData = tokenDoc.data()
+      console.log('토큰 데이터:', tokenData)
+
+      // 사무실 정보 설정
+      const rid = tokenData.regionId
+      const oid = tokenData.officeId
+
+      if (rid && oid) {
+        setRegionId(rid)
+        setOfficeId(oid)
+        setOfficeName(tokenData.officeName || '대리운전')
+
+        // 핑거프린트 수집 (토큰 포함)
+        await collectFingerprintWithToken(rid, oid, tokenValue)
+      } else {
+        console.error('토큰에 사무실 정보 없음')
+        setHasError(true)
+      }
+
+    } catch (error) {
+      console.error('토큰 처리 실패:', error)
+      setHasError(true)
+    }
+  }
+
+  const collectFingerprintWithToken = async (rid: string, oid: string, tokenValue: string) => {
+    try {
+      // FingerprintJS 초기화
+      const fp = await FingerprintJS.load()
+      const result = await fp.get()
+
+      // 디바이스 정보 수집
+      const deviceInfo = {
+        visitorId: result.visitorId,
+        userAgent: navigator.userAgent,
+        screenResolution: `${window.screen.width}x${window.screen.height}`,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        language: navigator.language,
+        platform: navigator.platform,
+        cookieEnabled: navigator.cookieEnabled,
+        timestamp: Date.now(),
+        regionId: rid,
+        officeId: oid,
+        token: tokenValue // 토큰 포함
+      }
+
+      // Firebase에 저장 (토큰 포함)
+      const { addDoc } = await import('firebase/firestore')
+      const attributionsRef = collection(db, 'regions', rid, 'offices', oid, 'attributions')
+
+      await addDoc(attributionsRef, {
+        ...deviceInfo,
+        createdAt: Timestamp.now(),
+        source: 'landing',
+        linkedOfficeId: oid,
+        expiresAt: Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000)
+      })
+
+      console.log('핑거프린트 + 토큰 저장 완료')
+
+      // 다운로드 페이지로 리다이렉트
+      setTimeout(() => {
+        console.log('다운로드 페이지로 리다이렉트:', `/download?token=${tokenValue}`)
+        window.location.href = `/download?token=${tokenValue}`
+      }, 1000)
+
+    } catch (error) {
+      console.error('핑거프린트 수집 실패:', error)
+      // 실패해도 다운로드 페이지로 리다이렉트
+      setTimeout(() => {
+        window.location.href = `/download?token=${tokenValue}`
+      }, 1000)
+    }
+  }
 
   useEffect(() => {
     if (regionId && officeId && !hasCollected) {
@@ -85,7 +190,9 @@ export default function LandingPage() {
         cookieEnabled: navigator.cookieEnabled,
         timestamp: Date.now(),
         regionId: regionId,
-        officeId: officeId
+        officeId: officeId,
+        ...(driverId && { driverId }), // 기사 추천 정보
+        ...(driverName && { driverName })
       }
 
       // Firebase에 저장
@@ -103,7 +210,9 @@ export default function LandingPage() {
         ...(officePhone && { phone: officePhone }),
         ...(bankName && { bank: bankName }),
         ...(accountNumber && { account: accountNumber }),
-        ...(accountHolder && { holder: accountHolder })
+        ...(accountHolder && { holder: accountHolder }),
+        ...(driverId && { d: driverId }),  // ✅ 기사 ID 추가
+        ...(driverName && { dn: driverName })  // ✅ 기사 이름 추가
       })
 
       // 1초 후 리다이렉트
@@ -116,16 +225,56 @@ export default function LandingPage() {
 
   const savePreAttribution = async (deviceInfo: any) => {
     try {
-      // 동적 경로: regions/{regionId}/offices/{officeId}/attributions/
-      await addDoc(collection(db, 'regions', regionId, 'offices', officeId, 'attributions'), {
+      const { getDocs, query, where, deleteDoc, doc } = await import('firebase/firestore')
+
+      // 1. 모든 지역의 모든 사무실에서 같은 screenResolution의 이전 핑거프린트 삭제 (중복 방지)
+      console.log(`모든 사무실에서 같은 해상도(${deviceInfo.screenResolution})의 핑거프린트 삭제 시작...`)
+
+      const regionsSnapshot = await getDocs(collection(db, 'regions'))
+      let totalDeleted = 0
+
+      for (const regionDoc of regionsSnapshot.docs) {
+        const rid = regionDoc.id
+        const officesSnapshot = await getDocs(collection(db, 'regions', rid, 'offices'))
+
+        for (const officeDoc of officesSnapshot.docs) {
+          const oid = officeDoc.id
+          const attributionsRef = collection(db, 'regions', rid, 'offices', oid, 'attributions')
+          const existingQuery = query(
+            attributionsRef,
+            where('screenResolution', '==', deviceInfo.screenResolution)
+          )
+          const existingDocs = await getDocs(existingQuery)
+
+          for (const doc of existingDocs.docs) {
+            await deleteDoc(doc.ref)
+            totalDeleted++
+          }
+        }
+      }
+
+      console.log(`총 ${totalDeleted}개의 기존 핑거프린트 삭제 완료`)
+
+      // 2. 현재 사무실에 새 핑거프린트 저장
+      const attributionsRef = collection(db, 'regions', regionId, 'offices', officeId, 'attributions')
+
+      // 토큰이 있으면 함께 저장 (토큰 방식 우선)
+      const params = new URLSearchParams(window.location.search)
+      const token = params.get('token')
+
+      await addDoc(attributionsRef, {
         ...deviceInfo,
         createdAt: Timestamp.now(),
         source: 'landing',
         regionId: regionId,
         officeId: officeId,
         linkedOfficeId: officeId, // 콜매니저 CustomerInfo 구조에 맞춤
+        expiresAt: Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000), // 24시간 후 만료
+        ...(token && { token }), // 토큰이 있으면 추가
         // IP는 서버사이드에서 수집
       })
+
+      console.log('새 핑거프린트 저장 완료')
     } catch (error) {
       console.error('어트리뷰션 저장 실패:', error)
     }

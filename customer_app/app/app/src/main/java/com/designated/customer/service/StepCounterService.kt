@@ -1,6 +1,10 @@
 package com.designated.customer.service
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
+import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -8,7 +12,12 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.os.Binder
+import android.os.Build
+import android.os.IBinder
+import androidx.core.app.NotificationCompat
 import com.designated.customer.data.repository.StepRepository
+import com.designated.customer.data.database.StepDatabase
 import com.google.android.gms.location.ActivityRecognition
 import com.google.android.gms.location.ActivityTransition
 import com.google.android.gms.location.ActivityTransitionRequest
@@ -16,32 +25,29 @@ import com.google.android.gms.location.DetectedActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 /**
- * 만보기 센서를 관리하는 서비스
+ * 만보기 센서를 관리하는 Foreground Service
  */
-class StepCounterService(
-    private val context: Context,
-    private val repository: StepRepository
-) : SensorEventListener {
+class StepCounterService : Service(), SensorEventListener {
 
-    private val sensorManager: SensorManager =
-        context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+    private val binder = LocalBinder()
+    private lateinit var repository: StepRepository
+
+    private lateinit var sensorManager: SensorManager
 
     // TYPE_STEP_COUNTER: 부팅 이후 총 걸음수 (정확하지만 느림)
-    private val stepCounterSensor: Sensor? =
-        sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
+    private var stepCounterSensor: Sensor? = null
 
     // TYPE_STEP_DETECTOR: 걸음 감지 즉시 이벤트 발생 (빠름)
-    private val stepDetectorSensor: Sensor? =
-        sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)
+    private var stepDetectorSensor: Sensor? = null
 
-    private val prefs: SharedPreferences =
-        context.getSharedPreferences("step_counter_prefs", Context.MODE_PRIVATE)
+    private lateinit var prefs: SharedPreferences
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -80,9 +86,28 @@ class StepCounterService(
         private const val KEY_LAST_DATE = "last_date"
         private const val KEY_TODAY_STEPS = "today_steps"
         private const val KEY_IS_WALKING = "is_walking"
+
+        private const val NOTIFICATION_ID = 1001
+        private const val CHANNEL_ID = "step_counter_channel"
     }
 
-    init {
+    inner class LocalBinder : Binder() {
+        fun getService(): StepCounterService = this@StepCounterService
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+
+        // 초기화
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        stepCounterSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
+        stepDetectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)
+        prefs = getSharedPreferences("step_counter_prefs", Context.MODE_PRIVATE)
+
+        // Repository 초기화
+        val database = StepDatabase.getInstance(applicationContext)
+        repository = StepRepository(database.stepDao())
+
         // 저장된 활동 상태 로드
         isWalkingOrRunning = prefs.getBoolean(KEY_IS_WALKING, true)
 
@@ -91,6 +116,71 @@ class StepCounterService(
 
         // Activity Recognition 시작
         startActivityRecognition()
+
+        // Foreground Service 시작
+        startForeground(NOTIFICATION_ID, createNotification(0))
+
+        // 센서 리스닝 시작
+        startListening()
+    }
+
+    override fun onBind(intent: Intent?): IBinder {
+        return binder
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        return START_STICKY // 서비스가 종료되어도 자동으로 재시작
+    }
+
+    /**
+     * Notification 생성
+     */
+    private fun createNotification(steps: Int): Notification {
+        createNotificationChannel()
+
+        val notificationIntent = Intent(this, com.designated.customer.MainActivity::class.java)
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            notificationIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("만보기 실행 중")
+            .setContentText("오늘 걸음 수: $steps 걸음")
+            .setSmallIcon(android.R.drawable.ic_menu_compass)
+            .setContentIntent(pendingIntent)
+            .setOngoing(true)
+            .build()
+    }
+
+    /**
+     * Notification Channel 생성 (Android 8.0+)
+     */
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "만보기 서비스",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "백그라운드에서 걸음 수를 추적합니다"
+                setShowBadge(false)
+            }
+
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    /**
+     * Notification 업데이트
+     */
+    private fun updateNotification(steps: Int) {
+        val notification = createNotification(steps)
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(NOTIFICATION_ID, notification)
     }
 
     /**
@@ -99,7 +189,7 @@ class StepCounterService(
     private fun startActivityRecognition() {
         // 권한 체크 (Android 10+)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            val hasPermission = context.checkSelfPermission(android.Manifest.permission.ACTIVITY_RECOGNITION) ==
+            val hasPermission = checkSelfPermission(android.Manifest.permission.ACTIVITY_RECOGNITION) ==
                 android.content.pm.PackageManager.PERMISSION_GRANTED
 
             if (!hasPermission) {
@@ -155,7 +245,7 @@ class StepCounterService(
             val request = ActivityTransitionRequest(transitions)
 
             // Activity Recognition API를 통해 활동 감지 시작
-            val task = ActivityRecognition.getClient(context)
+            val task = ActivityRecognition.getClient(this)
                 .requestActivityUpdates(5000L, createActivityPendingIntent())
 
             task.addOnSuccessListener {
@@ -175,9 +265,9 @@ class StepCounterService(
      * Activity Recognition 결과를 받을 PendingIntent 생성
      */
     private fun createActivityPendingIntent(): PendingIntent {
-        val intent = Intent(context, ActivityRecognitionReceiver::class.java)
+        val intent = Intent(this, ActivityRecognitionReceiver::class.java)
         return PendingIntent.getBroadcast(
-            context,
+            this,
             0,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
@@ -280,7 +370,7 @@ class StepCounterService(
 
         // Activity Recognition 중지
         try {
-            ActivityRecognition.getClient(context)
+            ActivityRecognition.getClient(this)
                 .removeActivityUpdates(createActivityPendingIntent())
                 .addOnSuccessListener {
                     // Activity Recognition 중지됨
@@ -291,6 +381,12 @@ class StepCounterService(
 
         // Receiver 등록 해제
         ActivityRecognitionReceiver.unregisterService()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        stopListening()
+        serviceScope.cancel() // 코루틴 스코프 해제 (메모리 누수 방지)
     }
 
     /**
@@ -304,6 +400,10 @@ class StepCounterService(
                     if (isWalkingOrRunning) {
                         _currentSteps.value++
                         updateSessionSteps()
+                        // 10걸음마다 알림 업데이트
+                        if (_currentSteps.value % 10 == 0) {
+                            updateNotification(_currentSteps.value)
+                        }
                     }
                 }
 
