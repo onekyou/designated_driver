@@ -6,9 +6,6 @@
     <!-- 전화 상태 읽기 권한: 전화가 오는지, 끊겼는지 알기 위해 필요해요 -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
-    <!-- 통화 기록 읽기 권한: 전화번호, 통화 시간 등을 가져오기 위해 필요해요 -->
-    <uses-permission android:name="android.permission.READ_CALL_LOG" />
-
     <!-- 연락처 읽기 권한: 전화번호로 저장된 이름을 찾기 위해 필요해요 -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
 
@@ -34,10 +31,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
-    
-    <!-- SMS 발송 권한 (공유콜 시스템용) -->
-    <uses-permission android:name="android.permission.SEND_SMS" />
-    
+
     <!-- 화면 위에 그리기 권한 (다른 앱 위에 표시) - 백그라운드에서 팝업 생성용 -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
@@ -52,7 +46,12 @@
         android:theme="@style/Theme.CallDetector"
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
-        
+
+        <!-- Sentry 비활성화 -->
+        <meta-data
+            android:name="io.sentry.auto-init"
+            android:value="false" />
+
         <!-- 메인 액티비티 -->
         <activity
             android:name=".MainActivity"
@@ -108,7 +107,17 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
-            
+
+        <!-- CallScreeningService - 전화번호 확인 (스팸 차단 앱 권한) -->
+        <service
+            android:name=".CallScreeningService"
+            android:permission="android.permission.BIND_SCREENING_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.telecom.CallScreeningService" />
+            </intent-filter>
+        </service>
+
         <!-- 부팅 완료 브로드캐스트 리시버 -->
         <receiver
             android:name=".BootCompletedReceiver"

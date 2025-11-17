@@ -43,11 +43,24 @@ class CallReceiver : BroadcastReceiver() {
 
         } else if (action == "android.intent.action.PHONE_STATE") {
             val stateStr = intent.getStringExtra(TelephonyManager.EXTRA_STATE)
-            val numberFromIntentExtras = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER)
+
+            // Android 버전에 따라 전화번호 가져오기
+            val numberFromIntentExtras = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // Android 10+: CallScreeningService에서 가져오기
+                CallScreeningService.latestIncomingNumber
+            } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+                // Android 8.1 이하: Intent에서 가져오기 (작동함)
+                intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER)
+            } else {
+                // Android 9 (API 28): 정책 공백 - 지원 불가
+                Log.w(tag, "⚠️ Android 9 detected - Phone number not available (policy gap)")
+                null
+            }
+
             var callStateFromTelephony = TelephonyManager.CALL_STATE_IDLE // 현재 전화 상태
 
             // Log details from the PHONE_STATE intent
-            Log.i(tag, "PHONE_STATE received. stateStr: $stateStr, numberFromIntentExtras: $numberFromIntentExtras, current staticSavedNumber: $staticSavedNumber, current staticIsIncoming: $staticIsIncoming")
+            Log.i(tag, "PHONE_STATE received. stateStr: $stateStr, numberFromIntentExtras: $numberFromIntentExtras (SDK: ${Build.VERSION.SDK_INT}), current staticSavedNumber: $staticSavedNumber, current staticIsIncoming: $staticIsIncoming")
 
             var numberToPass: String? = null
             var isIncomingToPass: Boolean = false
@@ -96,6 +109,12 @@ class CallReceiver : BroadcastReceiver() {
                         Log.i(tag, "Resetting static variables after delay as call is IDLE.")
                         staticSavedNumber = null
                         staticIsIncoming = false
+
+                        // CallScreeningService 초기화 (Android 10+)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            CallScreeningService.clearIncomingNumber()
+                            Log.i(tag, "CallScreeningService phone number cleared")
+                        }
                     }
                 }, 1000) // 1초 지연 후 초기화
             }

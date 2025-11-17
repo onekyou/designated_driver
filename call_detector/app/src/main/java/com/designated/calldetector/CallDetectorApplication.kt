@@ -5,6 +5,8 @@ import android.content.ComponentCallbacks2
 import android.content.res.Configuration
 import com.google.firebase.FirebaseApp
 import com.google.firebase.crashlytics.FirebaseCrashlytics
+import io.sentry.android.core.SentryAndroid
+import io.sentry.SentryLevel
 
 /**
  * CallDetector Application 클래스
@@ -28,15 +30,18 @@ class CallDetectorApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         INSTANCE = this
-        
+
+        // Sentry 초기화 (가장 먼저 초기화하여 모든 에러 캡처)
+        initializeSentry()
+
         // Firebase 초기화 및 확인
         val app = FirebaseApp.initializeApp(this)
         android.util.Log.d("CallDetectorApp", "Firebase initialized: ${app?.name}")
-        
+
         // Firebase 프로젝트 정보 확인
         android.util.Log.d("CallDetectorApp", "Project ID: ${app?.options?.projectId}")
         android.util.Log.d("CallDetectorApp", "App ID: ${app?.options?.applicationId}")
-        
+
         // Crashlytics 설정
         setupCrashlytics()
         
@@ -67,10 +72,10 @@ class CallDetectorApplication : Application() {
     
     private fun setupCrashlytics() {
         val crashlytics = FirebaseCrashlytics.getInstance()
-        
+
         // Crashlytics 활성화
         crashlytics.setCrashlyticsCollectionEnabled(true)
-        
+
         // 개발/프로덕션 환경 구분
         try {
             val packageInfo = packageManager.getPackageInfo(packageName, 0)
@@ -80,5 +85,42 @@ class CallDetectorApplication : Application() {
             crashlytics.setCustomKey("app_version", "1.0")
         }
         crashlytics.setCustomKey("app_type", "CALL_DETECTOR")
+    }
+
+    private fun initializeSentry() {
+        SentryAndroid.init(this) { options ->
+            // DSN 설정
+            options.dsn = "https://2b898c264c535b3fdbbff7201d1a2d27@o4510356858535936.ingest.us.sentry.io/4510356866203648"
+
+            // 환경 설정 (debug/release)
+            options.environment = if (BuildConfig.DEBUG) "debug" else "production"
+
+            // 릴리스 버전 설정
+            try {
+                val packageInfo = packageManager.getPackageInfo(packageName, 0)
+                options.release = "${packageInfo.versionName} (${packageInfo.versionCode})"
+            } catch (e: Exception) {
+                options.release = "1.0.0"
+            }
+
+            // 앱 타입 태그 추가
+            options.setTag("app_type", "CALL_DETECTOR")
+
+            // 디버그 로그 활성화 (개발 중에만)
+            options.isDebug = BuildConfig.DEBUG
+
+            // 샘플링 비율 설정
+            options.tracesSampleRate = if (BuildConfig.DEBUG) 1.0 else 0.2
+
+            // ANR (Application Not Responding) 감지
+            options.isEnableAutoSessionTracking = true
+            options.isAnrEnabled = true
+
+            // 첨부 파일 및 스크린샷
+            options.isAttachScreenshot = true
+            options.isAttachViewHierarchy = true
+
+            android.util.Log.i("CallDetectorApp", "✅ Sentry 초기화 완료")
+        }
     }
 }

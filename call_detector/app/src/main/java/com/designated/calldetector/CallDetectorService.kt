@@ -25,7 +25,6 @@ import android.view.LayoutInflater
 import android.view.WindowManager
 import android.widget.TextView
 import android.os.IBinder
-import android.provider.CallLog
 import android.provider.ContactsContract
 import android.telephony.TelephonyManager
 import android.telephony.SmsManager
@@ -40,6 +39,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.cancel
 
 class CallDetectorService : Service() {
     private var lastProcessedPhoneNumber: String? = null
@@ -66,12 +66,11 @@ class CallDetectorService : Service() {
         super.onCreate()
 
         // ------ Runtime permission check ------
-        val hasReadCallLog = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED
         val hasReadPhoneState = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
 
-        if (!hasReadCallLog || !hasReadPhoneState) {
+        if (!hasReadPhoneState) {
             // 필수 권한이 없으면 서비스 실행을 중단하여 SecurityException으로 인한 크래시를 예방합니다.
-            Log.e(TAG, "❌ Required permissions (READ_CALL_LOG / READ_PHONE_STATE) not granted. Stopping service to avoid crash.")
+            Log.e(TAG, "❌ Required permission (READ_PHONE_STATE) not granted. Stopping service to avoid crash.")
             stopSelf()
             return
         }
@@ -111,13 +110,7 @@ class CallDetectorService : Service() {
 
         if (phoneNumber != null) {
             val currentTime = System.currentTimeMillis()
-            
-            // 서비스 시작 시간 이후의 통화만 처리 (5초 여유 시간 추가)
-            if (currentTime < serviceStartTime + 5000) {
-                Log.i(TAG, "⏰ Ignoring call from $phoneNumber - occurred before/during service startup (current: $currentTime, serviceStart: $serviceStartTime)")
-                return START_NOT_STICKY
-            }
-            
+
             // 1. Handle call ending (IDLE state) - 원래 로직으로 복원
             if (callState == TelephonyManager.CALL_STATE_IDLE) {
                 if (phoneNumber == lastProcessedPhoneNumber) {
@@ -629,10 +622,10 @@ class CallDetectorService : Service() {
                 
                 db.collection("shared_calls")
                     .add(sharedCallData)
-                    .addOnSuccessListener { 
-                        Log.i(TAG, "✅ 부재중 전화 공유콜 생성 완료")
-                        // SMS 발송
-                        sendAutoSMS(phoneNumber, officeName)
+                    .addOnSuccessListener {
+                        Log.i(TAG, "✅ 부재중 전화 공유콜 생성 완료 - Cloud Functions에서 FCM 처리")
+                        // SMS 발송 제거 - Cloud Functions에서 FCM으로 처리
+                        // sendAutoSMS(phoneNumber, officeName)
                     }
                     .addOnFailureListener { e ->
                         Log.e(TAG, "❌ 부재중 전화 공유콜 생성 실패", e)
@@ -648,7 +641,7 @@ class CallDetectorService : Service() {
     /**
      * 사무실 상태 확인 후 일반 콜 또는 공유 콜 생성
      */
-    private fun checkOfficeStatusAndSaveCall(
+    private suspend fun checkOfficeStatusAndSaveCall(
         regionId: String,
         officeId: String,
         phoneNumber: String,
@@ -656,39 +649,41 @@ class CallDetectorService : Service() {
         contactAddress: String?,
         deviceName: String
     ) {
-        // 사무실 상태 확인
-        db.collection("regions").document(regionId)
-            .collection("offices").document(officeId)
-            .get()
-            .addOnSuccessListener { document ->
-                val officeStatus = document.getString("status") ?: "OPEN"
-                val officeName = document.getString("name") ?: "사무실"
-                
-                Log.i(TAG, "사무실 상태: $officeStatus")
-                
-                when (officeStatus) {
-                    "CLOSED" -> {
-                        // 마감 상태: shared_calls에 저장 및 자동 SMS 발송
-                        createSharedCall(regionId, officeId, phoneNumber, contactName, contactAddress, deviceName)
-                        sendAutoSMS(phoneNumber, officeName)
-                    }
-                    else -> {
-                        // 운영중: 기존대로 calls에 저장
-                        createNormalCall(regionId, officeId, phoneNumber, contactName, contactAddress, deviceName)
-                    }
+        try {
+            // 사무실 상태 확인
+            val document = db.collection("regions").document(regionId)
+                .collection("offices").document(officeId)
+                .get()
+                .await()
+
+            val officeStatus = document.getString("status") ?: "OPEN"
+            val officeName = document.getString("name") ?: "사무실"
+
+            Log.i(TAG, "사무실 상태: $officeStatus")
+
+            when (officeStatus) {
+                "CLOSED" -> {
+                    // 마감 상태: shared_calls에 저장 (Cloud Functions에서 FCM 알림 처리)
+                    createSharedCall(regionId, officeId, phoneNumber, contactName, contactAddress, deviceName)
+                    // SMS 발송 제거 - Cloud Functions에서 FCM으로 처리
+                    // sendAutoSMS(phoneNumber, officeName)
+                }
+                else -> {
+                    // 운영중: 기존대로 calls에 저장
+                    createNormalCall(regionId, officeId, phoneNumber, contactName, contactAddress, deviceName)
                 }
             }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "사무실 상태 확인 실패", e)
-                // 실패시 기본적으로 calls에 저장
-                createNormalCall(regionId, officeId, phoneNumber, contactName, contactAddress, deviceName)
-            }
+        } catch (e: Exception) {
+            Log.e(TAG, "사무실 상태 확인 실패", e)
+            // 실패시 기본적으로 calls에 저장
+            createNormalCall(regionId, officeId, phoneNumber, contactName, contactAddress, deviceName)
+        }
     }
     
     /**
      * 일반 콜 생성 (운영중)
      */
-    private fun createNormalCall(
+    private suspend fun createNormalCall(
         regionId: String,
         officeId: String,
         phoneNumber: String,
@@ -696,56 +691,81 @@ class CallDetectorService : Service() {
         contactAddress: String?,
         deviceName: String
     ) {
-        val callData = hashMapOf<String, Any>(
-            "phoneNumber" to phoneNumber,
-            "customerName" to (contactName ?: ""),
-            "customerAddress" to (contactAddress ?: ""),
-            "status" to CallStatus.WAITING.firestoreValue,
-            "timestamp" to FieldValue.serverTimestamp(),
-            "detectedTimestamp" to FieldValue.serverTimestamp(),
-            "regionId" to regionId,
-            "officeId" to officeId,
-            "deviceName" to deviceName,
-            "callType" to "수신",
-            "timestampClient" to System.currentTimeMillis(),
-            "fromCallDetector" to true // 독립 콜디텍터에서 생성된 콜 (콜매니저에서 팝업 표시 방지)
-        )
-        
-        // Firebase에 먼저 업로드하고 ID를 받아서 팝업 생성 (콜매니저와 동일한 방식)
-        val targetPath = "regions/$regionId/offices/$officeId/calls"
-        Log.i(TAG, "🚨 About to upload callData: $callData")
-        Log.i(TAG, "🚨 fromCallDetector value: ${callData["fromCallDetector"]}")
+        try {
+            // ✅ 추가: customerInfo 컬렉션 확인하여 앱 회원 여부 판별
+            Log.i(TAG, "📱 customerInfo 컬렉션 조회 시작: $phoneNumber")
+            val customerDoc = db
+                .collection("regions").document(regionId)
+                .collection("offices").document(officeId)
+                .collection("customerInfo")
+                .document(phoneNumber)
+                .get()
+                .await()
 
-        db.collection(targetPath)
-            .add(callData)
-            .addOnSuccessListener { documentReference ->
-                Log.i(TAG, "✅ Call data saved to Firestore with ID: ${documentReference.id}")
-
-                // Firebase ID를 받은 후 팝업 생성
-                bringMainActivityToForegroundForNewCall(
-                    documentReference.id,
-                    phoneNumber,
-                    contactName,
-                    contactAddress,
-                    regionId,
-                    officeId
-                )
-
-                Log.i(TAG, "✅ Call end processing completed")
+            val isAppCustomer = customerDoc.exists()
+            val customerHomeAddress = if (isAppCustomer) {
+                customerDoc.getString("homeAddress") ?: ""
+            } else {
+                ""
             }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "❌ Failed to save call data to Firestore: ${e.message}", e)
-                // 실패 시에도 임시 ID로 팝업 생성
-                val tempCallId = "temp_${System.currentTimeMillis()}"
-                bringMainActivityToForegroundForNewCall(
-                    tempCallId,
-                    phoneNumber,
-                    contactName,
-                    contactAddress,
-                    regionId,
-                    officeId
-                )
-            }
+            Log.i(TAG, "📱 앱 회원 여부: $isAppCustomer (phoneNumber: $phoneNumber)")
+            Log.i(TAG, "📱 앱 회원 집주소: $customerHomeAddress")
+
+            val callData = hashMapOf<String, Any>(
+                "phoneNumber" to phoneNumber,
+                "customerName" to (contactName ?: ""),
+                "customerAddress" to (customerHomeAddress.takeIf { it.isNotBlank() } ?: contactAddress ?: ""),
+                "status" to CallStatus.WAITING.firestoreValue,
+                "timestamp" to FieldValue.serverTimestamp(),
+                "detectedTimestamp" to FieldValue.serverTimestamp(),
+                "regionId" to regionId,
+                "officeId" to officeId,
+                "deviceName" to deviceName,
+                "callType" to "수신",
+                "timestampClient" to System.currentTimeMillis(),
+                "fromCallDetector" to true, // 독립 콜디텍터에서 생성된 콜 (콜매니저에서 팝업 표시 방지)
+                "isAppCustomer" to isAppCustomer,  // ✅ 추가: 앱 회원 여부
+                "customerId" to if (isAppCustomer) phoneNumber else "",  // ✅ 추가: 회원이면 phoneNumber
+                "createdFrom" to "phone"  // ✅ 추가: 전화로 생성됨
+            )
+
+            // Firebase에 먼저 업로드하고 ID를 받아서 팝업 생성 (콜매니저와 동일한 방식)
+            val targetPath = "regions/$regionId/offices/$officeId/calls"
+            Log.i(TAG, "🚨 About to upload callData: $callData")
+            Log.i(TAG, "🚨 fromCallDetector value: ${callData["fromCallDetector"]}")
+            Log.i(TAG, "🚨 isAppCustomer value: ${callData["isAppCustomer"]}")
+
+            val documentReference = db.collection(targetPath)
+                .add(callData)
+                .await()
+
+            Log.i(TAG, "✅ Call data saved to Firestore with ID: ${documentReference.id}")
+
+            // Firebase ID를 받은 후 팝업 생성
+            bringMainActivityToForegroundForNewCall(
+                documentReference.id,
+                phoneNumber,
+                contactName,
+                contactAddress,
+                regionId,
+                officeId
+            )
+
+            Log.i(TAG, "✅ Call end processing completed")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to create normal call: ${e.message}", e)
+            // 실패 시에도 임시 ID로 팝업 생성
+            val tempCallId = "temp_${System.currentTimeMillis()}"
+            bringMainActivityToForegroundForNewCall(
+                tempCallId,
+                phoneNumber,
+                contactName,
+                contactAddress,
+                regionId,
+                officeId
+            )
+        }
     }
     
     /**
@@ -785,33 +805,36 @@ class CallDetectorService : Service() {
     }
     
     /**
-     * 자동 SMS 발송
+     * 자동 SMS 발송 (비활성화 - Cloud Functions에서 FCM으로 대체)
+     * 나중에 SMS Gateway 구축 시 재활용 가능
      */
+    /*
     private fun sendAutoSMS(phoneNumber: String, officeName: String) {
         try {
             // SMS 권한 체크
-            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.SEND_SMS) 
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.SEND_SMS)
                 != PackageManager.PERMISSION_GRANTED) {
                 Log.e(TAG, "SMS 권한이 없습니다.")
                 return
             }
-            
+
             val message = "[$officeName] 운영시간이 종료되었습니다. 잠시 후 다시 연락드리겠습니다."
-            
+
             val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 getSystemService(SmsManager::class.java)
             } else {
                 @Suppress("DEPRECATION")
                 SmsManager.getDefault()
             }
-            
+
             smsManager.sendTextMessage(phoneNumber, null, message, null, null)
             Log.i(TAG, "✅ 자동 SMS 발송 완료: $phoneNumber")
-            
+
         } catch (e: Exception) {
             Log.e(TAG, "SMS 발송 실패", e)
         }
     }
+    */
 
     /**
      * 마감 상태 확인 후 빠른 SMS 발송 (RINGING 상태용)
@@ -843,11 +866,11 @@ class CallDetectorService : Service() {
                 
                 // 공유콜 생성 (RINGING에서)
                 createSharedCallFromRinging(regionId, officeId, phoneNumber, contactName, contactAddress, deviceName)
-                
-                // SMS 발송
-                sendAutoSMS(phoneNumber, officeName)
-                
-                Log.i(TAG, "✅ 마감 시 빠른 응답 완료 (RINGING → SMS)")
+
+                // SMS 발송 제거 - Cloud Functions에서 FCM으로 처리
+                // sendAutoSMS(phoneNumber, officeName)
+
+                Log.i(TAG, "✅ 마감 시 빠른 응답 완료 (RINGING → Cloud Functions FCM)")
             }
         } catch (e: Exception) {
             Log.e(TAG, "❌ 빠른 응답 처리 실패", e)
@@ -895,6 +918,7 @@ class CallDetectorService : Service() {
         super.onDestroy()
         // CallLogObserver 비활성화
         // contentResolver.unregisterContentObserver(callLogObserver)
+        serviceScope.cancel() // 코루틴 스코프 해제 (메모리 누수 방지)
         Log.i(TAG, "Service destroyed.")
     }
     

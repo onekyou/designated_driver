@@ -1,6 +1,7 @@
 package com.designated.calldetector
 
 import android.Manifest
+import android.app.role.RoleManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -89,8 +90,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var permissionManager: CallDetectorPermissionManager
     private lateinit var requestPermissionsLauncher: ActivityResultLauncher<Array<String>>
     private lateinit var overlayPermissionLauncher: ActivityResultLauncher<Intent>
+    private lateinit var callScreeningRoleLauncher: ActivityResultLauncher<Intent>
     private lateinit var sharedPreferences: SharedPreferences
-    
+
     // 권한 상태 새로고침을 위한 콜백 저장
     private var permissionRefreshCallback: (() -> Unit)? = null
 
@@ -128,7 +130,23 @@ class MainActivity : ComponentActivity() {
         ) {
             permissionManager.onOverlayPermissionResult()
         }
-        
+
+        // CallScreeningService Role 런처 등록 (Android 10+)
+        callScreeningRoleLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val roleManager = getSystemService(Context.ROLE_SERVICE) as? RoleManager
+                if (roleManager?.isRoleHeld(RoleManager.ROLE_CALL_SCREENING) == true) {
+                    showToast("스팸 차단 앱으로 설정되었습니다")
+                } else {
+                    showToast("스팸 차단 앱 설정이 취소되었습니다")
+                }
+                // 권한 상태 새로고침
+                refreshPermissionState()
+            }
+        }
+
         // 권한 관리자에 런처 등록
         permissionManager.initialize(requestPermissionsLauncher, overlayPermissionLauncher)
         
@@ -214,8 +232,11 @@ class MainActivity : ComponentActivity() {
                         StatusScreen(
                             hasAllPermissions = hasAllPermissions,
                             onNavigateToSettings = { currentScreen = ScreenState.SETTINGS },
-                            onRequestPermissions = { 
+                            onRequestPermissions = {
                                 permissionManager.requestAllPermissions()
+                            },
+                            onRequestCallScreeningRole = {
+                                requestCallScreeningRole()
                             },
                             onLogout = {
                                 // 로그아웃 처리
@@ -373,6 +394,80 @@ class MainActivity : ComponentActivity() {
 
     private fun showToast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * CallScreeningService (ROLE_CALL_SCREENING) 권한 요청
+     * Android 10+ (API 29) 전용
+     */
+    fun requestCallScreeningRole() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val roleManager = getSystemService(Context.ROLE_SERVICE) as? RoleManager
+            if (roleManager?.isRoleHeld(RoleManager.ROLE_CALL_SCREENING) != true) {
+                try {
+                    val intent = roleManager?.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING)
+                    if (intent != null) {
+                        callScreeningRoleLauncher.launch(intent)
+                    }
+                } catch (e: Exception) {
+                    Log.e(tag, "CallScreeningRole 요청 실패", e)
+                    showToast("스팸 차단 앱 권한 요청에 실패했습니다")
+                }
+            } else {
+                showToast("이미 스팸 차단 앱으로 설정되어 있습니다")
+            }
+        } else {
+            showToast("Android 10 이상에서만 지원됩니다")
+        }
+    }
+
+    /**
+     * CallScreeningService 권한이 설정되어 있는지 확인
+     */
+    fun isCallScreeningRoleHeld(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val roleManager = getSystemService(Context.ROLE_SERVICE) as? RoleManager
+            roleManager?.isRoleHeld(RoleManager.ROLE_CALL_SCREENING) == true
+        } else {
+            // Android 9 이하는 지원하지 않으므로 true 반환 (경고 표시 안 함)
+            true
+        }
+    }
+
+    /**
+     * InCallService가 활성화되어 있는지 확인
+     * Android 6.0 (API 23) 이상에서만 사용 가능
+     */
+    fun isInCallServiceEnabled(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return false
+        }
+
+        try {
+            val telecomManager = getSystemService(Context.TELECOM_SERVICE) as? android.telecom.TelecomManager
+            return telecomManager?.getDefaultDialerPackage() == packageName
+        } catch (e: Exception) {
+            Log.e(tag, "InCallService 활성화 체크 실패", e)
+            return false
+        }
+    }
+
+    /**
+     * InCallService 설정 화면으로 이동
+     */
+    fun openInCallServiceSettings() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val intent = Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
+                startActivity(intent)
+                showToast("'통화 앱' 또는 'Call app' 메뉴에서 이 앱을 선택해주세요")
+            } else {
+                showToast("Android 6.0 이상에서만 지원됩니다")
+            }
+        } catch (e: Exception) {
+            Log.e(tag, "InCallService 설정 화면 열기 실패", e)
+            showToast("설정 화면을 열 수 없습니다")
+        }
     }
 }
 
@@ -654,8 +749,19 @@ fun StatusScreen(
     onNavigateToSettings: () -> Unit,
     onRequestPermissions: () -> Unit,
     onLogout: () -> Unit,
-    onRefreshPermissions: () -> Unit = {}
+    onRefreshPermissions: () -> Unit = {},
+    onRequestCallScreeningRole: () -> Unit = {}
 ) {
+    val context = LocalContext.current as? MainActivity
+    val isCallScreeningRoleHeld = remember {
+        mutableStateOf(context?.isCallScreeningRoleHeld() ?: true)
+    }
+
+    // 화면이 다시 보일 때마다 CallScreeningService 상태 확인
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        isCallScreeningRoleHeld.value = context?.isCallScreeningRoleHeld() ?: true
+        onDispose { }
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -749,13 +855,83 @@ fun StatusScreen(
             }
             
             Spacer(modifier = Modifier.height(16.dp))
-            
+
+            // CallScreeningService 설정 안내 카드 (Android 10+ 전용, 미설정 시에만 표시)
+            if (!isCallScreeningRoleHeld.value && hasAllPermissions && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFFFF5722) // 빨간색
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "📞 스팸 차단 앱 설정 필요",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "전화번호를 확인하려면 이 앱을 '스팸 차단 앱'으로 설정해야 합니다.\n\n" +
+                                  "이 설정은 통화 감지 및 자동 배차 팝업 기능에 필수입니다.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = onRequestCallScreeningRole,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.White,
+                                contentColor = Color(0xFFFF5722)
+                            )
+                        ) {
+                            Text("스팸 차단 앱으로 설정", style = MaterialTheme.typography.titleSmall)
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // Android 9 경고 메시지
+            if (Build.VERSION.SDK_INT == Build.VERSION_CODES.P && hasAllPermissions) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFFFF9800) // 주황색
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "⚠️ Android 9 제한",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "현재 기기(Android 9)에서는 자동 전화번호 감지가 지원되지 않습니다.\n\n" +
+                                  "Android 10 이상으로 업데이트해주세요.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
             // 개인번호 관리 버튼 추가
-            val context = LocalContext.current
+            val mainContext = LocalContext.current
             Button(
                 onClick = {
-                    val intent = Intent(context, ExcludeNumberActivity::class.java)
-                    context.startActivity(intent)
+                    val intent = Intent(mainContext, ExcludeNumberActivity::class.java)
+                    mainContext.startActivity(intent)
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(

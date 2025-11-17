@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.google.gms.google.services)
     alias(libs.plugins.firebase.crashlytics)
+    alias(libs.plugins.sentry.android)
     // alias(libs.plugins.kotlin.compose)
 }
 
@@ -62,6 +63,7 @@ android {
     
     buildFeatures {
         compose true
+        buildConfig true
     }
     
     composeOptions {
@@ -78,6 +80,26 @@ android {
         variant.outputs.all {
             outputFileName = "call_detector.apk"
         }
+    }
+}
+
+sentry {
+    // Sentry 조직 및 프로젝트 정보
+    org = "designated-driver-platform"
+    projectName = "android"
+
+    // 자동 ProGuard 매핑 업로드 활성화
+    includeProguardMapping = true
+
+    // 소스 컨텍스트 포함 (오류 발생 시 코드 라인 확인 가능)
+    includeSourceContext = true
+
+    // 디버그 빌드에서는 Sentry 업로드 비활성화 (빌드 속도 향상)
+    autoUploadProguardMapping = false
+
+    // 릴리스 빌드에만 ProGuard 매핑 업로드
+    tracingInstrumentation {
+        enabled = false
     }
 }
 
@@ -103,11 +125,14 @@ dependencies {
     implementation 'com.google.firebase:firebase-firestore-ktx'
     implementation 'com.google.firebase:firebase-auth-ktx'
     implementation 'com.google.firebase:firebase-crashlytics-ktx'
-    // Firebase 인터넷 연결 문제 해결용 
+    // Firebase 인터넷 연결 문제 해결용
     implementation 'com.google.firebase:firebase-common-ktx'
     implementation 'com.google.firebase:firebase-installations:17.2.0'
     // 네트워크 연결 상태 확인용
     implementation 'com.squareup.okhttp3:okhttp:4.11.0'
+
+    // Sentry
+    implementation libs.sentry.android
     
     implementation "androidx.cardview:cardview:1.0.0"
     

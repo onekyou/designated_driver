@@ -45,12 +45,6 @@ class CallDetectorPermissionManager(
             required = true
         ),
         PermissionInfo(
-            permission = Manifest.permission.READ_CALL_LOG,
-            title = "통화 기록 읽기",
-            description = "전화번호와 통화 시간 정보를 가져오기 위해 필요합니다.",
-            required = true
-        ),
-        PermissionInfo(
             permission = Manifest.permission.READ_CONTACTS,
             title = "연락처 읽기",
             description = "전화번호로 저장된 고객명을 찾기 위해 필요합니다.",
@@ -58,18 +52,11 @@ class CallDetectorPermissionManager(
         ),
         // 알림 권한 (Android 13+)
         PermissionInfo(
-            permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) 
+            permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
                 Manifest.permission.POST_NOTIFICATIONS else "",
             title = "알림 권한",
             description = "콜 감지 상태 및 서비스 알림을 표시하기 위해 필요합니다.",
             required = true
-        ),
-        // SMS 권한 (공유콜 시스템용)
-        PermissionInfo(
-            permission = Manifest.permission.SEND_SMS,
-            title = "SMS 발송",
-            description = "공유콜 자동 문자 발송 기능에 필요합니다.",
-            required = false
         )
     ).filter { it.permission.isNotEmpty() }
     
