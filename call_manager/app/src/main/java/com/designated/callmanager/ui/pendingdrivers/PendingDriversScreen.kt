@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,11 +38,22 @@ fun PendingDriversScreen(
         )
     )
     val uiState by viewModel.uiState.collectAsState()
+    val approvedDriversState by viewModel.approvedDriversState.collectAsState()
     val approvalState by viewModel.approvalState.collectAsState()
 
+    var selectedTab by remember { mutableStateOf(0) }
     var showApprovalDialog by remember { mutableStateOf(false) }
     var driverToApprove by remember { mutableStateOf<PendingDriverInfo?>(null) }
+    var showRetireDialog by remember { mutableStateOf(false) }
+    var driverToRetire by remember { mutableStateOf<com.designated.callmanager.data.DriverInfo?>(null) }
     var processingDriverId by remember { mutableStateOf<String?>(null) }
+
+    // 탭 변경 시 해당 데이터 로드
+    LaunchedEffect(selectedTab) {
+        if (selectedTab == 1) {
+            viewModel.fetchApprovedDrivers()
+        }
+    }
 
     LaunchedEffect(approvalState) {
         when (val state = approvalState) {
@@ -68,7 +80,7 @@ fun PendingDriversScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("기사 가입 승인") },
+                title = { Text("기사 관리") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "뒤로가기")
@@ -77,37 +89,92 @@ fun PendingDriversScreen(
             )
         }
     ) { paddingValues ->
-        Box(modifier = Modifier.padding(paddingValues).fillMaxSize()) {
-            when (val state = uiState) {
-                is PendingDriversUiState.Loading -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-                }
-                is PendingDriversUiState.Success -> {
-                    if (state.drivers.isEmpty()) {
-                        Text("승인 대기 중인 기사가 없습니다.", modifier = Modifier.align(Alignment.Center))
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            items(state.drivers) { driver ->
-                                PendingDriverCard(
-                                    driverInfo = driver,
-                                    onApproveClick = {
-                                        driverToApprove = it
-                                        showApprovalDialog = true
-                                    },
-                                    onDeleteClick = { viewModel.deleteDriver(it) },
-                                    isProcessing = approvalState is DriverApprovalState.Loading,
-                                    processingDriverId = processingDriverId
-                                )
+        Column(modifier = Modifier.padding(paddingValues).fillMaxSize()) {
+            // 탭 Row
+            TabRow(selectedTabIndex = selectedTab) {
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    text = { Text("승인 대기") }
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    text = { Text("승인된 기사") }
+                )
+            }
+
+            // 탭 콘텐츠
+            Box(modifier = Modifier.fillMaxSize()) {
+                when (selectedTab) {
+                    0 -> {
+                        // 승인 대기 목록
+                        when (val state = uiState) {
+                            is PendingDriversUiState.Loading -> {
+                                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                            }
+                            is PendingDriversUiState.Success -> {
+                                if (state.drivers.isEmpty()) {
+                                    Text("승인 대기 중인 기사가 없습니다.", modifier = Modifier.align(Alignment.Center))
+                                } else {
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentPadding = PaddingValues(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        items(state.drivers) { driver ->
+                                            PendingDriverCard(
+                                                driverInfo = driver,
+                                                onApproveClick = {
+                                                    driverToApprove = it
+                                                    showApprovalDialog = true
+                                                },
+                                                onDeleteClick = { viewModel.deleteDriver(it) },
+                                                isProcessing = approvalState is DriverApprovalState.Loading,
+                                                processingDriverId = processingDriverId
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            is PendingDriversUiState.Error -> {
+                                Text("오류: ${state.message}", modifier = Modifier.align(Alignment.Center).padding(16.dp))
                             }
                         }
                     }
-                }
-                is PendingDriversUiState.Error -> {
-                    Text("오류: ${state.message}", modifier = Modifier.align(Alignment.Center).padding(16.dp))
+                    1 -> {
+                        // 승인된 기사 목록
+                        when (val state = approvedDriversState) {
+                            is ApprovedDriversUiState.Loading -> {
+                                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                            }
+                            is ApprovedDriversUiState.Success -> {
+                                if (state.drivers.isEmpty()) {
+                                    Text("승인된 기사가 없습니다.", modifier = Modifier.align(Alignment.Center))
+                                } else {
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentPadding = PaddingValues(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        items(state.drivers) { driver ->
+                                            ApprovedDriverCard(
+                                                driverInfo = driver,
+                                                onRetireClick = {
+                                                    driverToRetire = it
+                                                    showRetireDialog = true
+                                                },
+                                                isProcessing = approvalState is DriverApprovalState.Loading
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            is ApprovedDriversUiState.Error -> {
+                                Text("오류: ${state.message}", modifier = Modifier.align(Alignment.Center).padding(16.dp))
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -136,7 +203,7 @@ fun PendingDriversScreen(
                     },
                     enabled = approvalState !is DriverApprovalState.Loading
                 ) {
-                    if (approvalState is DriverApprovalState.Loading && driverToApprove != null) { // 특정 기사 처리 중 표시 - TODO: 이게 정확히 동작할지 확인 필요
+                    if (approvalState is DriverApprovalState.Loading && driverToApprove != null) {
                          CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     } else {
                        Text("승인")
@@ -145,6 +212,41 @@ fun PendingDriversScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showApprovalDialog = false }) {
+                    Text("취소")
+                }
+            }
+        )
+    }
+
+    if (showRetireDialog && driverToRetire != null) {
+        AlertDialog(
+            onDismissRequest = { showRetireDialog = false },
+            title = { Text("${driverToRetire!!.name} 기사 퇴사 처리") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("정말로 이 기사를 퇴사 처리하시겠습니까?")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("⚠️ 이 작업은 되돌릴 수 없습니다.", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("• 기사 정보가 삭제됩니다")
+                    Text("• Firebase 인증 계정이 삭제됩니다")
+                    Text("• 기사 앱 로그인이 불가능해집니다")
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.retireDriver(driverToRetire!!)
+                        showRetireDialog = false
+                    },
+                    enabled = approvalState !is DriverApprovalState.Loading,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("퇴사 처리")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRetireDialog = false }) {
                     Text("취소")
                 }
             }
@@ -206,6 +308,47 @@ fun PendingDriverCard(
                     Icon(Icons.Filled.Delete, contentDescription = "삭제", modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("삭제")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ApprovedDriverCard(
+    driverInfo: com.designated.callmanager.data.DriverInfo,
+    onRetireClick: (com.designated.callmanager.data.DriverInfo) -> Unit,
+    isProcessing: Boolean
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("이름: ${driverInfo.name}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text("연락처: ${driverInfo.phoneNumber}", style = MaterialTheme.typography.bodyMedium)
+            Text("이메일: ${driverInfo.email ?: "없음"}", style = MaterialTheme.typography.bodyMedium)
+            Text("유형: ${driverInfo.driverType ?: "대리기사"}", style = MaterialTheme.typography.bodyMedium)
+            Text("상태: ${driverInfo.status}", style = MaterialTheme.typography.bodyMedium)
+            driverInfo.approvedAt?.toDate()?.let {
+                Text("승인일: ${DateFormat.format("yyyy-MM-dd hh:mm a", it)}", style = MaterialTheme.typography.bodySmall)
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = { onRetireClick(driverInfo) },
+                    enabled = !isProcessing,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Icon(Icons.Filled.ExitToApp, contentDescription = "퇴사", modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("퇴사 처리")
                 }
             }
         }

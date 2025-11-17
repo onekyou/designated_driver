@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.AlertDialog
 import android.app.Application
 import android.app.NotificationManager
+import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -129,6 +130,8 @@ class MainActivity : ComponentActivity() {
     private var officeId: String? = null
     private var managerId: String? = null
 
+    private var tokenRefreshListener: com.google.firebase.firestore.ListenerRegistration? = null
+
     private lateinit var permissionManager: CallManagerPermissionManager
 
     private val permissionLauncher = registerForActivityResult(
@@ -141,6 +144,19 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) {
         permissionManager.onOverlayPermissionResult()
+    }
+
+    private val callScreeningRoleLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val roleManager = getSystemService(Context.ROLE_SERVICE) as? RoleManager
+            if (roleManager?.isRoleHeld(RoleManager.ROLE_CALL_SCREENING) == true) {
+                Toast.makeText(this, "스팸 차단 앱으로 설정되었습니다", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "스팸 차단 앱 설정이 취소되었습니다", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private val _screenState = mutableStateOf(Screen.Login)
@@ -608,6 +624,7 @@ class MainActivity : ComponentActivity() {
         }
 
         checkAndShowPendingPopup()
+        setupTokenRefreshListener()
     }
 
     override fun onPause() {
@@ -616,6 +633,8 @@ class MainActivity : ComponentActivity() {
             unregisterReceiver(callDetectedReceiver)
         } catch (e: IllegalArgumentException) {
         }
+        tokenRefreshListener?.remove()
+        tokenRefreshListener = null
     }
 
     private fun isPopupAlreadyShown(popupId: String): Boolean {
@@ -918,6 +937,122 @@ class MainActivity : ComponentActivity() {
                     }
             } catch (e: Exception) {
             }
+        }
+    }
+
+    /**
+     * 토큰 갱신 요청 실시간 리스너 설정
+     */
+    private fun setupTokenRefreshListener() {
+        val currentRegionId = regionId
+        val currentOfficeId = officeId
+        val currentManagerId = managerId
+
+        if (currentRegionId.isNullOrBlank() || currentOfficeId.isNullOrBlank() || currentManagerId.isNullOrBlank()) {
+            android.util.Log.w("MainActivity", "[TokenRefresh] regionId, officeId 또는 managerId가 없어 리스너 설정 불가")
+            return
+        }
+
+        // 기존 리스너 제거
+        tokenRefreshListener?.remove()
+
+        android.util.Log.d("MainActivity", "[TokenRefresh] 토큰 갱신 요청 리스너 시작 - managerId: $currentManagerId")
+
+        tokenRefreshListener = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            .collection("regions").document(currentRegionId)
+            .collection("offices").document(currentOfficeId)
+            .collection("tokenRefreshRequests")
+            .document(currentManagerId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    android.util.Log.e("MainActivity", "[TokenRefresh] 리스너 오류: ${error.message}")
+                    return@addSnapshotListener
+                }
+
+                if (snapshot != null && snapshot.exists()) {
+                    val processed = snapshot.getBoolean("processed") ?: false
+
+                    if (!processed) {
+                        android.util.Log.i("MainActivity", "[TokenRefresh] 갱신 요청 감지 - 새 토큰 등록 시작")
+
+                        // 새 FCM 토큰 가져오기 및 등록
+                        com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+                            .addOnCompleteListener { task ->
+                                if (!task.isSuccessful) {
+                                    android.util.Log.e("MainActivity", "[TokenRefresh] 토큰 가져오기 실패: ${task.exception?.message}")
+                                    return@addOnCompleteListener
+                                }
+
+                                val newToken = task.result
+                                android.util.Log.d("MainActivity", "[TokenRefresh] 새 토큰 획득: ${newToken.substring(0, 50)}...")
+
+                                // Firestore에 새 토큰 저장
+                                val managerTokenData = hashMapOf(
+                                    "fcmToken" to newToken,
+                                    "updatedAt" to com.google.firebase.Timestamp.now()
+                                )
+
+                                com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                                    .collection("regions").document(currentRegionId)
+                                    .collection("offices").document(currentOfficeId)
+                                    .collection("managerTokens").document(currentManagerId)
+                                    .set(managerTokenData, com.google.firebase.firestore.SetOptions.merge())
+                                    .addOnSuccessListener {
+                                        android.util.Log.i("MainActivity", "[TokenRefresh] ✅ 새 토큰 등록 성공")
+
+                                        // 갱신 요청 문서를 processed로 표시
+                                        snapshot.reference.update("processed", true)
+                                            .addOnSuccessListener {
+                                                android.util.Log.d("MainActivity", "[TokenRefresh] 갱신 요청 처리 완료 표시")
+                                            }
+                                            .addOnFailureListener { e ->
+                                                android.util.Log.e("MainActivity", "[TokenRefresh] 처리 완료 표시 실패: ${e.message}")
+                                            }
+                                    }
+                                    .addOnFailureListener { e ->
+                                        android.util.Log.e("MainActivity", "[TokenRefresh] ❌ 새 토큰 등록 실패: ${e.message}")
+                                    }
+                            }
+                    }
+                }
+            }
+    }
+
+    /**
+     * CallScreeningService (ROLE_CALL_SCREENING) 권한 요청
+     * Android 10+ (API 29) 전용
+     */
+    fun requestCallScreeningRole() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val roleManager = getSystemService(Context.ROLE_SERVICE) as? RoleManager
+            if (roleManager?.isRoleHeld(RoleManager.ROLE_CALL_SCREENING) != true) {
+                try {
+                    val intent = roleManager?.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING)
+                    if (intent != null) {
+                        callScreeningRoleLauncher.launch(intent)
+                    }
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "CallScreeningRole 요청 실패", e)
+                    Toast.makeText(this, "스팸 차단 앱 권한 요청에 실패했습니다", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                Toast.makeText(this, "이미 스팸 차단 앱으로 설정되어 있습니다", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Toast.makeText(this, "Android 10 이상에서만 지원됩니다", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * CallScreeningService 권한이 설정되어 있는지 확인
+     */
+    fun isCallScreeningRoleHeld(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val roleManager = getSystemService(Context.ROLE_SERVICE) as? RoleManager
+            roleManager?.isRoleHeld(RoleManager.ROLE_CALL_SCREENING) == true
+        } else {
+            // Android 9 이하는 지원하지 않으므로 true 반환 (경고 표시 안 함)
+            true
         }
     }
 }

@@ -125,6 +125,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 handleSharedCallCancelled(remoteMessage, callId)
                 Log.d(TAG, "🔔 [DEBUG] SHARED_CALL_CANCELLED_POPUP 처리 완료")
             }
+            "new_customer" -> {
+                Log.d(TAG, "🔔 [DEBUG] new_customer 처리 시작")
+                handleNewCustomer(remoteMessage)
+                Log.d(TAG, "🔔 [DEBUG] new_customer 처리 완료")
+            }
             else -> {
                 Log.w(TAG, "⚠️ [DEBUG] 알 수 없는 메시지 타입: $messageType")
             }
@@ -147,8 +152,13 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         saveTokenToFirestore(token)
     }
 
+    /**
+     * FCM 토큰을 Firestore에 저장 (Two-Phase Commit 방식)
+     * Phase 1: admins 컬렉션에 기본 토큰 저장 (항상 실행)
+     * Phase 2: managerTokens 컬렉션에 사무실별 토큰 저장 (로그인 후에만)
+     */
     private fun saveTokenToFirestore(token: String) {
-        Log.d(TAG, "[saveTokenToFirestore] 시작 - 토큰: $token")
+        Log.d(TAG, "[saveTokenToFirestore] 시작 - 토큰: ${token.take(20)}...")
 
         val auth = FirebaseAuth.getInstance()
         val currentUser = auth.currentUser
@@ -157,43 +167,120 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             Log.w(TAG, "[saveTokenToFirestore] 현재 사용자 null - 저장 취소")
             return
         }
-        Log.d(TAG, "[saveTokenToFirestore] 현재 사용자 UID: ${currentUser.uid}")
 
+        val adminId = currentUser.uid
+        Log.d(TAG, "[saveTokenToFirestore] 현재 사용자 UID: $adminId")
+
+        // Phase 1: admins 컬렉션에 기본 토큰 저장 (항상 실행)
+        saveTokenToAdminsCollection(adminId, token)
+
+        // Phase 2: managerTokens 컬렉션에 사무실별 토큰 저장 (조건부)
         val sharedPreferences = getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
         val regionId = sharedPreferences.getString("regionId", null)
         val officeId = sharedPreferences.getString("officeId", null)
 
         Log.d(TAG, "[saveTokenToFirestore] regionId: $regionId, officeId: $officeId")
 
-        if (regionId.isNullOrBlank() || officeId.isNullOrBlank()) {
-            Log.e(TAG, "[saveTokenToFirestore] regionId 또는 officeId 비어있음 - 저장 취소")
-            val allPrefs = sharedPreferences.all
-            Log.d(TAG, "[saveTokenToFirestore] login_prefs 전체 내용: $allPrefs")
-            return
+        if (!regionId.isNullOrBlank() && !officeId.isNullOrBlank()) {
+            saveTokenToManagerTokensCollection(adminId, regionId, officeId, token)
+        } else {
+            Log.w(TAG, "[saveTokenToFirestore] regionId/officeId 없음 - managerTokens 저장 스킵 (로그인 후 재시도 필요)")
         }
+    }
 
-        val adminId = currentUser.uid
+    /**
+     * Phase 1: admins 컬렉션에 기본 토큰 저장
+     */
+    private fun saveTokenToAdminsCollection(adminId: String, token: String) {
         val firestore = FirebaseFirestore.getInstance()
 
+        // 기본 토큰 데이터 (regionId/officeId 없이도 저장)
         val tokenData = hashMapOf(
             "fcmToken" to token,
-            "lastUpdated" to System.currentTimeMillis(),
-            "associatedRegionId" to regionId,
-            "associatedOfficeId" to officeId
+            "lastUpdated" to System.currentTimeMillis()
         )
 
-        Log.d(TAG, "[saveTokenToFirestore] Firestore에 토큰 저장 시도...")
-        Log.d(TAG, "[saveTokenToFirestore] adminId: $adminId")
-        Log.d(TAG, "[saveTokenToFirestore] tokenData: $tokenData")
+        Log.d(TAG, "[saveTokenToAdmins] admins 컬렉션에 토큰 저장 시도...")
 
         firestore.collection("admins").document(adminId)
             .set(tokenData, com.google.firebase.firestore.SetOptions.merge())
             .addOnSuccessListener {
-                Log.d(TAG, "[saveTokenToFirestore] ✅ Firestore에 토큰 저장 성공")
+                Log.d(TAG, "[saveTokenToAdmins] ✅ admins 컬렉션에 토큰 저장 성공")
             }
             .addOnFailureListener { e ->
-                Log.e(TAG, "[saveTokenToFirestore] ❌ Firestore에 토큰 저장 실패: ${e.message}")
+                Log.e(TAG, "[saveTokenToAdmins] ❌ admins 컬렉션에 토큰 저장 실패: ${e.message}")
                 e.printStackTrace()
+            }
+    }
+
+    /**
+     * Phase 2: managerTokens 컬렉션에 사무실별 토큰 저장
+     * 로그인 완료 후 호출되어야 함
+     */
+    private fun saveTokenToManagerTokensCollection(
+        adminId: String,
+        regionId: String,
+        officeId: String,
+        token: String
+    ) {
+        val firestore = FirebaseFirestore.getInstance()
+
+        val managerTokenData = hashMapOf(
+            "fcmToken" to token,
+            "updatedAt" to com.google.firebase.Timestamp.now()
+        )
+
+        Log.d(TAG, "[saveTokenToManagerTokens] managerTokens 저장 시도 - regionId: $regionId, officeId: $officeId")
+
+        firestore.collection("regions").document(regionId)
+            .collection("offices").document(officeId)
+            .collection("managerTokens").document(adminId)
+            .set(managerTokenData, com.google.firebase.firestore.SetOptions.merge())
+            .addOnSuccessListener {
+                Log.d(TAG, "[saveTokenToManagerTokens] ✅ managerTokens 컬렉션에 토큰 저장 성공")
+
+                // admins 컬렉션에도 regionId/officeId 업데이트
+                val adminUpdateData = hashMapOf(
+                    "associatedRegionId" to regionId,
+                    "associatedOfficeId" to officeId
+                )
+                firestore.collection("admins").document(adminId)
+                    .set(adminUpdateData, com.google.firebase.firestore.SetOptions.merge())
+                    .addOnSuccessListener {
+                        Log.d(TAG, "[saveTokenToManagerTokens] ✅ admins에 regionId/officeId 업데이트 완료")
+                    }
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "[saveTokenToManagerTokens] ❌ managerTokens 컬렉션에 토큰 저장 실패: ${e.message}")
+                e.printStackTrace()
+            }
+    }
+
+    /**
+     * 로그인 완료 후 managerTokens 재동기화
+     * LoginViewModel에서 호출됨
+     */
+    fun retryManagerTokensSync(regionId: String, officeId: String) {
+        Log.d(TAG, "[retryManagerTokensSync] managerTokens 재동기화 시작")
+
+        val auth = FirebaseAuth.getInstance()
+        val currentUser = auth.currentUser
+
+        if (currentUser == null) {
+            Log.w(TAG, "[retryManagerTokensSync] 현재 사용자 null - 재동기화 불가")
+            return
+        }
+
+        FirebaseMessaging.getInstance().token
+            .addOnCompleteListener { task ->
+                if (!task.isSuccessful) {
+                    Log.e(TAG, "[retryManagerTokensSync] 토큰 가져오기 실패: ${task.exception?.message}")
+                    return@addOnCompleteListener
+                }
+
+                val token = task.result
+                Log.d(TAG, "[retryManagerTokensSync] 토큰 획득 성공 - managerTokens 저장 시도")
+                saveTokenToManagerTokensCollection(currentUser.uid, regionId, officeId, token)
             }
     }
 
@@ -425,6 +512,41 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         intent.putExtra("driverName", driverName)
         intent.putExtra("driverPhone", driverPhone)
         sendBroadcast(intent)
+    }
+
+    private fun handleNewCustomer(remoteMessage: RemoteMessage) {
+        val customerId = remoteMessage.data["customerId"] ?: return
+        val customerName = remoteMessage.data["customerName"] ?: "신규 회원"
+        val customerPhone = remoteMessage.data["customerPhone"] ?: ""
+        val referralDriverName = remoteMessage.data["referralDriverName"] ?: ""
+
+        Log.d(TAG, "[handleNewCustomer] 신규 회원 가입 알림 생성: $customerName")
+
+        val contentText = if (referralDriverName.isNotEmpty()) {
+            "$customerName 님 (추천: $referralDriverName)"
+        } else {
+            "$customerName 님이 가입했습니다"
+        }
+
+        val bigText = if (referralDriverName.isNotEmpty()) {
+            "이름: $customerName\n전화: $customerPhone\n추천: $referralDriverName"
+        } else {
+            "이름: $customerName\n전화: $customerPhone"
+        }
+
+        // 알림 생성
+        showNotification(
+            channelId = DRIVER_UPDATE_CHANNEL_ID,
+            notificationId = "new_customer_$customerId".hashCode(),
+            title = "🎉 새 회원 가입",
+            content = contentText,
+            bigText = bigText,
+            callId = customerId,
+            color = ContextCompat.getColor(this, android.R.color.holo_green_dark),
+            autoCancel = true,
+            isNewCall = false,
+            timeoutAfter = 0
+        )
     }
 
     private fun handleNewCall(remoteMessage: RemoteMessage, callId: String) {

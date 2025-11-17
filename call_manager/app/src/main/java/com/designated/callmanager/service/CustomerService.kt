@@ -21,6 +21,7 @@ class CustomerService {
     /**
      * 사무실별 고객 목록 조회 (페이지네이션)
      * 일반관리자는 자기 사무실 고객만 조회 가능
+     * ✅ customerPoints 컬렉션에서 실제 포인트 정보도 함께 조회
      */
     suspend fun getCustomerList(
         regionId: String,
@@ -54,12 +55,63 @@ class CustomerService {
             }
 
             val snapshot = query.get().await()
+
+            Log.d(TAG, "📋 고객 기본 정보 조회: ${snapshot.documents.size}명")
+
+            // ✅ 1단계: 고객 기본 정보 파싱
             val customers = snapshot.documents.mapNotNull { doc ->
                 doc.toObject(CustomerInfo::class.java)?.copy(id = doc.id)
             }
 
-            Log.d(TAG, "고객 목록 조회 완료: ${customers.size}명")
-            CustomerListResult.Success(customers, snapshot.documents.lastOrNull()?.id)
+            // ✅ 2단계: customerPoints 일괄 조회 (N+1 문제 해결)
+            val phoneNumbers = customers.map { it.phoneNumber }
+            val pointsMap = if (phoneNumbers.isNotEmpty()) {
+                // Firestore whereIn은 최대 10개까지만 지원하므로 청크로 나눔
+                phoneNumbers.chunked(10).flatMap { chunk ->
+                    db.collection("regions")
+                        .document(regionId)
+                        .collection("offices")
+                        .document(officeId)
+                        .collection("customerPoints")
+                        .whereIn("phoneNumber", chunk)
+                        .get()
+                        .await()
+                        .documents
+                }.associate { doc ->
+                    val phoneNumber = doc.getString("phoneNumber") ?: doc.id
+                    phoneNumber to doc
+                }
+            } else {
+                emptyMap()
+            }
+
+            Log.d(TAG, "✅ 일괄 조회: 고객 ${customers.size}명, 포인트 ${pointsMap.size}건 (쿼리 ${(phoneNumbers.size + 9) / 10}번)")
+
+            // ✅ 3단계: 데이터 병합
+            val customersWithPoints = customers.map { customer ->
+                val pointsDoc = pointsMap[customer.phoneNumber]
+
+                if (pointsDoc != null && pointsDoc.exists()) {
+                    val points = pointsDoc.getLong("currentPoints")?.toInt() ?: 0
+                    val earned = pointsDoc.getLong("totalEarned")?.toInt() ?: 0
+                    val used = pointsDoc.getLong("totalUsed")?.toInt() ?: 0
+                    val calls = pointsDoc.getLong("totalCalls")?.toInt() ?: 0
+                    val grade = pointsDoc.getString("grade") ?: "BRONZE"
+
+                    customer.copy(
+                        currentPoints = points,
+                        totalEarned = earned,
+                        totalUsed = used,
+                        totalCalls = calls,
+                        customerGrade = grade
+                    )
+                } else {
+                    customer
+                }
+            }
+
+            Log.d(TAG, "고객 목록 조회 완료: ${customersWithPoints.size}명 (포인트 정보 포함)")
+            CustomerListResult.Success(customersWithPoints, snapshot.documents.lastOrNull()?.id)
 
         } catch (e: Exception) {
             Log.e(TAG, "고객 목록 조회 실패", e)
@@ -119,6 +171,7 @@ class CustomerService {
 
     /**
      * 전화번호로 고객 검색
+     * ✅ customerPoints 컬렉션에서 실제 포인트 정보도 함께 조회
      */
     suspend fun searchCustomerByPhone(
         regionId: String,
@@ -144,7 +197,30 @@ class CustomerService {
                 ?.copy(id = snapshot.documents[0].id)
                 ?: return CustomerSearchResult.Error("데이터 변환 실패")
 
-            CustomerSearchResult.Success(customer)
+            // ✅ customerPoints 컬렉션에서 실제 포인트 조회
+            val pointsDoc = db.collection("regions")
+                .document(regionId)
+                .collection("offices")
+                .document(officeId)
+                .collection("customerPoints")
+                .document(customer.phoneNumber)
+                .get()
+                .await()
+
+            // customerPoints가 있으면 병합
+            val customerWithPoints = if (pointsDoc.exists()) {
+                customer.copy(
+                    currentPoints = pointsDoc.getLong("currentPoints")?.toInt() ?: 0,
+                    totalEarned = pointsDoc.getLong("totalEarned")?.toInt() ?: 0,
+                    totalUsed = pointsDoc.getLong("totalUsed")?.toInt() ?: 0,
+                    totalCalls = pointsDoc.getLong("totalCalls")?.toInt() ?: 0,
+                    customerGrade = pointsDoc.getString("grade") ?: "BRONZE"
+                )
+            } else {
+                customer
+            }
+
+            CustomerSearchResult.Success(customerWithPoints)
 
         } catch (e: Exception) {
             Log.e(TAG, "고객 검색 실패", e)
@@ -154,6 +230,7 @@ class CustomerService {
 
     /**
      * 사무실 고객 통계 조회 (읽기 전용)
+     * ✅ customerPoints 컬렉션에서 실제 포인트 정보도 함께 조회
      */
     suspend fun getCustomerStats(
         regionId: String,
@@ -168,28 +245,67 @@ class CustomerService {
                 .get()
                 .await()
 
+            // ✅ 1단계: 고객 기본 정보 파싱
             val customers = snapshot.documents.mapNotNull { doc ->
                 doc.toObject(CustomerInfo::class.java)
             }
 
+            // ✅ 2단계: customerPoints 일괄 조회 (N+1 문제 해결)
+            val phoneNumbers = customers.map { it.phoneNumber }
+            val pointsMap = if (phoneNumbers.isNotEmpty()) {
+                phoneNumbers.chunked(10).flatMap { chunk ->
+                    db.collection("regions")
+                        .document(regionId)
+                        .collection("offices")
+                        .document(officeId)
+                        .collection("customerPoints")
+                        .whereIn("phoneNumber", chunk)
+                        .get()
+                        .await()
+                        .documents
+                }.associate { doc ->
+                    val phoneNumber = doc.getString("phoneNumber") ?: doc.id
+                    phoneNumber to doc
+                }
+            } else {
+                emptyMap()
+            }
+
+            // ✅ 3단계: 데이터 병합
+            val customersWithPoints = customers.map { customer ->
+                val pointsDoc = pointsMap[customer.phoneNumber]
+
+                if (pointsDoc != null && pointsDoc.exists()) {
+                    customer.copy(
+                        currentPoints = pointsDoc.getLong("currentPoints")?.toInt() ?: 0,
+                        totalEarned = pointsDoc.getLong("totalEarned")?.toInt() ?: 0,
+                        totalUsed = pointsDoc.getLong("totalUsed")?.toInt() ?: 0,
+                        totalCalls = pointsDoc.getLong("totalCalls")?.toInt() ?: 0,
+                        customerGrade = pointsDoc.getString("grade") ?: "BRONZE"
+                    )
+                } else {
+                    customer
+                }
+            }
+
             val stats = CustomerStats(
-                totalCustomers = customers.size,
-                activeCustomers = customers.count { it.totalRides > 0 },
+                totalCustomers = customersWithPoints.size,
+                activeCustomers = customersWithPoints.count { it.totalCalls > 0 },
                 gradeDistribution = mapOf(
-                    "bronze" to customers.count { it.grade == "bronze" },
-                    "silver" to customers.count { it.grade == "silver" },
-                    "gold" to customers.count { it.grade == "gold" },
-                    "vip" to customers.count { it.grade == "vip" }
+                    "bronze" to customersWithPoints.count { it.grade == "bronze" },
+                    "silver" to customersWithPoints.count { it.grade == "silver" },
+                    "gold" to customersWithPoints.count { it.grade == "gold" },
+                    "vip" to customersWithPoints.count { it.grade == "vip" }
                 ),
                 activityDistribution = mapOf(
-                    "active" to customers.count { it.getActivityStatus() == "active" },
-                    "warning" to customers.count { it.getActivityStatus() == "warning" },
-                    "dormant" to customers.count { it.getActivityStatus() == "dormant" }
+                    "active" to customersWithPoints.count { it.getActivityStatus() == "active" },
+                    "warning" to customersWithPoints.count { it.getActivityStatus() == "warning" },
+                    "dormant" to customersWithPoints.count { it.getActivityStatus() == "dormant" }
                 ),
-                averageRides = if (customers.isNotEmpty()) {
-                    customers.sumOf { it.totalRides }.toDouble() / customers.size
+                averageRides = if (customersWithPoints.isNotEmpty()) {
+                    customersWithPoints.sumOf { it.totalCalls }.toDouble() / customersWithPoints.size
                 } else 0.0,
-                totalPoints = customers.sumOf { it.points }
+                totalPoints = customersWithPoints.sumOf { it.currentPoints } // ✅ 실제 포인트 잔액 합계
             )
 
             CustomerStatsResult.Success(stats)
@@ -202,6 +318,7 @@ class CustomerService {
 
     /**
      * 고객 등급별 필터링
+     * ✅ customerPoints 컬렉션에서 실제 포인트 정보도 함께 조회
      */
     suspend fun getCustomersByGrade(
         regionId: String,
@@ -220,12 +337,51 @@ class CustomerService {
                 .get()
                 .await()
 
+            // ✅ 1단계: 고객 기본 정보 파싱
             val customers = snapshot.documents.mapNotNull { doc ->
                 doc.toObject(CustomerInfo::class.java)?.copy(id = doc.id)
-            }.sortedByDescending { it.totalRides } // 클라이언트 측 정렬
+            }
+
+            // ✅ 2단계: customerPoints 일괄 조회 (N+1 문제 해결)
+            val phoneNumbers = customers.map { it.phoneNumber }
+            val pointsMap = if (phoneNumbers.isNotEmpty()) {
+                phoneNumbers.chunked(10).flatMap { chunk ->
+                    db.collection("regions")
+                        .document(regionId)
+                        .collection("offices")
+                        .document(officeId)
+                        .collection("customerPoints")
+                        .whereIn("phoneNumber", chunk)
+                        .get()
+                        .await()
+                        .documents
+                }.associate { doc ->
+                    val phoneNumber = doc.getString("phoneNumber") ?: doc.id
+                    phoneNumber to doc
+                }
+            } else {
+                emptyMap()
+            }
+
+            // ✅ 3단계: 데이터 병합 및 정렬
+            val customersWithPoints = customers.map { customer ->
+                val pointsDoc = pointsMap[customer.phoneNumber]
+
+                if (pointsDoc != null && pointsDoc.exists()) {
+                    customer.copy(
+                        currentPoints = pointsDoc.getLong("currentPoints")?.toInt() ?: 0,
+                        totalEarned = pointsDoc.getLong("totalEarned")?.toInt() ?: 0,
+                        totalUsed = pointsDoc.getLong("totalUsed")?.toInt() ?: 0,
+                        totalCalls = pointsDoc.getLong("totalCalls")?.toInt() ?: 0,
+                        customerGrade = pointsDoc.getString("grade") ?: "BRONZE"
+                    )
+                } else {
+                    customer
+                }
+            }.sortedByDescending { it.totalCalls } // ✅ customerPoints 기준 정렬
              .take(limit) // limit 적용
 
-            CustomerListResult.Success(customers, customers.lastOrNull()?.id)
+            CustomerListResult.Success(customersWithPoints, customersWithPoints.lastOrNull()?.id)
 
         } catch (e: Exception) {
             Log.e(TAG, "등급별 고객 조회 실패", e)

@@ -53,7 +53,7 @@ data class CallInfo(
     @PropertyName("createdFrom") var createdFrom: String? = "phone", // phone/customer_app/landing
     @PropertyName("pointsEarned") var pointsEarned: Int? = null,
     @PropertyName("pointsUsed") var pointsUsed: Int? = null,
-    @PropertyName("isAppCustomer") var isAppCustomer: Boolean? = false,
+    @get:PropertyName("isAppCustomer") @set:PropertyName("isAppCustomer") var isAppCustomer: Boolean? = false,
     @PropertyName("attributionScore") var attributionScore: Int? = null, // 70점 기준 매칭 점수
     @PropertyName("attributionSource") var attributionSource: String? = null // landing/qr_scan/referral
 ) {

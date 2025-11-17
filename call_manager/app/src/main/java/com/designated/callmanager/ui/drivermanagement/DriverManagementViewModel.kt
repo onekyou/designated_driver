@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.net.URLEncoder
 
 class DriverManagementViewModel : ViewModel() {
     private val db: FirebaseFirestore = Firebase.firestore
@@ -50,15 +51,39 @@ class DriverManagementViewModel : ViewModel() {
     fun approveDriver(regionId: String, officeId: String, driverId: String) {
         viewModelScope.launch {
             try {
-                db.collection("regions").document(regionId).collection("offices").document(officeId)
+                val driverRef = db.collection("regions").document(regionId)
+                    .collection("offices").document(officeId)
                     .collection("designated_drivers").document(driverId)
-                    .update("approvalStatus", Constants.APPROVAL_STATUS_APPROVED,
-                        "status", Constants.DRIVER_STATUS_OFFLINE)
-                    .await()
+
+                // 기사 정보 가져오기
+                val driverSnapshot = driverRef.get().await()
+                val driverName = driverSnapshot.getString("name") ?: ""
+
+                // 추천 QR URL 생성
+                val referralQrUrl = buildReferralUrl(regionId, officeId, driverId, driverName)
+
+                // 승인 및 QR URL 저장
+                driverRef.update(
+                    "approvalStatus", Constants.APPROVAL_STATUS_APPROVED,
+                    "status", Constants.DRIVER_STATUS_OFFLINE,
+                    "referralQrUrl", referralQrUrl
+                ).await()
+
                 fetchPendingDrivers(regionId, officeId)
             } catch (e: Exception) {
             }
         }
+    }
+
+    private fun buildReferralUrl(
+        regionId: String,
+        officeId: String,
+        driverId: String,
+        driverName: String
+    ): String {
+        val encodedName = URLEncoder.encode(driverName, "UTF-8")
+        return "https://calldetector-5d61e.web.app/download" +
+               "?r=$regionId&o=$officeId&d=$driverId&dn=$encodedName"
     }
 
     fun rejectDriver(regionId: String, officeId: String, driverId: String) {

@@ -31,7 +31,6 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
     <uses-permission android:name="android.permission.PROCESS_OUTGOING_CALLS" />
-    <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     
     <!-- SMS 발송 권한 (공유콜 시스템용) -->
@@ -155,9 +154,19 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
-            
 
-            
+        <!-- CallScreeningService - 전화번호 확인 (스팸 차단 앱 권한) -->
+        <service
+            android:name=".service.CallScreeningService"
+            android:permission="android.permission.BIND_SCREENING_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.telecom.CallScreeningService" />
+            </intent-filter>
+        </service>
+
+
+
         <!-- Android 15 호환성 -->
         <meta-data
             android:name="android.webkit.WebView.EnableSafeBrowsing"

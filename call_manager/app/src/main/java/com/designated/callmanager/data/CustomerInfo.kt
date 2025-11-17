@@ -20,7 +20,18 @@ data class CustomerInfo(
     @PropertyName("attributionSource") val attributionSource: String? = null, // landing/qr_scan/referral
     @PropertyName("registeredAt") val registeredAt: Timestamp = Timestamp.now(),
     @PropertyName("lastRideAt") val lastRideAt: Timestamp? = null,
-    @PropertyName("lastActiveAt") val lastActiveAt: Timestamp? = null // 마지막 앱 실행 시간
+    @PropertyName("lastActiveAt") val lastActiveAt: Timestamp? = null, // 마지막 앱 실행 시간
+
+    // 기사 추천 정보
+    @PropertyName("referralDriverId") val referralDriverId: String? = null, // 추천한 기사 ID
+    @PropertyName("referralDriverName") val referralDriverName: String? = null, // 추천한 기사 이름
+
+    // ✅ customerPoints 컬렉션에서 조회한 실제 포인트 정보
+    val currentPoints: Int = 0, // 실제 사용 가능한 포인트 잔액
+    val totalEarned: Int = 0,   // 총 적립 포인트
+    val totalUsed: Int = 0,     // 총 사용 포인트
+    val totalCalls: Int = 0,    // 총 이용 횟수 (customerPoints 기준)
+    val customerGrade: String = "BRONZE" // 포인트 시스템의 등급 (BRONZE/SILVER/GOLD/PLATINUM/DIAMOND)
 ) {
     /**
      * 회원 활동 상태 계산

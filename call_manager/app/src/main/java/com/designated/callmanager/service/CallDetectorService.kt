@@ -21,6 +21,7 @@ import android.provider.CallLog
 import android.provider.ContactsContract
 import android.telephony.TelephonyManager
 import android.telephony.SmsManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.designated.callmanager.data.CallStatus
@@ -32,6 +33,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.cancel
 
 class CallDetectorService : Service() {
     private var lastProcessedPhoneNumber: String? = null
@@ -77,24 +79,25 @@ class CallDetectorService : Service() {
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
 
-        // 권한 확인
-        val hasReadCallLog = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED
+        // 권한 확인 (READ_PHONE_STATE만 체크, READ_CALL_LOG는 제거됨)
         val hasReadPhoneState = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
 
-        if (!hasReadCallLog || !hasReadPhoneState) {
+        if (!hasReadPhoneState) {
             // 권한이 없으면 서비스를 종료하되, startForeground는 이미 호출했으므로 타임아웃 방지
             stopSelf()
             return
         }
 
-        callLogObserver = CallLogObserver(Handler(mainLooper))
-        callLogObserver?.let { observer ->
-            contentResolver.registerContentObserver(
-                CallLog.Calls.CONTENT_URI,
-                true,
-                observer
-            )
-        }
+        // CallLogObserver는 READ_CALL_LOG 권한이 필요하므로 제거
+        // CallScreeningService와 CallReceiver가 전화를 감지하므로 더 이상 필요 없음
+        // callLogObserver = CallLogObserver(Handler(mainLooper))
+        // callLogObserver?.let { observer ->
+        //     contentResolver.registerContentObserver(
+        //         CallLog.Calls.CONTENT_URI,
+        //         true,
+        //         observer
+        //     )
+        // }
 
         isRunning = true
     }
@@ -107,10 +110,6 @@ class CallDetectorService : Service() {
 
         if (phoneNumber != null) {
             val currentTime = System.currentTimeMillis()
-
-            if (currentTime < serviceStartTime + 5000) {
-                return START_NOT_STICKY
-            }
 
             if (callState == TelephonyManager.CALL_STATE_IDLE) {
                 val finalPhoneNumber = phoneNumber ?: lastProcessedPhoneNumber
@@ -301,8 +300,7 @@ class CallDetectorService : Service() {
                         val cachedName = it.getString(it.getColumnIndexOrThrow(CallLog.Calls.CACHED_NAME))
 
                         if (type == CallLog.Calls.MISSED_TYPE &&
-                            (System.currentTimeMillis() - date) < 5000 &&
-                            date > serviceStartTime) {
+                            (System.currentTimeMillis() - date) < 5000) {
 
                             val regionId = sharedPreferences.getString("regionId", null)
                             val officeId = sharedPreferences.getString("officeId", null)
@@ -564,34 +562,110 @@ class CallDetectorService : Service() {
         contactAddress: String?,
         deviceName: String
     ) {
-        val callData = hashMapOf<String, Any>(
-            "phoneNumber" to phoneNumber,
-            "customerName" to (contactName ?: ""),
-            "customerAddress" to (contactAddress ?: ""),
-            "status" to CallStatus.WAITING.firestoreValue,
-            "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-            "detectedTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-            "regionId" to regionId,
-            "officeId" to officeId,
-            "deviceName" to deviceName,
-            "callType" to "수신",
-            "timestampClient" to System.currentTimeMillis(),
-            "fromCallManager" to true
-        )
-
-        val targetPath = "regions/$regionId/offices/$officeId/calls"
         val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
 
-        firestore.collection(targetPath)
-            .add(callData)
-            .addOnSuccessListener { documentReference ->
+        // ✅ 추가: customerInfo 컬렉션 확인하여 앱 회원 여부 판별
+        serviceScope.launch {
+            try {
+                // customerInfo 컬렉션에서 phoneNumber로 직접 조회 (문서 ID가 phoneNumber)
+                val customerInfoDoc = firestore
+                    .collection("regions").document(regionId)
+                    .collection("offices").document(officeId)
+                    .collection("customerInfo")
+                    .document(phoneNumber)
+                    .get()
+                    .await()
 
-                bringCallManagerToForegroundForNewCall(documentReference.id, phoneNumber, contactName, contactAddress)
+                val isAppCustomer = customerInfoDoc.exists()
+                val customerHomeAddress = if (isAppCustomer) {
+                    customerInfoDoc.getString("homeAddress") ?: ""
+                } else {
+                    ""
+                }
 
+                // ✅ 앱 회원인 경우 customers 컬렉션에서 name(nickname)과 grade 가져오기
+                val customerDoc = if (isAppCustomer) {
+                    firestore
+                        .collection("regions").document(regionId)
+                        .collection("offices").document(officeId)
+                        .collection("customers")
+                        .whereEqualTo("phoneNumber", phoneNumber)
+                        .limit(1)
+                        .get()
+                        .await()
+                        .documents
+                        .firstOrNull()
+                } else {
+                    null
+                }
+
+                // ✅ 앱 회원인 경우 name(nickname)과 grade 가져오기
+                val customerNickname = customerDoc?.getString("name")
+                val customerGrade = customerDoc?.getString("grade")
+
+                // 🔍 디버깅 로그
+                Log.d(TAG, "📞 전화 감지 - phoneNumber: $phoneNumber, isAppCustomer: $isAppCustomer, nickname: $customerNickname, grade: $customerGrade, homeAddress: $customerHomeAddress")
+
+                val callData = hashMapOf<String, Any>(
+                    "phoneNumber" to phoneNumber,
+                    "customerName" to (customerNickname ?: contactName ?: ""),
+                    "customerAddress" to (customerHomeAddress.takeIf { it.isNotBlank() } ?: contactAddress ?: ""),
+                    "status" to CallStatus.WAITING.firestoreValue,
+                    "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                    "detectedTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                    "regionId" to regionId,
+                    "officeId" to officeId,
+                    "deviceName" to deviceName,
+                    "callType" to "수신",
+                    "timestampClient" to System.currentTimeMillis(),
+                    "fromCallManager" to true,
+                    "isAppCustomer" to isAppCustomer,  // ✅ 추가: 앱 회원 여부
+                    "customerId" to if (isAppCustomer) phoneNumber else "",  // ✅ 추가: 회원이면 phoneNumber
+                    "customerGrade" to (customerGrade ?: ""),  // ✅ 추가: 고객 등급
+                    "createdFrom" to "phone"  // ✅ 추가: 전화로 생성됨
+                )
+
+                val targetPath = "regions/$regionId/offices/$officeId/calls"
+
+                firestore.collection(targetPath)
+                    .add(callData)
+                    .addOnSuccessListener { documentReference ->
+                        bringCallManagerToForegroundForNewCall(documentReference.id, phoneNumber, contactName, contactAddress)
+                    }
+                    .addOnFailureListener { e ->
+                        bringCallManagerToForeground()
+                    }
+            } catch (e: Exception) {
+                // 에러 발생 시 기존 방식으로 콜 생성
+                val callData = hashMapOf<String, Any>(
+                    "phoneNumber" to phoneNumber,
+                    "customerName" to (contactName ?: ""),
+                    "customerAddress" to (contactAddress ?: ""),
+                    "status" to CallStatus.WAITING.firestoreValue,
+                    "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                    "detectedTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                    "regionId" to regionId,
+                    "officeId" to officeId,
+                    "deviceName" to deviceName,
+                    "callType" to "수신",
+                    "timestampClient" to System.currentTimeMillis(),
+                    "fromCallManager" to true,
+                    "isAppCustomer" to false,
+                    "customerId" to "",
+                    "createdFrom" to "phone"
+                )
+
+                val targetPath = "regions/$regionId/offices/$officeId/calls"
+                firestore.collection(targetPath)
+                    .add(callData)
+                    .addOnSuccessListener { documentReference ->
+                        bringCallManagerToForegroundForNewCall(documentReference.id, phoneNumber, contactName, contactAddress)
+                    }
+                    .addOnFailureListener { e2 ->
+                        bringCallManagerToForeground()
+                    }
             }
-            .addOnFailureListener { e ->
-                bringCallManagerToForeground()
-            }
+        }
     }
 
     /**
@@ -786,13 +860,15 @@ class CallDetectorService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        try {
-            callLogObserver?.let { observer ->
-                contentResolver.unregisterContentObserver(observer)
-            }
-        } catch (e: Exception) {
-            // 이미 해제되었거나 초기화되지 않은 경우 무시
-        }
+        // CallLogObserver는 더 이상 사용하지 않으므로 unregister도 주석 처리
+        // try {
+        //     callLogObserver?.let { observer ->
+        //         contentResolver.unregisterContentObserver(observer)
+        //     }
+        // } catch (e: Exception) {
+        //     // 이미 해제되었거나 초기화되지 않은 경우 무시
+        // }
+        serviceScope.cancel() // 코루틴 스코프 해제 (메모리 누수 방지)
         isRunning = false
     }
 }

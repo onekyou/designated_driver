@@ -3,6 +3,7 @@ package com.designated.callmanager.util
 import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -23,6 +24,7 @@ class CallManagerPermissionManager(
         private const val PREFS_NAME = "CallManagerPrefs"
         private const val KEY_OVERLAY_PERMISSION_REQUESTED = "overlay_permission_requested"
         private const val KEY_BATTERY_OPTIMIZATION_REQUESTED = "battery_optimization_requested"
+        private const val KEY_CALL_SCREENING_ROLE_REQUESTED = "call_screening_role_requested"
     }
 
     private val prefs = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -64,12 +66,6 @@ class CallManagerPermissionManager(
             permission = Manifest.permission.READ_PHONE_STATE,
             title = "전화 상태 읽기",
             description = "콜 디텍터 기능 활성화 시 전화 감지에 필요합니다.",
-            required = false
-        ),
-        PermissionInfo(
-            permission = Manifest.permission.READ_CALL_LOG,
-            title = "통화 기록 읽기",
-            description = "콜 디텍터 기능 활성화 시 통화 정보 수집에 필요합니다.",
             required = false
         ),
         PermissionInfo(
@@ -342,7 +338,7 @@ class CallManagerPermissionManager(
             }
         }
 
-        finalizePermissionCheck()
+        checkCallScreeningRole()
     }
 
     private fun showBatteryOptimizationDialog() {
@@ -356,12 +352,12 @@ class CallManagerPermissionManager(
             .setPositiveButton("설정으로 이동") { _, _ ->
                 prefs.edit { putBoolean(KEY_BATTERY_OPTIMIZATION_REQUESTED, true) }
                 requestBatteryOptimizationExemption()
-                finalizePermissionCheck()
+                checkCallScreeningRole()
             }
             .setNegativeButton("건너뛰기") { _, _ ->
                 prefs.edit { putBoolean(KEY_BATTERY_OPTIMIZATION_REQUESTED, true) }
                 showToast("배터리 절약 모드에서 알림이 중단될 수 있습니다")
-                finalizePermissionCheck()
+                checkCallScreeningRole()
             }
             .setCancelable(false)
             .show()
@@ -430,5 +426,73 @@ class CallManagerPermissionManager(
 
     fun areAllRequiredPermissionsGranted(): Boolean {
         return getRequiredPermissions().isEmpty()
+    }
+
+    /**
+     * ROLE_CALL_SCREENING 권한 체크 (Android 10+ 전용)
+     * 콜 감지를 위해 스팸 차단 앱 권한이 필요
+     */
+    private fun checkCallScreeningRole() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val hasRequestedBefore = prefs.getBoolean(KEY_CALL_SCREENING_ROLE_REQUESTED, false)
+
+            if (needsCallScreeningRole() && !hasRequestedBefore) {
+                showCallScreeningRoleDialog()
+                return
+            }
+        }
+
+        finalizePermissionCheck()
+    }
+
+    /**
+     * ROLE_CALL_SCREENING 권한이 필요한지 확인
+     */
+    private fun needsCallScreeningRole(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val roleManager = activity.getSystemService(Context.ROLE_SERVICE) as? RoleManager
+            roleManager?.isRoleHeld(RoleManager.ROLE_CALL_SCREENING) != true
+        } else {
+            false // Android 9 이하는 CallScreeningService 지원 안 함
+        }
+    }
+
+    /**
+     * ROLE_CALL_SCREENING 권한 요청 다이얼로그
+     */
+    private fun showCallScreeningRoleDialog() {
+        AlertDialog.Builder(activity)
+            .setTitle("📞 통화 감지 권한")
+            .setMessage(
+                "콜 매니저가 수신 전화를 자동으로 감지하여 Firebase에 업로드하려면 '스팸 차단 앱' 권한이 필요합니다.\n\n" +
+                "Android 10 이상에서는 이 권한이 없으면 전화번호를 읽을 수 없습니다.\n\n" +
+                "⚠️ 이 권한이 없으면 콜 감지가 작동하지 않습니다."
+            )
+            .setPositiveButton("설정으로 이동") { _, _ ->
+                prefs.edit { putBoolean(KEY_CALL_SCREENING_ROLE_REQUESTED, true) }
+                requestCallScreeningRoleFromActivity()
+                // 사용자가 설정 후 돌아오면 권한 체크 완료
+                finalizePermissionCheck()
+            }
+            .setNegativeButton("건너뛰기") { _, _ ->
+                prefs.edit { putBoolean(KEY_CALL_SCREENING_ROLE_REQUESTED, true) }
+                showToast("⚠️ Android 10 이상에서 콜 감지가 제한됩니다")
+                finalizePermissionCheck()
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    /**
+     * MainActivity의 requestCallScreeningRole() 호출
+     */
+    private fun requestCallScreeningRoleFromActivity() {
+        try {
+            // MainActivity의 requestCallScreeningRole() 호출
+            val mainActivity = activity as? com.designated.callmanager.MainActivity
+            mainActivity?.requestCallScreeningRole()
+        } catch (e: Exception) {
+            showToast("스팸 차단 앱 권한 요청에 실패했습니다")
+        }
     }
 }

@@ -197,8 +197,9 @@ fun CustomerManagementScreen(
                         CustomerCard(
                             customer = customer,
                             onClick = {
-                                selectedCustomer = customer
-                                showCustomerDetail = true
+                                // TODO: 나중에 이용정보 데이터 연결 후 활성화
+                                // selectedCustomer = customer
+                                // showCustomerDetail = true
                             }
                         )
                     }
@@ -221,6 +222,8 @@ fun CustomerManagementScreen(
         }
 
         // 회원 상세 정보 BottomSheet
+        // TODO: 나중에 이용정보 데이터 연결 후 활성화
+        /*
         if (showCustomerDetail && selectedCustomer != null) {
             CustomerDetailBottomSheet(
                 customer = selectedCustomer!!,
@@ -230,6 +233,7 @@ fun CustomerManagementScreen(
                 }
             )
         }
+        */
 
         // 휴면 회원 삭제 확인 다이얼로그
         if (showDeleteDialog) {
@@ -524,9 +528,30 @@ fun CustomerCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                if (customer.totalRides > 0) {
+                // 기사 추천 정보 표시
+                if (!customer.referralDriverName.isNullOrEmpty()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.PersonAdd,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.tertiary
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            "추천: ${customer.referralDriverName}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+
+                if (customer.totalRides > 0 || customer.currentPoints > 0) {
                     Text(
-                        "이용 ${customer.totalRides}회 • ${customer.points}P",
+                        "이용 ${customer.totalCalls}회 • ${customer.currentPoints}P",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

@@ -20,7 +20,8 @@ data class DriverInfo(
     @PropertyName("email") var email: String? = null,
     @PropertyName("driverType") var driverType: String? = null,
     @PropertyName("approvedAt") var approvedAt: Timestamp? = null,
-    @PropertyName("approvalStatus") var approvalStatus: String = Constants.APPROVAL_STATUS_PENDING // String 타입 및 상수 사용
+    @PropertyName("approvalStatus") var approvalStatus: String = Constants.APPROVAL_STATUS_PENDING, // String 타입 및 상수 사용
+    @PropertyName("referralQrUrl") var referralQrUrl: String? = null // 추천 QR URL
 ) {
     constructor() : this(
         id = "",
@@ -35,6 +36,7 @@ data class DriverInfo(
         email = null,
         driverType = null,
         approvedAt = null,
-        approvalStatus = Constants.APPROVAL_STATUS_PENDING
+        approvalStatus = Constants.APPROVAL_STATUS_PENDING,
+        referralQrUrl = null
     )
 }

@@ -15,11 +15,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.designated.callmanager.data.DriverInfo
 
 sealed class PendingDriversUiState {
     object Loading : PendingDriversUiState()
     data class Success(val drivers: List<PendingDriverInfo>) : PendingDriversUiState()
     data class Error(val message: String) : PendingDriversUiState()
+}
+
+sealed class ApprovedDriversUiState {
+    object Loading : ApprovedDriversUiState()
+    data class Success(val drivers: List<DriverInfo>) : ApprovedDriversUiState()
+    data class Error(val message: String) : ApprovedDriversUiState()
 }
 
 sealed class DriverApprovalState {
@@ -38,6 +45,9 @@ class PendingDriversViewModel(
 
     private val _uiState = MutableStateFlow<PendingDriversUiState>(PendingDriversUiState.Loading)
     val uiState: StateFlow<PendingDriversUiState> = _uiState.asStateFlow()
+
+    private val _approvedDriversState = MutableStateFlow<ApprovedDriversUiState>(ApprovedDriversUiState.Loading)
+    val approvedDriversState: StateFlow<ApprovedDriversUiState> = _approvedDriversState.asStateFlow()
 
     private val _approvalState = MutableStateFlow<DriverApprovalState>(DriverApprovalState.Idle)
     val approvalState: StateFlow<DriverApprovalState> = _approvalState.asStateFlow()
@@ -116,6 +126,14 @@ class PendingDriversViewModel(
         _approvalState.value = DriverApprovalState.Loading
         viewModelScope.launch {
             try {
+                // 추천 QR URL 생성
+                val referralQrUrl = buildReferralUrl(
+                    driverInfo.targetRegionId,
+                    driverInfo.targetOfficeId,
+                    driverUid,
+                    driverInfo.name ?: ""
+                )
+
                 val finalDriverData: Map<String, Any?> = mapOf(
                     "id" to driverUid,
                     "authUid" to driverUid,
@@ -140,7 +158,8 @@ class PendingDriversViewModel(
                     "approvedAt" to com.google.firebase.Timestamp.now(),
                     "isActive" to true,
                     "rating" to 0f,
-                    "totalTrips" to 0
+                    "totalTrips" to 0,
+                    "referralQrUrl" to referralQrUrl  // 추천 QR URL 추가
                 )
 
                 val normalizedType = driverInfo.driverType.trim()
@@ -249,6 +268,185 @@ class PendingDriversViewModel(
 
     fun resetApprovalState() {
         _approvalState.value = DriverApprovalState.Idle
+    }
+
+    /**
+     * 승인된 기사 목록 조회 (대리기사 + 픽업기사)
+     */
+    fun fetchApprovedDrivers() {
+        android.util.Log.d("PendingDriversViewModel", "fetchApprovedDrivers called - regionId: $regionId, officeId: $officeId")
+
+        if (regionId.isBlank() || officeId.isBlank()) {
+            _approvedDriversState.value = ApprovedDriversUiState.Error("관리자 정보(지역/사무실 ID)가 유효하지 않습니다.")
+            return
+        }
+
+        _approvedDriversState.value = ApprovedDriversUiState.Loading
+        viewModelScope.launch {
+            try {
+                val allDrivers = mutableListOf<DriverInfo>()
+
+                // 대리기사 조회
+                val designatedSnapshot = firestore
+                    .collection("regions").document(regionId)
+                    .collection("offices").document(officeId)
+                    .collection("designated_drivers")
+                    .whereEqualTo("approvalStatus", Constants.APPROVAL_STATUS_APPROVED)
+                    .get()
+                    .await()
+
+                designatedSnapshot.documents.mapNotNullTo(allDrivers) { doc ->
+                    try {
+                        doc.toObject(DriverInfo::class.java)?.copy(
+                            id = doc.id,
+                            authUid = doc.id
+                        )
+                    } catch (e: Exception) {
+                        android.util.Log.e("PendingDriversViewModel", "Error parsing designated driver ${doc.id}", e)
+                        null
+                    }
+                }
+
+                // 픽업기사 조회
+                val pickupSnapshot = firestore
+                    .collection("regions").document(regionId)
+                    .collection("offices").document(officeId)
+                    .collection("pickup_drivers")
+                    .whereEqualTo("approvalStatus", Constants.APPROVAL_STATUS_APPROVED)
+                    .get()
+                    .await()
+
+                pickupSnapshot.documents.mapNotNullTo(allDrivers) { doc ->
+                    try {
+                        doc.toObject(DriverInfo::class.java)?.copy(
+                            id = doc.id,
+                            authUid = doc.id
+                        )
+                    } catch (e: Exception) {
+                        android.util.Log.e("PendingDriversViewModel", "Error parsing pickup driver ${doc.id}", e)
+                        null
+                    }
+                }
+
+                android.util.Log.d("PendingDriversViewModel", "승인된 기사 ${allDrivers.size}명 조회 완료")
+                _approvedDriversState.value = ApprovedDriversUiState.Success(allDrivers.sortedBy { it.name })
+
+            } catch (e: Exception) {
+                android.util.Log.e("PendingDriversViewModel", "fetchApprovedDrivers failed", e)
+                _approvedDriversState.value = ApprovedDriversUiState.Error("승인된 기사 목록 로드 실패: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * 승인된 기사 퇴사 처리
+     */
+    fun retireDriver(driverInfo: DriverInfo) {
+        val driverUid = driverInfo.authUid
+        if (driverUid.isNullOrBlank()) {
+            _approvalState.value = DriverApprovalState.Error("퇴사 처리 실패: 기사 고유 ID(authUid)가 없습니다.")
+            return
+        }
+
+        _approvalState.value = DriverApprovalState.Loading
+        viewModelScope.launch {
+            try {
+                // 기사 타입에 따라 컬렉션 결정
+                val driverType = driverInfo.driverType ?: "대리기사"
+                val driverCollection = when {
+                    driverType.equals("PICKUP", ignoreCase = true) -> "pickup_drivers"
+                    driverType == "픽업기사" -> "pickup_drivers"
+                    driverType.equals("DESIGNATED", ignoreCase = true) -> "designated_drivers"
+                    driverType == "대리기사" -> "designated_drivers"
+                    else -> "designated_drivers"
+                }
+
+                // 기사 문서 삭제
+                val driverDocRef = firestore
+                    .collection("regions").document(regionId)
+                    .collection("offices").document(officeId)
+                    .collection(driverCollection).document(driverUid)
+
+                driverDocRef.delete().await()
+                android.util.Log.d("PendingDriversViewModel", "기사 문서 삭제 완료: $driverUid")
+
+                // Cloud Functions를 통해 Auth 계정 삭제 요청
+                try {
+                    val deleteRequest = mapOf(
+                        "uid" to driverUid,
+                        "requestedBy" to "call_manager_retire"
+                    )
+                    firestore.collection("delete_requests").add(deleteRequest).await()
+                    android.util.Log.d("PendingDriversViewModel", "Auth 계정 삭제 요청 완료")
+                } catch (e: Exception) {
+                    android.util.Log.w("PendingDriversViewModel", "Auth 계정 삭제 요청 실패: ${e.message}")
+                }
+
+                _approvalState.value = DriverApprovalState.Success(driverInfo.name ?: "(이름 없음)", false)
+
+                // 목록 새로고침
+                fetchApprovedDrivers()
+
+            } catch (e: Exception) {
+                android.util.Log.e("PendingDriversViewModel", "retireDriver failed", e)
+                _approvalState.value = DriverApprovalState.Error("기사 퇴사 처리 중 오류 발생: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * 기사 추천 QR URL 생성 (토큰 방식)
+     */
+    private suspend fun buildReferralUrl(
+        regionId: String,
+        officeId: String,
+        driverId: String,
+        driverName: String
+    ): String {
+        // 1. 토큰 생성
+        val token = java.util.UUID.randomUUID().toString()
+
+        // 2. 사무실 정보 가져오기
+        val officeDoc = firestore
+            .collection("regions").document(regionId)
+            .collection("offices").document(officeId)
+            .get()
+            .await()
+
+        val officePhone = officeDoc.getString("phone") ?: ""
+        val bankName = officeDoc.getString("bankName") ?: ""
+        val accountNumber = officeDoc.getString("accountNumber") ?: ""
+        val accountHolder = officeDoc.getString("accountHolder") ?: ""
+
+        // 3. Firestore에 토큰 데이터 저장 (기사 정보 포함!)
+        val tokenData = mapOf(
+            "token" to token,
+            "officeId" to officeId,
+            "regionId" to regionId,
+            "driverId" to driverId,           // ✅ 기사 ID
+            "driverName" to driverName,       // ✅ 기사 이름
+            "officePhone" to officePhone,
+            "bankName" to bankName,
+            "accountNumber" to accountNumber,
+            "accountHolder" to accountHolder,
+            "createdAt" to com.google.firebase.Timestamp.now(),
+            "expiresAt" to com.google.firebase.Timestamp(
+                System.currentTimeMillis() / 1000 + 7 * 24 * 60 * 60, // 7일 후
+                0
+            ),
+            "status" to "pending"
+        )
+
+        firestore
+            .collection("attributionTokens")
+            .document(token)
+            .set(tokenData)
+            .await()
+
+        android.util.Log.d("PendingDriversViewModel", "기사 추천 토큰 생성 완료: $token (기사: $driverName)")
+
+        // 4. 토큰 URL 반환
+        return "https://calldetector-5d61e.web.app/?token=$token"
     }
 
     class Factory(private val application: Application, private val regionId: String, private val officeId: String) : ViewModelProvider.Factory {

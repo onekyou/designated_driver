@@ -102,6 +102,7 @@ fun CallStatus.getDisplayName(): String {
         CallStatus.COMPLETED -> "완료"
         CallStatus.SHARED_OUT -> "공유완료"
         CallStatus.CANCELED -> "취소"
+        CallStatus.CANCELLED -> "취소요청"
         CallStatus.HOLD -> "보류"
         CallStatus.UNKNOWN -> "알수없음"
     }
@@ -479,6 +480,7 @@ fun DashboardScreen(
                     modifier = Modifier.fillMaxWidth().weight(4.5f),
                     calls = calls.filter { call ->
                         val status = CallStatus.fromFirestoreValue(call.status)
+                        // CANCELLED(취소요청)은 표시, CANCELED/COMPLETED/SHARED_OUT만 숨김
                         status != CallStatus.COMPLETED && status != CallStatus.CANCELED && status != CallStatus.SHARED_OUT
                     },
                     title = "내부 호출 목록",
@@ -695,6 +697,9 @@ fun CallCard(call: CallInfo, onCallClick: (CallInfo) -> Unit) {
                     call.customerAddress
                 }) ?: "정보 없음"
 
+                // 🔍 디버깅 로그
+                android.util.Log.d("DashboardScreen", "콜 표시: phoneNumber=${call.phoneNumber}, customerName=${call.customerName}, isAppCustomer=${call.isAppCustomer}, createdFrom=${call.createdFrom}")
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     // 공유콜 아이콘
                     if (call.callType == "SHARED") {
@@ -707,11 +712,11 @@ fun CallCard(call: CallInfo, onCallClick: (CallInfo) -> Unit) {
                         Spacer(modifier = Modifier.width(4.dp))
                     }
 
-                    // 앱 콜 아이콘 (고객앱/랜딩페이지에서 온 콜)
-                    if (call.createdFrom == "customer_app" || call.createdFrom == "landing") {
+                    // 앱 콜 아이콘 (고객앱/랜딩페이지에서 온 콜 또는 앱 회원)
+                    if (call.createdFrom == "customer_app" || call.createdFrom == "landing" || call.isAppCustomer == true) {
                         Icon(
                             imageVector = Icons.Default.PhoneAndroid,
-                            contentDescription = "앱 콜",
+                            contentDescription = "앱 회원",
                             modifier = Modifier.size(16.dp),
                             tint = Color(0xFF4CAF50) // 초록색
                         )
@@ -758,12 +763,13 @@ fun CallCard(call: CallInfo, onCallClick: (CallInfo) -> Unit) {
                 text = statusDisplayName,
                 style = MaterialTheme.typography.labelMedium,
                 color = when (callStatus) {
-                    CallStatus.PENDING -> Color(0xFFFF5722)
-                    CallStatus.ASSIGNED -> Color(0xFFFFAB00)
-                    CallStatus.COMPLETED -> Color.Gray
-                    CallStatus.SHARED_OUT -> Color(0xFF9C27B0)
-                    CallStatus.CANCELED -> Color.Gray
-                    else -> Color(0xFF4CAF50)
+                    CallStatus.PENDING -> Color(0xFFFF5722)      // 주황색 - 기사승인대기
+                    CallStatus.ASSIGNED -> Color(0xFFFFAB00)     // 황색 - 배차완료
+                    CallStatus.COMPLETED -> Color.Gray           // 회색 - 완료
+                    CallStatus.SHARED_OUT -> Color(0xFF9C27B0)   // 보라색 - 공유완료
+                    CallStatus.CANCELED -> Color.Gray            // 회색 - 취소
+                    CallStatus.CANCELLED -> Color(0xFFE91E63)    // 핑크색 - 취소요청
+                    else -> Color(0xFF4CAF50)                     // 녹색 - 기본(대기 등)
                 }
             )
             }

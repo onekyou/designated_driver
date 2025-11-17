@@ -115,6 +115,11 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                         val success = regionOfficeEditor.commit()
 
                         if (success) {
+                            // ✅ Two-Phase Commit: 로그인 완료 후 managerTokens에 FCM 토큰 저장
+                            // Phase 2를 명시적으로 트리거 (Phase 1은 MyFirebaseMessagingService에서 자동 실행)
+                            android.util.Log.d("LoginViewModel", "[fetchAdminInfoAndProceed] 로그인 성공 - managerTokens 동기화 시작")
+                            saveFcmTokenToManagerTokens(uid, regionId, officeId)
+
                             _loginState.value = LoginState.Success(regionId, officeId)
                         } else {
                             _loginState.value = LoginState.Error("로그인 정보 저장 실패")
@@ -141,6 +146,51 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
 
     fun resetLoginState() {
         _loginState.value = LoginState.Idle
+    }
+
+    /**
+     * Two-Phase Commit Phase 2: managerTokens 컬렉션에 FCM 토큰 저장
+     * 로그인 성공 후 regionId/officeId가 확정된 시점에 호출
+     * Phase 1 (admins 저장)은 MyFirebaseMessagingService에서 자동 실행
+     */
+    private fun saveFcmTokenToManagerTokens(adminId: String, regionId: String, officeId: String) {
+        viewModelScope.launch {
+            try {
+                android.util.Log.d("LoginViewModel", "[saveFcmTokenToManagerTokens] Phase 2 시작 - managerTokens 저장")
+
+                // FCM 토큰 가져오기
+                val token = com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
+                android.util.Log.d("LoginViewModel", "[saveFcmTokenToManagerTokens] FCM 토큰 획득: ${token.take(20)}...")
+
+                // managerTokens 컬렉션에 저장
+                val managerTokenData = hashMapOf(
+                    "fcmToken" to token,
+                    "updatedAt" to com.google.firebase.Timestamp.now()
+                )
+
+                db.collection("regions").document(regionId)
+                    .collection("offices").document(officeId)
+                    .collection("managerTokens").document(adminId)
+                    .set(managerTokenData, com.google.firebase.firestore.SetOptions.merge())
+                    .await()
+
+                android.util.Log.d("LoginViewModel", "[saveFcmTokenToManagerTokens] ✅ Phase 2 완료 - managerTokens 저장 성공")
+
+                // admins 컬렉션에도 regionId/officeId 업데이트
+                val adminUpdateData = hashMapOf(
+                    "associatedRegionId" to regionId,
+                    "associatedOfficeId" to officeId
+                )
+                db.collection("admins").document(adminId)
+                    .set(adminUpdateData, com.google.firebase.firestore.SetOptions.merge())
+                    .await()
+
+                android.util.Log.d("LoginViewModel", "[saveFcmTokenToManagerTokens] ✅ admins에 regionId/officeId 업데이트 완료")
+            } catch (e: Exception) {
+                android.util.Log.e("LoginViewModel", "[saveFcmTokenToManagerTokens] ❌ managerTokens 저장 실패: ${e.message}")
+                e.printStackTrace()
+            }
+        }
     }
 
     class Factory(private val application: Application) : ViewModelProvider.Factory {
