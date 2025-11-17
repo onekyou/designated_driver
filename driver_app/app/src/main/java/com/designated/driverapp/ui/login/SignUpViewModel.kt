@@ -147,6 +147,7 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
                     "driverType" to driverType,
                     "targetRegionId" to selectedRegion!!.id,
                     "targetOfficeId" to selectedOffice!!.id,
+                    "status" to "승인대기중",
                     "requestedAt" to com.google.firebase.Timestamp.now()
                 )
 

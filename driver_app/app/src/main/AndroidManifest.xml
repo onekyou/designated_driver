@@ -14,6 +14,8 @@
     <!-- 위치 권한 추가 -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- 음성 인식 권한 (음성 입력 기능) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- 다른 앱 위에 표시 권한 추가 -->
     <!-- <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" /> -->
 

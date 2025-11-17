@@ -15,9 +15,11 @@ import com.designated.driverapp.ui.login.SignUpScreen
 import com.designated.driverapp.viewmodel.DriverViewModel
 import com.designated.driverapp.ui.home.HistorySettlementScreen
 import com.designated.driverapp.ui.details.CallDetailsScreen
+import com.designated.driverapp.ui.screens.home.ReferralQRScreen
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.activity.compose.BackHandler
 
 object AppDestinations {
     const val LOGIN_ROUTE = "login"
@@ -26,6 +28,7 @@ object AppDestinations {
     const val SIGNUP_ROUTE = "signup"
     const val HISTORY_SETTLEMENT_ROUTE = "history_settlement"
     const val CALL_DETAILS_ROUTE = "call_details"
+    const val REFERRAL_QR_ROUTE = "referral_qr"
 }
 
 @Composable
@@ -99,6 +102,11 @@ fun AppNavigation(
             )
         }
         composable(AppDestinations.HISTORY_SETTLEMENT_ROUTE) {
+            // 정산 페이지에서 시스템 뒤로가기 버튼 차단
+            BackHandler(enabled = true) {
+                // 아무 동작도 하지 않음
+            }
+
             HistorySettlementScreen(
                 navController = navController,
                 viewModel = driverViewModel,
@@ -114,6 +122,21 @@ fun AppNavigation(
             if (callId != null) {
                 CallDetailsScreen(navController = navController, viewModel = driverViewModel, callId = callId)
             }
+        }
+
+        composable(AppDestinations.REFERRAL_QR_ROUTE) {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val prefs = context.getSharedPreferences("driver_prefs", android.content.Context.MODE_PRIVATE)
+            val regionId = prefs.getString("regionId", "") ?: ""
+            val officeId = prefs.getString("officeId", "") ?: ""
+            val driverId = prefs.getString("driverId", "") ?: ""
+
+            ReferralQRScreen(
+                driverId = driverId,
+                regionId = regionId,
+                officeId = officeId,
+                onBackClick = { navController.popBackStack() }
+            )
         }
     }
 }

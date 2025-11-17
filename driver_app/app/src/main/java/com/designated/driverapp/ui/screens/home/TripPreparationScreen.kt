@@ -15,6 +15,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Phone
@@ -91,7 +92,7 @@ fun TripPreparationScreen(
     var fare by remember(callInfo.id) {
         val initialFare = when {
             callInfo.fare_set != 0 -> callInfo.fare_set
-            callInfo.fare != 0 -> callInfo.fare
+            callInfo.fare != null && callInfo.fare != 0 -> callInfo.fare
             else -> 0
         }
         mutableStateOf(if (initialFare != 0) initialFare.toString() else "")
@@ -388,7 +389,7 @@ fun TripPreparationScreen(
                         IconButton(onClick = {
                             destination = if (callInfo.customerAddress.isNotBlank()) callInfo.customerAddress else callInfo.destination
                         }) {
-                            Icon(Icons.Default.LocationOn, contentDescription = "손님 주소 입력")
+                            Icon(Icons.Default.Home, contentDescription = "집주소 입력")
                         }
                     }
                 },

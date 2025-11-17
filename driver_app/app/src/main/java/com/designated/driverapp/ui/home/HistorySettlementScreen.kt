@@ -46,6 +46,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import androidx.compose.runtime.SideEffect
 import android.util.Log
+import androidx.activity.compose.BackHandler
 
 @Composable
 fun HistorySettlementScreen(
@@ -139,6 +140,11 @@ fun HistorySettlementScreen(
         if (shouldNavigateToHistorySettlement) {
             viewModel.onNavigateToHistorySettlementHandled()
         }
+    }
+
+    // 시스템 뒤로가기 버튼 차단
+    BackHandler(enabled = true) {
+        // 아무 동작도 하지 않음 - 상단 뒤로가기 버튼으로만 나갈 수 있음
     }
 
     if (showDialog) {

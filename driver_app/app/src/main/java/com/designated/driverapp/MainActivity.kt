@@ -41,30 +41,18 @@ class MainActivity : ComponentActivity() {
     private val TAG = "MainActivity"
     private lateinit var auth: FirebaseAuth
 
-    private val requestPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
-            if (isGranted) {
-            } else {
-                Toast.makeText(this, "백그라운드 상태 알림을 받으려면 알림 권한이 필요합니다.", Toast.LENGTH_LONG).show()
-            }
+    // 권한 요청 결과를 처리하는 런처
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val deniedPermissions = permissions.filter { !it.value }.keys
+        if (deniedPermissions.isNotEmpty()) {
+            Log.w(TAG, "거부된 권한: $deniedPermissions")
+        } else {
+            Log.d(TAG, "모든 권한이 허용되었습니다")
+            updateFcmToken()
         }
-
-    private val requestLocationPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
-            if (isGranted) {
-            } else {
-                Toast.makeText(this, "현재 위치를 사용하려면 위치 권한이 필요합니다.", Toast.LENGTH_LONG).show()
-            }
-        }
-
-    private val requestAudioPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
-            if (isGranted) {
-                Toast.makeText(this, "음성 입력 기능이 활성화되었습니다.", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, "음성 입력을 사용하려면 마이크 권한이 필요합니다.", Toast.LENGTH_LONG).show()
-            }
-        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -74,9 +62,10 @@ class MainActivity : ComponentActivity() {
 
         val currentUser = auth.currentUser
 
-        askNotificationPermission()
-        askLocationPermission()
-        askAudioPermission()
+        // 최소한의 권한 요청 로직 - 로그인 상태만 확인
+        if (currentUser != null && !areAllRequiredPermissionsGranted()) {
+            requestAllPermissions()
+        }
 
         setContent {
             DriverAppTheme {
@@ -84,25 +73,49 @@ class MainActivity : ComponentActivity() {
 
                 val initialCallId = remember { mutableStateOf(intent.getStringExtra("callId")) }
 
-                AppNavigation(
-                    navController = navController,
-                    driverViewModel = driverViewModel,
-                    startDestination = if (currentUser != null) {
+                val startDest = if (currentUser != null) {
+                    // SharedPreferences에서 로그인 정보 확인
+                    val prefs = getSharedPreferences("driver_app_prefs", Context.MODE_PRIVATE)
+                    val hasLoginInfo = !prefs.getString("pref_region_id", "").isNullOrBlank() &&
+                                      !prefs.getString("pref_office_id", "").isNullOrBlank()
+
+                    if (hasLoginInfo) {
                         if (!initialCallId.value.isNullOrBlank()) {
                             "call_details/{callId}".replace("{callId}", initialCallId.value!!)
                         } else {
                             "home"
                         }
                     } else {
-                        "login"
+                        "login" // SharedPreferences 로그인 정보가 없으면 로그인 화면으로
                     }
+                } else {
+                    "login"
+                }
+
+
+                AppNavigation(
+                    navController = navController,
+                    driverViewModel = driverViewModel,
+                    startDestination = startDest
                 )
 
-                LaunchedEffect(intent) {
-                    val newCallId = intent.getStringExtra("callId")
-                    if (!newCallId.isNullOrBlank() && currentUser != null) {
-                        navController.navigate("call_details/$newCallId")
-                        intent.removeExtra("callId")
+                // ✅ StateFlow로 callId를 관찰하여 팝업 표시
+                val notificationCallId by driverViewModel.notificationCallId.collectAsState()
+
+                LaunchedEffect(notificationCallId) {
+                    if (!notificationCallId.isNullOrBlank() && auth.currentUser != null) {
+                        Log.d(TAG, "LaunchedEffect: processing notificationCallId = $notificationCallId")
+                        driverViewModel.handleNotificationCallId(notificationCallId!!)
+                        driverViewModel.clearNotificationCallId()
+                    }
+                }
+
+                // 최초 실행 시 intent에서 callId 확인
+                LaunchedEffect(Unit) {
+                    val initialCallId = intent.getStringExtra("callId")
+                    if (!initialCallId.isNullOrBlank() && auth.currentUser != null) {
+                        Log.d(TAG, "Initial callId from intent: $initialCallId")
+                        driverViewModel.setNotificationCallId(initialCallId)
                     }
                 }
             }
@@ -113,58 +126,51 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
 
-        // 알림 클릭으로 들어온 callId 처리
+        // 알림 클릭으로 들어온 callId 처리 - StateFlow로 전달하여 Compose가 반응하도록 함
         val callId = intent.getStringExtra("callId")
         if (!callId.isNullOrBlank() && auth.currentUser != null) {
             Log.d(TAG, "onNewIntent: callId received = $callId")
-            driverViewModel.handleNotificationCallId(callId)
+            driverViewModel.setNotificationCallId(callId)
         }
     }
 
-    private fun askNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val permission = Manifest.permission.POST_NOTIFICATIONS
-            when {
-                ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED -> {
-                }
-                shouldShowRequestPermissionRationale(permission) -> {
-                    Toast.makeText(this, "백그라운드 알림을 위해 권한이 필요합니다. 다시 요청합니다.", Toast.LENGTH_SHORT).show()
-                    requestPermissionLauncher.launch(permission)
-                }
-                else -> {
-                    requestPermissionLauncher.launch(permission)
-                }
+    private fun updateFcmToken() {
+        // FCM 토큰 업데이트 (기존 코드가 있다면 여기에 구현)
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (!task.isSuccessful) {
+                Log.w(TAG, "FCM 토큰 가져오기 실패", task.exception)
+                return@addOnCompleteListener
             }
+
+            val token = task.result
+            Log.d(TAG, "FCM 토큰: $token")
+            // TODO: FCM 토큰을 서버에 업데이트하는 로직 구현 필요
         }
     }
 
-    private fun askLocationPermission() {
-        val permission = Manifest.permission.ACCESS_FINE_LOCATION
-        when {
-            ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED -> {
-            }
-            shouldShowRequestPermissionRationale(permission) -> {
-                Toast.makeText(this, "출발지 자동 입력을 위해 위치 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
-                requestLocationPermissionLauncher.launch(permission)
-            }
-            else -> {
-                requestLocationPermissionLauncher.launch(permission)
-            }
+    private fun areAllRequiredPermissionsGranted(): Boolean {
+        val requiredPermissions = arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                Manifest.permission.POST_NOTIFICATIONS else null,
+            Manifest.permission.RECORD_AUDIO
+        ).filterNotNull()
+
+        return requiredPermissions.all { permission ->
+            ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
         }
     }
 
-    private fun askAudioPermission() {
-        val permission = Manifest.permission.RECORD_AUDIO
-        when {
-            ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED -> {
-            }
-            shouldShowRequestPermissionRationale(permission) -> {
-                Toast.makeText(this, "음성으로 주소와 요금을 입력하려면 마이크 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
-                requestAudioPermissionLauncher.launch(permission)
-            }
-            else -> {
-                requestAudioPermissionLauncher.launch(permission)
-            }
-        }
+    private fun requestAllPermissions() {
+        val requiredPermissions = arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                Manifest.permission.POST_NOTIFICATIONS else null,
+            Manifest.permission.RECORD_AUDIO
+        ).filterNotNull().toTypedArray()
+
+        permissionLauncher.launch(requiredPermissions)
     }
 }

@@ -6,6 +6,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavController
@@ -150,6 +151,35 @@ fun HomeScreen(
                 .padding(paddingValues),
             contentAlignment = Alignment.Center
         ) {
+            // 뒤로가기 버튼 처리
+            when {
+                // 정산 대기 중: 뒤로가기 차단 (정산 완료 필수)
+                uiState.callForSettlement != null -> {
+                    BackHandler(enabled = true) {
+                        // 뒤로가기 차단 - 아무 동작 하지 않음
+                    }
+                }
+                // 운행 중: 뒤로가기 차단 (운행 완료 필수)
+                uiState.activeCall?.statusEnum == CallStatus.IN_PROGRESS -> {
+                    BackHandler(enabled = true) {
+                        // 뒤로가기 차단 - 아무 동작 하지 않음
+                    }
+                }
+                // 운행 준비 중: 뒤로가기 차단 (취소 버튼으로만 취소 가능)
+                uiState.activeCall?.statusEnum == CallStatus.ACCEPTED -> {
+                    BackHandler(enabled = true) {
+                        // 뒤로가기 차단 - 아무 동작 하지 않음
+                        // 사용자는 화면의 "취소" 버튼을 통해 명시적으로 운행을 취소해야 함
+                    }
+                }
+                // 신규 콜 팝업: 뒤로가기로 팝업 닫기
+                uiState.newCallPopup != null -> {
+                    BackHandler(enabled = true) {
+                        viewModel.dismissNewCallPopup()
+                    }
+                }
+            }
+
             when {
                 uiState.newCallPopup != null -> {
                     val newCallPopup = uiState.newCallPopup!!
@@ -190,7 +220,8 @@ fun HomeScreen(
                                 driverStatus = uiState.driverStatus,
                                 onGoOnline = { viewModel.updateDriverStatus(DriverStatus.ONLINE) },
                                 onCheckPendingDispatch = { viewModel.checkForPendingDispatch() },
-                                hasPendingDispatch = uiState.assignedCalls.any { it.statusEnum == CallStatus.ASSIGNED }
+                                hasPendingDispatch = uiState.assignedCalls.any { it.statusEnum == CallStatus.ASSIGNED },
+                                onShowReferralQR = { navController.navigate(AppDestinations.REFERRAL_QR_ROUTE) }
                             )
                         }
                     }
@@ -209,7 +240,8 @@ fun HomeScreen(
                         driverStatus = uiState.driverStatus,
                         onGoOnline = { viewModel.updateDriverStatus(DriverStatus.ONLINE) },
                         onCheckPendingDispatch = { viewModel.checkForPendingDispatch() },
-                        hasPendingDispatch = uiState.assignedCalls.any { it.statusEnum == CallStatus.ASSIGNED }
+                        hasPendingDispatch = uiState.assignedCalls.any { it.statusEnum == CallStatus.ASSIGNED },
+                        onShowReferralQR = { navController.navigate(AppDestinations.REFERRAL_QR_ROUTE) }
                     )
                 }
             }
@@ -221,13 +253,14 @@ fun HomeScreen(
             uiState.callForSettlement?.let { call ->
                 SettlementSummaryPopup(
                     callInfo = call,
-                    onConfirm = { paymentMethod, cashAmount, finalFare ->
+                    onConfirm = { paymentMethod, cashAmount, finalFare, pointsToUse ->  // ✅ 추가: pointsToUse 파라미터
                         viewModel.confirmAndFinalizeTrip(
                             callId = call.id,
                             paymentMethod = paymentMethod,
                             cashAmount = cashAmount,
                             fareToSet = finalFare,
-                            tripSummaryToSet = call.trip_summary ?: ""
+                            tripSummaryToSet = call.trip_summary ?: "",
+                            pointsToUse = pointsToUse  // ✅ 추가: 리워드 포인트 전달
                         )
                     },
                     onDismiss = {
@@ -260,13 +293,55 @@ fun CompletedScreen(callInfo: CallInfo, onRequestSettlement: () -> Unit) {
 @Composable
 fun SettlementSummaryPopup(
     callInfo: CallInfo,
-    onConfirm: (String, Int?, Int) -> Unit,
+    onConfirm: (String, Int?, Int, Int) -> Unit,  // ✅ 추가: pointsToUse 파라미터
     onDismiss: () -> Unit
 ) {
     var paymentMethod by remember { mutableStateOf("현금") }
     var cashAmount by remember { mutableStateOf("") }
     var editableFare by remember { mutableStateOf((callInfo.fare_set ?: 0).toString()) }
     var isEditingFare by remember { mutableStateOf(false) }
+
+    // ✅ 추가: 리워드 포인트 관련 상태
+    var rewardPointsToUse by remember { mutableStateOf("") }
+    var customerPointInfo by remember { mutableStateOf<Map<String, Any>?>(null) }
+    var isLoadingPoints by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    // ✅ 추가: 앱 회원이면 포인트 정보 로드
+    LaunchedEffect(callInfo.isAppCustomer, callInfo.phoneNumber) {
+        if (callInfo.isAppCustomer && callInfo.phoneNumber.isNotBlank()) {
+            isLoadingPoints = true
+            try {
+                val prefs = context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
+                val regionId = prefs.getString("regionId", "") ?: ""
+                val officeId = prefs.getString("officeId", "") ?: ""
+
+                if (regionId.isNotEmpty() && officeId.isNotEmpty()) {
+                    val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                    val doc = firestore
+                        .collection("regions").document(regionId)
+                        .collection("offices").document(officeId)
+                        .collection("customerPoints")
+                        .document(callInfo.phoneNumber)
+                        .get()
+                        .await()
+
+                    if (doc.exists()) {
+                        customerPointInfo = mapOf(
+                            "currentPoints" to (doc.getLong("currentPoints")?.toInt() ?: 0),
+                            "grade" to (doc.getString("grade") ?: "BRONZE"),
+                            "totalCalls" to (doc.getLong("totalCalls")?.toInt() ?: 0)
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "포인트 정보 로드 실패", e)
+            } finally {
+                isLoadingPoints = false
+            }
+        }
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -376,6 +451,92 @@ fun SettlementSummaryPopup(
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+
+                // ✅ 추가: 앱 회원 포인트 정보 카드
+                if (callInfo.isAppCustomer && customerPointInfo != null) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A4A2A))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                "앱 회원 리워드 포인트",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF4CAF50)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // ✅ 수정: 스마트 캐스트 문제 해결 - 로컬 변수 사용
+                            val pointInfo = customerPointInfo
+                            val currentPoints = pointInfo?.get("currentPoints") as? Int ?: 0
+                            val grade = pointInfo?.get("grade") as? String ?: "BRONZE"
+
+                            Text(
+                                "보유 포인트: ${String.format("%,d", currentPoints)}P",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White
+                            )
+                            Text(
+                                "등급: $grade",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF4CAF50)
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            OutlinedTextField(
+                                value = rewardPointsToUse,
+                                onValueChange = {
+                                    val input = it.filter { c -> c.isDigit() }
+                                    val inputInt = input.toIntOrNull() ?: 0
+                                    // 보유 포인트와 요금 중 작은 값으로 제한
+                                    val maxUsable = minOf(currentPoints, editableFare.toIntOrNull() ?: 0)
+                                    rewardPointsToUse = if (inputInt > maxUsable) maxUsable.toString() else input
+                                },
+                                label = { Text("사용할 포인트 (P)", color = Color.Gray) },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color(0xFF4CAF50),
+                                    unfocusedBorderColor = Color.Gray,
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    cursorColor = Color(0xFF4CAF50)
+                                ),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+
+                            if (rewardPointsToUse.isNotEmpty()) {
+                                val pointsUsed = rewardPointsToUse.toIntOrNull() ?: 0
+                                val totalFare = editableFare.toIntOrNull() ?: 0
+                                val finalPayment = totalFare - pointsUsed
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    "포인트 차감 후 최종 결제액: ${String.format("%,d", finalPayment)}원",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF4CAF50)
+                                )
+                            }
+                        }
+                    }
+                } else if (callInfo.isAppCustomer && isLoadingPoints) {
+                    // 로딩 중
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = Color(0xFF4CAF50))
                         }
                     }
                 }
@@ -543,7 +704,16 @@ fun SettlementSummaryPopup(
                                 "현금+포인트" -> cashAmount.toIntOrNull()
                                 else -> null
                             }
-                            onConfirm(paymentMethod, amount, finalFare)
+                            // ✅ 포인트 사용액 계산
+                            val pointsToUse = when (paymentMethod) {
+                                "포인트" -> finalFare  // 포인트 전액 사용
+                                "현금+포인트" -> {
+                                    val cash = cashAmount.toIntOrNull() ?: 0
+                                    finalFare - cash  // 요금 - 현금 = 포인트 사용액
+                                }
+                                else -> 0  // 다른 결제 방법은 포인트 미사용
+                            }
+                            onConfirm(paymentMethod, amount, finalFare, pointsToUse)
                         },
                         enabled = confirmEnabled,
                         colors = ButtonDefaults.buttonColors(

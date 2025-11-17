@@ -48,10 +48,23 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
+        Log.d(TAG, "FCM 메시지 수신: ${remoteMessage.data}")
+
         val title = remoteMessage.notification?.title ?: "콜 배정 알림"
         val body = remoteMessage.notification?.body ?: "새로운 콜이 배정되었습니다."
-
         val callId = remoteMessage.data["callId"]
+
+        Log.d(TAG, "callId: $callId, title: $title")
+
+        // 앱이 포그라운드에 있을 때도 MainActivity로 callId 전달하여 팝업 표시
+        if (!callId.isNullOrBlank()) {
+            Log.d(TAG, "MainActivity로 callId 전달: $callId")
+            val intent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
+                putExtra("callId", callId)
+            }
+            startActivity(intent)
+        }
 
         showNotification(title, body, callId)
     }
