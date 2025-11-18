@@ -17,10 +17,11 @@ class AuthRepository {
   /// 현재 사용자
   User? get currentUser => _auth.currentUser;
 
-  /// 익명 로그인 (전화번호와 함께)
+  /// 익명 로그인 (네이티브 앱과 동일 - Firestore 저장 없음)
+  /// 프로필은 ProfileSetupScreen에서만 생성
   Future<UserModel> signInAnonymously({String? phoneNumber}) async {
     try {
-      // Firebase 익명 인증
+      // Firebase 익명 인증만 수행
       final userCredential = await _auth.signInAnonymously();
       final user = userCredential.user;
 
@@ -28,37 +29,18 @@ class AuthRepository {
         throw AuthException('익명 로그인에 실패했습니다', code: 'user_null');
       }
 
-      // Device Fingerprint 생성
-      final fingerprint = await DeviceFingerprint.generate();
-      final deviceId = await DeviceFingerprint.getDeviceId();
-
-      // Firestore에 사용자 정보 저장
+      // UserModel 생성 (Firestore 저장 없이)
       final now = DateTime.now();
       final userData = UserModel(
         uid: user.uid,
         isAnonymous: true,
-        phoneNumber: phoneNumber, // 전화번호 포함
+        phoneNumber: phoneNumber,
         createdAt: now,
         updatedAt: now,
       );
 
-      // customers 컬렉션에 저장
-      await _firestore.collection('customers').doc(user.uid).set({
-        ...userData.toFirestore(),
-        'fingerprint': fingerprint,
-        'deviceId': deviceId,
-        'lastLoginAt': Timestamp.fromDate(now),
-      }, SetOptions(merge: true));
-
-      // 로컬 저장소에 저장
+      // UID만 로컬에 저장
       await _storage.writeSecure('uid', user.uid);
-      await _storage.writeSecure('fingerprint', fingerprint);
-      await _storage.setString('deviceId', deviceId);
-
-      // 전화번호도 암호화하여 저장
-      if (phoneNumber != null) {
-        await _storage.writeSecure('phoneNumber', phoneNumber);
-      }
 
       return userData;
     } on FirebaseAuthException catch (e) {
@@ -67,7 +49,7 @@ class AuthRepository {
         code: e.code,
       );
     } catch (e) {
-      throw AuthException('인증 중 오류가 발생했습니다: $e');
+      throw AuthException('인증 중 오류가 발생했습니다: \$e');
     }
   }
 
@@ -78,7 +60,7 @@ class AuthRepository {
       // 로컬 저장소에서 인증 정보 삭제 (사무실 정보는 유지)
       await _storage.deleteSecure('uid');
     } catch (e) {
-      throw AuthException('로그아웃 중 오류가 발생했습니다: $e');
+      throw AuthException('로그아웃 중 오류가 발생했습니다: \$e');
     }
   }
 
@@ -93,7 +75,7 @@ class AuthRepository {
 
       return UserModel.fromFirestore(doc.data()!, uid);
     } catch (e) {
-      throw AuthException('사용자 정보를 가져오는 중 오류가 발생했습니다: $e');
+      throw AuthException('사용자 정보를 가져오는 중 오류가 발생했습니다: \$e');
     }
   }
 
@@ -105,7 +87,7 @@ class AuthRepository {
         'updatedAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      throw AuthException('사용자 정보 업데이트 중 오류가 발생했습니다: $e');
+      throw AuthException('사용자 정보 업데이트 중 오류가 발생했습니다: \$e');
     }
   }
 
@@ -119,7 +101,7 @@ class AuthRepository {
       case 'operation-not-allowed':
         return '익명 로그인이 비활성화되어 있습니다';
       default:
-        return '인증 중 오류가 발생했습니다 (code: $code)';
+        return '인증 중 오류가 발생했습니다 (code: \$code)';
     }
   }
 
