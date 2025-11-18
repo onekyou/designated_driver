@@ -1,0 +1,297 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'firebase_options.dart';
+import 'core/theme/app_theme.dart';
+import 'core/services/storage_service.dart';
+import 'core/navigation/main_navigation.dart';
+import 'features/profile/screens/profile_setup_screen.dart';
+import 'features/auth/providers/auth_provider.dart';
+import 'features/attribution/providers/attribution_provider.dart';
+import 'features/attribution/models/attribution_result.dart';
+
+// 앱 초기화 상태를 전역으로 관리
+final appInitializedProvider = StateProvider<bool>((ref) => false);
+
+void main() async {
+  // Flutter 바인딩 초기화
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Firebase 초기화
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  // Storage Service 초기화
+  await StorageService().init();
+
+  // 앱 실행
+  runApp(
+    const ProviderScope(
+      child: DesignatedCustomerApp(),
+    ),
+  );
+}
+
+class DesignatedCustomerApp extends ConsumerWidget {
+  const DesignatedCustomerApp({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isInitialized = ref.watch(appInitializedProvider);
+    final authState = ref.watch(authNotifierProvider);
+    final attributionState = ref.watch(attributionNotifierProvider);
+
+    Widget home;
+    if (isInitialized && authState.hasValue && authState.value != null && attributionState.hasValue && attributionState.value != null) {
+      home = const MainNavigation();
+    } else {
+      home = const AppInitializer();
+    }
+
+    return MaterialApp(
+      title: '대리운전 고객',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.lightTheme,
+      home: home,
+    );
+  }
+}
+
+/// 앱 초기화 및 라우팅 결정
+class AppInitializer extends ConsumerStatefulWidget {
+  const AppInitializer({super.key});
+
+  @override
+  ConsumerState<AppInitializer> createState() => _AppInitializerState();
+}
+
+class _AppInitializerState extends ConsumerState<AppInitializer> {
+  String _statusMessage = '초기화 중...';
+
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    try {
+      // SharedPreferences에서 전화번호 확인 (프로필 유무 판단)
+      final storage = StorageService();
+      final savedPhoneNumber = await storage.getString("phoneNumber");
+      
+      if (savedPhoneNumber != null && savedPhoneNumber.isNotEmpty) {
+        // 전화번호가 저장되어 있으면 이미 프로필이 있음 -> MainNavigation으로 이동
+        debugPrint("[Initialize] 저장된 전화번호 발견: $savedPhoneNumber");
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => const MainNavigation(),
+            ),
+          );
+        }
+        return;
+      }
+
+      // 1. 익명 인증 (자동)
+      setState(() => _statusMessage = '인증 중...');
+      await _handleAuthentication();
+
+      // 2. Attribution 매칭
+      setState(() => _statusMessage = '사무실 정보 확인 중...');
+      final attribution = await _handleAttribution();
+
+      if (attribution == null) {
+        // Attribution 실패 시 에러 화면
+        if (mounted) {
+          setState(() => _statusMessage = '사무실 정보를 찾을 수 없습니다');
+        }
+        return;
+      }
+
+      // 3. Firestore에서 프로필 확인
+      setState(() => _statusMessage = '프로필 확인 중...');
+      final hasProfile = await _checkProfile(
+        attribution.regionId,
+        attribution.officeId,
+      );
+
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // 초기화 완료 표시
+      ref.read(appInitializedProvider.notifier).state = true;
+
+      if (mounted) {
+        if (!hasProfile) {
+          // 프로필 없음 → ProfileSetupScreen
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => ProfileSetupScreen(
+                regionId: attribution.regionId,
+                officeId: attribution.officeId,
+                attributionToken: attribution.token,
+                referralDriverId: attribution.referralDriverId,
+                referralDriverName: attribution.referralDriverName,
+                onProfileComplete: () {
+                  // 프로필 생성 완료 후 홈 화면으로 이동
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(
+                      builder: (context) => const MainNavigation(),
+                    ),
+                  );
+                },
+              ),
+            ),
+          );
+        } else {
+          // 프로필 있음 → MainNavigation
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => const MainNavigation(),
+            ),
+          );
+        }
+      }
+    } catch (e, stackTrace) {
+      debugPrint('[Initialize] 오류 발생: $e');
+      debugPrint('[Initialize] 스택 트레이스: $stackTrace');
+      if (mounted) {
+        setState(() => _statusMessage = '초기화 중 오류가 발생했습니다\n$e');
+      }
+
+      // 5초 후 재시도
+      await Future.delayed(const Duration(seconds: 5));
+      if (mounted) {
+        setState(() => _statusMessage = '재시도 중...');
+        _initialize(); // 재시도
+      }
+    }
+  }
+
+  /// 인증 처리 (익명 인증)
+  Future<void> _handleAuthentication() async {
+    final authNotifier = ref.read(authNotifierProvider.notifier);
+    final authState = ref.read(authNotifierProvider);
+
+    // 이미 인증된 경우 스킵
+    if (authState.hasValue && authState.value != null) {
+      return;
+    }
+
+    // 익명 로그인 (전화번호 없이)
+    await authNotifier.signInAnonymously();
+  }
+
+  /// Attribution 처리
+  Future<AttributionResult?> _handleAttribution() async {
+    final attributionNotifier = ref.read(attributionNotifierProvider.notifier);
+
+    // Attribution 매칭
+    await attributionNotifier.matchAttribution();
+
+    // 결과 반환
+    final attributionState = ref.read(attributionNotifierProvider);
+    return attributionState.value;
+  }
+
+  /// Firestore에서 프로필 확인
+  Future<bool> _checkProfile(String regionId, String officeId) async {
+    try {
+      final authState = ref.read(authNotifierProvider);
+      final user = authState.value;
+
+      if (user == null) {
+        return false;
+      }
+
+      final doc = await FirebaseFirestore.instance
+          .collection('regions')
+          .doc(regionId)
+          .collection('offices')
+          .doc(officeId)
+          .collection('customers')
+          .doc(user.uid)
+          .get();
+
+      if (doc.exists) {
+        // 전화번호를 SharedPreferences에 저장 (FCM 토큰 저장에 필요)
+        final phoneNumber = doc.data()?['phoneNumber'] as String?;
+        if (phoneNumber != null) {
+          final storage = StorageService();
+          await storage.setString('phoneNumber', phoneNumber);
+        }
+
+        // lastActiveAt 업데이트
+        await FirebaseFirestore.instance
+            .collection('regions')
+            .doc(regionId)
+            .collection('offices')
+            .doc(officeId)
+            .collection('customers')
+            .doc(user.uid)
+            .update({'lastActiveAt': FieldValue.serverTimestamp()});
+
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      debugPrint('[ProfileCheck] 프로필 확인 실패: $e');
+      return false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              AppTheme.primaryColor,
+              AppTheme.primaryColor.withOpacity(0.8),
+            ],
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // TODO: 로고 이미지 추가
+              const Icon(
+                Icons.local_taxi,
+                size: 100,
+                color: Colors.white,
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                '대리운전 고객',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 48),
+              const CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _statusMessage,
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: Colors.white70,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

@@ -1,0 +1,332 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../attribution/providers/attribution_provider.dart';
+import '../../call/providers/call_provider.dart';
+import '../../call/screens/call_request_screen.dart';
+import '../../call/screens/call_history_screen.dart';
+
+/// 홈 화면
+class HomeScreen extends ConsumerWidget {
+  const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authNotifierProvider);
+    final attributionState = ref.watch(attributionNotifierProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('대리운전 고객'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              ref.read(authNotifierProvider.notifier).refresh();
+              ref.read(attributionNotifierProvider.notifier).refresh();
+            },
+          ),
+        ],
+      ),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.local_taxi,
+                size: 80,
+                color: Colors.blue,
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                '대리운전 고객 앱',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Phase 3 완료: 콜 요청 시스템',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 48),
+
+              // 인증 상태
+              Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '인증 상태',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      authState.when(
+                        data: (user) {
+                          if (user == null) {
+                            return const Row(
+                              children: [
+                                Icon(Icons.cancel, color: Colors.red, size: 20),
+                                SizedBox(width: 8),
+                                Text('인증되지 않음'),
+                              ],
+                            );
+                          }
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.check_circle, color: Colors.green, size: 20),
+                                  const SizedBox(width: 8),
+                                  Text('인증 완료 (${user.isAnonymous ? '익명' : '일반'})'),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              if (user.phoneNumber != null) ...[
+                                Text(
+                                  '전화번호: ${user.phoneNumber}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                              ],
+                              Text(
+                                'UID: ${user.uid.substring(0, 8)}...',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                        loading: () => const Row(
+                          children: [
+                            SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                            SizedBox(width: 8),
+                            Text('인증 중...'),
+                          ],
+                        ),
+                        error: (error, _) => Row(
+                          children: [
+                            const Icon(Icons.error, color: Colors.red, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text('에러: $error')),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Attribution 상태
+              Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Attribution 상태',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      attributionState.when(
+                        data: (attribution) {
+                          if (attribution == null) {
+                            return const Row(
+                              children: [
+                                Icon(Icons.warning, color: Colors.orange, size: 20),
+                                SizedBox(width: 8),
+                                Text('매칭된 사무실 없음'),
+                              ],
+                            );
+                          }
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.check_circle, color: Colors.green, size: 20),
+                                  const SizedBox(width: 8),
+                                  Text('매칭 완료: ${attribution.officeName}'),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                '전화번호: ${attribution.officePhone}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                              if (attribution.referralDriverName != null) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  '추천인: ${attribution.referralDriverName}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          );
+                        },
+                        loading: () => const Row(
+                          children: [
+                            SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                            SizedBox(width: 8),
+                            Text('매칭 중...'),
+                          ],
+                        ),
+                        error: (error, _) => Row(
+                          children: [
+                            const Icon(Icons.error, color: Colors.red, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text('에러: $error')),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // 콜 요청 버튼
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: FilledButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CallRequestScreen(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.local_taxi, size: 28),
+                  label: const Text(
+                    '대리운전 요청하기',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    minimumSize: const Size(double.infinity, 0),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // 콜 내역 버튼
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CallHistoryScreen(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.history),
+                  label: const Text('콜 내역 보기'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    minimumSize: const Size(double.infinity, 0),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // 활성 콜 상태 (있는 경우)
+              Consumer(
+                builder: (context, ref, child) {
+                  final activeCallAsync = ref.watch(callProvider);
+
+                  return activeCallAsync.when(
+                    data: (activeCall) {
+                      if (activeCall == null) {
+                        return const SizedBox.shrink();
+                      }
+
+                      return Card(
+                        margin: const EdgeInsets.symmetric(horizontal: 16),
+                        color: Colors.green.shade50,
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.check_circle, color: Colors.green.shade700, size: 24),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '활성 콜',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.green.shade700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Text('상태: ${activeCall.status.displayText}'),
+                              const SizedBox(height: 4),
+                              Text('출발지: ${activeCall.currentLocation}'),
+                              const SizedBox(height: 4),
+                              Text('목적지: ${activeCall.destinationLocation}'),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, __) => const SizedBox.shrink(),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
