@@ -102,6 +102,31 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserModel?>> {
       state = AsyncValue.error(e, stack);
     }
   }
+
+  /// 전화번호 다시 로드 (ProfileSetupScreen에서 프로필 저장 후 호출)
+  Future<void> reloadPhoneNumber() async {
+    final currentUser = _authRepository.currentUser;
+    if (currentUser == null) {
+      state = const AsyncValue.data(null);
+      return;
+    }
+
+    try {
+      // SharedPreferences에서 전화번호 다시 로드
+      final savedPhoneNumber = await _authRepository.getSavedPhoneNumber();
+
+      // 현재 state의 UserModel을 업데이트
+      final currentData = state.value;
+      if (currentData != null) {
+        final updatedData = currentData.copyWith(
+          phoneNumber: savedPhoneNumber,
+        );
+        state = AsyncValue.data(updatedData);
+      }
+    } catch (e, stack) {
+      state = AsyncValue.error(e, stack);
+    }
+  }
 }
 
 /// AuthNotifier Provider

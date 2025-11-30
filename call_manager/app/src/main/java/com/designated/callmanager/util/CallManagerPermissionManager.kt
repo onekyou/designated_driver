@@ -38,20 +38,6 @@ class CallManagerPermissionManager(
     )
 
     private val requiredPermissions = listOf(
-        // 위치 권한 (콜 매니저 필수)
-        PermissionInfo(
-            permission = Manifest.permission.ACCESS_FINE_LOCATION,
-            title = "정확한 위치",
-            description = "기사 위치 추적 및 콜 배차에 필요합니다.",
-            required = true
-        ),
-        PermissionInfo(
-            permission = Manifest.permission.ACCESS_COARSE_LOCATION,
-            title = "대략적인 위치",
-            description = "기사 위치 추적 및 콜 배차에 필요합니다.",
-            required = true
-        ),
-
         // 알림 권한
         PermissionInfo(
             permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
@@ -72,25 +58,6 @@ class CallManagerPermissionManager(
             permission = Manifest.permission.READ_CONTACTS,
             title = "연락처 읽기",
             description = "콜 디텍터 기능 활성화 시 고객명 표시에 필요합니다.",
-            required = false
-        ),
-        PermissionInfo(
-            permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                Manifest.permission.READ_PHONE_NUMBERS else "",
-            title = "전화번호 읽기",
-            description = "콜 디텍터 기능 활성화 시 전화번호 정보에 필요합니다.",
-            required = false
-        ),
-        PermissionInfo(
-            permission = "android.permission.PROCESS_OUTGOING_CALLS",
-            title = "발신 전화 처리",
-            description = "콜 디텍터 기능 활성화 시 발신 전화 감지에 필요합니다.",
-            required = false
-        ),
-        PermissionInfo(
-            permission = Manifest.permission.SEND_SMS,
-            title = "SMS 발송",
-            description = "자동 문자 발송 기능에 필요합니다.",
             required = false
         ),
         PermissionInfo(
@@ -199,7 +166,6 @@ class CallManagerPermissionManager(
         return requiredPermissions.filter {
             !it.required && needsPermission(it.permission) &&
             (isCallDetectionEnabled ||
-             it.permission == Manifest.permission.SEND_SMS ||
              it.permission == Manifest.permission.RECORD_AUDIO)
         }
     }

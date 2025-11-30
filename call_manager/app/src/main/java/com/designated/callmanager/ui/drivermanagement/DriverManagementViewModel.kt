@@ -81,9 +81,12 @@ class DriverManagementViewModel : ViewModel() {
         driverId: String,
         driverName: String
     ): String {
+        // Play Store Install Referrer 방식
         val encodedName = URLEncoder.encode(driverName, "UTF-8")
-        return "https://calldetector-5d61e.web.app/download" +
-               "?r=$regionId&o=$officeId&d=$driverId&dn=$encodedName"
+        val referrerParams = "r=$regionId&o=$officeId&d=$driverId&dn=$encodedName"
+        return "https://play.google.com/store/apps/details" +
+               "?id=com.designated.customer" +
+               "&referrer=${URLEncoder.encode(referrerParams, "UTF-8")}"
     }
 
     fun rejectDriver(regionId: String, officeId: String, driverId: String) {

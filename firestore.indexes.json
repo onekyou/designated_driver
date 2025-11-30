@@ -313,6 +313,20 @@
       ]
     },
     {
+      "collectionGroup": "attributions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "screenResolution",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "calls",
       "queryScope": "COLLECTION",
       "fields": [

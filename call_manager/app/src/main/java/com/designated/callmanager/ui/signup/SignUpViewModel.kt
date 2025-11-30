@@ -226,15 +226,21 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
         holder: String
     ) {
         try {
-            // 랜딩 페이지 URL 생성 (Firebase Hosting) - Query Parameter 방식
-            val landingPageUrl = "https://calldetector-5d61e.web.app/?r=$regionId&o=$officeId" +
+            // Play Store Install Referrer 방식
+            val referrerParams = "r=$regionId&o=$officeId" +
                     "&phone=${android.net.Uri.encode(phone)}" +
                     "&bank=${android.net.Uri.encode(bank)}" +
                     "&account=${android.net.Uri.encode(account)}" +
                     "&holder=${android.net.Uri.encode(holder)}"
 
-            // QR 코드 데이터 = 랜딩 페이지 URL (동일하게)
-            val qrData = landingPageUrl
+            // Play Store 링크 생성
+            val playStoreUrl = "https://play.google.com/store/apps/details" +
+                    "?id=com.designated.customer" +
+                    "&referrer=${android.net.Uri.encode(referrerParams)}"
+
+            // QR 코드 데이터 = Play Store URL
+            val qrData = playStoreUrl
+            val landingPageUrl = playStoreUrl // 하위 호환
 
             // OfficeSettings 문서에 QR 코드 및 랜딩 페이지 URL 저장
             val settingsData = hashMapOf(

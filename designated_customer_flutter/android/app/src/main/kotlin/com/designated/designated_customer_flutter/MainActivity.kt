@@ -39,11 +39,9 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun getScreenResolution(): String {
-        val windowManager = getSystemService(android.content.Context.WINDOW_SERVICE) as android.view.WindowManager
-        val display = windowManager.defaultDisplay
-        val realMetrics = android.util.DisplayMetrics()
-        display.getRealMetrics(realMetrics)
-        return "${realMetrics.widthPixels}x${realMetrics.heightPixels}"
+        // Native Android 앱과 동일한 방식 사용
+        val displayMetrics = android.content.res.Resources.getSystem().displayMetrics
+        return "${displayMetrics.widthPixels}x${displayMetrics.heightPixels}"
     }
 
     // Native Android VoiceInputHelper와 동일한 방식

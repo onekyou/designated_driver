@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import '../../../core/services/storage_service.dart';
 
+import '../../auth/providers/auth_provider.dart';
 /// 프로필 설정 화면 상태
 class ProfileSetupState {
   final String nickname;
@@ -297,6 +298,8 @@ class ProfileSetupScreen extends ConsumerWidget {
                           );
 
                           if (success) {
+                            // AuthProvider에서 전화번호 다시 로드
+                            await ref.read(authNotifierProvider.notifier).reloadPhoneNumber();
                             onProfileComplete();
                           }
                         },

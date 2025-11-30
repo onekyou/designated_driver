@@ -41,6 +41,11 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.android.installreferrer.api.InstallReferrerClient
+import com.android.installreferrer.api.InstallReferrerStateListener
+import com.android.installreferrer.api.ReferrerDetails
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 
 // 토큰 매칭 결과 데이터 클래스
 data class TokenMatchResult(
@@ -172,6 +177,7 @@ suspend fun claimToken(token: String, phoneNumber: String?) {
 class MainActivity : ComponentActivity() {
     companion object {
         private const val NOTIFICATION_PERMISSION_REQUEST_CODE = 1001
+        private const val ACTIVITY_RECOGNITION_PERMISSION_REQUEST_CODE = 1002
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -179,8 +185,14 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
 
+        // Install Referrer 확인 (Play Store 설치 시 사무실 정보 자동 매칭)
+        checkInstallReferrer()
+
         // 알림 권한 요청 (Android 13+)
         requestNotificationPermission()
+
+        // 만보기 권한 요청 (Android 10+)
+        requestActivityRecognitionPermission()
 
         // FCM 토큰 요청 및 저장
         requestAndSaveFcmToken()
@@ -260,6 +272,115 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
+     * Play Store Install Referrer 확인 (Play Store 설치 시 자동 사무실 매칭)
+     * Play Store 설치 시 QR 코드의 referrer 파라미터를 자동으로 받아서 저장
+     */
+    private fun checkInstallReferrer() {
+        // 이미 사무실 정보가 저장되어 있으면 스킵
+        val prefsManager = PreferencesManager(this)
+        val savedOfficeId = prefsManager.getOfficeId()
+
+        if (savedOfficeId != null) {
+            android.util.Log.d("InstallReferrer", "이미 사무실 정보 있음: $savedOfficeId, 스킵")
+            return
+        }
+
+        val referrerClient = InstallReferrerClient.newBuilder(this).build()
+        referrerClient.startConnection(object : InstallReferrerStateListener {
+            override fun onInstallReferrerSetupFinished(responseCode: Int) {
+                when (responseCode) {
+                    InstallReferrerClient.InstallReferrerResponse.OK -> {
+                        try {
+                            val response: ReferrerDetails = referrerClient.installReferrer
+                            val referrerUrl = response.installReferrer
+
+                            android.util.Log.d("InstallReferrer", "Install Referrer 받음: $referrerUrl")
+
+                            // URL 디코딩 및 파싱
+                            if (referrerUrl.isNotEmpty()) {
+                                parseAndSaveReferrer(referrerUrl)
+                            } else {
+                                android.util.Log.d("InstallReferrer", "Referrer URL이 비어있음")
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("InstallReferrer", "Referrer 처리 중 오류", e)
+                        }
+
+                        referrerClient.endConnection()
+                    }
+
+                    InstallReferrerClient.InstallReferrerResponse.FEATURE_NOT_SUPPORTED -> {
+                        android.util.Log.w("InstallReferrer", "Install Referrer API를 지원하지 않는 기기")
+                    }
+
+                    InstallReferrerClient.InstallReferrerResponse.SERVICE_UNAVAILABLE -> {
+                        android.util.Log.w("InstallReferrer", "Play Store 서비스를 사용할 수 없음")
+                    }
+
+                    else -> {
+                        android.util.Log.w("InstallReferrer", "알 수 없는 응답 코드: $responseCode")
+                    }
+                }
+            }
+
+            override fun onInstallReferrerServiceDisconnected() {
+                android.util.Log.d("InstallReferrer", "Install Referrer 서비스 연결 해제됨")
+            }
+        })
+    }
+
+    /**
+     * Install Referrer URL 파싱 및 저장
+     * 예시: "r=Hongchon&o=qwfdeSOL8Vz4lXEEP4TD&driver=d123&driverName=김기사"
+     */
+    private fun parseAndSaveReferrer(referrerUrl: String) {
+        try {
+            // URL 디코딩
+            val decoded = URLDecoder.decode(referrerUrl, StandardCharsets.UTF_8.name())
+            android.util.Log.d("InstallReferrer", "디코딩된 Referrer: $decoded")
+
+            // 파라미터 파싱
+            val params = decoded.split("&").associate {
+                val (key, value) = it.split("=", limit = 2)
+                key to value
+            }
+
+            val regionId = params["r"]
+            val officeId = params["o"]
+            val driverId = params["driver"]
+            val driverName = params["driverName"]
+            val phoneNumber = params["phone"]
+            val bankName = params["bank"]
+            val accountNumber = params["account"]
+            val accountHolder = params["holder"]
+
+            if (regionId != null && officeId != null) {
+                // SharedPreferences에 저장
+                val prefsManager = PreferencesManager(this)
+                prefsManager.saveOfficeInfo(officeId, regionId)
+
+                // 추가 정보 저장
+                if (driverId != null && driverName != null) {
+                    prefsManager.saveDriverReferralInfo(driverId, driverName)
+                }
+
+                if (phoneNumber != null && bankName != null && accountNumber != null && accountHolder != null) {
+                    prefsManager.saveOfficeContactInfo(phoneNumber, bankName, accountNumber, accountHolder)
+                }
+
+                android.util.Log.d("InstallReferrer", "✅ 사무실 정보 저장 완료: $regionId/$officeId")
+                if (driverId != null) {
+                    android.util.Log.d("InstallReferrer", "✅ 추천 기사: $driverName ($driverId)")
+                }
+            } else {
+                android.util.Log.w("InstallReferrer", "필수 파라미터 누락: r=$regionId, o=$officeId")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("InstallReferrer", "Referrer 파싱 중 오류", e)
+        }
+    }
+
+    /**
      * 알림 권한 요청 (Android 13+)
      */
     private fun requestNotificationPermission() {
@@ -273,6 +394,25 @@ class MainActivity : ComponentActivity() {
                     this,
                     arrayOf(Manifest.permission.POST_NOTIFICATIONS),
                     NOTIFICATION_PERMISSION_REQUEST_CODE
+                )
+            }
+        }
+    }
+
+    /**
+     * 만보기 권한 요청 (Android 10+)
+     */
+    private fun requestActivityRecognitionPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.ACTIVITY_RECOGNITION
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.ACTIVITY_RECOGNITION),
+                    ACTIVITY_RECOGNITION_PERMISSION_REQUEST_CODE
                 )
             }
         }
@@ -473,53 +613,8 @@ fun CustomerApp(initialIntent: Intent? = null) {
                         return@LaunchedEffect
                     } else {
                         // 토큰 매칭 실패 시 캐시 삭제 (만료된 토큰)
-                        android.util.Log.w("AttributionMatching", "토큰 매칭 실패, 캐시 삭제 후 핑거프린트 매칭으로 폴백")
+                        android.util.Log.w("AttributionMatching", "토큰 매칭 실패 - Install Referrer를 통한 매칭을 권장합니다")
                         preferencesManager.clearAttributionToken()
-                    }
-                }
-
-                // 2. 토큰이 없거나 실패 시 핑거프린트 매칭 (기존 방식)
-                android.util.Log.d("AttributionMatching", "핑거프린트 매칭 시도")
-                val attributionService = com.designated.customer.service.AttributionMatchingService(context)
-                val result = attributionService.matchAttribution()
-
-                android.util.Log.d("AttributionMatching", "Match result: $result")
-
-                when (result) {
-                    is com.designated.customer.service.AttributionMatchingService.MatchResult.Success -> {
-                        android.util.Log.d("AttributionMatching", "SUCCESS - regionId=${result.regionId}, officeId=${result.officeId}, score=${result.score}")
-
-                        // 사무실 정보 저장 (기존 데이터 덮어쓰기)
-                        currentRegionId = result.regionId
-                        currentOfficeId = result.officeId
-                        preferencesManager.saveOfficeInfo(result.officeId, result.regionId)
-
-                        // 사무실 연락처 정보 저장
-                        if (result.officePhone != null && result.bankName != null &&
-                            result.accountNumber != null && result.accountHolder != null) {
-                            preferencesManager.saveOfficeContactInfo(
-                                result.officePhone,
-                                result.bankName,
-                                result.accountNumber,
-                                result.accountHolder
-                            )
-                        }
-
-                        // 기사 추천 정보 저장
-                        if (result.referralDriverId != null && result.referralDriverName != null) {
-                            referralDriverId = result.referralDriverId
-                            referralDriverName = result.referralDriverName
-                            preferencesManager.saveDriverReferralInfo(result.referralDriverId, result.referralDriverName)
-                            android.util.Log.d("AttributionMatching", "기사 추천 정보 저장 - driverId=${result.referralDriverId}, driverName=${result.referralDriverName}")
-                        }
-                    }
-                    is com.designated.customer.service.AttributionMatchingService.MatchResult.NoMatch -> {
-                        android.util.Log.w("AttributionMatching", "NO MATCH - ${result.message}")
-                        // 매칭 실패 시 기존 SharedPreferences 데이터 사용
-                    }
-                    is com.designated.customer.service.AttributionMatchingService.MatchResult.Error -> {
-                        android.util.Log.e("AttributionMatching", "ERROR - ${result.message}", result.exception)
-                        // 에러 시 기존 SharedPreferences 데이터 사용
                     }
                 }
             } catch (e: Exception) {

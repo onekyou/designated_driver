@@ -2,16 +2,16 @@
 
 import { useEffect, useState } from 'react'
 import { initializeApp } from 'firebase/app'
-import { getFirestore, collection, addDoc } from 'firebase/firestore'
+import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc } from 'firebase/firestore'
 
 // Firebase 설정
 const firebaseConfig = {
-  apiKey: "AIzaSyDECFwLZJwmROE47BYGwME9qLpvPPgKCa0",
+  apiKey: "AIzaSyA9x04acmgJozvpz1zpbe27rOwPmHrORXs",
   authDomain: "calldetector-5d61e.firebaseapp.com",
   projectId: "calldetector-5d61e",
   storageBucket: "calldetector-5d61e.firebasestorage.app",
-  messagingSenderId: "403670530829",
-  appId: "1:403670530829:web:e41e3a733e45f24f00ca34"
+  messagingSenderId: "60275310305",
+  appId: "1:60275310305:web:e41e3a733e45f24f00ca34"
 }
 
 // Firebase 초기화
@@ -46,26 +46,65 @@ export default function DownloadPage() {
         // 기사 추천 방식 - Firestore에 attribution 생성
         console.log('기사 추천 다운로드:', {regionId, officeId, driverId, driverName})
 
-        // 화면 해상도 가져오기
-        const screenResolution = `${window.screen.width}x${window.screen.height}`
+        // 화면 해상도 가져오기 (물리적 픽셀)
+        const width = Math.round(window.screen.width * window.devicePixelRatio)
+        const height = Math.round(window.screen.height * window.devicePixelRatio)
+        const screenResolution = `${width}x${height}`
+
+        // UUID 토큰 생성
+        const generatedToken = crypto.randomUUID()
 
         // Firestore에 attribution 저장 (앱이 설치 후 자동으로 매칭)
         const attributionData = {
           screenResolution: screenResolution,
+          token: generatedToken,
           driverId: driverId || null,
           driverName: driverName || null,
           createdAt: new Date(),
           claimed: false
         }
 
-        // Firestore에 저장
-        addDoc(collection(db, 'regions', regionId, 'offices', officeId, 'attributions'), attributionData)
-          .then(() => {
-            console.log('Attribution 저장 완료:', attributionData)
-          })
-          .catch((error) => {
-            console.error('Attribution 저장 실패:', error)
-          })
+        // 🔥 청소 로직 + 저장 (비동기 함수)
+        const saveAttributionWithCleanup = async () => {
+          try {
+            // 1단계: 모든 사무실에서 해당 screenResolution의 기존 attribution 삭제
+            console.log(`모든 사무실에서 해당 해상도(${screenResolution})의 attribution 삭제 시작...`)
+
+            const regionsSnapshot = await getDocs(collection(db, 'regions'))
+            let totalDeleted = 0
+
+            for (const regionDoc of regionsSnapshot.docs) {
+              const rid = regionDoc.id
+              const officesSnapshot = await getDocs(collection(db, 'regions', rid, 'offices'))
+
+              for (const officeDoc of officesSnapshot.docs) {
+                const oid = officeDoc.id
+                const attributionsRef = collection(db, 'regions', rid, 'offices', oid, 'attributions')
+                const existingQuery = query(
+                  attributionsRef,
+                  where('screenResolution', '==', screenResolution)
+                )
+                const existingDocs = await getDocs(existingQuery)
+
+                for (const doc of existingDocs.docs) {
+                  await deleteDoc(doc.ref)
+                  totalDeleted++
+                }
+              }
+            }
+
+            console.log(`총 ${totalDeleted}개의 기존 attribution 삭제 완료`)
+
+            // 2단계: QR로 지정된 사무실에만 새 attribution 생성
+            await addDoc(collection(db, 'regions', regionId, 'offices', officeId, 'attributions'), attributionData)
+            console.log('✅ Attribution 저장 완료:', attributionData)
+          } catch (error) {
+            console.error('❌ Attribution 저장 실패:', error)
+          }
+        }
+
+        // 비동기 함수 실행
+        saveAttributionWithCleanup()
       } else {
         // 기존 방식 (하위 호환)
         const phone = params.get('phone') || ''
@@ -137,12 +176,20 @@ export default function DownloadPage() {
 
           {/* 버튼 */}
           <div className="space-y-4">
-            <button
-              onClick={handleDownloadAPK}
-              className="w-full max-w-md bg-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-700 transition-colors shadow-lg"
+            <a
+              href="https://calldetector-5d61e.web.app/customer_app.apk"
+              download="customer_app.apk"
+              className="block w-full max-w-md bg-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-700 transition-colors shadow-lg text-center"
             >
-              APK 다운로드
-            </button>
+              고객앱 다운로드 (Native Android)
+            </a>
+            <a
+              href="https://calldetector-5d61e.web.app/customer_app_flutter.apk"
+              download="customer_app_flutter.apk"
+              className="block w-full max-w-md bg-green-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-green-700 transition-colors shadow-lg text-center"
+            >
+              고객앱 다운로드 (Flutter 신규) ⭐
+            </a>
           </div>
 
           {/* 안내 */}

@@ -18,23 +18,15 @@
     <!-- Foreground Service 및 백그라운드 작업 권한 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
 
-    
+
     <!-- 전화 감지 권한 (콜 디텍터 기능) -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-    <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
-    <uses-permission android:name="android.permission.PROCESS_OUTGOING_CALLS" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
-    
-    <!-- SMS 발송 권한 (공유콜 시스템용) -->
-    <uses-permission android:name="android.permission.SEND_SMS" />
 
     <!-- 음성 인식 권한 (음성 입력 기능) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />

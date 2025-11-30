@@ -14,8 +14,8 @@ android {
         applicationId = "com.designated.customer"
         minSdk = 24
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "1.0.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -31,6 +31,16 @@ android {
             enableV3Signing = true
             enableV4Signing = true
         }
+        create("release") {
+            storeFile = file("keystore/release.keystore")
+            storePassword = "designated2024!"
+            keyAlias = "upload"
+            keyPassword = "designated2024!"
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
+            enableV4Signing = true
+        }
     }
 
     buildTypes {
@@ -39,6 +49,7 @@ android {
         }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -102,6 +113,9 @@ dependencies {
 
     // Google Play Services - Activity Recognition
     implementation("com.google.android.gms:play-services-location:21.1.0")
+
+    // Install Referrer API
+    implementation("com.android.installreferrer:installreferrer:2.2")
 
     // LocalBroadcastManager
     implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")

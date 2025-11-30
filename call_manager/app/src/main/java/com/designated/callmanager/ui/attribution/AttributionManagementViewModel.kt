@@ -242,36 +242,25 @@ class AttributionManagementViewModel(application: Application) : AndroidViewMode
                     )
                     .await()
 
-                // 2. 토큰 생성 및 Firestore에 저장
-                val token = java.util.UUID.randomUUID().toString()
-                val tokenData = mapOf(
-                    "token" to token,
-                    "officeId" to officeId,
-                    "regionId" to regionId,
-                    "officePhone" to phone,
-                    "bankName" to bank,
-                    "accountNumber" to account,
-                    "accountHolder" to holder,
-                    "createdAt" to com.google.firebase.Timestamp.now(),
-                    "expiresAt" to com.google.firebase.Timestamp(
-                        System.currentTimeMillis() / 1000 + 7 * 24 * 60 * 60, // 7일 후
-                        0
-                    ),
-                    "status" to "pending"
-                )
+                // 2. Play Store Install Referrer URL 생성
+                val encodedPhone = android.net.Uri.encode(phone)
+                val encodedBank = android.net.Uri.encode(bank)
+                val encodedAccount = android.net.Uri.encode(account)
+                val encodedHolder = android.net.Uri.encode(holder)
 
-                Firebase.firestore
-                    .collection("attributionTokens")
-                    .document(token)
-                    .set(tokenData)
-                    .await()
+                val referrerParams = "r=$regionId&o=$officeId" +
+                        "&phone=$encodedPhone" +
+                        "&bank=$encodedBank" +
+                        "&account=$encodedAccount" +
+                        "&holder=$encodedHolder"
 
-                android.util.Log.d(TAG, "토큰 생성 완료: $token")
+                val playStoreUrl = "https://play.google.com/store/apps/details" +
+                        "?id=com.designated.customer" +
+                        "&referrer=${android.net.Uri.encode(referrerParams)}"
 
-                // 3. QR 코드 URL 재생성 (토큰 포함)
-                val landingPageUrl = "https://calldetector-5d61e.web.app/?token=$token"
+                android.util.Log.d(TAG, "Play Store URL 생성 완료")
 
-                // 4. QR 설정 업데이트
+                // 3. QR 설정 업데이트
                 Firebase.firestore
                     .collection("regions")
                     .document(regionId)
@@ -281,8 +270,8 @@ class AttributionManagementViewModel(application: Application) : AndroidViewMode
                     .document("attribution")
                     .update(
                         mapOf(
-                            "qrCode" to landingPageUrl,
-                            "landingPageUrl" to landingPageUrl
+                            "qrCode" to playStoreUrl,
+                            "landingPageUrl" to playStoreUrl
                         )
                     )
                     .await()
@@ -293,15 +282,15 @@ class AttributionManagementViewModel(application: Application) : AndroidViewMode
                 _accountNumber.value = account
                 _accountHolder.value = holder
 
-                // 6. QR 코드 재생성
+                // 4. QR 코드 재생성
                 val newSettings = _officeSettings.value?.copy(
-                    qrCode = landingPageUrl,
-                    landingPageUrl = landingPageUrl
+                    qrCode = playStoreUrl,
+                    landingPageUrl = playStoreUrl
                 )
                 _officeSettings.value = newSettings
 
                 withContext(Dispatchers.Default) {
-                    val bitmap = QRCodeGenerator.generateQRCodeBitmap(landingPageUrl, 512)
+                    val bitmap = QRCodeGenerator.generateQRCodeBitmap(playStoreUrl, 512)
                     _qrCodeBitmap.value = bitmap
                     cachedQRBitmap = null // 캐시 초기화
                 }

@@ -1688,46 +1688,61 @@ exports.matchByToken = (0, https_1.onCall)({ region: "asia-northeast3" }, async 
                 message: "토큰이 제공되지 않았습니다"
             };
         }
-        // attributionTokens 컬렉션에서 토큰 조회
+        // regions/.../offices/.../attributions 컬렉션에서 토큰 검색
         const db = admin.firestore();
-        const tokenDoc = await db.collection("attributionTokens").doc(token).get();
-        if (!tokenDoc.exists) {
-            logger.warn(`[matchByToken] 유효하지 않은 토큰: ${token}`);
-            return {
-                success: false,
-                message: "유효하지 않은 QR 코드입니다"
-            };
+        const regionsSnapshot = await db.collection("regions").get();
+        for (const regionDoc of regionsSnapshot.docs) {
+            const regionId = regionDoc.id;
+            const officesSnapshot = await db.collection(`regions/${regionId}/offices`).get();
+            for (const officeDoc of officesSnapshot.docs) {
+                const officeId = officeDoc.id;
+                const officeData = officeDoc.data();
+                // 해당 사무실의 attributions에서 토큰 검색
+                const attributionsQuery = await db
+                    .collection(`regions/${regionId}/offices/${officeId}/attributions`)
+                    .where("token", "==", token)
+                    .limit(1)
+                    .get();
+                if (!attributionsQuery.empty) {
+                    const attributionDoc = attributionsQuery.docs[0];
+                    const attributionData = attributionDoc.data();
+                    // 만료 확인 (생성 후 7일)
+                    const now = admin.firestore.Timestamp.now();
+                    const createdAt = attributionData.createdAt;
+                    const expiryTime = createdAt.toMillis() + (7 * 24 * 60 * 60 * 1000);
+                    if (now.toMillis() > expiryTime) {
+                        logger.warn(`[matchByToken] 만료된 토큰: ${token}`);
+                        return {
+                            success: false,
+                            message: "만료된 QR 코드입니다 (7일 경과)"
+                        };
+                    }
+                    // 이미 사용된 토큰인지 확인 (재사용 허용)
+                    if (attributionData.claimed === true) {
+                        logger.info(`[matchByToken] 이미 사용된 토큰이지만 재사용 허용: ${token}`);
+                    }
+                    // 성공 응답
+                    logger.info(`[matchByToken] 매칭 성공 - regionId: ${regionId}, officeId: ${officeId}, driverId: ${attributionData.driverId || 'null'}, driverName: ${attributionData.driverName || 'null'}`);
+                    return {
+                        success: true,
+                        regionId: regionId,
+                        officeId: officeId,
+                        officeName: officeData.name || "",
+                        officePhone: officeData.phoneNumber || "",
+                        bankName: officeData.bankName || "",
+                        accountNumber: officeData.accountNumber || "",
+                        accountHolder: officeData.accountHolder || "",
+                        referralDriverId: attributionData.driverId || null,
+                        referralDriverName: attributionData.driverName || null
+                    };
+                }
+            }
         }
-        const tokenData = tokenDoc.data();
-        // 만료 확인
-        const now = admin.firestore.Timestamp.now();
-        if (tokenData.expiresAt && tokenData.expiresAt < now) {
-            logger.warn(`[matchByToken] 만료된 토큰: ${token}`);
-            return {
-                success: false,
-                message: "만료된 QR 코드입니다 (7일 경과)"
-            };
-        }
-        // 이미 사용된 토큰인지 확인 (선택적 - 재사용 허용하려면 주석 처리)
-        if (tokenData.status === "claimed") {
-            logger.info(`[matchByToken] 이미 사용된 토큰이지만 재사용 허용: ${token}`);
-            // return {
-            //   success: false,
-            //   message: "이미 사용된 QR 코드입니다"
-            // };
-        }
-        // 성공 응답
-        logger.info(`[matchByToken] 매칭 성공 - regionId: ${tokenData.regionId}, officeId: ${tokenData.officeId}, driverId: ${tokenData.driverId || 'null'}, driverName: ${tokenData.driverName || 'null'}`);
+        // 토큰을 찾지 못한 경우
+        logger.warn(`[matchByToken] 유효하지 않은 토큰: ${token}`);
         return {
-            success: true,
-            regionId: tokenData.regionId,
-            officeId: tokenData.officeId,
-            officePhone: tokenData.officePhone || "",
-            bankName: tokenData.bankName || "",
-            accountNumber: tokenData.accountNumber || "",
-            accountHolder: tokenData.accountHolder || "",
-            referralDriverId: tokenData.driverId || null, // ✅ 기사 ID 추가
-            referralDriverName: tokenData.driverName || null // ✅ 기사 이름 추가
+            success: false,
+            message: "유효하지 않은 QR 코드입니다"
         };
     }
     catch (error) {
@@ -2453,7 +2468,7 @@ exports.getArchivedStats = (0, https_1.onCall)({
                 officesToQuery.push({
                     regionId,
                     officeId,
-                    officeName: ((_a = officeDoc.data()) === null || _a === void 0 ? void 0 : _a.officeName) || officeId
+                    officeName: ((_a = officeDoc.data()) === null || _a === void 0 ? void 0 : _a.name) || officeId
                 });
             }
         }
@@ -2467,7 +2482,7 @@ exports.getArchivedStats = (0, https_1.onCall)({
                     officesToQuery.push({
                         regionId: regionDoc.id,
                         officeId: officeDoc.id,
-                        officeName: officeDoc.data().officeName || officeDoc.id
+                        officeName: officeDoc.data().name || officeDoc.id
                     });
                 }
             }
@@ -2579,7 +2594,7 @@ exports.searchArchivedCalls = (0, https_1.onCall)({
                 officesToQuery.push({
                     regionId,
                     officeId,
-                    officeName: ((_a = officeDoc.data()) === null || _a === void 0 ? void 0 : _a.officeName) || officeId
+                    officeName: ((_a = officeDoc.data()) === null || _a === void 0 ? void 0 : _a.name) || officeId
                 });
             }
         }
@@ -2592,7 +2607,7 @@ exports.searchArchivedCalls = (0, https_1.onCall)({
                     officesToQuery.push({
                         regionId: regionDoc.id,
                         officeId: officeDoc.id,
-                        officeName: officeDoc.data().officeName || officeDoc.id
+                        officeName: officeDoc.data().name || officeDoc.id
                     });
                 }
             }
@@ -2693,7 +2708,7 @@ exports.getOfficeReport = (0, https_1.onCall)({
             office: {
                 regionId,
                 officeId,
-                officeName: (officeData === null || officeData === void 0 ? void 0 : officeData.officeName) || officeId,
+                officeName: (officeData === null || officeData === void 0 ? void 0 : officeData.name) || officeId,
                 address: (officeData === null || officeData === void 0 ? void 0 : officeData.address) || 'N/A',
                 phoneNumber: (officeData === null || officeData === void 0 ? void 0 : officeData.phoneNumber) || 'N/A'
             },

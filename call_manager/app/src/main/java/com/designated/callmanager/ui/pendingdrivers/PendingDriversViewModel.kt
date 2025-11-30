@@ -395,7 +395,7 @@ class PendingDriversViewModel(
     }
 
     /**
-     * 기사 추천 QR URL 생성 (토큰 방식)
+     * 기사 추천 QR URL 생성 (Play Store Install Referrer 방식)
      */
     private suspend fun buildReferralUrl(
         regionId: String,
@@ -403,10 +403,7 @@ class PendingDriversViewModel(
         driverId: String,
         driverName: String
     ): String {
-        // 1. 토큰 생성
-        val token = java.util.UUID.randomUUID().toString()
-
-        // 2. 사무실 정보 가져오기
+        // 1. 사무실 정보 가져오기
         val officeDoc = firestore
             .collection("regions").document(regionId)
             .collection("offices").document(officeId)
@@ -418,35 +415,23 @@ class PendingDriversViewModel(
         val accountNumber = officeDoc.getString("accountNumber") ?: ""
         val accountHolder = officeDoc.getString("accountHolder") ?: ""
 
-        // 3. Firestore에 토큰 데이터 저장 (기사 정보 포함!)
-        val tokenData = mapOf(
-            "token" to token,
-            "officeId" to officeId,
-            "regionId" to regionId,
-            "driverId" to driverId,           // ✅ 기사 ID
-            "driverName" to driverName,       // ✅ 기사 이름
-            "officePhone" to officePhone,
-            "bankName" to bankName,
-            "accountNumber" to accountNumber,
-            "accountHolder" to accountHolder,
-            "createdAt" to com.google.firebase.Timestamp.now(),
-            "expiresAt" to com.google.firebase.Timestamp(
-                System.currentTimeMillis() / 1000 + 7 * 24 * 60 * 60, // 7일 후
-                0
-            ),
-            "status" to "pending"
-        )
+        // 2. Play Store Install Referrer URL 생성
+        val encodedName = java.net.URLEncoder.encode(driverName, "UTF-8")
+        val encodedPhone = java.net.URLEncoder.encode(officePhone, "UTF-8")
+        val encodedBank = java.net.URLEncoder.encode(bankName, "UTF-8")
+        val encodedAccount = java.net.URLEncoder.encode(accountNumber, "UTF-8")
+        val encodedHolder = java.net.URLEncoder.encode(accountHolder, "UTF-8")
 
-        firestore
-            .collection("attributionTokens")
-            .document(token)
-            .set(tokenData)
-            .await()
+        val referrerParams = "r=$regionId&o=$officeId&d=$driverId&dn=$encodedName" +
+                "&phone=$encodedPhone&bank=$encodedBank&account=$encodedAccount&holder=$encodedHolder"
 
-        android.util.Log.d("PendingDriversViewModel", "기사 추천 토큰 생성 완료: $token (기사: $driverName)")
+        val playStoreUrl = "https://play.google.com/store/apps/details" +
+                "?id=com.designated.customer" +
+                "&referrer=${java.net.URLEncoder.encode(referrerParams, "UTF-8")}"
 
-        // 4. 토큰 URL 반환
-        return "https://calldetector-5d61e.web.app/?token=$token"
+        android.util.Log.d("PendingDriversViewModel", "기사 추천 Play Store URL 생성 완료 (기사: $driverName)")
+
+        return playStoreUrl
     }
 
     class Factory(private val application: Application, private val regionId: String, private val officeId: String) : ViewModelProvider.Factory {

@@ -73,7 +73,10 @@ class _AppInitializerState extends ConsumerState<AppInitializer> {
   @override
   void initState() {
     super.initState();
-    _initialize();
+    // 빌드 완료 후 초기화 시작 (provider 수정을 위해)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initialize();
+    });
   }
 
   Future<void> _initialize() async {
