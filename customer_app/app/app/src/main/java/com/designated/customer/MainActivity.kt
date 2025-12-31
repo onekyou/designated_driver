@@ -46,135 +46,13 @@ import com.android.installreferrer.api.InstallReferrerStateListener
 import com.android.installreferrer.api.ReferrerDetails
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
-
-// 토큰 매칭 결과 데이터 클래스
-data class TokenMatchResult(
-    val regionId: String,
-    val officeId: String,
-    val officePhone: String?,
-    val bankName: String?,
-    val accountNumber: String?,
-    val accountHolder: String?,
-    val referralDriverId: String? = null,    // ✅ 기사 ID 추가
-    val referralDriverName: String? = null   // ✅ 기사 이름 추가
-)
-
-// 토큰 조회 함수 (캐시 우선, 없으면 Firestore에서 조회)
-suspend fun getAttributionToken(context: android.content.Context): String? {
-    return try {
-        val prefsManager = com.designated.customer.util.PreferencesManager(context)
-
-        // 1. 먼저 캐시된 토큰 확인 (즉시 반환, 0 reads)
-        val cachedToken = prefsManager.getAttributionToken()
-        if (cachedToken != null) {
-            android.util.Log.d("AttributionToken", "캐시된 토큰 사용: $cachedToken")
-            return cachedToken
-        }
-
-        android.util.Log.d("AttributionToken", "캐시된 토큰 없음, Firestore에서 조회 시작")
-
-        // 2. 캐시 없을 때만 Firestore 조회
-        // FingerprintJS 방식으로 디바이스 정보 생성
-        val screenResolution = "${android.content.res.Resources.getSystem().displayMetrics.widthPixels}x${android.content.res.Resources.getSystem().displayMetrics.heightPixels}"
-        val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-
-        // 최근 24시간 이내에 생성된 attribution에서 토큰 찾기
-        val oneDayAgo = com.google.firebase.Timestamp(System.currentTimeMillis() / 1000 - 24 * 60 * 60, 0)
-
-        // 모든 지역/사무실을 순회하며 매칭되는 attribution 찾기
-        val regionsSnapshot = firestore.collection("regions").get().await()
-
-        for (regionDoc in regionsSnapshot.documents) {
-            val officesSnapshot = firestore
-                .collection("regions").document(regionDoc.id)
-                .collection("offices")
-                .get()
-                .await()
-
-            for (officeDoc in officesSnapshot.documents) {
-                val attributionQuery = firestore
-                    .collection("regions").document(regionDoc.id)
-                    .collection("offices").document(officeDoc.id)
-                    .collection("attributions")
-                    .whereEqualTo("screenResolution", screenResolution)
-                    .whereGreaterThan("createdAt", oneDayAgo)
-                    .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(1)
-                    .get()
-                    .await()
-
-                if (!attributionQuery.isEmpty) {
-                    val attribution = attributionQuery.documents[0]
-                    val token = attribution.getString("token")
-                    if (token != null) {
-                        android.util.Log.d("AttributionToken", "토큰 발견: $token (screenResolution: $screenResolution)")
-                        // 3. 조회 성공 시 캐시에 저장
-                        prefsManager.saveAttributionToken(token)
-                        return token
-                    }
-                }
-            }
-        }
-
-        android.util.Log.d("AttributionToken", "토큰을 찾지 못함 (screenResolution: $screenResolution)")
-        null
-    } catch (e: Exception) {
-        android.util.Log.e("AttributionToken", "토큰 조회 실패", e)
-        null
-    }
-}
-
-// 토큰 기반 매칭 함수
-suspend fun matchByToken(token: String): TokenMatchResult? {
-    return try {
-        val functions = FirebaseFunctions.getInstance("asia-northeast3")
-        val data = hashMapOf("token" to token)
-        val result = functions.getHttpsCallable("matchByToken")
-            .call(data)
-            .await()
-
-        val responseData = result.data as? Map<*, *>
-        android.util.Log.d("TokenMatching", "matchByToken 응답: $responseData")
-
-        if (responseData?.get("success") == true) {
-            TokenMatchResult(
-                regionId = responseData["regionId"] as String,
-                officeId = responseData["officeId"] as String,
-                officePhone = responseData["officePhone"] as? String,
-                bankName = responseData["bankName"] as? String,
-                accountNumber = responseData["accountNumber"] as? String,
-                accountHolder = responseData["accountHolder"] as? String,
-                referralDriverId = responseData["referralDriverId"] as? String,     // ✅ 기사 ID
-                referralDriverName = responseData["referralDriverName"] as? String  // ✅ 기사 이름
-            )
-        } else {
-            android.util.Log.w("TokenMatching", "매칭 실패: ${responseData?.get("message")}")
-            null
-        }
-    } catch (e: Exception) {
-        android.util.Log.e("TokenMatching", "토큰 매칭 중 오류", e)
-        null
-    }
-}
-
-// 토큰 클레임 함수 (사용 완료 표시)
-suspend fun claimToken(token: String, phoneNumber: String?) {
-    try {
-        val functions = FirebaseFunctions.getInstance("asia-northeast3")
-        val data = hashMapOf(
-            "token" to token,
-            "phoneNumber" to (phoneNumber ?: "unknown")
-        )
-        functions.getHttpsCallable("claimToken")
-            .call(data)
-            .await()
-        android.util.Log.d("TokenMatching", "토큰 클레임 완료: $token")
-    } catch (e: Exception) {
-        android.util.Log.e("TokenMatching", "토큰 클레임 실패", e)
-    }
-}
+import com.google.firebase.remoteconfig.FirebaseRemoteConfig
+import com.google.firebase.remoteconfig.remoteConfigSettings
 
 class MainActivity : ComponentActivity() {
+    private lateinit var remoteConfig: FirebaseRemoteConfig
+    private var allowDirectInstall by mutableStateOf(false)
+
     companion object {
         private const val NOTIFICATION_PERMISSION_REQUEST_CODE = 1001
         private const val ACTIVITY_RECOGNITION_PERMISSION_REQUEST_CODE = 1002
@@ -197,13 +75,34 @@ class MainActivity : ComponentActivity() {
         // FCM 토큰 요청 및 저장
         requestAndSaveFcmToken()
 
+        // Remote Config 초기화
+        remoteConfig = FirebaseRemoteConfig.getInstance()
+        val configSettings = remoteConfigSettings {
+            minimumFetchIntervalInSeconds = 3600  // 1시간
+        }
+        remoteConfig.setConfigSettingsAsync(configSettings)
+
+        // 기본값 설정
+        remoteConfig.setDefaultsAsync(mapOf(
+            "allowDirectInstall" to false
+        ))
+
+        // Remote Config 가져오기
+        remoteConfig.fetchAndActivate().addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                allowDirectInstall = remoteConfig.getBoolean("allowDirectInstall")
+                android.util.Log.d("RemoteConfig", "allowDirectInstall = $allowDirectInstall")
+            }
+        }
+
         // StepCounterService 시작
         startStepCounterService()
 
         setContent {
             DesignatedCustomerTheme {
                 CustomerApp(
-                    initialIntent = intent
+                    initialIntent = intent,
+                    allowDirectInstall = allowDirectInstall
                 )
             }
         }
@@ -489,7 +388,10 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun CustomerApp(initialIntent: Intent? = null) {
+fun CustomerApp(
+    initialIntent: Intent? = null,
+    allowDirectInstall: Boolean = false
+) {
     val context = LocalContext.current
     val preferencesManager = remember { PreferencesManager(context) }
     val coroutineScope = rememberCoroutineScope()
@@ -515,7 +417,6 @@ fun CustomerApp(initialIntent: Intent? = null) {
     var currentUserId by remember { mutableStateOf<String?>(null) }
     var showProfileSetup by remember { mutableStateOf(false) }
     var hasProfileInFirestore by remember { mutableStateOf(false) }
-    var attributionToken by remember { mutableStateOf<String?>(null) }
 
     // 기사 추천 정보
     var referralDriverId by remember { mutableStateOf<String?>(null) }
@@ -550,84 +451,9 @@ fun CustomerApp(initialIntent: Intent? = null) {
     // CustomerInfo 상태 (사무실 연락처 포함)
     var customerInfo by remember { mutableStateOf<com.designated.customer.data.model.CustomerInfo?>(null) }
 
-    // Attribution 매칭 상태
-    var isMatchingAttribution by remember { mutableStateOf(false) }
-    var hasTriedMatching by remember { mutableStateOf(false) }
-
-    // 앱 최초 실행 시 Attribution 매칭 시도
-    LaunchedEffect(Unit) {
-        android.util.Log.d("AttributionMatching", "LaunchedEffect started")
-
-        // ✅ 이미 prefs에 사무실 정보가 있으면 매칭 skip (성능 최적화)
-        if (currentOfficeId != null && currentRegionId != null) {
-            android.util.Log.d("AttributionMatching", "SharedPreferences에 사무실 정보 있음 - 매칭 skip (officeId=$currentOfficeId, regionId=$currentRegionId)")
-            hasTriedMatching = true
-            isMatchingAttribution = false
-            return@LaunchedEffect
-        }
-
-        if (!hasTriedMatching) {
-            hasTriedMatching = true
-            isMatchingAttribution = true
-
-            try {
-                // 1. 먼저 토큰 기반 매칭 시도 (새 방식)
-                val token = getAttributionToken(context)
-
-                if (token != null) {
-                    android.util.Log.d("AttributionMatching", "토큰 발견: $token")
-                    val tokenResult = matchByToken(token)
-
-                    if (tokenResult != null) {
-                        // 토큰 매칭 성공
-                        android.util.Log.d("AttributionMatching", "토큰 매칭 성공 - regionId=${tokenResult.regionId}, officeId=${tokenResult.officeId}")
-
-                        currentRegionId = tokenResult.regionId
-                        currentOfficeId = tokenResult.officeId
-                        attributionToken = token
-                        preferencesManager.saveOfficeInfo(tokenResult.officeId, tokenResult.regionId)
-
-                        if (tokenResult.officePhone != null && tokenResult.bankName != null &&
-                            tokenResult.accountNumber != null && tokenResult.accountHolder != null) {
-                            preferencesManager.saveOfficeContactInfo(
-                                tokenResult.officePhone,
-                                tokenResult.bankName,
-                                tokenResult.accountNumber,
-                                tokenResult.accountHolder
-                            )
-                        }
-
-                        // ✅ 기사 추천 정보 저장
-                        if (tokenResult.referralDriverId != null && tokenResult.referralDriverName != null) {
-                            preferencesManager.saveDriverReferralInfo(
-                                tokenResult.referralDriverId,
-                                tokenResult.referralDriverName
-                            )
-                            android.util.Log.d("AttributionMatching", "토큰 매칭 - 기사 추천 정보 저장: driverId=${tokenResult.referralDriverId}, driverName=${tokenResult.referralDriverName}")
-                        }
-
-                        // 토큰 매칭 성공 시 캐시에 저장 (이미 getAttributionToken에서 저장되지만 명시적으로 재저장)
-                        preferencesManager.saveAttributionToken(token)
-
-                        isMatchingAttribution = false
-                        return@LaunchedEffect
-                    } else {
-                        // 토큰 매칭 실패 시 캐시 삭제 (만료된 토큰)
-                        android.util.Log.w("AttributionMatching", "토큰 매칭 실패 - Install Referrer를 통한 매칭을 권장합니다")
-                        preferencesManager.clearAttributionToken()
-                    }
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("AttributionMatching", "Exception during matching", e)
-            } finally {
-                isMatchingAttribution = false
-            }
-        }
-    }
-
     // 프로필 존재 여부 확인 (익명 인증 완료 + 사무실 매칭 완료 후)
-    LaunchedEffect(currentUserId, currentRegionId, currentOfficeId, isMatchingAttribution) {
-        if (currentUserId != null && currentRegionId != null && currentOfficeId != null && !isMatchingAttribution) {
+    LaunchedEffect(currentUserId, currentRegionId, currentOfficeId) {
+        if (currentUserId != null && currentRegionId != null && currentOfficeId != null) {
             try {
                 val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
                 val doc = firestore
@@ -706,33 +532,13 @@ fun CustomerApp(initialIntent: Intent? = null) {
                     }
                 }
             }
-            // 1. Attribution 매칭 중이면 로딩 화면
-            isMatchingAttribution -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        androidx.compose.material3.CircularProgressIndicator()
-                        Spacer(modifier = Modifier.height(16.dp))
-                        androidx.compose.material3.Text(
-                            text = "사무실 정보를 확인하는 중...",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodyLarge
-                        )
-                    }
-                }
-            }
+
             // 2. 프로필 입력이 필요하면 프로필 입력 화면
             showProfileSetup && currentRegionId != null && currentOfficeId != null -> {
                 ProfileSetupScreen(
                     regionId = currentRegionId!!,
                     officeId = currentOfficeId!!,
-                    attributionToken = attributionToken,
+
                     onProfileComplete = {
                         // 프로필 입력 완료
                         android.util.Log.d("ProfileSetup", "프로필 입력 완료")
@@ -760,11 +566,7 @@ fun CustomerApp(initialIntent: Intent? = null) {
                                     }
                                 }
 
-                                // 토큰이 있으면 클레임 처리
-                                if (attributionToken != null) {
-                                    val phoneNumber = customerInfo?.phoneNumber
-                                    claimToken(attributionToken!!, phoneNumber)
-                                }
+
                             } catch (e: Exception) {
                                 android.util.Log.e("ProfileSetup", "CustomerInfo 로드 실패", e)
                             }
@@ -773,39 +575,52 @@ fun CustomerApp(initialIntent: Intent? = null) {
                     modifier = Modifier.padding(paddingValues)
                 )
             }
-            // 2. 사무실 정보가 없으면 에러 안내 화면
+            // 2. 사무실 정보가 없으면 Remote Config에 따라 처리
             currentOfficeId == null || currentRegionId == null -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
-                        modifier = Modifier.padding(32.dp)
+                if (allowDirectInstall) {
+                    // Direct install 허용 시: 사무실 선택 화면 표시
+                    com.designated.customer.ui.office.OfficeSelectionScreen(
+                        modifier = Modifier.padding(paddingValues),
+                        onOfficeSelected = { officeId, regionId ->
+                            preferencesManager.saveOfficeInfo(officeId, regionId)
+                            currentOfficeId = officeId
+                            currentRegionId = regionId
+                        }
+                    )
+                } else {
+                    // Direct install 불허 시: 기존 에러 화면 (QR 코드 재설치 안내)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(paddingValues),
+                        contentAlignment = Alignment.Center
                     ) {
-                        androidx.compose.material3.Icon(
-                            imageVector = androidx.compose.material.icons.Icons.Default.LocationOn,
-                            contentDescription = null,
-                            modifier = Modifier.size(72.dp),
-                            tint = androidx.compose.material3.MaterialTheme.colorScheme.error
-                        )
-                        Spacer(modifier = Modifier.height(24.dp))
-                        androidx.compose.material3.Text(
-                            text = "사무실 정보를 찾을 수 없습니다",
-                            style = androidx.compose.material3.MaterialTheme.typography.headlineSmall,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        androidx.compose.material3.Text(
-                            text = "QR 코드를 통해 앱을 다시 설치해주세요.\n\n1. 사무실에서 받은 QR 코드를 스캔하세요\n2. 랜딩페이지에서 APK를 다운로드하세요\n3. 앱을 설치하고 실행하세요",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodyLarge,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                            modifier = Modifier.padding(32.dp)
+                        ) {
+                            androidx.compose.material3.Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Default.LocationOn,
+                                contentDescription = null,
+                                modifier = Modifier.size(72.dp),
+                                tint = androidx.compose.material3.MaterialTheme.colorScheme.error
+                            )
+                            Spacer(modifier = Modifier.height(24.dp))
+                            androidx.compose.material3.Text(
+                                text = "사무실 정보를 찾을 수 없습니다",
+                                style = androidx.compose.material3.MaterialTheme.typography.headlineSmall,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            androidx.compose.material3.Text(
+                                text = "QR 코드를 통해 앱을 다시 설치해주세요.\n\n1. 사무실에서 받은 QR 코드를 스캔하세요\n2. 랜딩페이지에서 APK를 다운로드하세요\n3. 앱을 설치하고 실행하세요",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodyLarge,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }

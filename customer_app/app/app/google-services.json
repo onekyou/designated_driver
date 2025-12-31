@@ -65,6 +65,44 @@
     },
     {
       "client_info": {
+        "mobilesdk_app_id": "1:60275310305:android:7f6627bf5ac8af6a9ac1a0",
+        "android_client_info": {
+          "package_name": "com.designated.customer.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA9x04acmgJozvpz1zpbe27rOwPmHrORXs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:60275310305:android:ad5b3f1e6c6805d99ac1a0",
+        "android_client_info": {
+          "package_name": "com.designated.designated_customer_flutter"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA9x04acmgJozvpz1zpbe27rOwPmHrORXs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:60275310305:android:de8cadaf442e57f09ac1a0",
         "android_client_info": {
           "package_name": "com.designated.driver"

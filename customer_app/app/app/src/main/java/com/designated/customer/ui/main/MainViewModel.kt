@@ -21,6 +21,8 @@ import com.designated.customer.service.StepCounterService
 import com.designated.customer.data.repository.StepRepository
 import com.designated.customer.data.model.DailyStepData
 import com.designated.customer.data.model.WeeklyStepSummary
+import com.designated.customer.data.model.BannerAdData
+import com.designated.customer.service.BannerAdService
 import com.designated.customer.data.model.MonthlyStepSummary
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.StateFlow
@@ -62,7 +64,9 @@ data class MainUiState(
     val showPointsEarnedDialog: Boolean = false,
     val earnedPoints: Int = 0,
     val usedPoints: Int = 0,  // ✅ 추가: 사용한 포인트
-    val rideCompletedFare: Int = 0
+    val rideCompletedFare: Int = 0,
+    // 배너 광고 관련 상태
+    val currentBanner: BannerAdData? = null
 ) {
     val canRequestCall: Boolean
         get() = currentLocation.isNotEmpty() &&
@@ -97,6 +101,8 @@ class MainViewModel(
     private var rideCompletedReceiver: BroadcastReceiver? = null
     private var driverAssignedReceiver: BroadcastReceiver? = null
     private var callCancelledReceiver: BroadcastReceiver? = null
+    // 배너 광고 서비스
+    private val bannerAdService = BannerAdService(regionId = regionId, officeId = officeId)
 
     // 사무실 연락처 정보 (customerInfo에서 추출, 없으면 SharedPreferences에서)
     val officePhone: String get() {
@@ -123,6 +129,8 @@ class MainViewModel(
         loadLocalAddresses()
         // FCM 브로드캐스트 리스너 등록
         registerRideCompletedReceiver()
+        // 배너 광고 로드
+        loadBannerAds()
 
         android.util.Log.d("MainViewModel", "Init - customerInfo.homeAddress: ${customerInfo?.homeAddress}")
     }
@@ -330,6 +338,8 @@ class MainViewModel(
      * FCM 브로드캐스트 리스너 등록
      */
     private fun registerRideCompletedReceiver() {
+        // 배너 광고 로드
+        loadBannerAds()
         context?.let { ctx ->
             // 운행 완료 브로드캐스트 수신
             val completedFilter = IntentFilter("com.designated.customer.RIDE_COMPLETED")
@@ -907,6 +917,27 @@ class MainViewModel(
      * ViewModel 종료 시 처리
      * Service는 백그라운드에서 계속 실행되므로 stopListening을 호출하지 않음
      */
+    /**
+     * 배너 광고 로드
+     * Firebase Firestore에서 활성화된 배너를 실시간으로 모니터링
+     */
+    private fun loadBannerAds() {
+        viewModelScope.launch {
+            try {
+                bannerAdService.observeActiveBanners().collectLatest { banners ->
+                    android.util.Log.d("MainViewModel", "배너 광고 로드: ${banners.size}개")
+                    // 우선순위가 가장 높은 배너 1개만 표시
+                    uiState = uiState.copy(
+                        currentBanner = banners.firstOrNull()
+                    )
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "배너 광고 로드 실패", e)
+            }
+        }
+    }
+
+
     override fun onCleared() {
         super.onCleared()
         // Service는 계속 실행되어야 하므로 stopListening 호출하지 않음

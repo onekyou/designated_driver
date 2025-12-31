@@ -11,11 +11,11 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.designated.customer"
+        applicationId = "com.designated.customer.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 4
+        versionName = "1.0.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -91,6 +91,7 @@ dependencies {
     implementation("com.google.firebase:firebase-firestore-ktx")
     implementation("com.google.firebase:firebase-functions-ktx")
     implementation("com.google.firebase:firebase-messaging-ktx")
+    implementation("com.google.firebase:firebase-config-ktx")
 
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.7.5")
@@ -119,6 +120,9 @@ dependencies {
 
     // LocalBroadcastManager
     implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
+    // Coil - 이미지 로딩
+    implementation("io.coil-kt:coil-compose:2.5.0")
+
 
     // 테스트
     testImplementation(libs.junit)

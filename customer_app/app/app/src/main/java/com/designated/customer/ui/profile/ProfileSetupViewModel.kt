@@ -49,7 +49,7 @@ class ProfileSetupViewModel : ViewModel() {
     fun saveProfile(
         regionId: String,
         officeId: String,
-        attributionToken: String? = null,
+
         driverId: String? = null,
         driverName: String? = null
     ) {
@@ -115,11 +115,6 @@ class ProfileSetupViewModel : ViewModel() {
                     "accountNumber" to "",
                     "accountHolder" to ""
                 )
-
-                // 토큰이 있으면 추가
-                if (attributionToken != null) {
-                    customerData["attributionToken"] = attributionToken
-                }
 
                 // 기사 추천 정보가 있으면 추가
                 if (driverId != null && driverName != null) {

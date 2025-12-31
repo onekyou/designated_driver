@@ -32,6 +32,11 @@ data class Office(
     val address: String = ""
 )
 
+data class Region(
+    val id: String = "",
+    val name: String = ""
+)
+
 @Composable
 fun OfficeSelectionScreen(
     modifier: Modifier = Modifier,
@@ -77,35 +82,25 @@ fun OfficeSelectionScreen(
 
         Divider(modifier = Modifier.padding(bottom = 8.dp))
 
-        // 지역 선택 탭 (실제 Firebase 리전 사용)
-        var selectedRegion by remember { mutableStateOf("Hongchon") }
+        // 지역 선택 탭 (Firebase regions 컬렉션에서 동적 조회)
+        var selectedRegionIndex by remember { mutableStateOf(0) }
 
-        TabRow(
-            selectedTabIndex = if (selectedRegion == "Hongchon") 0 else 1
-        ) {
-            Tab(
-                selected = selectedRegion == "Hongchon",
-                onClick = {
-                    selectedRegion = "Hongchon"
-                    viewModel.loadOffices("Hongchon")
+        if (state.regions.isNotEmpty()) {
+            TabRow(selectedTabIndex = selectedRegionIndex) {
+                state.regions.forEachIndexed { index, region ->
+                    Tab(
+                        selected = selectedRegionIndex == index,
+                        onClick = {
+                            selectedRegionIndex = index
+                            viewModel.loadOffices(region.id)
+                        }
+                    ) {
+                        Text(
+                            text = region.name,
+                            modifier = Modifier.padding(vertical = 16.dp)
+                        )
+                    }
                 }
-            ) {
-                Text(
-                    "홍천",
-                    modifier = Modifier.padding(vertical = 16.dp)
-                )
-            }
-            Tab(
-                selected = selectedRegion == "yangpyong",
-                onClick = {
-                    selectedRegion = "yangpyong"
-                    viewModel.loadOffices("yangpyong")
-                }
-            ) {
-                Text(
-                    "양평",
-                    modifier = Modifier.padding(vertical = 16.dp)
-                )
             }
         }
 
@@ -151,7 +146,13 @@ fun OfficeSelectionScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                onOfficeSelected(office.id, office.regionId)
+                                // 현재 선택된 지역의 ID를 사용
+                                val currentRegionId = if (state.regions.isNotEmpty() && selectedRegionIndex < state.regions.size) {
+                                    state.regions[selectedRegionIndex].id
+                                } else {
+                                    office.regionId
+                                }
+                                onOfficeSelected(office.id, currentRegionId)
                             }
                     ) {
                         Column(
@@ -212,6 +213,7 @@ fun OfficeSelectionScreen(
 
 // ViewModel
 data class OfficeSelectionState(
+    val regions: List<Region> = emptyList(),
     val offices: List<Office> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null
@@ -223,7 +225,37 @@ class OfficeSelectionViewModel : ViewModel() {
     val state: StateFlow<OfficeSelectionState> = _state
 
     init {
-        loadOffices("seoul")
+        loadRegions()
+    }
+
+    fun loadRegions() {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isLoading = true, error = null)
+            try {
+                val regionsSnapshot = firestore.collection("regions").get().await()
+                val regions = regionsSnapshot.documents.mapNotNull { doc ->
+                    Region(
+                        id = doc.id,
+                        name = doc.getString("name") ?: doc.id
+                    )
+                }.sortedBy { it.name }
+
+                _state.value = _state.value.copy(
+                    regions = regions,
+                    isLoading = false
+                )
+
+                // 첫 번째 지역의 사무실 자동 로드
+                if (regions.isNotEmpty()) {
+                    loadOffices(regions[0].id)
+                }
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    error = "지역 목록을 불러오는데 실패했습니다: ${e.message}",
+                    isLoading = false
+                )
+            }
+        }
     }
 
     fun loadOffices(regionId: String) {
