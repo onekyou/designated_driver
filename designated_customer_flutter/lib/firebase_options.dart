@@ -58,11 +58,11 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyBEhcvBqk4Dw8jg3ukfao6gsXJUGsT_h2A',
-    appId: '1:105383907831:ios:0f1eb279b4adac6a5f9ef2',
-    messagingSenderId: '105383907831',
-    projectId: 'designated-driver-wk667t',
-    storageBucket: 'designated-driver-wk667t.firebasestorage.app',
+    apiKey: 'AIzaSyDSbl-RlfidVBlo2i1_jTuCtqo8lgTTbGg',
+    appId: '1:60275310305:ios:8e0eeb7659801a869ac1a0',
+    messagingSenderId: '60275310305',
+    projectId: 'calldetector-5d61e',
+    storageBucket: 'calldetector-5d61e.firebasestorage.app',
     iosBundleId: 'com.designated.designatedCustomerFlutter',
   );
 }

@@ -1,0 +1,31 @@
+현재 콜매니저앱의 qr을 스캔후 랜딩페이지를 거쳐 앱을 다운로드 받아 설치하면 해당 사무실로 로그인 할 준비를
+해야하는데 테스트사무실로 바로 들어가 문제가 발생 다음과 같은 조치를 취했어 
+
+ 1. PreferencesManager.kt:111-126
+  // 로그아웃 시 사무실 정보도 함께 삭제
+  fun clearUserData() {
+      prefs.edit().apply {
+          remove(KEY_PHONE_NUMBER)
+          remove(KEY_IS_PHONE_VERIFIED)
+          remove(KEY_CUSTOMER_GRADE)
+          remove(KEY_HOME_ADDRESS)
+          remove(KEY_FAVORITE_ADDRESSES)
+          remove(KEY_OFFICE_ID)        // ← 추가
+          remove(KEY_REGION_ID)        // ← 추가
+          remove(KEY_OFFICE_PHONE)     // ← 추가
+          remove(KEY_BANK_NAME)        // ← 추가
+          remove(KEY_ACCOUNT_NUMBER)   // ← 추가
+          remove(KEY_ACCOUNT_HOLDER)   // ← 추가
+          apply()
+      }
+  }
+
+  2. MainActivity.kt:32-113
+  - 딥링크로 받은 정보를 MutableState로 저장
+  - CustomerApp()에 파라미터로 전달
+  - 딥링크 값이 있으면 우선적으로 사용
+  - LaunchedEffect로 딥링크 값 변경 시 UI 자동 갱신
+
+이후 테스트중 API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Could not
+    process image"},"request_id":"req_011CUMEDAZ6ZgAGzXV4ioLHU"} 에러 발생
+백그라운드 빌드를 삭제하지못하고 종료 되었어

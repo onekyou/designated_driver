@@ -1,0 +1,11 @@
+PTT 비프음 파일 테스트
+
+현재 상황:
+- 파일명: ptt_beep.m4a
+- 위치: res/raw/ptt_beep.m4a
+- 결과: MediaPlayer 생성 실패, 시스템 사운드 재생
+
+해결 방법:
+1. 파일을 mp3나 wav로 변환
+2. 또는 Android에서 기본 제공하는 사운드 사용
+3. ToneGenerator 사용해서 비프음 생성

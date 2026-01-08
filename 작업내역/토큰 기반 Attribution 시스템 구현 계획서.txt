@@ -1,0 +1,353 @@
+  토큰 기반 Attribution 시스템 구현 계획서
+
+  📋 현재 시스템 분석 결과:
+
+  ✅ 현재 작동 중인 것들:
+
+  1. Call Manager (콜매니저):
+    - AttributionManagementViewModel.kt - QR 코드 URL 생성
+    - QRCodeGenerator.kt - QR 비트맵 생성
+    - 현재 URL 형식: https://calldetector-5d61e.web.app/?r={regionId}&o={officeId}&phone=...
+  2. Customer App (고객앱):
+    - MainActivity.kt - Attribution 매칭
+    - AttributionMatchingService.kt - Cloud Function 호출
+  3. Landing Page:
+    - app/page.tsx - 핑거프린트 수집
+    - download/page.tsx - APK 다운로드
+  4. Cloud Functions:
+    - matchAttribution - 핑거프린트 매칭
+
+  ---
+  🎯 구현 전략: 단계적 마이그레이션
+
+  전략 핵심:
+
+  기존 핑거프린트 방식과 토큰 방식을 동시 지원하여, 점진적으로 전환
+
+  장점:
+  - ✅ 기존 QR 코드도 계속 작동 (하위 호환성)
+  - ✅ 새 QR 코드부터 토큰 방식 적용
+  - ✅ 리스크 최소화
+  - ✅ 롤백 가능
+
+  ---
+  📝 구현 계획 (3단계)
+
+  Phase 1: Backend 구축 (2시간)
+
+  1.1. Firestore 구조 추가
+
+  attributionTokens/  (새 컬렉션)
+    {token-uuid}/
+      token: "550e8400-e29b-41d4-a716-446655440000"
+      officeId: "ggg"
+      regionId: "Hongchon"
+      officePhone: "010-1234-5678"
+      bankName: "NH농협은행"
+      accountNumber: "3333149014688"
+      accountHolder: "홍길동"
+      createdAt: Timestamp
+      expiresAt: Timestamp (7일 후)
+      status: "pending" | "claimed" | "expired"
+
+      // 선택적
+      claimedAt: Timestamp
+      claimedBy: "010-xxxx-xxxx"
+      fingerprint: {...} // 폴백용
+
+  1.2. Cloud Function 수정
+
+  // functions/src/index.ts
+
+  // 새로운 토큰 기반 매칭 함수
+  export const matchByToken = onCall(async (request) => {
+    const { token } = request.data
+
+    const tokenDoc = await db.collection('attributionTokens')
+      .document(token)
+      .get()
+
+    if (!tokenDoc.exists) {
+      return { success: false, message: '유효하지 않은 토큰' }
+    }
+
+    const data = tokenDoc.data()
+
+    // 만료 확인
+    if (data.expiresAt.toMillis() < Date.now()) {
+      return { success: false, message: '만료된 QR 코드' }
+    }
+
+    // 이미 사용됨 확인
+    if (data.status === 'claimed') {
+      return { success: false, message: '이미 사용된 QR 코드' }
+    }
+
+    return {
+      success: true,
+      regionId: data.regionId,
+      officeId: data.officeId,
+      officePhone: data.officePhone,
+      bankName: data.bankName,
+      accountNumber: data.accountNumber,
+      accountHolder: data.accountHolder
+    }
+  })
+
+  // 기존 matchAttribution은 폴백용으로 유지
+
+  ---
+  Phase 2: Call Manager 수정 (3시간)
+
+  2.1. AttributionManagementViewModel.kt 수정
+
+  // 토큰 생성 함수 추가
+  fun generateAttributionToken(
+      regionId: String,
+      officeId: String,
+      phone: String,
+      bankName: String,
+      accountNumber: String,
+      accountHolder: String
+  ): String {
+      val token = java.util.UUID.randomUUID().toString()
+
+      // Firestore에 토큰 등록
+      val tokenData = mapOf(
+          "token" to token,
+          "officeId" to officeId,
+          "regionId" to regionId,
+          "officePhone" to phone,
+          "bankName" to bankName,
+          "accountNumber" to accountNumber,
+          "accountHolder" to accountHolder,
+          "createdAt" to com.google.firebase.Timestamp.now(),
+          "expiresAt" to com.google.firebase.Timestamp.fromMillis(
+              System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000
+          ),
+          "status" to "pending"
+      )
+
+      firestore.collection("attributionTokens")
+          .document(token)
+          .set(tokenData)
+          .addOnSuccessListener {
+              android.util.Log.d(TAG, "토큰 생성 완료: $token")
+          }
+
+      return token
+  }
+
+  // updateOfficeInfo 함수 수정
+  fun updateOfficeInfo(...) {
+      viewModelScope.launch {
+          try {
+              // 1. 토큰 생성
+              val token = generateAttributionToken(
+                  regionId, officeId, phone, bank, account, holder
+              )
+
+              // 2. 토큰 포함 URL 생성
+              val landingPageUrl = "https://calldetector-5d61e.web.app/?token=$token"
+
+              // 3. QR 코드 생성
+              val bitmap = QRCodeGenerator.generateQRCodeBitmap(landingPageUrl, 512)
+              _qrCodeBitmap.value = bitmap
+
+              // 기존 코드 유지...
+          }
+      }
+  }
+
+  ---
+  Phase 3: Customer App + Landing Page 수정 (3시간)
+
+  3.1. Landing Page 수정
+
+  // customer_app/landing/app/page.tsx
+
+  export default function LandingPage() {
+    const [token, setToken] = useState<string>('')
+    const [hasError, setHasError] = useState(false)
+
+    useEffect(() => {
+      const params = new URLSearchParams(window.location.search)
+      const t = params.get('token')
+
+      if (t) {
+        // 새 방식: 토큰 기반
+        setToken(t)
+        handleTokenFlow(t)
+      } else {
+        // 기존 방식: 핑거프린트 (하위 호환)
+        const r = params.get('r')
+        const o = params.get('o')
+        if (r && o) {
+          handleLegacyFlow(r, o, ...)
+        } else {
+          setHasError(true)
+        }
+      }
+    }, [])
+
+    const handleTokenFlow = async (token: string) => {
+      // 토큰 유효성 확인 (선택적)
+      const tokenDoc = await getDoc(doc(db, 'attributionTokens', token))
+      if (!tokenDoc.exists()) {
+        setHasError(true)
+        return
+      }
+
+      // 다운로드 페이지로 리다이렉트 (토큰 포함)
+      setTimeout(() => {
+        window.location.href = `/download?token=${token}`
+      }, 1000)
+    }
+  }
+
+  3.2. Download Page 수정
+
+  // customer_app/landing/app/download/page.tsx
+
+  export default function DownloadPage() {
+    const [token, setToken] = useState<string>('')
+
+    useEffect(() => {
+      const params = new URLSearchParams(window.location.search)
+      setToken(params.get('token') || '')
+    }, [])
+
+    const handleDownload = () => {
+      // APK 다운로드 with token
+      const apkUrl = '/customer_app.apk'
+
+      // Android Install Referrer 설정
+      if (token) {
+        const referrer = `token=${token}`
+        window.location.href = `${apkUrl}#Intent;S.referrer=${encodeURIComponent(referrer)};end`
+      } else {
+        // 폴백: 일반 다운로드
+        window.location.href = apkUrl
+      }
+    }
+  }
+
+  3.3. Customer App MainActivity 수정
+
+  // customer_app/app/app/src/main/java/com/designated/customer/MainActivity.kt
+
+  @Composable
+  fun CustomerApp() {
+      val context = LocalContext.current
+      val preferencesManager = remember { PreferencesManager(context) }
+
+      var currentOfficeId by remember { mutableStateOf<String?>(null) }
+      var currentRegionId by remember { mutableStateOf<String?>(null) }
+
+      // 토큰 매칭 시도
+      LaunchedEffect(Unit) {
+          // 1. 토큰으로 매칭 시도 (새 방식)
+          val token = getInstallReferrerToken(context)
+
+          if (token != null) {
+              android.util.Log.d("Attribution", "토큰 발견: $token")
+              val result = matchByToken(token)
+              if (result != null) {
+                  currentRegionId = result.regionId
+                  currentOfficeId = result.officeId
+                  preferencesManager.saveOfficeInfo(result.officeId, result.regionId)
+                  // 성공
+                  return@LaunchedEffect
+              }
+          }
+
+          // 2. 폴백: 핑거프린트 매칭 (기존 방식)
+          android.util.Log.d("Attribution", "토큰 없음, 핑거프린트 매칭 시도")
+          val attributionService = AttributionMatchingService(context)
+          val result = attributionService.matchAttribution()
+          // 기존 로직...
+      }
+  }
+
+  // Install Referrer에서 토큰 추출
+  fun getInstallReferrerToken(context: Context): String? {
+      // Google Play Install Referrer API 사용
+      // 구현 필요
+  }
+
+  // 토큰으로 매칭
+  suspend fun matchByToken(token: String): OfficeInfo? {
+      val functions = FirebaseFunctions.getInstance("asia-northeast3")
+      val result = functions.getHttpsCallable("matchByToken")
+          .call(mapOf("token" to token))
+          .await()
+
+      val data = result.data as? Map<*, *>
+      if (data?["success"] == true) {
+          return OfficeInfo(
+              regionId = data["regionId"] as String,
+              officeId = data["officeId"] as String,
+              ...
+          )
+      }
+      return null
+  }
+
+  ---
+  📊 작업 일정 및 우선순위:
+
+  | Phase   | 작업                        | 소요 시간 | 우선순위  |
+  |---------|---------------------------|-------|-------|
+  | Phase 1 | Cloud Function 수정         | 2시간   | 🔴 높음 |
+  | Phase 2 | Call Manager QR 생성 수정     | 3시간   | 🔴 높음 |
+  | Phase 3 | Customer App + Landing 수정 | 3시간   | 🟡 중간 |
+  | Testing | 통합 테스트                    | 2시간   | 🔴 높음 |
+
+  총 예상 시간: 10시간 (1-2일)
+
+  ---
+  ✅ 테스트 계획:
+
+  1. 토큰 방식 테스트:
+
+  1. Call Manager에서 새 QR 생성
+  2. QR 스캔 → 랜딩페이지 (token 확인)
+  3. APK 다운로드 (referrer에 token 확인)
+  4. 앱 설치 및 실행
+  5. 토큰 매칭 성공 확인
+
+  2. 하위 호환성 테스트:
+
+  1. 기존 QR 코드 (token 없음)로 테스트
+  2. 핑거프린트 매칭으로 폴백 확인
+  3. 정상 작동 확인
+
+  ---
+  🎁 추가 혜택:
+
+  토큰 방식으로 가능한 추가 기능:
+
+  1. 영업사원별 QR 생성:
+  val token = generateAttributionToken(
+      ...
+      salesPersonId = "김영업",
+      salesPersonName = "김영업"
+  )
+  2. QR 통계 분석:
+  // 전환율 분석
+  const totalGenerated = await db.collection('attributionTokens').count()
+  const totalClaimed = await db.collection('attributionTokens')
+    .where('status', '==', 'claimed').count()
+  3. 프로모션 코드:
+  val token = generateAttributionToken(
+      ...
+      promotionCode = "WELCOME2024",
+      bonusPoints = 1000
+  )
+
+  ---
+  🚀 시작 순서:
+
+  1. ✅ Phase 1 (Backend) 부터 시작
+  2. ✅ Phase 2 (Call Manager) 수정
+  3. ✅ Phase 3 (Customer App + Landing) 마지막

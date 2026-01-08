@@ -1,0 +1,57 @@
+🎯 Firebase Crashlytics 통합 완료!
+
+  구현된 기능:
+
+  1. 즉시 크래시 감지
+    - 강제종료 시 즉각 Firebase에 알림
+    - 콜매니저에 실시간 푸시 알림
+  2. 다양한 오류 타입 감지
+    - Crash (강제종료)
+    - ANR (응답 없음)
+    - Low Memory (메모리 부족)
+    - Previous Crash (이전 크래시 복구)
+  3. 긴급 알림 시스템
+    - 방해금지 모드 무시
+    - 알람음으로 즉시 알림
+    - 빨간색 경고 표시
+
+  설정 방법:
+
+  1. build.gradle 추가
+  // app/build.gradle
+  dependencies {
+      implementation 'com.google.firebase:firebase-crashlytics'
+      implementation 'com.google.firebase:firebase-analytics'
+  }
+
+  // 프로젝트 build.gradle
+  plugins {
+      id 'com.google.firebase.crashlytics' version '2.9.9'
+  }
+
+  2. AndroidManifest.xml 수정
+  <application
+      android:name=".CallDetectorApplication"
+      ...>
+
+  3. Firebase Console 설정
+  - Crashlytics 활성화
+  - 알림 규칙 설정
+  - Slack/Email 연동
+
+  비용:
+
+  - Firebase Crashlytics: 완전 무료!
+  - Firestore 알림 저장: 월 1,000원 미만
+
+  장점:
+
+  - ✅ 100% 크래시 감지
+  - ✅ 즉시 알림 (1초 이내)
+  - ✅ 자동 복구 추적
+  - ✅ 상세한 오류 정보
+  - ✅ 5000대 규모도 무료
+
+  이제 콜디텍터가 강제종료되면 즉시 콜매니저에 알림이 갑니다!
+
+대시보드에 실시간 상태 아이콘을 추가

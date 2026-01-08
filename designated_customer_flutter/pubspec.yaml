@@ -44,6 +44,9 @@ dependencies:
   # 권한 관리
   permission_handler: ^11.1.0
 
+  # QR 코드 스캔
+  mobile_scanner: ^3.5.5
+
   # 날짜/시간
   intl: ^0.18.1
   url_launcher: ^6.3.1

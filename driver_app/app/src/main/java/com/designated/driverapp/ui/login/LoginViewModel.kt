@@ -89,9 +89,16 @@ class LoginViewModel @Inject constructor(
                         } else {
                             // 2. 온라인 로그인 실패 시 오프라인 로그인 시도
                             val exception = task.exception
+                            Log.e(TAG, "❌ 온라인 로그인 실패", exception)
+                            Log.e(TAG, "❌ 에러 메시지: ${exception?.message}")
+                            Log.d(TAG, "🔍 네트워크 에러 여부: ${isNetworkError(exception)}")
+                            Log.d(TAG, "🔍 오프라인 로그인 가능 여부: ${sessionManager.canLoginOffline()}")
+
                             if (isNetworkError(exception) && sessionManager.canLoginOffline()) {
+                                Log.d(TAG, "⚠️ 네트워크 에러로 오프라인 로그인 시도")
                                 attemptOfflineLogin()
                             } else {
+                                Log.e(TAG, "❌ 온라인 로그인 실패 - 오프라인 로그인 불가")
                                 _loginState.value = LoginState.Error(exception?.message ?: "로그인에 실패했습니다.")
                             }
                         }
@@ -220,12 +227,23 @@ class LoginViewModel @Inject constructor(
 
                             _loginState.value = LoginState.Success(regionId, officeId, userId, needsUpdate)
 
+                            // ✅ 로그인 시 항상 상태를 업데이트하여 콜매니저의 리스너가 트리거되도록 함
                             val onlineStatus = com.designated.driverapp.model.DriverStatus.ONLINE.value
-                            if (currentDriverStatus != onlineStatus) {
-                                driverRef.update("status", onlineStatus)
-                                    .addOnSuccessListener { }
-                                    .addOnFailureListener { e -> }
-                            }
+                            val currentTime = com.google.firebase.Timestamp.now()
+                            Log.d(TAG, "🔵 로그인 성공 - 상태 업데이트: $onlineStatus, 시간: $currentTime")
+
+                            val updates = hashMapOf<String, Any>(
+                                "status" to onlineStatus,
+                                "lastLoginTime" to currentTime
+                            )
+
+                            driverRef.update(updates)
+                                .addOnSuccessListener {
+                                    Log.d(TAG, "✅ Firestore 상태 업데이트 성공: $onlineStatus")
+                                }
+                                .addOnFailureListener { e ->
+                                    Log.e(TAG, "❌ Firestore 상태 업데이트 실패", e)
+                                }
                         }
 
                     } else {

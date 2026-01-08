@@ -171,6 +171,48 @@ export const oncallassigned = onDocumentWritten(
                 logger.info(`[${callId}] 앱 고객이 아니거나 전화번호 없음 - 고객 알림 스킵. isAppCustomer: ${isAppCustomer}, phoneNumber: ${customerPhone}`);
             }
 
+            // 6. 콜매니저에게도 배차 상태 변경 알림 전송
+            try {
+                const managerTokensSnapshot = await admin.firestore()
+                    .collection("regions").doc(regionId)
+                    .collection("offices").doc(officeId)
+                    .collection("managerTokens")
+                    .get();
+
+                if (!managerTokensSnapshot.empty) {
+                    const managerTokens: string[] = [];
+                    managerTokensSnapshot.forEach((doc) => {
+                        const token = doc.data().fcmToken;
+                        if (token) managerTokens.push(token);
+                    });
+
+                    if (managerTokens.length > 0) {
+                        const managerPayload = {
+                            data: {
+                                type: "CALL_STATUS_UPDATE",
+                                callId: callId,
+                                status: "ASSIGNED",
+                                assignedDriverId: driverId,
+                                assignedDriverName: driverName,
+                                customerName: afterData.customerName || "고객",
+                                customerPhone: afterData.phoneNumber || "",
+                                departure: afterData.departure_set || afterData.departure || "",
+                                destination: afterData.destination_set || afterData.destination || "",
+                                fare: (afterData.fare_set ?? afterData.fare ?? 0).toString(),
+                                regionId: regionId,
+                                officeId: officeId
+                            },
+                            tokens: managerTokens
+                        };
+
+                        const response = await admin.messaging().sendEachForMulticast(managerPayload);
+                        logger.info(`[${callId}] 콜매니저 FCM 전송 완료 - 성공: ${response.successCount}, 실패: ${response.failureCount}`);
+                    }
+                }
+            } catch (managerError) {
+                logger.error(`[${callId}] 콜매니저 알림 전송 오류:`, managerError);
+            }
+
         } catch (error) {
             logger.error(`[${callId}] 알림 전송 중 오류 발생:`, error);
         }
@@ -1136,27 +1178,75 @@ export const onCallStatusChanged = onDocumentUpdated(
 
     // 상태가 변경되지 않았으면 무시
     if (beforeData.status === afterData.status) {
+      logger.info(`[onCallStatusChanged:${callId}] 상태 변경 없음 - status: ${afterData.status}, departure_set: ${afterData.departure_set}, destination_set: ${afterData.destination_set}, fare_set: ${afterData.fare_set}`);
       return;
     }
 
     logger.info(`[onCallStatusChanged:${callId}] Status changed: ${beforeData.status} → ${afterData.status}`);
-
-    // 운행 시작 (IN_PROGRESS) 또는 정산 완료 (COMPLETED) 상태 체크
-    if (afterData.status === "IN_PROGRESS" || afterData.status === "COMPLETED") {
-      // 관리자 FCM 토큰 조회
-      const adminQuery = await admin
-        .firestore()
-        .collection("admins")
-        .where("associatedRegionId", "==", regionId)
-        .where("associatedOfficeId", "==", officeId)
+    // ✅ 콜매니저에 상태 변경 알림 전송
+    try {
+      const managerTokensSnapshot = await admin.firestore()
+        .collection("regions").doc(regionId)
+        .collection("offices").doc(officeId)
+        .collection("managerTokens")
         .get();
 
-      const tokens = adminQuery.docs
-        .map((d) => d.data().fcmToken as string | undefined)
-        .filter((t): t is string => !!t && t.length > 0);
+      if (!managerTokensSnapshot.empty) {
+        const managerTokens: string[] = [];
+        managerTokensSnapshot.forEach((doc) => {
+          const token = doc.data().fcmToken;
+          if (token) managerTokens.push(token);
+        });
+
+        if (managerTokens.length > 0) {
+          const managerPayload = {
+            data: {
+              type: "CALL_STATUS_UPDATE",
+              callId: callId,
+              status: afterData.status,
+              customerName: afterData.customerName || "고객",
+              customerPhone: afterData.phoneNumber || "",
+              assignedDriverName: afterData.assignedDriverName || "",
+              departure: afterData.departure_set || afterData.departure || "",
+              destination: afterData.destination_set || afterData.destination || "",
+              fare: (afterData.fare_set ?? afterData.fare ?? 0).toString(),
+              regionId: regionId,
+              officeId: officeId
+            },
+            android: {
+              priority: "high" as const,
+              ttl: 60000
+            },
+            tokens: managerTokens
+          };
+
+          const response = await admin.messaging().sendEachForMulticast(managerPayload);
+          logger.info(`[onCallStatusChanged:${callId}] 콜매니저 FCM 전송 - ${afterData.status} - 성공: ${response.successCount}`);
+        }
+      }
+    } catch (managerError) {
+      logger.error(`[onCallStatusChanged:${callId}] 콜매니저 FCM 오류:`, managerError);
+    }
+
+    // 운행 시작 (IN_PROGRESS) 또는 정산 완료 (COMPLETED) 상태 체크
+    if (afterData.status === "ACCEPTED" || afterData.status === "IN_PROGRESS" || afterData.status === "COMPLETED") {
+      // 콜매니저 FCM 토큰 조회 (managerTokens 사용)
+      const managerTokensSnapshot = await admin
+        .firestore()
+        .collection("regions").doc(regionId)
+        .collection("offices").doc(officeId)
+        .collection("managerTokens")
+        .get();
+
+      const tokens: string[] = [];
+      managerTokensSnapshot.forEach((doc) => {
+        const token = doc.data().fcmToken;
+        if (token) tokens.push(token);
+      });
+      logger.info(`[onCallStatusChanged:${callId}] STATUS_CHANGE tokens count: ${tokens.length}`);
 
       if (tokens.length === 0) {
-        logger.warn(`[onCallStatusChanged:${callId}] No admin tokens found.`);
+        logger.warn(`[onCallStatusChanged:${callId}] No manager tokens found.`);
         return;
       }
 
@@ -1164,6 +1254,7 @@ export const onCallStatusChanged = onDocumentUpdated(
 
       if (afterData.status === "IN_PROGRESS") {
         // 운행 시작 로직
+        logger.info(`[onCallStatusChanged:${callId}] IN_PROGRESS block entered - sending STATUS_CHANGE`);
         const driverName = afterData.assignedDriverName || "기사";
 
         // 공유콜인 경우: 원사무실(sourceOfficeId)에만 (공유기사) 표시, 수락사무실에는 실제 기사 이름만 표시
@@ -1171,6 +1262,9 @@ export const onCallStatusChanged = onDocumentUpdated(
         const driverDisplayName = isSourceOffice ? `${driverName} (공유기사)` : driverName;
 
         logger.info(`[onCallStatusChanged:${callId}] 기사 이름 표시 로직 - callType: ${afterData.callType}, sourceOfficeId: ${afterData.sourceOfficeId}, currentOfficeId: ${officeId}, isSourceOffice: ${isSourceOffice}, driverDisplayName: ${driverDisplayName}`);
+
+        // 디버깅: 운행 정보 로그
+        logger.info(`[onCallStatusChanged:${callId}] 운행 정보 - departure_set: ${afterData.departure_set}, destination_set: ${afterData.destination_set}, fare_set: ${afterData.fare_set}, fare: ${afterData.fare}`);
 
         // FCM 메시지 전송 (notification 필드 추가로 백그라운드에서도 확실히 알림 표시)
         const payload = {
@@ -1184,7 +1278,10 @@ export const onCallStatusChanged = onDocumentUpdated(
             statusText: "운행 시작",
             customerName: afterData.customerName || "고객",
             customerPhone: afterData.customerPhone || "-",
-            driverName: driverDisplayName
+            driverName: driverDisplayName,
+            departure: afterData.departure_set || afterData.departure || "",
+            destination: afterData.destination_set || afterData.destination || "",
+            fare: (afterData.fare_set ?? afterData.fare ?? 0).toString()
           },
           android: {
             priority: "high" as const,
@@ -1215,6 +1312,9 @@ export const onCallStatusChanged = onDocumentUpdated(
 
         logger.info(`[onCallStatusChanged:${callId}] 운행완료 기사 이름 표시 로직 - callType: ${afterData.callType}, sourceOfficeId: ${afterData.sourceOfficeId}, currentOfficeId: ${officeId}, isSourceOffice: ${isSourceOffice}, driverName: ${driverName}`);
 
+        // 디버깅: 운행 정보 로그
+        logger.info(`[onCallStatusChanged:${callId}] 운행 정보 - departure_set: ${afterData.departure_set}, destination_set: ${afterData.destination_set}, fare_set: ${afterData.fare_set}, fare: ${afterData.fare}`);
+
         // FCM 메시지 전송 (notification 필드 추가로 백그라운드에서도 확실히 알림 표시)
         const payload = {
           notification: {
@@ -1227,7 +1327,10 @@ export const onCallStatusChanged = onDocumentUpdated(
             statusText: "운행 완료",
             customerName: afterData.customerName || "고객",
             customerPhone: afterData.customerPhone || "-",
-            driverName: driverName
+            driverName: driverName,
+            departure: afterData.departure_set || afterData.departure || "",
+            destination: afterData.destination_set || afterData.destination || "",
+            fare: (afterData.fare_set ?? afterData.fare ?? 0).toString()
           },
           android: {
             priority: "high" as const,
@@ -3413,5 +3516,131 @@ export const getOfficeReport = onCall(
   }
 );
 
-const _forceDeploy = Date.now() + 1000005; // 배포 강제용 더미 변수
+// ====== 기사 상태 변경 알림 ======
+/**
+ * 기사 상태 변경 시 콜매니저로 FCM 알림 전송
+ * - 로그인/로그아웃
+ * - 배차 수락/거절
+ * - 운행 시작 (ONLINE -> DRIVING)
+ * - 운행 완료 (DRIVING -> WAITING)
+ */
+export const onDriverStatusChange = onDocumentUpdated(
+  {
+    region: "asia-northeast3",
+    document: "regions/{regionId}/offices/{officeId}/designated_drivers/{driverId}"
+  },
+  async (event: any) => {
+    const {regionId, officeId, driverId} = event.params;
+
+    if (!event.data || !event.data.after || !event.data.after.exists) {
+      logger.info(`[기사상태] ${driverId}: 데이터 없음`);
+      return;
+    }
+
+    const beforeData = event.data.before?.data();
+    const afterData = event.data.after.data();
+
+    // 상태 변경 확인
+    const statusChanged = beforeData?.status !== afterData?.status;
+
+    if (!statusChanged) {
+      // 상태 변경이 없으면 알림 보내지 않음
+      return;
+    }
+
+    const oldStatus = beforeData?.status || "UNKNOWN";
+    const newStatus = afterData?.status || "UNKNOWN";
+    const driverName = afterData?.name || "기사";
+    const authUid = afterData?.authUid || driverId;  // authUid 추가 (없으면 driverId 사용)
+
+    logger.info(`[기사상태] ${driverId} (${driverName}): ${oldStatus} -> ${newStatus}`);
+
+    try {
+      // 관리자 토큰 가져오기
+      const managerTokensSnapshot = await admin.firestore()
+        .collection("regions").doc(regionId)
+        .collection("offices").doc(officeId)
+        .collection("managerTokens")
+        .get();
+
+      if (managerTokensSnapshot.empty) {
+        logger.warn(`[기사상태] ${driverId}: 관리자 토큰 없음`);
+        return;
+      }
+
+      const managerTokens: string[] = [];
+      managerTokensSnapshot.forEach((doc) => {
+        const token = doc.data().fcmToken;
+        if (token) managerTokens.push(token);
+      });
+
+      if (managerTokens.length === 0) {
+        logger.warn(`[기사상태] ${driverId}: 유효한 관리자 토큰 없음`);
+        return;
+      }
+
+      // 상태 메시지 생성
+      let statusMessage = "";
+      switch (newStatus) {
+        case "ONLINE":
+          statusMessage = "대기중";
+          break;
+        case "OFFLINE":
+          statusMessage = "오프라인";
+          break;
+        case "WAITING":
+          statusMessage = "대기중";
+          break;
+        case "DRIVING":
+          statusMessage = "운행중";
+          break;
+        case "ASSIGNED":
+          statusMessage = "배차됨";
+          break;
+        default:
+          statusMessage = newStatus;
+      }
+
+      // FCM 메시지 생성
+      const message = {
+        data: {
+          type: "DRIVER_STATUS_UPDATE",
+          driverId: driverId,
+          driverName: driverName,
+          authUid: authUid,
+          newStatus: newStatus,
+          oldStatus: oldStatus,
+          statusMessage: statusMessage,
+          regionId: regionId,
+          officeId: officeId,
+          timestamp: Date.now().toString()
+        },
+        android: {
+          priority: "high" as const,
+          ttl: 60000
+        },
+        tokens: managerTokens
+      };
+
+      // FCM 전송
+      const response = await admin.messaging().sendEachForMulticast(message);
+
+      logger.info(`[기사상태] ${driverId}: FCM 전송 완료 - 성공: ${response.successCount}, 실패: ${response.failureCount}`);
+
+      // 실패한 토큰 로그
+      if (response.failureCount > 0) {
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            logger.error(`[기사상태] ${driverId}: 토큰 ${managerTokens[idx]} 전송 실패 - ${resp.error}`);
+          }
+        });
+      }
+
+    } catch (error) {
+      logger.error(`[기사상태] ${driverId}: FCM 전송 오류`, error);
+    }
+  }
+);
+
+const _forceDeploy = Date.now() + 1000006; // 배포 강제용 더미 변수
 void _forceDeploy;                 // 사용해서 컴파일 경고 해소

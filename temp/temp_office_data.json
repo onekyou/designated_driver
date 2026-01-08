@@ -1,0 +1,39 @@
+{
+  "offices": {
+    "TEST_OFFICE": {
+      "officeId": "TEST_OFFICE",
+      "name": "테스트 대리운전",
+      "phoneNumber": "010-1234-5678",
+      "address": "서울시 강남구 테스트로 123",
+      "businessLicense": "TEST-123-45-67890",
+      "managerName": "김테스트",
+      "region": "seoul",
+      "status": "active",
+      "settings": {
+        "allowSharedCalls": true,
+        "pointRate": {
+          "bronze": 0.03,
+          "silver": 0.05,
+          "gold": 0.07,
+          "vip": 0.09
+        },
+        "gradeThresholds": {
+          "silver": 50000,
+          "gold": 100000,
+          "vip": 200000
+        }
+      },
+      "createdAt": "2024-09-28T10:00:00Z",
+      "updatedAt": "2024-09-28T10:00:00Z"
+    }
+  },
+  "regions": {
+    "seoul": {
+      "regionId": "seoul",
+      "name": "서울특별시",
+      "isActive": true,
+      "offices": ["TEST_OFFICE"],
+      "createdAt": "2024-09-28T10:00:00Z"
+    }
+  }
+}

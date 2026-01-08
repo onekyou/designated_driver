@@ -9,8 +9,16 @@
     <!-- 인터넷 권한 (Firebase) -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- FCM 푸시 알림 권한 (Android 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- QR 코드 스캔 권한 -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
     <application
-        android:label="designated_customer_flutter"
+        android:label="대리운전 고객"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

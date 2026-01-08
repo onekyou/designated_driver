@@ -1,0 +1,24 @@
+<resources>
+    <string name="app_name">Call Detector</string>
+    <string name="call_detecting">통화 감지 중</string>
+    <string name="permission_required">권한이 필요합니다</string>
+    <string name="required_permissions">필수권한: %1$s</string>
+    <string name="loading_data">데이터 로딩 중…</string>
+    <string name="app_reset_message">앱이 초기화되었습니다. 다시 시작하면 권한을 다시 확인합니다.</string>
+    <string name="reset_error">초기화 중 오류가 발생했습니다: %1$s</string>
+    <string name="no_call_data">저장된 통화 정보가 없습니다.</string>
+    <string name="app_exit">앱 종료</string>
+    <string name="app_reset">앱 초기화</string>
+    <string name="device_settings">설정</string>
+    <string name="device_name">디바이스: %1$s</string>
+    <string name="device_name_default">설정 필요</string>
+    <string name="call_info_header">최근 통화 정보</string>
+    <string name="exit_confirmation">앱을 종료하면 전화 감지 기능도 중지됩니다. 계속하시겠습니까?</string>
+    <string name="exit_confirm">종료</string>
+    <string name="cancel">취소</string>
+    <string name="reset_confirmation">모든 설정과 캐시를 초기화하시겠습니까?\n이 작업은 되돌릴 수 없습니다.</string>
+    <string name="reset_confirm">초기화</string>
+    <string name="device_selection_title">디바이스 선택</string>
+    <string name="device_set_message">디바이스가 \'%1$s\'(으)로 설정되었습니다</string>
+    <string name="start_service">통화 감지 서비스 시작</string>
+</resources>

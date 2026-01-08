@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="300" height="200" viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .person-body { fill: #404040; }
+      .person-head { fill: #8B7CC6; }
+      .person-shirt-1 { fill: #FFAB00; }
+      .person-shirt-2 { fill: #6650A4; }
+      .person-shirt-3 { fill: #FFCF66; }
+      .person-shirt-4 { fill: #4A3B7C; }
+      .person-pants { fill: #2C2C2C; }
+      .person-hair { fill: #333333; }
+      .shadow { fill: #1E1E1E; opacity: 0.3; }
+    </style>
+  </defs>
+
+  <!-- Person 1 - Driver (Front, tallest) -->
+  <g transform="translate(50, 50)">
+    <!-- Shadow -->
+    <ellipse cx="25" cy="135" rx="20" ry="8" class="shadow"/>
+    <!-- Body -->
+    <rect x="15" y="80" width="20" height="55" rx="10" class="person-shirt-1"/>
+    <!-- Arms -->
+    <rect x="5" y="85" width="8" height="25" rx="4" class="person-shirt-1"/>
+    <rect x="37" y="85" width="8" height="25" rx="4" class="person-shirt-1"/>
+    <!-- Pants -->
+    <rect x="18" y="125" width="14" height="25" rx="7" class="person-pants"/>
+    <!-- Head -->
+    <circle cx="25" cy="65" r="15" class="person-head"/>
+    <!-- Hair -->
+    <path d="M 15 55 Q 25 45 35 55 Q 30 50 25 50 Q 20 50 15 55" class="person-hair"/>
+    <!-- Face details -->
+    <circle cx="22" cy="62" r="1" fill="#333"/>
+    <circle cx="28" cy="62" r="1" fill="#333"/>
+    <path d="M 22 68 Q 25 70 28 68" stroke="#333" stroke-width="1" fill="none"/>
+  </g>
+
+  <!-- Person 2 - Manager (Left side) -->
+  <g transform="translate(120, 60)">
+    <!-- Shadow -->
+    <ellipse cx="20" cy="125" rx="15" ry="6" class="shadow"/>
+    <!-- Body -->
+    <rect x="12" y="75" width="16" height="50" rx="8" class="person-shirt-2"/>
+    <!-- Arms -->
+    <rect x="4" y="80" width="6" height="20" rx="3" class="person-shirt-2"/>
+    <rect x="30" y="80" width="6" height="20" rx="3" class="person-shirt-2"/>
+    <!-- Pants -->
+    <rect x="14" y="115" width="12" height="20" rx="6" class="person-pants"/>
+    <!-- Head -->
+    <circle cx="20" cy="60" r="12" class="person-head"/>
+    <!-- Hair -->
+    <path d="M 12 50 Q 20 42 28 50 Q 24 46 20 46 Q 16 46 12 50" class="person-hair"/>
+    <!-- Face details -->
+    <circle cx="18" cy="58" r="0.8" fill="#333"/>
+    <circle cx="22" cy="58" r="0.8" fill="#333"/>
+    <path d="M 18 63 Q 20 65 22 63" stroke="#333" stroke-width="0.8" fill="none"/>
+  </g>
+
+  <!-- Person 3 - Customer (Right side) -->
+  <g transform="translate(180, 70)">
+    <!-- Shadow -->
+    <ellipse cx="18" cy="115" rx="13" ry="5" class="shadow"/>
+    <!-- Body -->
+    <rect x="10" y="70" width="16" height="45" rx="8" class="person-shirt-3"/>
+    <!-- Arms -->
+    <rect x="3" y="75" width="6" height="18" rx="3" class="person-shirt-3"/>
+    <rect x="27" y="75" width="6" height="18" rx="3" class="person-shirt-3"/>
+    <!-- Pants -->
+    <rect x="12" y="105" width="12" height="18" rx="6" class="person-pants"/>
+    <!-- Head -->
+    <circle cx="18" cy="57" r="11" class="person-head"/>
+    <!-- Hair -->
+    <path d="M 10 48 Q 18 40 26 48 Q 22 44 18 44 Q 14 44 10 48" class="person-hair"/>
+    <!-- Face details -->
+    <circle cx="16" cy="55" r="0.8" fill="#333"/>
+    <circle cx="20" cy="55" r="0.8" fill="#333"/>
+    <path d="M 16 60 Q 18 62 20 60" stroke="#333" stroke-width="0.8" fill="none"/>
+  </g>
+
+  <!-- Person 4 - Another team member (Back) -->
+  <g transform="translate(240, 80)">
+    <!-- Shadow -->
+    <ellipse cx="15" cy="105" rx="12" ry="4" class="shadow"/>
+    <!-- Body -->
+    <rect x="8" y="65" width="14" height="40" rx="7" class="person-shirt-4"/>
+    <!-- Arms -->
+    <rect x="2" y="70" width="5" height="15" rx="2.5" class="person-shirt-4"/>
+    <rect x="23" y="70" width="5" height="15" rx="2.5" class="person-shirt-4"/>
+    <!-- Pants -->
+    <rect x="10" y="95" width="10" height="15" rx="5" class="person-pants"/>
+    <!-- Head -->
+    <circle cx="15" cy="52" r="10" class="person-head"/>
+    <!-- Hair -->
+    <path d="M 8 43 Q 15 36 22 43 Q 19 39 15 39 Q 11 39 8 43" class="person-hair"/>
+    <!-- Face details -->
+    <circle cx="13" cy="50" r="0.7" fill="#333"/>
+    <circle cx="17" cy="50" r="0.7" fill="#333"/>
+    <path d="M 13 55 Q 15 57 17 55" stroke="#333" stroke-width="0.7" fill="none"/>
+  </g>
+
+  <!-- Decorative elements -->
+  <!-- Phone icon near first person -->
+  <g transform="translate(80, 80)">
+    <rect x="0" y="0" width="8" height="12" rx="2" fill="#FFAB00" opacity="0.7"/>
+    <rect x="1" y="2" width="6" height="8" rx="1" fill="#FFF" opacity="0.9"/>
+    <circle cx="4" cy="10" r="0.5" fill="#FFAB00"/>
+  </g>
+
+  <!-- Car icon -->
+  <g transform="translate(200, 140)">
+    <rect x="0" y="8" width="20" height="6" rx="3" fill="#6650A4" opacity="0.6"/>
+    <circle cx="4" cy="16" r="2" fill="#333" opacity="0.8"/>
+    <circle cx="16" cy="16" r="2" fill="#333" opacity="0.8"/>
+    <rect x="2" y="6" width="16" height="4" rx="2" fill="#8B7CC6" opacity="0.7"/>
+  </g>
+
+  <!-- Connection lines (subtle) -->
+  <path d="M 75 100 Q 150 90 180 105" stroke="#FFAB00" stroke-width="1" fill="none" opacity="0.3" stroke-dasharray="3,3"/>
+  <path d="M 140 120 Q 180 115 220 130" stroke="#6650A4" stroke-width="1" fill="none" opacity="0.3" stroke-dasharray="3,3"/>
+</svg>

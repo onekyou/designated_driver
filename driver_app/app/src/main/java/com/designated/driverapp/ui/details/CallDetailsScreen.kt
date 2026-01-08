@@ -72,10 +72,10 @@ private fun CallDetailsContent(
     var fee by remember { mutableStateOf("") }
 
     Text(text = "상태: ${callInfo.status}")
-    Text(text = "고객 전화번호: ${callInfo.phoneNumber ?: "정보 없음"}")
-    val departure = if (callInfo.departure_set.isNotBlank()) callInfo.departure_set else callInfo.customerAddress
-    val destination = if (callInfo.destination_set.isNotBlank()) callInfo.destination_set else callInfo.destination
-    val fareDisplay = if (callInfo.fare_set > 0) callInfo.fare_set else callInfo.fare
+    Text(text = "고객 전화번호: ${callInfo.phoneNumber.takeIf { it.isNotBlank() } ?: "정보 없음"}")
+    val departure = callInfo.departure_set?.takeIf { it.isNotBlank() } ?: callInfo.customerAddress
+    val destination = callInfo.destination_set?.takeIf { it.isNotBlank() } ?: callInfo.destination
+    val fareDisplay = callInfo.fare_set?.takeIf { it > 0 } ?: callInfo.fare
 
     Text(text = "출발지: ${departure ?: "정보 없음"}")
     Text(text = "도착지: ${destination ?: "정보 없음"}")

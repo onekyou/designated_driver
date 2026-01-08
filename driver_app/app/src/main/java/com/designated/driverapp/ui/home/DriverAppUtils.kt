@@ -16,6 +16,9 @@ import com.designated.driverapp.viewmodel.DriverViewModel
 import com.designated.driverapp.data.Constants
 
 fun logoutUserAndExitApp(context: Context, scope: CoroutineScope, viewModel: DriverViewModel) {
+    Log.d("DriverAppUtils", "🔴 [LOGOUT] logoutUserAndExitApp 호출됨")
+    Log.d("DriverAppUtils", "🔴 [LOGOUT] 호출 스택:", Exception("Stack trace"))
+
     val auth = Firebase.auth
     val userId = auth.currentUser?.uid
     val firestore = FirebaseFirestore.getInstance()
@@ -31,11 +34,15 @@ fun logoutUserAndExitApp(context: Context, scope: CoroutineScope, viewModel: Dri
             val correctPath = "regions/$regionId/offices/$officeId/designated_drivers/$userId"
             val driverRef = firestore.document(correctPath)
 
+            Log.d("DriverAppUtils", "🔴 [LOGOUT] status를 OFFLINE으로 업데이트: $correctPath")
+
             driverRef.update("status", Constants.DRIVER_STATUS_OFFLINE)
                 .addOnSuccessListener {
+                    Log.d("DriverAppUtils", "✅ [LOGOUT] OFFLINE 업데이트 성공")
                     performSignOut(context, scope)
                 }
                 .addOnFailureListener { e ->
+                    Log.e("DriverAppUtils", "❌ [LOGOUT] OFFLINE 업데이트 실패", e)
                     Toast.makeText(context, "상태 업데이트 실패. 로그아웃을 진행합니다.", Toast.LENGTH_SHORT).show()
                     performSignOut(context, scope)
                 }

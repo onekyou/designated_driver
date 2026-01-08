@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>callLink | D2R2 대리운전 통합 플랫폼</title>
+    <style>
+        :root {
+            --primary: #FFAB00; 
+            --primary-dark: #FF8F00; 
+            --primary-light: #FFCF66;
+            --bg-light: #FFFBF0;
+            --text-dark: #2C3E50;
+            --text-muted: #5D6D7E;
+            --white: #ffffff;
+        }
+
+        body {
+            font-family: 'Pretendard', 'Malgun Gothic', sans-serif;
+            line-height: 1.7;
+            margin: 0;
+            padding: 0;
+            color: var(--text-dark);
+            background-color: #f4f7f9;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: var(--white);
+            padding: 60px 20px;
+            text-align: center;
+        }
+        header h1 { margin: 0; font-size: 3em; font-weight: 800; }
+        header p { margin-top: 10px; font-size: 1.2em; opacity: 0.95; }
+
+        .container { max-width: 1200px; margin: 0 auto; padding: 40px 20px; }
+
+        .section-title {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2em;
+            color: var(--primary-dark);
+            position: relative;
+        }
+
+        /* 🚀 [1순위] 4개 앱 가로 라인업 섹션 */
+        .app-lineup-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 60px;
+        }
+        .lineup-card {
+            background: var(--white);
+            padding: 35px 20px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.05);
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+        .lineup-card:hover { 
+            transform: translateY(-10px); 
+            border-color: var(--primary);
+            box-shadow: 0 15px 30px rgba(255, 171, 0, 0.15);
+        }
+        .lineup-icon { font-size: 3.5em; margin-bottom: 15px; display: block; }
+        .lineup-card h4 { margin: 15px 0 10px; font-size: 1.3em; color: var(--primary-dark); }
+        .lineup-card p { font-size: 0.95em; color: var(--text-muted); margin: 0; line-height: 1.4; }
+
+        /* 📄 [2순위] 상세 앱 소개 섹션 (세로 배열) */
+        .app-detail-card {
+            background: var(--white);
+            border-radius: 25px;
+            padding: 45px;
+            margin-bottom: 35px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.03);
+            border-left: 10px solid var(--primary);
+        }
+        .app-detail-card h3 {
+            font-size: 1.9em;
+            color: var(--primary-dark);
+            margin: 0 0 15px 0;
+            display: flex;
+            align-items: center;
+        }
+        .app-detail-card blockquote {
+            margin: 0 0 25px 0;
+            padding: 15px 25px;
+            background: var(--bg-light);
+            border-radius: 12px;
+            font-weight: 500;
+            color: var(--text-dark);
+            border: none;
+        }
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+        }
+        .detail-item h4 { color: var(--primary-dark); margin-bottom: 12px; font-size: 1.1em; border-bottom: 2px solid var(--bg-light); display: inline-block; }
+        .detail-item ul { padding-left: 20px; margin: 0; }
+        .detail-item li { margin-bottom: 10px; color: var(--text-muted); }
+
+        .core-value-box {
+            margin-top: 30px;
+            padding: 20px;
+            background: linear-gradient(to right, #ffffff, var(--bg-light));
+            border: 1px dashed var(--primary);
+            border-radius: 12px;
+            text-align: center;
+            font-weight: bold;
+            color: var(--primary-dark);
+            font-size: 1.1em;
+        }
+
+        /* 🏢 공식 정보 */
+        .info-box {
+            background: #2C3E50; color: var(--white); padding: 50px; border-radius: 25px;
+            margin-top: 60px;
+        }
+        .info-grid { display: grid; grid-template-columns: 160px 1fr; gap: 20px; margin-top: 30px; }
+        .info-label { color: var(--primary-light); font-weight: bold; text-transform: uppercase; font-size: 0.9em; }
+        .info-value { font-size: 1.1em; }
+
+        footer { text-align: center; padding: 50px 0; color: #adb5bd; font-size: 0.95em; }
+
+        @media (max-width: 992px) {
+            .app-lineup-grid { grid-template-columns: repeat(2, 1fr); }
+            .detail-grid { grid-template-columns: 1fr; gap: 25px; }
+        }
+        @media (max-width: 600px) {
+            .app-lineup-grid { grid-template-columns: 1fr; }
+            header h1 { font-size: 2.2em; }
+            .app-detail-card { padding: 30px; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>callLink</h1>
+        <p>"전화 한 통이 바로 매출이 되는 스마트 대리운전 시스템"</p>
+    </header>
+
+    <div class="container">
+        
+        <h2 class="section-title">D2R2 통합 플랫폼 라인업</h2>
+        <div class="app-lineup-grid">
+            <div class="lineup-card">
+                <span class="lineup-icon">🎁</span>
+                <h4>콜마당</h4>
+                <p>QR 다이렉트 호출<br>& 포인트 적립 시스템</p>
+            </div>
+            <div class="lineup-card">
+                <span class="lineup-icon">🔔</span>
+                <h4>Call Keeper</h4>
+                <p>지능형 콜 감지<br>& 자동 배차 팝업</p>
+            </div>
+            <div class="lineup-card">
+                <span class="lineup-icon">📊</span>
+                <h4>Call Manager</h4>
+                <p>실시간 운영 통계<br>& 자동 정산 관리</p>
+            </div>
+            <div class="lineup-card">
+                <span class="lineup-icon">🚗</span>
+                <h4>Driver App</h4>
+                <p>GPS 최적 위치 배차<br>& 실시간 수익 확인</p>
+            </div>
+        </div>
+
+        <hr style="border: 0; height: 1px; background: #eee; margin: 60px 0;">
+
+        <h2 class="section-title">서비스 상세 솔루션</h2>
+
+        <div class="app-detail-card">
+            <h3>🎁 콜마당 (Guest App)</h3>
+            <blockquote>"복잡한 검색 없이 QR 스캔 한 번으로 즉시 호출하세요"</blockquote>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <h4>핵심 기능</h4>
+                    <ul>
+                        <li>전용 QR 코드 기반 사무실 즉시 연결</li>
+                        <li>사용자 편의에 따른 전화/앱 호출 선택</li>
+                        <li>등급별 포인트 자동 적립 및 혜택 관리</li>
+                    </ul>
+                </div>
+                <div class="detail-item">
+                    <h4>사용 대상</h4>
+                    <ul>
+                        <li>대리운전 이용 고객</li>
+                        <li>단골 고객 관리가 필요한 지역 사무실</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="core-value-box">"손님은 편리하게 호출하고, 사무실은 확실한 단골을 확보합니다."</div>
+        </div>
+
+        <div class="app-detail-card">
+            <h3>🔔 Call Keeper</h3>
+            <blockquote>"전화벨이 울리면 기록은 시스템이 책임집니다"</blockquote>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <h4>핵심 기능</h4>
+                    <ul>
+                        <li>개인/업무 전화 지능형 필터링</li>
+                        <li>통화 종료 후 자동 배차 팝업 활성화</li>
+                        <li>다중 사무실 통합 관리 기능</li>
+                        <li>데이터 실시간 동기화 (Firebase)</li>
+                    </ul>
+                </div>
+                <div class="detail-item">
+                    <h4>사용 대상</h4>
+                    <ul>
+                        <li>대리운전 사무실 메인 전화기</li>
+                        <li>개인 스마트폰으로 콜을 받는 상담원</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="core-value-box">"메모 누락으로 인한 수익 손실을 0%로 만듭니다."</div>
+        </div>
+
+        <div class="app-detail-card">
+            <h3>📊 Call Manager</h3>
+            <blockquote>"데이터로 증명하는 효율적인 경영 관리"</blockquote>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <h4>핵심 기능</h4>
+                    <ul>
+                        <li>기사 실시간 상태 모니터링 및 배차 제어</li>
+                        <li>누락 없는 자동 수수료 계산 및 정산 시스템</li>
+                        <li>일/주/월간 운영 통계 리포트 제공</li>
+                        <li>사무실 간 공유콜 네트워크 연동</li>
+                    </ul>
+                </div>
+                <div class="detail-item">
+                    <h4>사용 대상</h4>
+                    <ul>
+                        <li>사무실 관리자 및 운영 대표자</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="core-value-box">"수기 정산의 스트레스에서 벗어나 운영에만 집중하세요."</div>
+        </div>
+
+        <div class="app-detail-card">
+            <h3>🚗 Driver App</h3>
+            <blockquote>"기사님의 이동 동선에 최적화된 스마트 배차"</blockquote>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <h4>핵심 기능</h4>
+                    <ul>
+                        <li>GPS 기반 가장 가까운 콜 실시간 알림</li>
+                        <li>모든 운행 이력 및 수익 내역 자동 저장</li>
+                        <li>간편한 원터치 출퇴근 및 실적 확인</li>
+                    </ul>
+                </div>
+                <div class="detail-item">
+                    <h4>사용 대상</h4>
+                    <ul>
+                        <li>대리운전 기사 및 현장 출동 인력</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="core-value-box">"불필요한 대기 시간을 줄이고 운행 횟수를 극대화합니다."</div>
+        </div>
+
+        <div class="info-box">
+            <h2 style="color: var(--primary-light); margin-top:0;">Official Information</h2>
+            <div class="info-grid">
+                <div class="info-label">Business Name</div><div class="info-value">callLink</div>
+                <div class="info-label">Address</div><div class="info-value">10 Dudam-gil, Yongmun-myeon, Yangpyeong, Gyeonggi, 12519, South Korea</div>
+                <div class="info-label">Email</div><div class="info-value">calllinkdrive@gmail.com</div>
+                <div class="info-label">Phone</div><div class="info-value">+82 10 3670 2011</div>
+            </div>
+        </div>
+
+        <footer>&copy; 2025 callLink. All rights reserved.</footer>
+    </div>
+</body>
+</html>

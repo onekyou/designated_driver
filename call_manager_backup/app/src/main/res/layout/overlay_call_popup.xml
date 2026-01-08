@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="#CCFFFFFF"
+    android:padding="24dp">
+
+    <TextView
+        android:id="@+id/textCallName"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="고객명"
+        android:textStyle="bold"
+        android:textSize="20sp"
+        android:layout_marginBottom="8dp"/>
+
+    <TextView
+        android:id="@+id/textCallPhone"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="전화번호"
+        android:textSize="16sp"
+        android:layout_marginBottom="8dp"/>
+
+    <TextView
+        android:id="@+id/textCallSummary"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="운행 정보"
+        android:textSize="16sp"
+        android:layout_marginBottom="16dp"/>
+
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="end">
+
+        <Button
+            android:id="@+id/btnAssign"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="배차"/>
+        <Button
+            android:id="@+id/btnHold"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="보류"
+            android:layout_marginStart="8dp"/>
+        <Button
+            android:id="@+id/btnDelete"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="삭제"
+            android:layout_marginStart="8dp"/>
+    </LinearLayout>
+
+</LinearLayout>

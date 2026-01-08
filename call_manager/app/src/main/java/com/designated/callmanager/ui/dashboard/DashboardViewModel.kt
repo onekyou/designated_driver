@@ -121,8 +121,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         )
     }
 
-    private val _regionId = MutableStateFlow<String?>(null)
-    val regionId: StateFlow<String?> = _regionId.asStateFlow()
+    private val _provinceId = MutableStateFlow<String?>(null)
+    val provinceId: StateFlow<String?> = _provinceId.asStateFlow()
+
+    private val _cityId = MutableStateFlow<String?>(null)
+    val cityId: StateFlow<String?> = _cityId.asStateFlow()
 
     private val _officeId = MutableStateFlow<String?>(null)
     val officeId: StateFlow<String?> = _officeId.asStateFlow()
@@ -231,25 +234,28 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private fun fetchCurrentUserAndStartListening() {
         val user = auth.currentUser
         if (user != null) {
-            val storedRegionId = sharedPreferences.getString("regionId", null)
+            val storedProvinceId = sharedPreferences.getString("provinceId", null)
+            val storedCityId = sharedPreferences.getString("cityId", null)
             val storedOfficeId = sharedPreferences.getString("officeId", null)
-            _regionId.value = storedRegionId
+            _provinceId.value = storedProvinceId
+            _cityId.value = storedCityId
             _officeId.value = storedOfficeId
-            if (!storedRegionId.isNullOrBlank() && !storedOfficeId.isNullOrBlank()) {
-                startListening(storedRegionId, storedOfficeId)
-                fetchOfficeName(storedRegionId, storedOfficeId)
+            if (!storedProvinceId.isNullOrBlank() && !storedCityId.isNullOrBlank() && !storedOfficeId.isNullOrBlank()) {
+                startListening(storedProvinceId, storedCityId, storedOfficeId)
+                fetchOfficeName(storedProvinceId, storedCityId, storedOfficeId)
             }
         }
     }
 
-    private fun startListening(regionId: String, officeId: String) {
+    private fun startListening(provinceId: String, cityId: String, officeId: String) {
         // 이미 같은 office를 리스닝 중이면 중복 시작하지 않음
-        if (_regionId.value == regionId && _officeId.value == officeId && callsListener != null) {
+        if (_provinceId.value == provinceId && _cityId.value == cityId && _officeId.value == officeId && callsListener != null) {
             return
         }
 
         stopListening()
-        val officeRef = firestore.collection("regions").document(regionId)
+        val officeRef = firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
             .collection("offices").document(officeId)
 
         officeRef.addSnapshotListener { snapshot, e ->
@@ -271,7 +277,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
         // Repository 패턴으로 교체됨 - Firebase 리스너 대신 Local DB Flow 구독
         // callsListener와 driversListener는 제거됨
-        setupCallsAndDriversObservers(regionId, officeId)
+        setupCallsAndDriversObservers(provinceId, cityId, officeId)
 
         officeStatusListener = officeRef.addSnapshotListener { snapshot, e ->
             if (e != null) {
@@ -294,7 +300,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
 
         val listenerA = firestore.collection("shared_calls")
-            .whereEqualTo("sourceRegionId", regionId)
+            .whereEqualTo("sourceRegionId", provinceId)
             .whereEqualTo("status", "OPEN")
             .addSnapshotListener { snapshots, e ->
                 if (e != null) {
@@ -333,7 +339,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         sharedCallsListener = listenerA
 
         allSharedCallsListener = firestore.collection("shared_calls")
-            .whereEqualTo("sourceRegionId", regionId)
+            .whereEqualTo("sourceRegionId", provinceId)
             .addSnapshotListener { snapshots, e ->
                 if (e != null) {
                     return@addSnapshotListener
@@ -350,18 +356,18 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             }
 
         // Repository 패턴으로 교체됨 - 포인트 데이터 구독 시작
-        setupPointsObservers(regionId, officeId)
+        setupPointsObservers(provinceId, cityId, officeId)
     }
 
     /**
      * Repository 패턴을 사용한 포인트 데이터 구독 설정
      */
-    private fun setupPointsObservers(regionId: String, officeId: String) {
-        Log.d(TAG, "포인트 옵저버 설정: $regionId/$officeId")
+    private fun setupPointsObservers(provinceId: String, cityId: String, officeId: String) {
+        Log.d(TAG, "포인트 옵저버 설정: $provinceId/$cityId/$officeId")
 
         // 1. 포인트 잔액 구독
         viewModelScope.launch {
-            pointRepository.getPointsInfoFlow(regionId, officeId)
+            pointRepository.getPointsInfoFlow(provinceId, officeId)
                 .collect { pointsInfo ->
                     _pointsInfo.value = pointsInfo ?: PointsInfo(0, null)
                     Log.d(TAG, "포인트 잔액 업데이트: ${pointsInfo?.balance ?: 0}")
@@ -370,7 +376,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
         // 2. 거래 내역 구독
         viewModelScope.launch {
-            pointRepository.getTransactionsFlow(regionId, officeId)
+            pointRepository.getTransactionsFlow(provinceId, officeId)
                 .collect { transactions ->
                     _pointTransactions.value = transactions
                     Log.d(TAG, "포인트 거래 내역 업데이트: ${transactions.size}개")
@@ -383,7 +389,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         // 3. 초기 데이터 새로고침 (백그라운드)
         viewModelScope.launch {
             try {
-                pointRepository.refreshData(regionId, officeId)
+                pointRepository.refreshData(provinceId, officeId)
                 Log.d(TAG, "포인트 데이터 새로고침 완료")
             } catch (e: Exception) {
                 Log.e(TAG, "포인트 데이터 새로고침 실패", e)
@@ -395,12 +401,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
      * Repository 패턴을 사용한 콜/기사 데이터 구독 설정
      * Local-First 아키텍처: Room DB Flow 구독 + FCM 동기화
      */
-    private fun setupCallsAndDriversObservers(regionId: String, officeId: String) {
-        Log.d(TAG, "콜/기사 옵저버 설정: $regionId/$officeId")
+    private fun setupCallsAndDriversObservers(provinceId: String, cityId: String, officeId: String) {
+        Log.d(TAG, "콜/기사 옵저버 설정: $provinceId/$cityId/$officeId")
 
         // 1. 콜 목록 Flow 구독
         viewModelScope.launch {
-            callRepository.getCallsFlow(regionId, officeId)
+            callRepository.getCallsFlow(provinceId, officeId)
                 .collect { calls ->
                     Log.d(TAG, "콜 목록 업데이트: ${calls.size}개")
 
@@ -481,7 +487,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
         // 2. 기사 목록 Flow 구독
         viewModelScope.launch {
-            driverRepository.getDriversFlow(regionId, officeId)
+            driverRepository.getDriversFlow(provinceId, officeId)
                 .collect { drivers ->
                     Log.d(TAG, "기사 목록 업데이트: ${drivers.size}명")
 
@@ -497,7 +503,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             try {
                 Log.d(TAG, "콜 데이터 새로고침 시작...")
-                callRepository.refreshData(regionId, officeId)
+                callRepository.refreshData(provinceId, cityId, officeId)
                 Log.d(TAG, "콜 데이터 새로고침 완료")
             } catch (e: Exception) {
                 Log.e(TAG, "콜 데이터 새로고침 실패", e)
@@ -507,7 +513,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             try {
                 Log.d(TAG, "기사 데이터 새로고침 시작...")
-                driverRepository.refreshData(regionId, officeId)
+                driverRepository.refreshData(provinceId, cityId, officeId)
                 Log.d(TAG, "기사 데이터 새로고침 완료")
             } catch (e: Exception) {
                 Log.e(TAG, "기사 데이터 새로고침 실패", e)
@@ -528,10 +534,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun assignCallToDriver(callInfo: CallInfo, driverId: String) {
-        if (_regionId.value == null || _officeId.value == null) {
+        if (_provinceId.value == null || _cityId.value == null || _officeId.value == null) {
             return
         }
-        val officePath = firestore.collection("regions").document(_regionId.value!!)
+        val officePath = firestore.collection("provinces").document(_provinceId.value!!)
+            .collection("cities").document(_cityId.value!!)
             .collection("offices").document(_officeId.value!!)
 
         viewModelScope.launch {
@@ -566,12 +573,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun updateCallStatus(callId: String, newStatus: CallStatus) {
-        if (_regionId.value == null || _officeId.value == null) {
+        if (_provinceId.value == null || _cityId.value == null || _officeId.value == null) {
             return
         }
         viewModelScope.launch {
             try {
-                firestore.collection("regions").document(_regionId.value!!)
+                firestore.collection("provinces").document(_provinceId.value!!)
+                    .collection("cities").document(_cityId.value!!)
                     .collection("offices").document(_officeId.value!!)
                     .collection("calls").document(callId)
                     .update("status", newStatus.firestoreValue)
@@ -586,11 +594,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun completeCall(callId: String) {
-        if (_regionId.value == null || _officeId.value == null) return
+        if (_provinceId.value == null || _cityId.value == null || _officeId.value == null) return
 
         viewModelScope.launch {
             try {
-                val callRef = firestore.collection("regions").document(_regionId.value!!)
+                val callRef = firestore.collection("provinces").document(_provinceId.value!!)
+                    .collection("cities").document(_cityId.value!!)
                     .collection("offices").document(_officeId.value!!)
                     .collection("calls").document(callId)
 
@@ -600,7 +609,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 callRef.update("status", CallStatus.COMPLETED.firestoreValue).await()
 
                 if (!assignedDriverAuthUid.isNullOrBlank()) {
-                    val driversQuery = firestore.collection("regions").document(_regionId.value!!)
+                    val driversQuery = firestore.collection("provinces").document(_provinceId.value!!)
+                        .collection("cities").document(_cityId.value!!)
                         .collection("offices").document(_officeId.value!!)
                         .collection("designated_drivers")
                         .whereEqualTo("authUid", assignedDriverAuthUid)
@@ -624,9 +634,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         _callInfoForDialog.value = callInfo
     }
 
-    private fun getOfficeRef() = regionId.value?.let { rId ->
-        officeId.value?.let { oId ->
-            firestore.collection("regions").document(rId).collection("offices").document(oId)
+    private fun getOfficeRef() = provinceId.value?.let { pId ->
+        cityId.value?.let { cId ->
+            officeId.value?.let { oId ->
+                firestore.collection("provinces").document(pId)
+                    .collection("cities").document(cId)
+                    .collection("offices").document(oId)
+            }
         }
     }
 
@@ -651,10 +665,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     return@launch
                 }
 
-                val region = _regionId.value ?: return@launch
+                val province = _provinceId.value ?: return@launch
+                val city = _cityId.value ?: return@launch
                 val office = _officeId.value ?: return@launch
 
-                val callDocument = firestore.collection("regions").document(region)
+                val callDocument = firestore.collection("provinces").document(province)
+                    .collection("cities").document(city)
                     .collection("offices").document(office)
                     .collection("calls").document(callId)
                     .get().await()
@@ -686,10 +702,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun showSharedCallCancelledDialog(callId: String) {
         viewModelScope.launch {
             try {
-                val region = _regionId.value ?: return@launch
+                val province = _provinceId.value ?: return@launch
+                val city = _cityId.value ?: return@launch
                 val office = _officeId.value ?: return@launch
 
-                val callDocument = firestore.collection("regions").document(region)
+                val callDocument = firestore.collection("provinces").document(province)
+                    .collection("cities").document(city)
                     .collection("offices").document(office)
                     .collection("calls").document(callId)
                     .get().await()
@@ -781,12 +799,14 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
      * 설정 페이지에서 사용하는 사무실 상태 업데이트 함수
      */
     fun updateOfficeStatus(newStatus: String) {
-        val region = _regionId.value ?: return
+        val province = _provinceId.value ?: return
+        val city = _cityId.value ?: return
         val office = _officeId.value ?: return
 
         viewModelScope.launch {
             try {
-                val officeRef = firestore.collection("regions").document(region)
+                val officeRef = firestore.collection("provinces").document(province)
+                    .collection("cities").document(city)
                     .collection("offices").document(office)
 
                 val currentStatus = _officeStatus.value
@@ -811,10 +831,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun createPlaceholderCall() {
-        val region = _regionId.value ?: return
+        val province = _provinceId.value ?: return
+        val city = _cityId.value ?: return
         val office = _officeId.value ?: return
 
-        val officeRef = firestore.collection("regions").document(region)
+        val officeRef = firestore.collection("provinces").document(province)
+            .collection("cities").document(city)
             .collection("offices").document(office)
 
         viewModelScope.launch {
@@ -827,7 +849,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     "timestamp" to nowTs,
                     "timestampClient" to System.currentTimeMillis(),
                     "status" to CallStatus.WAITING.firestoreValue,
-                    "regionId" to region,
+                    "provinceId" to province,
+                    "cityId" to city,
                     "officeId" to office,
                     "createdBy" to (auth.currentUser?.uid ?: "")
                 )
@@ -842,12 +865,14 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
      * 콜을 Firebase와 로컬 캐시에서 삭제
      */
     fun deleteCall(callId: String) {
-        val region = _regionId.value ?: return
+        val province = _provinceId.value ?: return
+        val city = _cityId.value ?: return
         val office = _officeId.value ?: return
 
         viewModelScope.launch {
             try {
-                firestore.collection("regions").document(region)
+                firestore.collection("provinces").document(province)
+                    .collection("cities").document(city)
                     .collection("offices").document(office)
                     .collection("calls").document(callId)
                     .delete()
@@ -865,10 +890,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    private fun fetchOfficeName(regionId: String, officeId: String) {
+    private fun fetchOfficeName(provinceId: String, cityId: String, officeId: String) {
         viewModelScope.launch {
             try {
-                val document = firestore.collection("regions").document(regionId)
+                val document = firestore.collection("provinces").document(provinceId)
+                    .collection("cities").document(cityId)
                     .collection("offices").document(officeId).get().await()
                 _officeName.value = if (document.exists()) document.getString("name") else "사무실 없음"
             } catch (e: Exception) {
@@ -877,9 +903,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun loadDataForUser(regionId: String, officeId: String) {
-        // 이미 같은 region/office를 로드 중이면 중복 실행하지 않음
-        if (_regionId.value == regionId && _officeId.value == officeId && callsListener != null) {
+    fun loadDataForUser(provinceId: String, cityId: String, officeId: String) {
+        // 이미 같은 province/city/office를 로드 중이면 중복 실행하지 않음
+        if (_provinceId.value == provinceId && _cityId.value == cityId && _officeId.value == officeId && callsListener != null) {
             return
         }
 
@@ -890,13 +916,14 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         _calls.value = emptyList()
         _drivers.value = emptyList()
 
-        _regionId.value = regionId
+        _provinceId.value = provinceId
+        _cityId.value = cityId
         _officeId.value = officeId
 
-        syncCallDetectorSettings(regionId, officeId)
+        syncCallDetectorSettings(provinceId, cityId, officeId)
 
-        startListening(regionId, officeId)
-        fetchOfficeName(regionId, officeId)
+        startListening(provinceId, cityId, officeId)
+        fetchOfficeName(provinceId, cityId, officeId)
 
         startCallDetectorIfEnabled()
     }
@@ -930,7 +957,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun shareCall(callInfo: CallInfo, departure: String, destination: String, fare: Int) {
         viewModelScope.launch {
             try {
-                val region = _regionId.value ?: return@launch
+                val province = _provinceId.value ?: return@launch
+                val city = _cityId.value ?: return@launch
                 val office = _officeId.value ?: return@launch
                 val docRef = firestore.collection("shared_calls").document()
 
@@ -944,9 +972,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     "departure" to departure,
                     "destination" to destination,
                     "fare" to fare,
-                    "sourceRegionId" to region,
+                    "sourceRegionId" to province,
                     "sourceOfficeId" to office,
-                    "targetRegionId" to region,
+                    "targetRegionId" to province,
                     "createdBy" to (auth.currentUser?.uid ?: ""),
                     "phoneNumber" to callInfo.phoneNumber,
                     "originalCallId" to callInfo.id,
@@ -956,7 +984,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
                 docRef.set(data).await()
 
-                val origCallRef = firestore.collection("regions").document(region)
+                val origCallRef = firestore.collection("provinces").document(province)
+                    .collection("cities").document(city)
                     .collection("offices").document(office)
                     .collection("calls").document(callInfo.id)
 
@@ -978,7 +1007,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun claimSharedCall(sharedCallId: String) {
         viewModelScope.launch {
             try {
-                val region = _regionId.value ?: return@launch
+                val province = _provinceId.value ?: return@launch
                 val office = _officeId.value ?: return@launch
                 firestore.runTransaction { tx ->
                     val docRef = firestore.collection("shared_calls").document(sharedCallId)
@@ -991,7 +1020,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                         "status" to "CLAIMED",
                         "claimedOfficeId" to office,
                         "claimedAt" to Timestamp.now(),
-                        "targetRegionId" to region
+                        "targetRegionId" to province
                     ))
                 }.await()
             } catch (e: Exception) {
@@ -1012,7 +1041,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
         viewModelScope.launch {
             try {
-                val region = _regionId.value ?: return@launch
+                val province = _provinceId.value ?: return@launch
                 val office = _officeId.value ?: return@launch
                 firestore.runTransaction { tx ->
                     val docRef = firestore.collection("shared_calls").document(sharedCallId)
@@ -1031,7 +1060,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                         "departure" to departure,
                         "destination" to destination,
                         "fare" to fare,
-                        "targetRegionId" to region
+                        "targetRegionId" to province
                     )
                     driverId?.let {
                         updateMap["claimedDriverId"] = it
@@ -1050,14 +1079,16 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun createTestPointsDocument() {
-        val region = _regionId.value ?: return
+        val province = _provinceId.value ?: return
+        val city = _cityId.value ?: return
         val office = _officeId.value ?: return
 
-        Log.d(TAG, "초기 포인트 설정 시작: Region=$region, Office=$office")
+        Log.d(TAG, "초기 포인트 설정 시작: Province=$province, City=$city, Office=$office")
 
         viewModelScope.launch {
             try {
-                val officeRef = firestore.collection("regions").document(region)
+                val officeRef = firestore.collection("provinces").document(province)
+                    .collection("cities").document(city)
                     .collection("offices").document(office)
 
                 // 1. 포인트 잔액 설정
@@ -1172,11 +1203,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         _showCanceledCallPopup.value = true
     }
 
-    fun syncCallDetectorSettings(regionId: String, officeId: String) {
+    fun syncCallDetectorSettings(provinceId: String, cityId: String, officeId: String) {
         val prefs = getApplication<Application>().getSharedPreferences("call_manager_prefs", Context.MODE_PRIVATE)
 
         prefs.edit().apply {
-            putString("regionId", regionId)
+            putString("provinceId", provinceId)
+            putString("cityId", cityId)
             putString("officeId", officeId)
             putString("deviceName", android.os.Build.MODEL)
             if (!prefs.contains("call_detection_enabled")) {
@@ -1188,11 +1220,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun forceSyncCallDetectorSettings() {
-        val currentRegionId = _regionId.value
+        val currentProvinceId = _provinceId.value
+        val currentCityId = _cityId.value
         val currentOfficeId = _officeId.value
 
-        if (currentRegionId != null && currentOfficeId != null) {
-            syncCallDetectorSettings(currentRegionId, currentOfficeId)
+        if (currentProvinceId != null && currentCityId != null && currentOfficeId != null) {
+            syncCallDetectorSettings(currentProvinceId, currentCityId, currentOfficeId)
         } else {
         }
     }
@@ -1238,7 +1271,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     // 전날 마감내역 조회 및 팝업 관리
     fun loadPreviousDayClosingData() {
-        val region = _regionId.value ?: return
+        val province = _provinceId.value ?: return
+        val city = _cityId.value ?: return
         val office = _officeId.value ?: return
 
         viewModelScope.launch {
@@ -1248,8 +1282,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 val popupPrefs = appContext.getSharedPreferences("closing_popups", Context.MODE_PRIVATE)
 
                 // 마지막 마감 시간 가져오기
-                val lastClosingTime = closingTimePrefs.getLong("last_closing_time_${region}_${office}", 0L)
-                val lastPopupShownTime = popupPrefs.getLong("last_popup_shown_${region}_${office}", 0L)
+                val lastClosingTime = closingTimePrefs.getLong("last_closing_time_${province}_${office}", 0L)
+                val lastPopupShownTime = popupPrefs.getLong("last_popup_shown_${province}_${office}", 0L)
                 val currentTime = System.currentTimeMillis()
 
                 // 마감 이후 첫 업무 시작인지 확인
@@ -1283,7 +1317,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 val closingDayEnd = Timestamp(calendar.time)
 
                 // 어제 마감콜들 조회 (callType이 마감콜 관련이거나 특정 조건을 만족하는 콜들)
-                val callsQuery = firestore.collection("regions").document(region)
+                val callsQuery = firestore.collection("provinces").document(province)
+                    .collection("cities").document(city)
                     .collection("offices").document(office)
                     .collection("calls")
                     .whereGreaterThanOrEqualTo("timestamp", closingDayStart)
@@ -1342,9 +1377,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
                     // 팝업 표시 시간을 기록하여 중복 방지
                     popupPrefs.edit()
-                        .putLong("last_popup_shown_${region}_${office}", currentTime)
+                        .putLong("last_popup_shown_${province}_${office}", currentTime)
                         .apply()
-                    Log.d(TAG, "전날 마감내역 팝업 표시 기록: last_popup_shown_${region}_${office} = $currentTime")
+                    Log.d(TAG, "전날 마감내역 팝업 표시 기록: last_popup_shown_${province}_${office} = $currentTime")
                 }
 
             } catch (e: Exception) {
@@ -1360,7 +1395,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     // 마감정산 조회 (최근 30일)
     fun loadClosingSettlements() {
-        val region = _regionId.value ?: return
+        val province = _provinceId.value ?: return
+        val city = _cityId.value ?: return
         val office = _officeId.value ?: return
 
         viewModelScope.launch {
@@ -1388,7 +1424,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     val dateString = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(calendar.time)
 
                     // 해당 날짜의 마감콜들 조회
-                    val callsQuery = firestore.collection("regions").document(region)
+                    val callsQuery = firestore.collection("provinces").document(province)
+                        .collection("cities").document(city)
                         .collection("offices").document(office)
                         .collection("calls")
                         .whereGreaterThanOrEqualTo("timestamp", Timestamp(dateStart.time))
@@ -1459,11 +1496,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private fun validateBalanceConsistency(recentTransactions: List<PointTransaction>) {
         viewModelScope.launch {
             try {
-                val region = _regionId.value ?: return@launch
+                val province = _provinceId.value ?: return@launch
+                val city = _cityId.value ?: return@launch
                 val office = _officeId.value ?: return@launch
 
                 // 전체 거래내역을 조회하여 정확한 합계 계산
-                val officeRef = firestore.collection("regions").document(region)
+                val officeRef = firestore.collection("provinces").document(province)
+                    .collection("cities").document(city)
                     .collection("offices").document(office)
 
                 val allTransactions = officeRef.collection("point_transactions")
@@ -1496,7 +1535,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
      * Repository 패턴을 사용한 테스트 포인트 거래 생성
      */
     fun createTestPointTransaction(amount: Int, type: String, description: String) {
-        val region = _regionId.value ?: return
+        val province = _provinceId.value ?: return
         val office = _officeId.value ?: return
 
         viewModelScope.launch {
@@ -1508,12 +1547,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     amount = amount,
                     description = description,
                     timestamp = Timestamp.now(),
-                    regionId = region,
+                    regionId = province, // PointTransaction 필드명은 regionId로 유지 (내부적으로 provinceId로 사용)
                     officeId = office,
                     relatedSharedCallId = null
                 )
 
-                pointRepository.addTransaction(region, office, transaction)
+                pointRepository.addTransaction(province, office, transaction)
 
                 Log.d(TAG, "테스트 거래 생성 완료: $amount, $type")
             } catch (e: Exception) {
@@ -1524,12 +1563,14 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     // 정정 거래 생성
     private fun createAdjustmentTransaction(amount: Long, description: String) {
-        val region = _regionId.value ?: return
+        val province = _provinceId.value ?: return
+        val city = _cityId.value ?: return
         val office = _officeId.value ?: return
 
         viewModelScope.launch {
             try {
-                val officeRef = firestore.collection("regions").document(region)
+                val officeRef = firestore.collection("provinces").document(province)
+                    .collection("cities").document(city)
                     .collection("offices").document(office)
 
                 val transactionData = hashMapOf(

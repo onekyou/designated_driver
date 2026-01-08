@@ -73,15 +73,13 @@ fun TripPreparationScreen(
 
     var departure by remember(callInfo.id) {
         mutableStateOf(
-            if (callInfo.departure_set.isNotBlank()) callInfo.departure_set
-            else ""
+            callInfo.departure_set?.takeIf { it.isNotBlank() } ?: ""
         )
     }
 
     var destination by remember(callInfo.id) {
         mutableStateOf(
-            if (callInfo.destination_set.isNotBlank()) callInfo.destination_set
-            else callInfo.destination
+            callInfo.destination_set?.takeIf { it.isNotBlank() } ?: callInfo.destination ?: ""
         )
     }
 
@@ -91,7 +89,7 @@ fun TripPreparationScreen(
 
     var fare by remember(callInfo.id) {
         val initialFare = when {
-            callInfo.fare_set != 0 -> callInfo.fare_set
+            callInfo.fare_set != null && callInfo.fare_set != 0 -> callInfo.fare_set
             callInfo.fare != null && callInfo.fare != 0 -> callInfo.fare
             else -> 0
         }
@@ -387,7 +385,7 @@ fun TripPreparationScreen(
                             }
                         }
                         IconButton(onClick = {
-                            destination = if (callInfo.customerAddress.isNotBlank()) callInfo.customerAddress else callInfo.destination
+                            destination = callInfo.customerAddress?.takeIf { it.isNotBlank() } ?: callInfo.destination ?: ""
                         }) {
                             Icon(Icons.Default.Home, contentDescription = "집주소 입력")
                         }

@@ -1,0 +1,148 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'com.google.gms.google-services' // Firebase plugin
+    id 'kotlin-kapt'
+    id 'dagger.hilt.android.plugin'
+    id 'kotlin-parcelize' // Parcelize 플러그인 추가
+}
+
+android {
+    namespace 'com.designated.driverapp'
+    compileSdk 35 // Use a recent SDK version
+
+    // 키스토어 정보 로드
+    def keystorePropertiesFile = rootProject.file("keystore/keystore.properties")
+    def keystoreProperties = new Properties()
+    if (keystorePropertiesFile.exists()) {
+        keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+    }
+
+    signingConfigs {
+        release {
+            if (keystorePropertiesFile.exists()) {
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+            }
+        }
+    }
+
+    defaultConfig {
+        applicationId "com.designated.driverapp"
+        minSdk 24
+        targetSdk 35
+        versionCode 3
+        versionName "1.0.2"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables {
+            useSupportLibrary true
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (keystorePropertiesFile.exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+    buildFeatures {
+        compose true
+    }
+    composeOptions {
+        kotlinCompilerExtensionVersion '1.5.8' // Compatible with Kotlin 1.9.22
+    }
+    packagingOptions {
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+        }
+    }
+}
+
+dependencies {
+
+    // --- Hilt 의존성 추가 ---
+    implementation libs.hilt.android
+    kapt libs.hilt.compiler
+    implementation libs.hilt.navigation.compose
+
+    // --- 추가된 의존성 ---
+    // Lifecycle + Compose 통합 (collectAsStateWithLifecycle 사용)
+    implementation libs.lifecycle.runtime.compose
+    // Firebase Task await() 사용 
+    implementation libs.kotlinx.coroutines.play.services
+    
+    // --- Kotlin Coroutines Core/Android (StateFlow, viewModelScope 등 사용) ---
+    implementation libs.kotlinx.coroutines.android
+    // --- ---
+
+    implementation libs.core.ktx
+    implementation libs.lifecycle.runtime.ktx
+    implementation libs.activity.compose
+    
+    // Material Components for Android (for XML themes, etc.)
+    implementation libs.material
+    
+    // Compose - 모든 Compose 라이브러리를 BOM으로 통일
+    implementation platform(libs.compose.bom)
+    implementation libs.compose.ui
+    implementation libs.compose.ui.graphics
+    implementation libs.compose.ui.tooling.preview
+    implementation libs.compose.material3 // Material 3
+    // Compose Material Icons
+    implementation libs.compose.material.icons.core
+    implementation libs.compose.material.icons.extended
+    
+    // Navigation Compose - BOM 사용하도록 변경
+    implementation libs.navigation.compose
+
+    // ViewModel Compose
+    implementation libs.lifecycle.viewmodel.compose
+
+    // Firebase Authentication
+    implementation platform(libs.firebase.bom)
+    implementation libs.firebase.auth.ktx
+    implementation libs.firebase.firestore.ktx
+    implementation libs.firebase.messaging.ktx
+
+    // QR Code Generation (ZXing)
+    implementation 'com.google.zxing:core:3.5.2'
+
+    // Google Play Services Location
+    implementation libs.play.services.location
+
+    // reCAPTCHA 명시적 추가
+    implementation libs.recaptcha
+    implementation libs.play.services.safetynet
+
+    // Security - Encrypted SharedPreferences (비밀번호 암호화)
+    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+
+    // Testing
+    testImplementation libs.junit
+    androidTestImplementation libs.androidx.test.ext.junit
+    androidTestImplementation libs.espresso.core
+    androidTestImplementation platform(libs.compose.bom)
+    androidTestImplementation libs.compose.ui.test.junit4
+    debugImplementation libs.compose.ui.tooling
+    debugImplementation libs.compose.ui.test.manifest
+
+    implementation libs.accompanist.systemuicontroller
+}
+
+kapt {
+    correctErrorTypes true
+}

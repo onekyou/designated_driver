@@ -1,0 +1,195 @@
+name: designated_customer_flutter
+description: 대리운전 고객 앱 - Android & iOS 크로스 플랫폼
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # ============================================
+  # 상태 관리
+  # ============================================
+  flutter_riverpod: ^2.4.9
+  riverpod_annotation: ^2.3.3
+
+  # ============================================
+  # Firebase
+  # ============================================
+  firebase_core: ^2.24.0
+  firebase_auth: ^4.15.0
+  firebase_firestore: ^4.13.0
+  firebase_functions: ^4.5.0
+  firebase_messaging: ^14.7.0
+  firebase_analytics: ^10.7.4
+
+  # ============================================
+  # 보안
+  # ============================================
+  flutter_secure_storage: ^9.0.0
+  crypto: ^3.0.3
+
+  # ============================================
+  # 로컬 저장소
+  # ============================================
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  shared_preferences: ^2.2.2
+
+  # ============================================
+  # 네트워크 & API
+  # ============================================
+  http: ^1.1.2
+  dio: ^5.4.0
+
+  # ============================================
+  # 디바이스 정보
+  # ============================================
+  device_info_plus: ^9.1.1
+  package_info_plus: ^5.0.1
+
+  # ============================================
+  # 네비게이션
+  # ============================================
+  go_router: ^12.1.3
+
+  # ============================================
+  # QR 코드
+  # ============================================
+  mobile_scanner: ^3.5.5
+  qr_flutter: ^4.1.0
+
+  # ============================================
+  # 만보기 (플랫폼별)
+  # ============================================
+  pedometer: ^4.0.1           # Android Step Counter
+  health: ^10.0.0             # iOS HealthKit
+  permission_handler: ^11.1.0
+
+  # ============================================
+  # 음성 인식
+  # ============================================
+  speech_to_text: ^6.5.1
+
+  # ============================================
+  # 위치
+  # ============================================
+  geolocator: ^10.1.0
+  geocoding: ^2.1.1
+
+  # ============================================
+  # 알림
+  # ============================================
+  flutter_local_notifications: ^16.3.0
+
+  # ============================================
+  # UI & 디자인
+  # ============================================
+  google_fonts: ^6.1.0
+  flutter_svg: ^2.0.9
+  cached_network_image: ^3.3.0
+  shimmer: ^3.0.0
+  flutter_spinkit: ^5.2.0
+
+  # ============================================
+  # 날짜 & 시간
+  # ============================================
+  intl: ^0.18.1
+  timeago: ^3.6.0
+
+  # ============================================
+  # 유틸리티
+  # ============================================
+  url_launcher: ^6.2.2
+  path_provider: ^2.1.1
+  uuid: ^4.2.2
+  equatable: ^2.0.5
+
+  # ============================================
+  # 에러 추적
+  # ============================================
+  sentry_flutter: ^7.14.0
+
+  # ============================================
+  # 개발 도구
+  # ============================================
+  logger: ^2.0.2+1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # ============================================
+  # Lint & 코드 품질
+  # ============================================
+  flutter_lints: ^3.0.1
+
+  # ============================================
+  # 코드 생성
+  # ============================================
+  build_runner: ^2.4.7
+  riverpod_generator: ^2.3.9
+  hive_generator: ^2.0.1
+  json_serializable: ^6.7.1
+
+  # ============================================
+  # 테스트
+  # ============================================
+  mockito: ^5.4.4
+  fake_cloud_firestore: ^2.4.7
+  firebase_auth_mocks: ^0.13.0
+
+  # ============================================
+  # 아이콘
+  # ============================================
+  flutter_launcher_icons: ^0.13.1
+
+# ============================================
+# Flutter 설정
+# ============================================
+flutter:
+  uses-material-design: true
+
+  # 이미지 assets
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/logos/
+
+  # 폰트 (선택사항)
+  # fonts:
+  #   - family: Pretendard
+  #     fonts:
+  #       - asset: assets/fonts/Pretendard-Regular.ttf
+  #       - asset: assets/fonts/Pretendard-Bold.ttf
+  #         weight: 700
+
+# ============================================
+# 런처 아이콘 설정
+# ============================================
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icons/app_icon.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/icons/app_icon.png"
+
+# ============================================
+# 노트
+# ============================================
+#
+# Flutter 프로젝트 생성 후:
+# 1. flutter pub get
+# 2. flutter pub run build_runner build --delete-conflicting-outputs
+# 3. flutter pub run flutter_launcher_icons
+#
+# Firebase 설정:
+# 1. Firebase Console에서 프로젝트 생성
+# 2. Android: google-services.json → android/app/
+# 3. iOS: GoogleService-Info.plist → ios/Runner/
+# 4. flutter pub add firebase_core
+# 5. flutterfire configure
+#

@@ -50,11 +50,18 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         Log.d(TAG, "FCM 메시지 수신: ${remoteMessage.data}")
 
+        // ✅ 로그인 체크: 로그인하지 않은 상태에서는 알림 무시
+        val currentUser = Firebase.auth.currentUser
+        if (currentUser == null) {
+            Log.d(TAG, "로그인하지 않은 상태 - FCM 메시지 무시")
+            return
+        }
+
         val title = remoteMessage.notification?.title ?: "콜 배정 알림"
         val body = remoteMessage.notification?.body ?: "새로운 콜이 배정되었습니다."
         val callId = remoteMessage.data["callId"]
 
-        Log.d(TAG, "callId: $callId, title: $title")
+        Log.d(TAG, "callId: $callId, title: $title, userId: ${currentUser.uid}")
 
         // 앱이 포그라운드에 있을 때도 MainActivity로 callId 전달하여 팝업 표시
         if (!callId.isNullOrBlank()) {

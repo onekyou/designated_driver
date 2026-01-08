@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../providers/call_provider.dart';
 import '../providers/location_provider.dart';
 import '../../attribution/providers/attribution_provider.dart';
+import '../../auth/providers/auth_provider.dart';
 
 /// 콜 요청 화면
 class CallRequestScreen extends ConsumerStatefulWidget {
@@ -83,6 +85,69 @@ class _CallRequestScreenState extends ConsumerState<CallRequestScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('위치를 가져올 수 없습니다: $e')),
+        );
+      }
+    }
+  }
+
+  /// 집주소 자동 입력 (네이티브 앱의 onHomeAddressClick과 동일)
+  Future<void> _loadHomeAddress() async {
+    try {
+      final attribution = ref.read(attributionNotifierProvider).value;
+      final user = ref.read(authNotifierProvider).value;
+
+      if (attribution == null || user?.uid == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('사용자 정보를 찾을 수 없습니다')),
+          );
+        }
+        return;
+      }
+
+      // Firestore에서 고객 정보 조회
+      final doc = await FirebaseFirestore.instance
+          .collection('regions')
+          .doc(attribution.regionId)
+          .collection('offices')
+          .doc(attribution.officeId)
+          .collection('customers')
+          .doc(user!.uid)
+          .get();
+
+      if (!doc.exists) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('프로필 정보를 찾을 수 없습니다')),
+          );
+        }
+        return;
+      }
+
+      final homeAddress = doc.data()?['homeAddress'] as String?;
+
+      if (homeAddress == null || homeAddress.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('저장된 집주소가 없습니다')),
+          );
+        }
+        return;
+      }
+
+      setState(() {
+        _currentLocationController.text = homeAddress;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('집주소를 불러왔습니다')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('집주소를 불러올 수 없습니다: $e')),
         );
       }
     }
@@ -231,10 +296,21 @@ class _CallRequestScreenState extends ConsumerState<CallRequestScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  // 현재 위치 버튼
                   IconButton.filled(
                     onPressed: _loadCurrentLocation,
                     icon: const Icon(Icons.gps_fixed),
                     tooltip: '현재 위치',
+                  ),
+                  const SizedBox(width: 4),
+                  // 집주소 버튼 (네이티브 앱과 동일)
+                  IconButton.filled(
+                    onPressed: _loadHomeAddress,
+                    icon: const Icon(Icons.home),
+                    tooltip: '집',
+                    style: IconButton.styleFrom(
+                      backgroundColor: const Color(0xFFFFAB00),
+                    ),
                   ),
                 ],
               ),

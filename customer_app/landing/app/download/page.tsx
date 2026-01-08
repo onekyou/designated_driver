@@ -1,133 +1,59 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { initializeApp } from 'firebase/app'
-import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc } from 'firebase/firestore'
-
-// Firebase 설정
-const firebaseConfig = {
-  apiKey: "AIzaSyA9x04acmgJozvpz1zpbe27rOwPmHrORXs",
-  authDomain: "calldetector-5d61e.firebaseapp.com",
-  projectId: "calldetector-5d61e",
-  storageBucket: "calldetector-5d61e.firebasestorage.app",
-  messagingSenderId: "60275310305",
-  appId: "1:60275310305:web:e41e3a733e45f24f00ca34"
-}
-
-// Firebase 초기화
-const app = initializeApp(firebaseConfig)
-const db = getFirestore(app)
 
 export default function DownloadPage() {
+  const [playStoreUrl, setPlayStoreUrl] = useState<string>('')
+  const [showDevSection, setShowDevSection] = useState(false)
   const [officePhone, setOfficePhone] = useState<string>('')
   const [bankName, setBankName] = useState<string>('')
   const [accountNumber, setAccountNumber] = useState<string>('')
   const [accountHolder, setAccountHolder] = useState<string>('')
-  const [token, setToken] = useState<string>('')
 
   useEffect(() => {
     // URL에서 파라미터 추출
     const params = new URLSearchParams(window.location.search)
-    const tokenParam = params.get('token')
 
-    if (tokenParam) {
-      // 토큰 방식
-      setToken(tokenParam)
-      console.log('토큰 다운로드 페이지:', tokenParam)
-      // 토큰 정보는 앱에서 직접 조회하므로 여기서는 저장만
-    } else {
-      // 기사 추천 방식 확인 (r, o, d, dn 파라미터)
-      const regionId = params.get('r')
-      const officeId = params.get('o')
-      const driverId = params.get('d')
-      const driverName = params.get('dn')
+    const regionId = params.get('r')
+    const officeId = params.get('o')
+    const driverId = params.get('driver')
+    const driverName = params.get('driverName')
+    const phone = params.get('phone')
+    const bank = params.get('bank')
+    const account = params.get('account')
+    const holder = params.get('holder')
 
-      if (regionId && officeId) {
-        // 기사 추천 방식 - Firestore에 attribution 생성
-        console.log('기사 추천 다운로드:', {regionId, officeId, driverId, driverName})
+    // 사무실 정보 저장 (UI 표시용)
+    if (phone) setOfficePhone(phone)
+    if (bank) setBankName(bank)
+    if (account) setAccountNumber(account)
+    if (holder) setAccountHolder(holder)
 
-        // 화면 해상도 가져오기 (물리적 픽셀)
-        const width = Math.round(window.screen.width * window.devicePixelRatio)
-        const height = Math.round(window.screen.height * window.devicePixelRatio)
-        const screenResolution = `${width}x${height}`
+    // Install Referrer 파라미터 생성
+    const referrerParams = new URLSearchParams()
 
-        // UUID 토큰 생성
-        const generatedToken = crypto.randomUUID()
+    if (regionId) referrerParams.append('r', regionId)
+    if (officeId) referrerParams.append('o', officeId)
+    if (driverId) referrerParams.append('driver', driverId)
+    if (driverName) referrerParams.append('driverName', driverName)
+    if (phone) referrerParams.append('phone', phone)
+    if (bank) referrerParams.append('bank', bank)
+    if (account) referrerParams.append('account', account)
+    if (holder) referrerParams.append('holder', holder)
 
-        // Firestore에 attribution 저장 (앱이 설치 후 자동으로 매칭)
-        const attributionData = {
-          screenResolution: screenResolution,
-          token: generatedToken,
-          driverId: driverId || null,
-          driverName: driverName || null,
-          createdAt: new Date(),
-          claimed: false
-        }
+    // Play Store URL 생성
+    const baseUrl = 'https://play.google.com/store/apps/details'
+    const packageId = 'com.designated.customer.app'
+    const referrerString = referrerParams.toString()
 
-        // 🔥 청소 로직 + 저장 (비동기 함수)
-        const saveAttributionWithCleanup = async () => {
-          try {
-            // 1단계: 모든 사무실에서 해당 screenResolution의 기존 attribution 삭제
-            console.log(`모든 사무실에서 해당 해상도(${screenResolution})의 attribution 삭제 시작...`)
-
-            const regionsSnapshot = await getDocs(collection(db, 'regions'))
-            let totalDeleted = 0
-
-            for (const regionDoc of regionsSnapshot.docs) {
-              const rid = regionDoc.id
-              const officesSnapshot = await getDocs(collection(db, 'regions', rid, 'offices'))
-
-              for (const officeDoc of officesSnapshot.docs) {
-                const oid = officeDoc.id
-                const attributionsRef = collection(db, 'regions', rid, 'offices', oid, 'attributions')
-                const existingQuery = query(
-                  attributionsRef,
-                  where('screenResolution', '==', screenResolution)
-                )
-                const existingDocs = await getDocs(existingQuery)
-
-                for (const doc of existingDocs.docs) {
-                  await deleteDoc(doc.ref)
-                  totalDeleted++
-                }
-              }
-            }
-
-            console.log(`총 ${totalDeleted}개의 기존 attribution 삭제 완료`)
-
-            // 2단계: QR로 지정된 사무실에만 새 attribution 생성
-            await addDoc(collection(db, 'regions', regionId, 'offices', officeId, 'attributions'), attributionData)
-            console.log('✅ Attribution 저장 완료:', attributionData)
-          } catch (error) {
-            console.error('❌ Attribution 저장 실패:', error)
-          }
-        }
-
-        // 비동기 함수 실행
-        saveAttributionWithCleanup()
-      } else {
-        // 기존 방식 (하위 호환)
-        const phone = params.get('phone') || ''
-        const bank = params.get('bank') || ''
-        const account = params.get('account') || ''
-        const holder = params.get('holder') || ''
-
-        setOfficePhone(phone)
-        setBankName(bank)
-        setAccountNumber(account)
-        setAccountHolder(holder)
-      }
+    let url = `${baseUrl}?id=${packageId}`
+    if (referrerString) {
+      url += `&referrer=${encodeURIComponent(referrerString)}`
     }
+
+    setPlayStoreUrl(url)
+    console.log('Play Store URL 생성:', url)
   }, [])
-
-  const handleDownloadAPK = () => {
-    // 토큰을 localStorage에 저장 (앱에서 읽을 수 있도록)
-    if (token) {
-      localStorage.setItem('attribution_token', token)
-      console.log('토큰 저장:', token)
-    }
-    window.location.href = 'https://calldetector-5d61e.web.app/customer_app.apk'
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
@@ -147,7 +73,7 @@ export default function DownloadPage() {
               앱 다운로드
             </h2>
             <p className="text-gray-600">
-              아래 버튼을 눌러 앱을 다운로드하세요
+              Google Play에서 앱을 다운로드하세요
             </p>
           </div>
 
@@ -174,21 +100,16 @@ export default function DownloadPage() {
             </div>
           )}
 
-          {/* 버튼 */}
+          {/* Play Store 다운로드 버튼 */}
           <div className="space-y-4">
             <a
-              href="https://calldetector-5d61e.web.app/customer_app.apk"
-              download="customer_app.apk"
-              className="block w-full max-w-md bg-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-700 transition-colors shadow-lg text-center"
+              href={playStoreUrl || '#'}
+              className="inline-flex items-center justify-center w-full max-w-md bg-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-700 transition-colors shadow-lg"
             >
-              고객앱 다운로드 (Native Android)
-            </a>
-            <a
-              href="https://calldetector-5d61e.web.app/customer_app_flutter.apk"
-              download="customer_app_flutter.apk"
-              className="block w-full max-w-md bg-green-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-green-700 transition-colors shadow-lg text-center"
-            >
-              고객앱 다운로드 (Flutter 신규) ⭐
+              <svg className="w-6 h-6 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M3,20.5V3.5C3,2.91 3.34,2.39 3.84,2.15L13.69,12L3.84,21.85C3.34,21.6 3,21.09 3,20.5M16.81,15.12L6.05,21.34L14.54,12.85L16.81,15.12M20.16,10.81C20.5,11.08 20.75,11.5 20.75,12C20.75,12.5 20.53,12.9 20.18,13.18L17.89,14.5L15.39,12L17.89,9.5L20.16,10.81M6.05,2.66L16.81,8.88L14.54,11.15L6.05,2.66Z"/>
+              </svg>
+              Google Play에서 다운로드
             </a>
           </div>
 
@@ -196,10 +117,44 @@ export default function DownloadPage() {
           <div className="mt-12 bg-blue-50 border border-blue-200 rounded-lg p-6 max-w-md mx-auto">
             <h3 className="font-semibold text-blue-900 mb-2">📌 설치 안내</h3>
             <ol className="text-sm text-blue-800 text-left space-y-2">
-              <li>1. "APK 다운로드" 버튼을 클릭하여 앱을 다운로드하세요</li>
-              <li>2. 다운로드한 APK 파일을 실행하여 앱을 설치하세요</li>
+              <li>1. "Google Play에서 다운로드" 버튼을 클릭하세요</li>
+              <li>2. Play Store에서 "설치" 버튼을 눌러 앱을 설치하세요</li>
               <li>3. 앱을 실행하면 사무실 정보가 자동으로 연결됩니다</li>
             </ol>
+          </div>
+
+          {/* 개발자용 APK 다운로드 섹션 (접을 수 있음) */}
+          <div className="mt-12">
+            <button
+              onClick={() => setShowDevSection(!showDevSection)}
+              className="text-sm text-gray-500 hover:text-gray-700 underline"
+            >
+              {showDevSection ? '▼' : '▶'} 개발/테스트용 APK 다운로드
+            </button>
+
+            {showDevSection && (
+              <div className="mt-4 bg-gray-50 border border-gray-300 rounded-lg p-6 max-w-md mx-auto">
+                <p className="text-xs text-gray-600 mb-4">
+                  ⚠️ 개발 및 테스트 목적으로만 사용하세요. 일반 사용자는 위의 Play Store 링크를 이용해주세요.
+                </p>
+                <div className="space-y-3">
+                  <a
+                    href="https://calldetector-5d61e.web.app/customer_app.apk"
+                    download="customer_app.apk"
+                    className="block w-full bg-gray-600 text-white px-6 py-3 rounded-lg text-sm font-semibold hover:bg-gray-700 transition-colors text-center"
+                  >
+                    고객앱 APK (Native Android)
+                  </a>
+                  <a
+                    href="https://calldetector-5d61e.web.app/customer_app_flutter.apk"
+                    download="customer_app_flutter.apk"
+                    className="block w-full bg-gray-600 text-white px-6 py-3 rounded-lg text-sm font-semibold hover:bg-gray-700 transition-colors text-center"
+                  >
+                    고객앱 APK (Flutter)
+                  </a>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </main>

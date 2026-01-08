@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
@@ -10,6 +11,15 @@ import 'features/profile/screens/profile_setup_screen.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'features/attribution/providers/attribution_provider.dart';
 import 'features/attribution/models/attribution_result.dart';
+
+/// FCM Background 메시지 핸들러 (Top-level 함수 필수)
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  debugPrint('[FCM Background] 메시지 수신: ${message.messageId}');
+  debugPrint('[FCM Background] 타입: ${message.data['type']}');
+  debugPrint('[FCM Background] 데이터: ${message.data}');
+}
 
 // 앱 초기화 상태를 전역으로 관리
 final appInitializedProvider = StateProvider<bool>((ref) => false);
@@ -22,6 +32,9 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // FCM Background 핸들러 등록 (Firebase 초기화 후)
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   // Storage Service 초기화
   await StorageService().init();

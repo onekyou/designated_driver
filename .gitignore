@@ -86,4 +86,5 @@ SENSITIVE_DATA.md
 
 # Development & Test credentials
 **/test_credentials.json
-**/dev_api_keys.txt
+**/dev_api_keys.txtnul
+**/nul

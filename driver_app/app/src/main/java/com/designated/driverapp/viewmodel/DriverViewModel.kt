@@ -281,13 +281,21 @@ class DriverViewModel @Inject constructor(
      *  Firestore 리스너가 activeCall 을 업데이트하므로 별도 fetch 는 생략.
      */
     fun acceptCall(callId: String) = performFirestoreUpdate {
+        Log.d(TAG, "🔵 acceptCall 시작 - callId: $callId")
+
         val (regionId, officeId) = getDriverLocationInfo()
+        Log.d(TAG, "🔵 Location Info - regionId: $regionId, officeId: $officeId")
+
         val driverId = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
+        Log.d(TAG, "🔵 Driver ID: $driverId")
 
         // ✅ 1단계: 즉시 로컬 UI 업데이트 (리스너 기다리지 않음)
+        Log.d(TAG, "🔵 1단계: 로컬 UI 업데이트 시작")
         _uiState.update { currentState ->
             val acceptedCall = currentState.assignedCalls.find { it.id == callId }
+            Log.d(TAG, "🔵 찾은 콜: ${acceptedCall?.id}, 상태: ${acceptedCall?.status}")
             acceptedCall?.let { call ->
+                Log.d(TAG, "🔵 UI 업데이트 - 콜을 ACCEPTED로 변경")
                 currentState.copy(
                     assignedCalls = currentState.assignedCalls.map {
                         if (it.id == callId) it.copy(status = Constants.STATUS_ACCEPTED)
@@ -297,29 +305,52 @@ class DriverViewModel @Inject constructor(
                     newCallPopup = null,
                     driverStatus = DriverStatus.ACCEPTED
                 )
-            } ?: currentState.copy(newCallPopup = null)
+            } ?: run {
+                Log.w(TAG, "⚠️ assignedCalls에서 콜을 찾을 수 없음")
+                currentState.copy(newCallPopup = null)
+            }
         }
+        Log.d(TAG, "🔵 1단계 완료")
 
         // ✅ 2단계: Firestore 업데이트 (백그라운드)
+        Log.d(TAG, "🔵 2단계: Firestore 업데이트 시작")
         val callRef = firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_CALLS).document(callId)
+        Log.d(TAG, "🔵 Call Ref 경로: regions/$regionId/offices/$officeId/calls/$callId")
 
         val driverRef = firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_DRIVERS).document(driverId)
+        Log.d(TAG, "🔵 Driver Ref 경로: regions/$regionId/offices/$officeId/drivers/$driverId")
 
+        Log.d(TAG, "🔵 Transaction 시작")
         firestore.runTransaction { transaction ->
+            Log.d(TAG, "🔵 Transaction 내부 - 콜 문서 읽기")
             val callSnapshot = transaction.get(callRef)
+
             if (!callSnapshot.exists()) {
+                Log.e(TAG, "❌ 콜 문서가 존재하지 않음")
                 throw Exception("콜 문서를 찾을 수 없습니다.")
             }
+
+            val callData = callSnapshot.data
+            Log.d(TAG, "🔵 콜 문서 데이터: $callData")
+
             val currentStatus = callSnapshot.getString(Constants.FIELD_STATUS)
+            Log.d(TAG, "🔵 현재 콜 상태: $currentStatus")
+
             if (currentStatus == Constants.STATUS_ASSIGNED) {
+                Log.d(TAG, "🔵 Transaction - 콜 상태를 ACCEPTED로 업데이트")
                 transaction.update(callRef, Constants.FIELD_STATUS, Constants.STATUS_ACCEPTED)
+
+                Log.d(TAG, "🔵 Transaction - 기사 상태를 PREPARING으로 업데이트")
                 transaction.update(driverRef, Constants.FIELD_STATUS, "PREPARING")
+            } else {
+                Log.w(TAG, "⚠️ 콜 상태가 ASSIGNED가 아님: $currentStatus")
             }
         }.await()
+        Log.d(TAG, "🔵 Transaction 완료")
 
         Log.d(TAG, "✅ 콜 수락 완료: $callId")
     }
@@ -604,8 +635,13 @@ class DriverViewModel @Inject constructor(
     }
 
     fun updateDriverStatus(newStatus: DriverStatus) = performFirestoreUpdate {
+        Log.d(TAG, "🟡 [STATUS UPDATE] updateDriverStatus 호출됨 - 새 상태: ${newStatus.value}")
+        Log.d(TAG, "🟡 [STATUS UPDATE] 호출 스택:", Exception("Stack trace"))
+
         val (regionId, officeId) = getDriverLocationInfo()
         val driverId = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
+
+        Log.d(TAG, "🟡 [STATUS UPDATE] 경로: regions/$regionId/offices/$officeId/designated_drivers/$driverId")
 
         // ✅ 1단계: 즉시 로컬 UI 업데이트
         _uiState.update { it.copy(driverStatus = newStatus) }
@@ -616,7 +652,7 @@ class DriverViewModel @Inject constructor(
             .collection(Constants.COLLECTION_DRIVERS).document(driverId)
             .update(Constants.FIELD_STATUS, newStatus.value).await()
 
-        Log.d(TAG, "✅ 기사 상태 변경: ${newStatus.value}")
+        Log.d(TAG, "✅ [STATUS UPDATE] Firestore 업데이트 완료: ${newStatus.value}")
     }
 
     private suspend fun getAddressFromLocation(latitude: Double, longitude: Double): String? = withContext(Dispatchers.IO) {
@@ -690,6 +726,10 @@ class DriverViewModel @Inject constructor(
             try {
                 block()
             } catch (e: Exception) {
+                Log.e(TAG, "❌ performFirestoreUpdate 에러 발생", e)
+                Log.e(TAG, "❌ 에러 타입: ${e.javaClass.simpleName}")
+                Log.e(TAG, "❌ 에러 메시지: ${e.message}")
+                Log.e(TAG, "❌ 스택 트레이스:", e)
                 _uiState.update { it.copy(errorMessage = e.message ?: "알 수 없는 오류가 발생했습니다.") }
             }
         }
