@@ -1650,9 +1650,14 @@ fun SharedCallCard(
         if ((sharedCall.callType == "마감콜" || sharedCall.callType == "AFTER_HOURS_QUICK" || sharedCall.callType == "MISSED_AFTER_HOURS") && sharedCall.sourceOfficeId.isNotEmpty()) {
             val firestore = FirebaseFirestore.getInstance()
             try {
-                val doc = firestore.collection("regions").document(sharedCall.sourceRegionId)
-                    .collection("offices").document(sharedCall.sourceOfficeId).get().await()
-                officeName = doc.getString("name") ?: sharedCall.sourceOfficeId
+                // provinces/cities 구조에서는 cityId 정보가 필요하지만 SharedCallInfo에 없으므로
+                // collectionGroup을 사용하여 전체 offices에서 검색
+                val doc = firestore.collectionGroup("offices")
+                    .whereEqualTo(com.google.firebase.firestore.FieldPath.documentId(), sharedCall.sourceOfficeId)
+                    .limit(1)
+                    .get().await()
+                    .documents.firstOrNull()
+                officeName = doc?.getString("name") ?: sharedCall.sourceOfficeId
             } catch (e: Exception) {
                 officeName = sharedCall.sourceOfficeId
             }
