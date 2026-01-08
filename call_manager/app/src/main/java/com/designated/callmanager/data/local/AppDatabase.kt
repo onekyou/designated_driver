@@ -14,15 +14,19 @@ import android.content.Context
 @Database(
     entities = [
         LocalPointTransaction::class,
-        LocalPointsInfo::class
+        LocalPointsInfo::class,
+        LocalCallInfo::class,
+        LocalDriverInfo::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun pointTransactionDao(): PointTransactionDao
     abstract fun pointsInfoDao(): PointsInfoDao
+    abstract fun callDao(): CallDao
+    abstract fun driverDao(): DriverDao
 
     companion object {
         private const val DATABASE_NAME = "call_manager_db"
@@ -49,12 +53,52 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
-         * 향후 스키마 변경 시 사용할 마이그레이션 예시
+         * v1 → v2 마이그레이션: calls와 drivers 테이블 추가
          */
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                // 스키마 변경 시 마이그레이션 로직 작성
-                // 예: database.execSQL("ALTER TABLE point_transactions ADD COLUMN new_field TEXT")
+                // calls 테이블 생성
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS calls (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        phoneNumber TEXT NOT NULL,
+                        customerName TEXT,
+                        customerAddress TEXT,
+                        status TEXT NOT NULL,
+                        timestamp INTEGER,
+                        departure_set TEXT,
+                        destination_set TEXT,
+                        waypoints_set TEXT,
+                        fare_set INTEGER,
+                        assignedDriverId TEXT,
+                        assignedDriverAuthUid TEXT,
+                        assignedDriverName TEXT,
+                        assignedDriverPhone TEXT,
+                        callType TEXT,
+                        fromCallDetector INTEGER,
+                        regionId TEXT NOT NULL,
+                        officeId TEXT NOT NULL,
+                        synced INTEGER NOT NULL DEFAULT 1,
+                        lastUpdated INTEGER NOT NULL
+                    )
+                """)
+
+                // drivers 테이블 생성
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS drivers (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        name TEXT NOT NULL,
+                        phoneNumber TEXT NOT NULL,
+                        authUid TEXT,
+                        status TEXT NOT NULL,
+                        createdAt INTEGER,
+                        updatedAt INTEGER,
+                        regionId TEXT NOT NULL,
+                        officeId TEXT NOT NULL,
+                        synced INTEGER NOT NULL DEFAULT 1,
+                        lastUpdated INTEGER NOT NULL
+                    )
+                """)
             }
         }
 

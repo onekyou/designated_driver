@@ -110,6 +110,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 showCustomSharedCallNotification(remoteMessage)
                 Log.d(TAG, "🔔 [DATA_ONLY] NEW_SHARED_CALL 처리 완료")
             }
+            "CALL_STATUS_UPDATE" -> {
+                Log.d(TAG, "🔔 [DEBUG] CALL_STATUS_UPDATE 처리 시작")
+                handleCallStatusUpdate(remoteMessage)
+                Log.d(TAG, "🔔 [DEBUG] CALL_STATUS_UPDATE 처리 완료")
+            }
             "STATUS_CHANGE" -> {
                 Log.d(TAG, "🔔 [DEBUG] STATUS_CHANGE 처리 시작")
                 handleStatusChange(remoteMessage, callId)
@@ -610,6 +615,56 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             isSharedCall = true,
             timeoutAfter = 120000
         )
+    }
+
+    /**
+     * CALL_STATUS_UPDATE FCM 메시지 처리
+     * Local-First 아키텍처: 로컬 DB 업데이트
+     */
+    private fun handleCallStatusUpdate(remoteMessage: RemoteMessage) {
+        val data = remoteMessage.data
+        val callId = data["callId"] ?: run {
+            Log.e(TAG, "[CALL_STATUS_UPDATE] callId 없음")
+            return
+        }
+        val status = data["status"] ?: run {
+            Log.e(TAG, "[CALL_STATUS_UPDATE] status 없음")
+            return
+        }
+
+        Log.d(TAG, "[CALL_STATUS_UPDATE] callId=$callId, status=$status")
+
+        // CallManagerApplication에서 Repository 가져오기
+        val app = applicationContext as? com.designated.callmanager.CallManagerApplication
+        if (app == null) {
+            Log.e(TAG, "[CALL_STATUS_UPDATE] CallManagerApplication을 가져올 수 없습니다")
+            return
+        }
+
+        // Repository를 통한 로컬 DB 업데이트
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            try {
+                // 출발지/목적지/요금 데이터 추출
+                val departure = data["departure"]
+                val destination = data["destination"]
+                val fare = data["fare"]?.toLongOrNull()
+
+                Log.d(TAG, "[CALL_STATUS_UPDATE] 로컬 DB 업데이트: departure=$departure, destination=$destination, fare=$fare")
+
+                // Repository를 통해 로컬 DB 업데이트
+                app.callRepository.updateCallStatusFromFCM(
+                    callId = callId,
+                    newStatus = status,
+                    departure = departure,
+                    destination = destination,
+                    fare = fare
+                )
+
+                Log.d(TAG, "[CALL_STATUS_UPDATE] 로컬 DB 업데이트 완료: $callId")
+            } catch (e: Exception) {
+                Log.e(TAG, "[CALL_STATUS_UPDATE] 로컬 DB 업데이트 실패: $callId", e)
+            }
+        }
     }
 
     private fun handleStatusChange(remoteMessage: RemoteMessage, callId: String) {

@@ -101,8 +101,17 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val appContext = application.applicationContext
 
     // Repository 패턴 구성 요소
+    private val app: CallManagerApplication by lazy {
+        getApplication<Application>() as CallManagerApplication
+    }
     private val database: AppDatabase by lazy {
-        DatabaseProvider.provideAppDatabase(getApplication<Application>().applicationContext)
+        app.database
+    }
+    private val callRepository by lazy {
+        app.callRepository
+    }
+    private val driverRepository by lazy {
+        app.driverRepository
     }
     private val pointRepository: PointRepository by lazy {
         DatabaseProvider.providePointRepository(
@@ -260,136 +269,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
 
-        callsListener = officeRef.collection("calls")
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(100)
-            .addSnapshotListener { snapshots, e ->
-                if (e != null) {
-                    return@addSnapshotListener
-                }
-
-                if (snapshots == null) {
-                    return@addSnapshotListener
-                }
-
-                for (dc in snapshots.documentChanges) {
-                    val doc = dc.document
-                    val callInfo = parseCallDocument(doc)
-                    if (callInfo == null) {
-                        continue
-                    }
-
-                    when (dc.type) {
-                        DocumentChange.Type.ADDED, DocumentChange.Type.MODIFIED -> {
-                            if (dc.type == DocumentChange.Type.ADDED &&
-                                callInfo.status == CallStatus.WAITING.firestoreValue) {
-
-                                // 콜 디텍터에서 생성한 콜은 팝업 표시하지 않음
-                                if (callInfo.fromCallDetector == true) {
-                                    // 콜 디텍터에서 이미 팝업을 표시했으므로 무시
-                                    Log.d(TAG, "Ignoring call from CallDetector: ${doc.id}")
-                                } else if (callInfo.callType != "SHARED") {
-                                    // 콜 매니저에서 생성했거나 fromCallDetector가 없는 경우만 팝업 표시
-                                    // SharedPreferences로 이미 표시한 새 콜 팝업 체크
-                                    val prefs = appContext.getSharedPreferences("shown_popups", Context.MODE_PRIVATE)
-                                    val popupId = "NEW_CALL_${doc.id}"
-
-                                    if (!prefs.getBoolean(popupId, false)) {
-                                        _newCallInfo.value = callInfo
-                                        _showNewCallPopup.value = true
-
-                                        // 표시한 팝업으로 마킹
-                                        prefs.edit().putBoolean(popupId, true).apply()
-                                    }
-                                }
-                            }
-                            if (callInfo.status == CallStatus.IN_PROGRESS.firestoreValue && previousStatusMap[doc.id] != CallStatus.IN_PROGRESS.firestoreValue) {
-                                val tripSummary = buildString {
-                                    append("출발: ${callInfo.departure_set ?: callInfo.customerAddress ?: "정보없음"}")
-                                    append(", 도착: ${callInfo.destination_set ?: "정보없음"}")
-                                    if (!callInfo.waypoints_set.isNullOrBlank()) {
-                                        append(", 경유: ${callInfo.waypoints_set}")
-                                    }
-                                    append(", 요금: ${callInfo.fare_set ?: callInfo.fare ?: 0}원")
-                                }
-                                var phone = callInfo.assignedDriverPhone
-                                if (phone.isNullOrBlank()) {
-                                    val dId = callInfo.assignedDriverId
-                                    if (!dId.isNullOrBlank()) {
-                                        phone = driverCache.values.firstOrNull { it.id == dId }?.phoneNumber
-                                    }
-                                }
-                                val driverDisplayName = if (callInfo.callType == "SHARED") {
-                                    "공유 기사님"
-                                } else {
-                                    callInfo.assignedDriverName ?: "기사"
-                                }
-                                _tripStartedInfo.value = Triple(
-                                    driverDisplayName,
-                                    phone,
-                                    tripSummary
-                                )
-                                _showTripStartedPopup.value = true
-                            }
-                            if (callInfo.status == CallStatus.COMPLETED.firestoreValue && previousStatusMap[doc.id] != CallStatus.COMPLETED.firestoreValue) {
-                                // SharedPreferences로 이미 표시한 완료 팝업 체크
-                                val prefs = appContext.getSharedPreferences("shown_popups", Context.MODE_PRIVATE)
-                                val popupId = "TRIP_COMPLETED_${doc.id}"
-
-                                if (!prefs.getBoolean(popupId, false)) {
-                                    val driverName = if (callInfo.callType == "SHARED") {
-                                        "공유 기사님"
-                                    } else {
-                                        callInfo.assignedDriverName ?: "기사"
-                                    }
-                                    val customerName: String = callInfo.customerName?.takeIf { it.isNotBlank() } ?: "고객"
-                                    _tripCompletedInfo.value = Pair(driverName, customerName)
-                                    _showTripCompletedPopup.value = true
-
-                                    // 표시한 팝업으로 마킹
-                                    prefs.edit().putBoolean(popupId, true).apply()
-                                    lastCompletedCallId = doc.id
-                                }
-                            }
-                            previousStatusMap[doc.id] = callInfo.status
-                            callsCache[doc.id] = callInfo
-                        }
-                        DocumentChange.Type.REMOVED -> {
-                            callsCache.remove(doc.id)
-                            previousStatusMap.remove(doc.id)
-                        }
-                    }
-                }
-                updateCallsFromCache()
-            }
-
-        driversListener = officeRef.collection("designated_drivers")
-            .addSnapshotListener { snapshots, e ->
-                if (e != null) {
-                    return@addSnapshotListener
-                }
-
-                if (snapshots == null) {
-                    return@addSnapshotListener
-                }
-
-                for (dc in snapshots.documentChanges) {
-                    val doc = dc.document
-                    try {
-                        val driverInfo = doc.toObject(DriverInfo::class.java).apply { id = doc.id }
-                        when (dc.type) {
-                            DocumentChange.Type.ADDED, DocumentChange.Type.MODIFIED -> {
-                                driverCache[doc.id] = driverInfo
-                            }
-                            DocumentChange.Type.REMOVED -> {
-                                driverCache.remove(doc.id)
-                            }
-                        }
-                    } catch (parseEx: Exception) {
-                    }
-                }
-                _drivers.value = driverCache.values.toList().sortedBy { it.name }
-            }
+        // Repository 패턴으로 교체됨 - Firebase 리스너 대신 Local DB Flow 구독
+        // callsListener와 driversListener는 제거됨
+        setupCallsAndDriversObservers(regionId, officeId)
 
         officeStatusListener = officeRef.addSnapshotListener { snapshot, e ->
             if (e != null) {
@@ -505,6 +387,130 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 Log.d(TAG, "포인트 데이터 새로고침 완료")
             } catch (e: Exception) {
                 Log.e(TAG, "포인트 데이터 새로고침 실패", e)
+            }
+        }
+    }
+
+    /**
+     * Repository 패턴을 사용한 콜/기사 데이터 구독 설정
+     * Local-First 아키텍처: Room DB Flow 구독 + FCM 동기화
+     */
+    private fun setupCallsAndDriversObservers(regionId: String, officeId: String) {
+        Log.d(TAG, "콜/기사 옵저버 설정: $regionId/$officeId")
+
+        // 1. 콜 목록 Flow 구독
+        viewModelScope.launch {
+            callRepository.getCallsFlow(regionId, officeId)
+                .collect { calls ->
+                    Log.d(TAG, "콜 목록 업데이트: ${calls.size}개")
+
+                    // 팝업 감지 로직
+                    for (call in calls) {
+                        val cachedCall = callsCache[call.id]
+
+                        // 새로운 WAITING 콜 팝업
+                        if (cachedCall == null && call.status == CallStatus.WAITING.firestoreValue) {
+                            if (call.fromCallDetector != true && call.callType != "SHARED") {
+                                val prefs = appContext.getSharedPreferences("shown_popups", Context.MODE_PRIVATE)
+                                val popupId = "NEW_CALL_${call.id}"
+                                if (!prefs.getBoolean(popupId, false)) {
+                                    _newCallInfo.value = call
+                                    _showNewCallPopup.value = true
+                                    prefs.edit().putBoolean(popupId, true).apply()
+                                }
+                            }
+                        }
+
+                        // 운행 시작 팝업
+                        if (call.status == CallStatus.IN_PROGRESS.firestoreValue &&
+                            previousStatusMap[call.id] != CallStatus.IN_PROGRESS.firestoreValue) {
+                            val tripSummary = buildString {
+                                append("출발: ${call.departure_set ?: call.customerAddress ?: "정보없음"}")
+                                append(", 도착: ${call.destination_set ?: "정보없음"}")
+                                if (!call.waypoints_set.isNullOrBlank()) {
+                                    append(", 경유: ${call.waypoints_set}")
+                                }
+                                append(", 요금: ${call.fare_set ?: call.fare ?: 0}원")
+                            }
+                            val driverDisplayName = if (call.callType == "SHARED") {
+                                "공유 기사님"
+                            } else {
+                                call.assignedDriverName ?: "기사"
+                            }
+                            _tripStartedInfo.value = Triple(
+                                driverDisplayName,
+                                call.assignedDriverPhone,
+                                tripSummary
+                            )
+                            _showTripStartedPopup.value = true
+                        }
+
+                        // 운행 완료 팝업
+                        if (call.status == CallStatus.COMPLETED.firestoreValue &&
+                            previousStatusMap[call.id] != CallStatus.COMPLETED.firestoreValue) {
+                            val prefs = appContext.getSharedPreferences("shown_popups", Context.MODE_PRIVATE)
+                            val popupId = "TRIP_COMPLETED_${call.id}"
+                            if (!prefs.getBoolean(popupId, false)) {
+                                val driverName = if (call.callType == "SHARED") {
+                                    "공유 기사님"
+                                } else {
+                                    call.assignedDriverName ?: "기사"
+                                }
+                                val customerName = call.customerName?.takeIf { it.isNotBlank() } ?: "고객"
+                                _tripCompletedInfo.value = Pair(driverName, customerName)
+                                _showTripCompletedPopup.value = true
+                                prefs.edit().putBoolean(popupId, true).apply()
+                            }
+                        }
+
+                        previousStatusMap[call.id] = call.status
+                        callsCache[call.id] = call
+                    }
+
+                    // 삭제된 콜 감지
+                    val currentCallIds = calls.map { it.id }.toSet()
+                    val removedCallIds = callsCache.keys.filter { it !in currentCallIds }
+                    removedCallIds.forEach {
+                        callsCache.remove(it)
+                        previousStatusMap.remove(it)
+                    }
+
+                    _calls.value = calls
+                }
+        }
+
+        // 2. 기사 목록 Flow 구독
+        viewModelScope.launch {
+            driverRepository.getDriversFlow(regionId, officeId)
+                .collect { drivers ->
+                    Log.d(TAG, "기사 목록 업데이트: ${drivers.size}명")
+
+                    // 캐시 업데이트
+                    driverCache.clear()
+                    drivers.forEach { driverCache[it.id] = it }
+
+                    _drivers.value = drivers
+                }
+        }
+
+        // 3. 초기 데이터 새로고침 (백그라운드)
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "콜 데이터 새로고침 시작...")
+                callRepository.refreshData(regionId, officeId)
+                Log.d(TAG, "콜 데이터 새로고침 완료")
+            } catch (e: Exception) {
+                Log.e(TAG, "콜 데이터 새로고침 실패", e)
+            }
+        }
+
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "기사 데이터 새로고침 시작...")
+                driverRepository.refreshData(regionId, officeId)
+                Log.d(TAG, "기사 데이터 새로고침 완료")
+            } catch (e: Exception) {
+                Log.e(TAG, "기사 데이터 새로고침 실패", e)
             }
         }
     }

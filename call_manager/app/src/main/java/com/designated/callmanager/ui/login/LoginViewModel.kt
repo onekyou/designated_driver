@@ -21,7 +21,7 @@ import kotlinx.coroutines.tasks.await
 sealed class LoginState {
     object Idle : LoginState()
     object Loading : LoginState()
-    data class Success(val regionId: String, val officeId: String) : LoginState()
+    data class Success(val provinceId: String, val officeId: String) : LoginState()
     data class Error(val message: String) : LoginState()
 }
 
@@ -88,9 +88,11 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                 val adminDoc = db.collection("admins").document(uid).get().await()
 
                 if (adminDoc.exists()) {
-                    val regionId = adminDoc.getString("associatedRegionId")
+                    val provinceId = adminDoc.getString("associatedProvinceId")
+                    val cityId = adminDoc.getString("associatedCityId")
                     val officeId = adminDoc.getString("associatedOfficeId")
-                    if (!regionId.isNullOrBlank() && !officeId.isNullOrBlank()) {
+
+                    if (!provinceId.isNullOrBlank() && !cityId.isNullOrBlank() && !officeId.isNullOrBlank()) {
                         if (autoLogin) {
                             val autoLoginEditor = sharedPreferences.edit()
                             autoLoginEditor.putString("email", email)
@@ -110,7 +112,8 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                         }
 
                         val regionOfficeEditor = sharedPreferences.edit()
-                        regionOfficeEditor.putString("regionId", regionId)
+                        regionOfficeEditor.putString("provinceId", provinceId)
+                        regionOfficeEditor.putString("cityId", cityId)
                         regionOfficeEditor.putString("officeId", officeId)
                         val success = regionOfficeEditor.commit()
 
@@ -118,9 +121,9 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                             // ✅ Two-Phase Commit: 로그인 완료 후 managerTokens에 FCM 토큰 저장
                             // Phase 2를 명시적으로 트리거 (Phase 1은 MyFirebaseMessagingService에서 자동 실행)
                             android.util.Log.d("LoginViewModel", "[fetchAdminInfoAndProceed] 로그인 성공 - managerTokens 동기화 시작")
-                            saveFcmTokenToManagerTokens(uid, regionId, officeId)
+                            saveFcmTokenToManagerTokens(uid, provinceId, cityId, officeId)
 
-                            _loginState.value = LoginState.Success(regionId, officeId)
+                            _loginState.value = LoginState.Success(provinceId, officeId)
                         } else {
                             _loginState.value = LoginState.Error("로그인 정보 저장 실패")
                             auth.signOut()
@@ -150,10 +153,10 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * Two-Phase Commit Phase 2: managerTokens 컬렉션에 FCM 토큰 저장
-     * 로그인 성공 후 regionId/officeId가 확정된 시점에 호출
+     * 로그인 성공 후 provinceId/cityId/officeId가 확정된 시점에 호출
      * Phase 1 (admins 저장)은 MyFirebaseMessagingService에서 자동 실행
      */
-    private fun saveFcmTokenToManagerTokens(adminId: String, regionId: String, officeId: String) {
+    private fun saveFcmTokenToManagerTokens(adminId: String, provinceId: String, cityId: String, officeId: String) {
         viewModelScope.launch {
             try {
                 android.util.Log.d("LoginViewModel", "[saveFcmTokenToManagerTokens] Phase 2 시작 - managerTokens 저장")
@@ -168,7 +171,8 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                     "updatedAt" to com.google.firebase.Timestamp.now()
                 )
 
-                db.collection("regions").document(regionId)
+                db.collection("provinces").document(provinceId)
+                    .collection("cities").document(cityId)
                     .collection("offices").document(officeId)
                     .collection("managerTokens").document(adminId)
                     .set(managerTokenData, com.google.firebase.firestore.SetOptions.merge())
@@ -176,16 +180,17 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
 
                 android.util.Log.d("LoginViewModel", "[saveFcmTokenToManagerTokens] ✅ Phase 2 완료 - managerTokens 저장 성공")
 
-                // admins 컬렉션에도 regionId/officeId 업데이트
+                // admins 컬렉션에도 provinceId/cityId/officeId 업데이트
                 val adminUpdateData = hashMapOf(
-                    "associatedRegionId" to regionId,
+                    "associatedProvinceId" to provinceId,
+                    "associatedCityId" to cityId,
                     "associatedOfficeId" to officeId
                 )
                 db.collection("admins").document(adminId)
                     .set(adminUpdateData, com.google.firebase.firestore.SetOptions.merge())
                     .await()
 
-                android.util.Log.d("LoginViewModel", "[saveFcmTokenToManagerTokens] ✅ admins에 regionId/officeId 업데이트 완료")
+                android.util.Log.d("LoginViewModel", "[saveFcmTokenToManagerTokens] ✅ admins에 provinceId/cityId/officeId 업데이트 완료")
             } catch (e: Exception) {
                 android.util.Log.e("LoginViewModel", "[saveFcmTokenToManagerTokens] ❌ managerTokens 저장 실패: ${e.message}")
                 e.printStackTrace()
