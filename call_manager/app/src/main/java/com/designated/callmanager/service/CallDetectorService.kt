@@ -126,15 +126,17 @@ class CallDetectorService : Service() {
 
                         val (contactName, contactAddress) = getContactInfo(applicationContext, finalPhoneNumber)
 
-                        val regionId = sharedPreferences.getString("regionId", null)
+                        val provinceId = sharedPreferences.getString("provinceId", null)
+                        val cityId = sharedPreferences.getString("cityId", null)
                         val officeId = sharedPreferences.getString("officeId", null)
 
-                        if (regionId != null && officeId != null) {
+                        if (provinceId != null && cityId != null && officeId != null) {
 
                             val deviceName = sharedPreferences.getString("deviceName", android.os.Build.MODEL) ?: android.os.Build.MODEL
 
                             checkOfficeStatusAndSaveCall(
-                                regionId,
+                                provinceId,
+                                cityId,
                                 officeId,
                                 finalPhoneNumber,
                                 contactName,
@@ -164,11 +166,12 @@ class CallDetectorService : Service() {
             else if (callState == TelephonyManager.CALL_STATE_RINGING && isIncomingCall) {
 
                 serviceScope.launch {
-                    val regionId = sharedPreferences.getString("regionId", null)
+                    val provinceId = sharedPreferences.getString("provinceId", null)
+                    val cityId = sharedPreferences.getString("cityId", null)
                     val officeId = sharedPreferences.getString("officeId", null)
 
-                    if (regionId != null && officeId != null) {
-                        checkOfficeStatusForQuickResponse(regionId, officeId, phoneNumber)
+                    if (provinceId != null && cityId != null && officeId != null) {
+                        checkOfficeStatusForQuickResponse(provinceId, cityId, officeId, phoneNumber)
                     } else {
                         tryGetOfficeInfoFromFirebase(phoneNumber)
                     }
@@ -302,11 +305,12 @@ class CallDetectorService : Service() {
                         if (type == CallLog.Calls.MISSED_TYPE &&
                             (System.currentTimeMillis() - date) < 5000) {
 
-                            val regionId = sharedPreferences.getString("regionId", null)
+                            val provinceId = sharedPreferences.getString("provinceId", null)
+                            val cityId = sharedPreferences.getString("cityId", null)
                             val officeId = sharedPreferences.getString("officeId", null)
 
-                            if (regionId != null && officeId != null) {
-                                checkOfficeStatusForMissedCall(regionId, officeId, number, cachedName)
+                            if (provinceId != null && cityId != null && officeId != null) {
+                                checkOfficeStatusForMissedCall(provinceId, cityId, officeId, number, cachedName)
                             } else {
                             }
                         }
@@ -321,14 +325,16 @@ class CallDetectorService : Service() {
      * 부재중 전화에 대한 사무실 상태 확인 및 처리
      */
     private suspend fun checkOfficeStatusForMissedCall(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         phoneNumber: String,
         contactName: String?
     ) {
         try {
             val firestore = FirebaseFirestore.getInstance()
-            val document = firestore.collection("regions").document(regionId)
+            val document = firestore.collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
                 .collection("offices").document(officeId)
                 .get()
                 .await()
@@ -342,7 +348,7 @@ class CallDetectorService : Service() {
                 val deviceName = sharedPreferences.getString("deviceName", android.os.Build.MODEL) ?: android.os.Build.MODEL
                 val finalContactName = fullContactName ?: contactName
 
-                createSharedCallFromMissed(regionId, officeId, phoneNumber, finalContactName, contactAddress, deviceName)
+                createSharedCallFromMissed(provinceId, cityId, officeId, phoneNumber, finalContactName, contactAddress, deviceName)
 
                 sendAutoSMS(phoneNumber, officeName)
 
@@ -356,7 +362,8 @@ class CallDetectorService : Service() {
      * 부재중 전화에서 공유 콜 생성 (CallManager용)
      */
     private fun createSharedCallFromMissed(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         phoneNumber: String,
         contactName: String?,
@@ -365,9 +372,9 @@ class CallDetectorService : Service() {
     ) {
         val sharedCallData = hashMapOf<String, Any>(
             "phoneNumber" to phoneNumber,
-            "sourceRegionId" to regionId,
+            "sourceRegionId" to provinceId,
             "sourceOfficeId" to officeId,
-            "targetRegionId" to regionId,
+            "targetRegionId" to provinceId,
             "deviceName" to deviceName,
             "status" to "OPEN",
             "timestamp" to FieldValue.serverTimestamp(),
@@ -515,7 +522,8 @@ class CallDetectorService : Service() {
      * 사무실 상태 확인 후 일반 콜 또는 공유 콜 생성
      */
     private fun checkOfficeStatusAndSaveCall(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         phoneNumber: String,
         contactName: String?,
@@ -524,12 +532,13 @@ class CallDetectorService : Service() {
     ) {
 
         val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-        firestore.collection("regions").document(regionId)
+        firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
             .collection("offices").document(officeId)
             .get()
             .addOnSuccessListener { document ->
                 if (!document.exists()) {
-                    createNormalCall(regionId, officeId, phoneNumber, contactName, contactAddress, deviceName)
+                    createNormalCall(provinceId, cityId, officeId, phoneNumber, contactName, contactAddress, deviceName)
                     return@addOnSuccessListener
                 }
 
@@ -538,16 +547,16 @@ class CallDetectorService : Service() {
 
                 when (officeStatus) {
                     "CLOSED" -> {
-                        createSharedCall(regionId, officeId, phoneNumber, contactName, contactAddress, deviceName)
+                        createSharedCall(provinceId, cityId, officeId, phoneNumber, contactName, contactAddress, deviceName)
                         sendAutoSMS(phoneNumber, officeName)
                     }
                     else -> {
-                        createNormalCall(regionId, officeId, phoneNumber, contactName, contactAddress, deviceName)
+                        createNormalCall(provinceId, cityId, officeId, phoneNumber, contactName, contactAddress, deviceName)
                     }
                 }
             }
             .addOnFailureListener { e ->
-                createNormalCall(regionId, officeId, phoneNumber, contactName, contactAddress, deviceName)
+                createNormalCall(provinceId, cityId, officeId, phoneNumber, contactName, contactAddress, deviceName)
             }
     }
 
@@ -555,7 +564,8 @@ class CallDetectorService : Service() {
      * 일반 콜 생성 (운영중)
      */
     private fun createNormalCall(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         phoneNumber: String,
         contactName: String?,
@@ -569,7 +579,8 @@ class CallDetectorService : Service() {
             try {
                 // customerInfo 컬렉션에서 phoneNumber로 직접 조회 (문서 ID가 phoneNumber)
                 val customerInfoDoc = firestore
-                    .collection("regions").document(regionId)
+                    .collection("provinces").document(provinceId)
+                    .collection("cities").document(cityId)
                     .collection("offices").document(officeId)
                     .collection("customerInfo")
                     .document(phoneNumber)
@@ -586,7 +597,8 @@ class CallDetectorService : Service() {
                 // ✅ 앱 회원인 경우 customers 컬렉션에서 name(nickname)과 grade 가져오기
                 val customerDoc = if (isAppCustomer) {
                     firestore
-                        .collection("regions").document(regionId)
+                        .collection("provinces").document(provinceId)
+                        .collection("cities").document(cityId)
                         .collection("offices").document(officeId)
                         .collection("customers")
                         .whereEqualTo("phoneNumber", phoneNumber)
@@ -613,7 +625,8 @@ class CallDetectorService : Service() {
                     "status" to CallStatus.WAITING.firestoreValue,
                     "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
                     "detectedTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                    "regionId" to regionId,
+                    "provinceId" to provinceId,
+                    "cityId" to cityId,
                     "officeId" to officeId,
                     "deviceName" to deviceName,
                     "callType" to "수신",
@@ -625,7 +638,7 @@ class CallDetectorService : Service() {
                     "createdFrom" to "phone"  // ✅ 추가: 전화로 생성됨
                 )
 
-                val targetPath = "regions/$regionId/offices/$officeId/calls"
+                val targetPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/calls"
 
                 firestore.collection(targetPath)
                     .add(callData)
@@ -644,7 +657,8 @@ class CallDetectorService : Service() {
                     "status" to CallStatus.WAITING.firestoreValue,
                     "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
                     "detectedTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                    "regionId" to regionId,
+                    "provinceId" to provinceId,
+                    "cityId" to cityId,
                     "officeId" to officeId,
                     "deviceName" to deviceName,
                     "callType" to "수신",
@@ -655,7 +669,7 @@ class CallDetectorService : Service() {
                     "createdFrom" to "phone"
                 )
 
-                val targetPath = "regions/$regionId/offices/$officeId/calls"
+                val targetPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/calls"
                 firestore.collection(targetPath)
                     .add(callData)
                     .addOnSuccessListener { documentReference ->
@@ -672,7 +686,8 @@ class CallDetectorService : Service() {
      * 공유 콜 생성 (마감 상태)
      */
     private fun createSharedCall(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         phoneNumber: String,
         contactName: String?,
@@ -681,9 +696,9 @@ class CallDetectorService : Service() {
     ) {
         val sharedCallData = hashMapOf<String, Any>(
             "phoneNumber" to phoneNumber,
-            "sourceRegionId" to regionId,
+            "sourceRegionId" to provinceId,
             "sourceOfficeId" to officeId,
-            "targetRegionId" to regionId,
+            "targetRegionId" to provinceId,
             "deviceName" to deviceName,
             "status" to "OPEN",
             "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
@@ -763,17 +778,19 @@ class CallDetectorService : Service() {
                 return
             }
 
-            val regionId = adminDoc.getString("associatedRegionId")
+            val provinceId = adminDoc.getString("associatedProvinceId")
+            val cityId = adminDoc.getString("associatedCityId")
             val officeId = adminDoc.getString("associatedOfficeId")
 
-            if (regionId != null && officeId != null) {
+            if (provinceId != null && cityId != null && officeId != null) {
                 sharedPreferences.edit().apply {
-                    putString("regionId", regionId)
+                    putString("provinceId", provinceId)
+                    putString("cityId", cityId)
                     putString("officeId", officeId)
                     apply()
                 }
 
-                checkOfficeStatusForQuickResponse(regionId, officeId, phoneNumber)
+                checkOfficeStatusForQuickResponse(provinceId, cityId, officeId, phoneNumber)
             } else {
             }
 
@@ -785,14 +802,16 @@ class CallDetectorService : Service() {
      * 마감 상태 확인 후 빠른 SMS 발송 (RINGING 상태용)
      */
     private suspend fun checkOfficeStatusForQuickResponse(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         phoneNumber: String
     ) {
         try {
 
             val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-            val document = firestore.collection("regions").document(regionId)
+            val document = firestore.collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
                 .collection("offices").document(officeId)
                 .get()
                 .await()
@@ -811,7 +830,7 @@ class CallDetectorService : Service() {
                 val (contactName, contactAddress) = getContactInfo(applicationContext, phoneNumber)
                 val deviceName = sharedPreferences.getString("deviceName", android.os.Build.MODEL) ?: android.os.Build.MODEL
 
-                createSharedCallFromRinging(regionId, officeId, phoneNumber, contactName, contactAddress, deviceName)
+                createSharedCallFromRinging(provinceId, cityId, officeId, phoneNumber, contactName, contactAddress, deviceName)
 
                 sendAutoSMS(phoneNumber, officeName)
 
@@ -825,7 +844,8 @@ class CallDetectorService : Service() {
      * RINGING 상태에서 공유 콜 생성 (콜매니저용)
      */
     private fun createSharedCallFromRinging(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         phoneNumber: String,
         contactName: String?,
@@ -834,9 +854,9 @@ class CallDetectorService : Service() {
     ) {
         val sharedCallData = hashMapOf<String, Any>(
             "phoneNumber" to phoneNumber,
-            "sourceRegionId" to regionId,
+            "sourceRegionId" to provinceId,
             "sourceOfficeId" to officeId,
-            "targetRegionId" to regionId,
+            "targetRegionId" to provinceId,
             "deviceName" to deviceName,
             "status" to "OPEN",
             "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
