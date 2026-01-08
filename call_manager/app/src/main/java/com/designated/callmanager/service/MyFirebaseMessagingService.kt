@@ -181,15 +181,16 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         // Phase 2: managerTokens 컬렉션에 사무실별 토큰 저장 (조건부)
         val sharedPreferences = getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
-        val regionId = sharedPreferences.getString("regionId", null)
+        val provinceId = sharedPreferences.getString("provinceId", null)
+        val cityId = sharedPreferences.getString("cityId", null)
         val officeId = sharedPreferences.getString("officeId", null)
 
-        Log.d(TAG, "[saveTokenToFirestore] regionId: $regionId, officeId: $officeId")
+        Log.d(TAG, "[saveTokenToFirestore] provinceId: $provinceId, cityId: $cityId, officeId: $officeId")
 
-        if (!regionId.isNullOrBlank() && !officeId.isNullOrBlank()) {
-            saveTokenToManagerTokensCollection(adminId, regionId, officeId, token)
+        if (!provinceId.isNullOrBlank() && !cityId.isNullOrBlank() && !officeId.isNullOrBlank()) {
+            saveTokenToManagerTokensCollection(adminId, provinceId, cityId, officeId, token)
         } else {
-            Log.w(TAG, "[saveTokenToFirestore] regionId/officeId 없음 - managerTokens 저장 스킵 (로그인 후 재시도 필요)")
+            Log.w(TAG, "[saveTokenToFirestore] provinceId/cityId/officeId 없음 - managerTokens 저장 스킵 (로그인 후 재시도 필요)")
         }
     }
 
@@ -224,7 +225,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
      */
     private fun saveTokenToManagerTokensCollection(
         adminId: String,
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         token: String
     ) {
@@ -235,24 +237,26 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             "updatedAt" to com.google.firebase.Timestamp.now()
         )
 
-        Log.d(TAG, "[saveTokenToManagerTokens] managerTokens 저장 시도 - regionId: $regionId, officeId: $officeId")
+        Log.d(TAG, "[saveTokenToManagerTokens] managerTokens 저장 시도 - provinceId: $provinceId, cityId: $cityId, officeId: $officeId")
 
-        firestore.collection("regions").document(regionId)
+        firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
             .collection("offices").document(officeId)
             .collection("managerTokens").document(adminId)
             .set(managerTokenData, com.google.firebase.firestore.SetOptions.merge())
             .addOnSuccessListener {
                 Log.d(TAG, "[saveTokenToManagerTokens] ✅ managerTokens 컬렉션에 토큰 저장 성공")
 
-                // admins 컬렉션에도 regionId/officeId 업데이트
+                // admins 컬렉션에도 provinceId/cityId/officeId 업데이트
                 val adminUpdateData = hashMapOf(
-                    "associatedRegionId" to regionId,
+                    "associatedProvinceId" to provinceId,
+                    "associatedCityId" to cityId,
                     "associatedOfficeId" to officeId
                 )
                 firestore.collection("admins").document(adminId)
                     .set(adminUpdateData, com.google.firebase.firestore.SetOptions.merge())
                     .addOnSuccessListener {
-                        Log.d(TAG, "[saveTokenToManagerTokens] ✅ admins에 regionId/officeId 업데이트 완료")
+                        Log.d(TAG, "[saveTokenToManagerTokens] ✅ admins에 provinceId/cityId/officeId 업데이트 완료")
                     }
             }
             .addOnFailureListener { e ->
@@ -265,7 +269,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
      * 로그인 완료 후 managerTokens 재동기화
      * LoginViewModel에서 호출됨
      */
-    fun retryManagerTokensSync(regionId: String, officeId: String) {
+    fun retryManagerTokensSync(provinceId: String, cityId: String, officeId: String) {
         Log.d(TAG, "[retryManagerTokensSync] managerTokens 재동기화 시작")
 
         val auth = FirebaseAuth.getInstance()
@@ -285,7 +289,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
                 val token = task.result
                 Log.d(TAG, "[retryManagerTokensSync] 토큰 획득 성공 - managerTokens 저장 시도")
-                saveTokenToManagerTokensCollection(currentUser.uid, regionId, officeId, token)
+                saveTokenToManagerTokensCollection(currentUser.uid, provinceId, cityId, officeId, token)
             }
     }
 
