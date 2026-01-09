@@ -184,41 +184,43 @@ fun SignUpScreen(
                 }
             }
 
-            // 시/군/구 선택
-            ExposedDropdownMenuBox(
-                expanded = expandedCity,
-                onExpandedChange = { expandedCity = !expandedCity },
-                 modifier = Modifier.fillMaxWidth()
-            ) {
-                OutlinedTextField(
-                    value = viewModel.selectedCity?.name ?: "시/군/구 선택",
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("시/군/구") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCity) },
-                    modifier = Modifier.menuAnchor().fillMaxWidth(),
-                    enabled = viewModel.selectedProvince != null && signUpState !is SignUpState.Loading
-                )
-                ExposedDropdownMenu(
+            // 시/군/구 선택 (도 타입일 때만 표시, 광역시/특별자치시는 자동 선택)
+            if (viewModel.selectedProvince?.type == "do") {
+                ExposedDropdownMenuBox(
                     expanded = expandedCity,
-                    onDismissRequest = { expandedCity = false },
+                    onExpandedChange = { expandedCity = !expandedCity },
                      modifier = Modifier.fillMaxWidth()
                 ) {
-                    if (cities.isEmpty()) {
-                         DropdownMenuItem(
-                            text = { Text("먼저 도/시를 선택하세요") },
-                            onClick = { },
-                            enabled = false
-                        )
-                    } else {
-                        cities.forEach { city ->
-                            DropdownMenuItem(
-                                text = { Text(city.name) },
-                                onClick = {
-                                    viewModel.onCitySelected(city)
-                                    expandedCity = false
-                                }
+                    OutlinedTextField(
+                        value = viewModel.selectedCity?.name ?: "시/군/구 선택",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("시/군/구") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCity) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                        enabled = viewModel.selectedProvince != null && signUpState !is SignUpState.Loading
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expandedCity,
+                        onDismissRequest = { expandedCity = false },
+                         modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (cities.isEmpty()) {
+                             DropdownMenuItem(
+                                text = { Text("먼저 도/시를 선택하세요") },
+                                onClick = { },
+                                enabled = false
                             )
+                        } else {
+                            cities.forEach { city ->
+                                DropdownMenuItem(
+                                    text = { Text(city.name) },
+                                    onClick = {
+                                        viewModel.onCitySelected(city)
+                                        expandedCity = false
+                                    }
+                                )
+                            }
                         }
                     }
                 }

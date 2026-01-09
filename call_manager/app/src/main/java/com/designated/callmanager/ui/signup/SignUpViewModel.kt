@@ -22,7 +22,7 @@ import kotlinx.coroutines.tasks.await
 // TODO: Implement SignUpViewModel logic
 
 data class RegionItem(val id: String, val name: String)
-data class ProvinceItem(val id: String, val name: String)
+data class ProvinceItem(val id: String, val name: String, val type: String = "do")
 data class CityItem(val id: String, val name: String)
 
 object KoreanBanks {
@@ -109,11 +109,15 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
         _signUpState.value = SignUpState.LoadingRegions
         viewModelScope.launch {
             try {
-                val snapshot = db.collection("provinces").get().await()
+                val snapshot = db.collection("provinces")
+                    .whereEqualTo("active", true)
+                    .get()
+                    .await()
                 val provinceList = snapshot.documents.mapNotNull { doc ->
                     val name = doc.getString("name")
+                    val type = doc.getString("type") ?: "do"
                     if (name != null) {
-                        ProvinceItem(id = doc.id, name = name)
+                        ProvinceItem(id = doc.id, name = name, type = type)
                     } else {
                         null
                     }
@@ -132,6 +136,7 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
                 val snapshot = db.collection("provinces")
                     .document(provinceId)
                     .collection("cities")
+                    .whereEqualTo("active", true)
                     .get()
                     .await()
                 val cityList = snapshot.documents.mapNotNull { doc ->
@@ -143,6 +148,11 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
                     }
                 }.sortedBy { it.name }
                 _cities.value = cityList
+
+                // 광역시/특별자치시인 경우 city가 1개뿐이므로 자동 선택
+                if (cityList.size == 1) {
+                    selectedCity = cityList.first()
+                }
             } catch (e: Exception) {
                 _signUpState.value = SignUpState.Error("시/군/구 목록을 불러오는데 실패했습니다: ${e.message}")
             }
