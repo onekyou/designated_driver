@@ -25,7 +25,8 @@ import android.text.format.DateFormat
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PendingDriversScreen(
-    regionId: String,
+    provinceId: String,
+    cityId: String,
     officeId: String,
     onNavigateBack: () -> Unit
 ) {
@@ -33,7 +34,8 @@ fun PendingDriversScreen(
     val viewModel: PendingDriversViewModel = viewModel(
         factory = PendingDriversViewModel.Factory(
             application = context.applicationContext as android.app.Application,
-            regionId = regionId,
+            provinceId = provinceId,
+            cityId = cityId,
             officeId = officeId
         )
     )
@@ -188,7 +190,8 @@ fun PendingDriversScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("다음 정보로 기사를 승인하시겠습니까?")
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("대상 지역 ID: ${driverToApprove!!.targetRegionId}", fontWeight = FontWeight.Bold)
+                    Text("대상 도/시 ID: ${driverToApprove!!.targetProvinceId}", fontWeight = FontWeight.Bold)
+                    Text("대상 시/구 ID: ${driverToApprove!!.targetCityId}", fontWeight = FontWeight.Bold)
                     Text("대상 사무실 ID: ${driverToApprove!!.targetOfficeId}", fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("(만약 대상 지역/사무실 정보가 올바르지 않다면, 먼저 기사 가입 정보를 수정해야 합니다.)", style = MaterialTheme.typography.bodySmall)

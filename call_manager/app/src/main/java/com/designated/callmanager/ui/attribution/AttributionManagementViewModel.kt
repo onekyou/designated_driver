@@ -67,7 +67,7 @@ class AttributionManagementViewModel(application: Application) : AndroidViewMode
 
     private val TAG = "AttributionManagementVM"
 
-    fun loadAttributionData(regionId: String, officeId: String) {
+    fun loadAttributionData(provinceId: String, cityId: String, officeId: String) {
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null
@@ -75,10 +75,10 @@ class AttributionManagementViewModel(application: Application) : AndroidViewMode
             try {
                 // 병렬로 데이터 로드
                 coroutineScope {
-                    val statsJob = async { loadAttributionStats(regionId, officeId) }
-                    val kpiJob = async { loadKPIMetrics(regionId, officeId) }
-                    val recentJob = async { loadRecentAttributions(regionId, officeId) }
-                    val settingsJob = async { loadOfficeSettings(regionId, officeId) }
+                    val statsJob = async { loadAttributionStats(provinceId, cityId, officeId) }
+                    val kpiJob = async { loadKPIMetrics(provinceId, cityId, officeId) }
+                    val recentJob = async { loadRecentAttributions(provinceId, cityId, officeId) }
+                    val settingsJob = async { loadOfficeSettings(provinceId, cityId, officeId) }
 
                     // 모든 작업 완료 대기
                     statsJob.await()
@@ -98,9 +98,9 @@ class AttributionManagementViewModel(application: Application) : AndroidViewMode
         }
     }
 
-    private suspend fun loadAttributionStats(regionId: String, officeId: String) {
+    private suspend fun loadAttributionStats(provinceId: String, cityId: String, officeId: String) {
         try {
-            val result = attributionService.getAttributionStats(regionId, officeId)
+            val result = attributionService.getAttributionStats(provinceId, cityId, officeId)
             when (result) {
                 is AttributionStatsResult.Success -> {
                     _attributionStats.value = result.stats
@@ -114,9 +114,9 @@ class AttributionManagementViewModel(application: Application) : AndroidViewMode
         }
     }
 
-    private suspend fun loadKPIMetrics(regionId: String, officeId: String) {
+    private suspend fun loadKPIMetrics(provinceId: String, cityId: String, officeId: String) {
         try {
-            val result = basicKPIService.getBasicKPI(regionId, officeId)
+            val result = basicKPIService.getBasicKPI(provinceId, cityId, officeId)
             when (result) {
                 is BasicKPIResult.Success -> {
                     _kpiMetrics.value = result.kpi
@@ -130,9 +130,9 @@ class AttributionManagementViewModel(application: Application) : AndroidViewMode
         }
     }
 
-    private suspend fun loadRecentAttributions(regionId: String, officeId: String) {
+    private suspend fun loadRecentAttributions(provinceId: String, cityId: String, officeId: String) {
         try {
-            val result = attributionService.getRecentAttributions(regionId, officeId, 10)
+            val result = attributionService.getRecentAttributions(provinceId, cityId, officeId, 10)
             when (result) {
                 is RecentAttributionsResult.Success -> {
                     _recentAttributions.value = result.attributions
@@ -146,12 +146,14 @@ class AttributionManagementViewModel(application: Application) : AndroidViewMode
         }
     }
 
-    private suspend fun loadOfficeSettings(regionId: String, officeId: String) {
+    private suspend fun loadOfficeSettings(provinceId: String, cityId: String, officeId: String) {
         try {
             // 1. 사무실 기본 정보 로드
             val officeDoc = Firebase.firestore
-                .collection("regions")
-                .document(regionId)
+                .collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .get()
@@ -166,8 +168,10 @@ class AttributionManagementViewModel(application: Application) : AndroidViewMode
 
             // 2. QR 설정 로드
             val settingsDoc = Firebase.firestore
-                .collection("regions")
-                .document(regionId)
+                .collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("settings")
@@ -203,8 +207,8 @@ class AttributionManagementViewModel(application: Application) : AndroidViewMode
         }
     }
 
-    fun refreshData(regionId: String, officeId: String) {
-        loadAttributionData(regionId, officeId)
+    fun refreshData(provinceId: String, cityId: String, officeId: String) {
+        loadAttributionData(provinceId, cityId, officeId)
     }
 
     fun clearError() {
@@ -213,7 +217,8 @@ class AttributionManagementViewModel(application: Application) : AndroidViewMode
 
     // 사무실 정보 업데이트 함수
     fun updateOfficeInfo(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         phone: String,
         bank: String,
@@ -228,8 +233,10 @@ class AttributionManagementViewModel(application: Application) : AndroidViewMode
 
                 // 1. 사무실 기본 정보 업데이트
                 Firebase.firestore
-                    .collection("regions")
-                    .document(regionId)
+                    .collection("provinces")
+                    .document(provinceId)
+                    .collection("cities")
+                    .document(cityId)
                     .collection("offices")
                     .document(officeId)
                     .update(
@@ -248,7 +255,7 @@ class AttributionManagementViewModel(application: Application) : AndroidViewMode
                 val encodedAccount = android.net.Uri.encode(account)
                 val encodedHolder = android.net.Uri.encode(holder)
 
-                val referrerParams = "r=$regionId&o=$officeId" +
+                val referrerParams = "p=$provinceId&c=$cityId&o=$officeId" +
                         "&phone=$encodedPhone" +
                         "&bank=$encodedBank" +
                         "&account=$encodedAccount" +
@@ -262,8 +269,10 @@ class AttributionManagementViewModel(application: Application) : AndroidViewMode
 
                 // 3. QR 설정 업데이트
                 Firebase.firestore
-                    .collection("regions")
-                    .document(regionId)
+                    .collection("provinces")
+                    .document(provinceId)
+                    .collection("cities")
+                    .document(cityId)
                     .collection("offices")
                     .document(officeId)
                     .collection("settings")

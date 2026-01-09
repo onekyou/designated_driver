@@ -27,13 +27,13 @@ class CustomerDetailViewModel : ViewModel() {
 
     private val TAG = "CustomerDetailVM"
 
-    fun loadCustomerDetail(regionId: String, officeId: String, customerId: String) {
+    fun loadCustomerDetail(provinceId: String, cityId: String, officeId: String, customerId: String) {
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null
 
             try {
-                val result = customerService.getCustomerDetail(regionId, officeId, customerId)
+                val result = customerService.getCustomerDetail(provinceId, cityId, officeId, customerId)
 
                 when (result) {
                     is CustomerDetailResult.Success -> {

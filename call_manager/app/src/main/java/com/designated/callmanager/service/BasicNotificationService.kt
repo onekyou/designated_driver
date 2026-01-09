@@ -19,7 +19,8 @@ class BasicNotificationService {
      * 고객앱 콜 알림 생성
      */
     suspend fun createAppCallNotification(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         callId: String,
         customerName: String?,
@@ -31,15 +32,18 @@ class BasicNotificationService {
                 "title" to "고객앱 콜",
                 "message" to buildAppCallMessage(customerName, customerGrade),
                 "callId" to callId,
-                "regionId" to regionId,
+                "provinceId" to provinceId,
+                "cityId" to cityId,
                 "officeId" to officeId,
                 "priority" to "HIGH",
                 "timestamp" to Timestamp.now(),
                 "isRead" to false
             )
 
-            val docRef = db.collection("regions")
-                .document(regionId)
+            val docRef = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("notifications")
@@ -59,7 +63,8 @@ class BasicNotificationService {
      * 신규 고객 등록 알림
      */
     suspend fun createNewCustomerNotification(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         customerId: String,
         customerName: String,
@@ -80,15 +85,18 @@ class BasicNotificationService {
                 "message" to "새로운 고객이 등록되었습니다\n${customerName} (${sourceText})",
                 "customerId" to customerId,
                 "customerPhone" to customerPhone,
-                "regionId" to regionId,
+                "provinceId" to provinceId,
+                "cityId" to cityId,
                 "officeId" to officeId,
                 "priority" to "NORMAL",
                 "timestamp" to Timestamp.now(),
                 "isRead" to false
             )
 
-            val docRef = db.collection("regions")
-                .document(regionId)
+            val docRef = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("notifications")
@@ -108,7 +116,8 @@ class BasicNotificationService {
      * 포인트 적립 알림
      */
     suspend fun createPointEarnedNotification(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         customerId: String,
         customerName: String,
@@ -123,15 +132,18 @@ class BasicNotificationService {
                 "customerId" to customerId,
                 "pointsEarned" to pointsEarned,
                 "callId" to callId,
-                "regionId" to regionId,
+                "provinceId" to provinceId,
+                "cityId" to cityId,
                 "officeId" to officeId,
                 "priority" to "LOW",
                 "timestamp" to Timestamp.now(),
                 "isRead" to false
             )
 
-            val docRef = db.collection("regions")
-                .document(regionId)
+            val docRef = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("notifications")
@@ -151,7 +163,8 @@ class BasicNotificationService {
      * 고객 등급 승급 알림
      */
     suspend fun createGradeUpNotification(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         customerId: String,
         customerName: String,
@@ -173,15 +186,18 @@ class BasicNotificationService {
                 "customerId" to customerId,
                 "oldGrade" to oldGrade,
                 "newGrade" to newGrade,
-                "regionId" to regionId,
+                "provinceId" to provinceId,
+                "cityId" to cityId,
                 "officeId" to officeId,
                 "priority" to "NORMAL",
                 "timestamp" to Timestamp.now(),
                 "isRead" to false
             )
 
-            val docRef = db.collection("regions")
-                .document(regionId)
+            val docRef = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("notifications")
@@ -201,13 +217,16 @@ class BasicNotificationService {
      * 일반 알림 조회 (최근 50개)
      */
     suspend fun getNotifications(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         limit: Int = 50
     ): NotificationListResult {
         return try {
-            val snapshot = db.collection("regions")
-                .document(regionId)
+            val snapshot = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("notifications")
@@ -247,13 +266,16 @@ class BasicNotificationService {
      * 알림 읽음 처리
      */
     suspend fun markAsRead(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         notificationId: String
     ): NotificationResult {
         return try {
-            db.collection("regions")
-                .document(regionId)
+            db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("notifications")
@@ -274,12 +296,15 @@ class BasicNotificationService {
      * 읽지 않은 알림 개수 조회
      */
     suspend fun getUnreadCount(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String
     ): UnreadCountResult {
         return try {
-            val snapshot = db.collection("regions")
-                .document(regionId)
+            val snapshot = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("notifications")
@@ -299,7 +324,8 @@ class BasicNotificationService {
      * 오래된 알림 정리 (30일 이상)
      */
     suspend fun cleanupOldNotifications(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String
     ): NotificationResult {
         return try {
@@ -307,8 +333,10 @@ class BasicNotificationService {
             calendar.add(java.util.Calendar.DAY_OF_MONTH, -30)
             val cutoffDate = Timestamp(calendar.time)
 
-            val snapshot = db.collection("regions")
-                .document(regionId)
+            val snapshot = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("notifications")

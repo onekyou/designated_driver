@@ -38,7 +38,8 @@ sealed class DriverApprovalState {
 
 class PendingDriversViewModel(
     application: Application,
-    private val regionId: String,
+    private val provinceId: String,
+    private val cityId: String,
     private val officeId: String
 ) : AndroidViewModel(application) {
     private val firestore: FirebaseFirestore = Firebase.firestore
@@ -53,18 +54,18 @@ class PendingDriversViewModel(
     val approvalState: StateFlow<DriverApprovalState> = _approvalState.asStateFlow()
 
     init {
-        if (regionId.isBlank() || officeId.isBlank()) {
-            _uiState.value = PendingDriversUiState.Error("관리자 정보(지역/사무실 ID)가 유효하지 않습니다.")
+        if (provinceId.isBlank() || cityId.isBlank() || officeId.isBlank()) {
+            _uiState.value = PendingDriversUiState.Error("관리자 정보(도/시/사무실 ID)가 유효하지 않습니다.")
         } else {
             fetchPendingDrivers()
         }
     }
 
     fun fetchPendingDrivers() {
-        android.util.Log.d("PendingDriversViewModel", "fetchPendingDrivers called - regionId: $regionId, officeId: $officeId")
+        android.util.Log.d("PendingDriversViewModel", "fetchPendingDrivers called - provinceId: $provinceId, cityId: $cityId, officeId: $officeId")
 
-        if (regionId.isBlank() || officeId.isBlank()) {
-            _uiState.value = PendingDriversUiState.Error("관리자 정보(지역/사무실 ID)가 유효하지 않습니다.")
+        if (provinceId.isBlank() || cityId.isBlank() || officeId.isBlank()) {
+            _uiState.value = PendingDriversUiState.Error("관리자 정보(도/시/사무실 ID)가 유효하지 않습니다.")
             return
         }
 
@@ -74,7 +75,8 @@ class PendingDriversViewModel(
                 android.util.Log.d("PendingDriversViewModel", "Starting Firestore query...")
 
                 val snapshot = firestore.collection("pending_drivers")
-                    .whereEqualTo("targetRegionId", regionId)
+                    .whereEqualTo("targetProvinceId", provinceId)
+                    .whereEqualTo("targetCityId", cityId)
                     .whereEqualTo("targetOfficeId", officeId)
                     .get()
                     .await()
@@ -119,7 +121,7 @@ class PendingDriversViewModel(
             _approvalState.value = DriverApprovalState.Error("승인 실패: 기사 고유 ID(authUid)가 없습니다.")
             return
         }
-        if (driverInfo.targetRegionId.isNullOrBlank() || driverInfo.targetOfficeId.isNullOrBlank()) {
+        if (driverInfo.targetProvinceId.isNullOrBlank() || driverInfo.targetOfficeId.isNullOrBlank()) {
             _approvalState.value = DriverApprovalState.Error("승인 실패: 기사 정보에 대상 지역/사무실 ID가 없습니다.")
             return
         }
@@ -128,7 +130,7 @@ class PendingDriversViewModel(
             try {
                 // 추천 QR URL 생성
                 val referralQrUrl = buildReferralUrl(
-                    driverInfo.targetRegionId,
+                    driverInfo.targetProvinceId,
                     driverInfo.targetOfficeId,
                     driverUid,
                     driverInfo.name ?: ""
@@ -148,7 +150,7 @@ class PendingDriversViewModel(
                     // 기사 가입 승인 상태: DriverApprovalStatus Enum의 name 사용 (예: "APPROVED")
                     "approvalStatus" to Constants.APPROVAL_STATUS_APPROVED,
 
-                    "regionId" to driverInfo.targetRegionId,
+                    "provinceId" to driverInfo.targetProvinceId,
                     "officeId" to driverInfo.targetOfficeId,
 
                     "associatedOfficeId" to driverInfo.targetOfficeId,
@@ -172,7 +174,7 @@ class PendingDriversViewModel(
                         "designated_drivers"
                     }
                 }
-                val finalDriverDocRef = firestore.collection("regions").document(driverInfo.targetRegionId)
+                val finalDriverDocRef = firestore.collection("provinces").document(driverInfo.targetProvinceId)
                     .collection("offices").document(driverInfo.targetOfficeId)
                     .collection(driverCollection).document(driverUid)
                 val pendingDriverDocRef = firestore.collection("pending_drivers").document(driverUid)
@@ -236,7 +238,7 @@ class PendingDriversViewModel(
                         else -> "designated_drivers"
                     }
 
-                    val driverDocRef = firestore.collection("regions").document(driverInfo.targetRegionId)
+                    val driverDocRef = firestore.collection("provinces").document(driverInfo.targetProvinceId)
                         .collection("offices").document(driverInfo.targetOfficeId)
                         .collection(driverCollection).document(driverUid)
 
@@ -274,9 +276,9 @@ class PendingDriversViewModel(
      * 승인된 기사 목록 조회 (대리기사 + 픽업기사)
      */
     fun fetchApprovedDrivers() {
-        android.util.Log.d("PendingDriversViewModel", "fetchApprovedDrivers called - regionId: $regionId, officeId: $officeId")
+        android.util.Log.d("PendingDriversViewModel", "fetchApprovedDrivers called - provinceId: $provinceId, officeId: $officeId")
 
-        if (regionId.isBlank() || officeId.isBlank()) {
+        if (provinceId.isBlank() || officeId.isBlank()) {
             _approvedDriversState.value = ApprovedDriversUiState.Error("관리자 정보(지역/사무실 ID)가 유효하지 않습니다.")
             return
         }
@@ -288,7 +290,7 @@ class PendingDriversViewModel(
 
                 // 대리기사 조회
                 val designatedSnapshot = firestore
-                    .collection("regions").document(regionId)
+                    .collection("provinces").document(provinceId)
                     .collection("offices").document(officeId)
                     .collection("designated_drivers")
                     .whereEqualTo("approvalStatus", Constants.APPROVAL_STATUS_APPROVED)
@@ -309,7 +311,7 @@ class PendingDriversViewModel(
 
                 // 픽업기사 조회
                 val pickupSnapshot = firestore
-                    .collection("regions").document(regionId)
+                    .collection("provinces").document(provinceId)
                     .collection("offices").document(officeId)
                     .collection("pickup_drivers")
                     .whereEqualTo("approvalStatus", Constants.APPROVAL_STATUS_APPROVED)
@@ -363,7 +365,7 @@ class PendingDriversViewModel(
 
                 // 기사 문서 삭제
                 val driverDocRef = firestore
-                    .collection("regions").document(regionId)
+                    .collection("provinces").document(provinceId)
                     .collection("offices").document(officeId)
                     .collection(driverCollection).document(driverUid)
 
@@ -398,14 +400,14 @@ class PendingDriversViewModel(
      * 기사 추천 QR URL 생성 (Play Store Install Referrer 방식)
      */
     private suspend fun buildReferralUrl(
-        regionId: String,
+        provinceId: String,
         officeId: String,
         driverId: String,
         driverName: String
     ): String {
         // 1. 사무실 정보 가져오기
         val officeDoc = firestore
-            .collection("regions").document(regionId)
+            .collection("provinces").document(provinceId)
             .collection("offices").document(officeId)
             .get()
             .await()
@@ -422,7 +424,7 @@ class PendingDriversViewModel(
         val encodedAccount = java.net.URLEncoder.encode(accountNumber, "UTF-8")
         val encodedHolder = java.net.URLEncoder.encode(accountHolder, "UTF-8")
 
-        val referrerParams = "r=$regionId&o=$officeId&d=$driverId&dn=$encodedName" +
+        val referrerParams = "r=$provinceId&o=$officeId&d=$driverId&dn=$encodedName" +
                 "&phone=$encodedPhone&bank=$encodedBank&account=$encodedAccount&holder=$encodedHolder"
 
         val playStoreUrl = "https://play.google.com/store/apps/details" +
@@ -434,11 +436,11 @@ class PendingDriversViewModel(
         return playStoreUrl
     }
 
-    class Factory(private val application: Application, private val regionId: String, private val officeId: String) : ViewModelProvider.Factory {
+    class Factory(private val application: Application, private val provinceId: String, private val cityId: String, private val officeId: String) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(PendingDriversViewModel::class.java)) {
                 @Suppress("UNCHECKED_CAST")
-                return PendingDriversViewModel(application, regionId, officeId) as T
+                return PendingDriversViewModel(application, provinceId, cityId, officeId) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

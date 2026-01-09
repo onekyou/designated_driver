@@ -22,13 +22,16 @@ class ReadOnlyAttributionService {
      * 사무실 어트리뷰션 통계 조회 (읽기 전용)
      */
     suspend fun getAttributionStats(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String
     ): AttributionStatsResult {
         return try {
             // 고객 데이터 조회
-            val customerSnapshot = db.collection("regions")
-                .document(regionId)
+            val customerSnapshot = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("customers")
@@ -40,7 +43,7 @@ class ReadOnlyAttributionService {
             }
 
             // 현재 임계값 조회
-            val threshold = getAttributionThreshold(regionId, officeId)
+            val threshold = getAttributionThreshold(provinceId, cityId, officeId)
 
             // 통계 계산
             val totalAttributions = customers.size
@@ -79,13 +82,16 @@ class ReadOnlyAttributionService {
      * 최근 어트리뷰션 매칭 결과 조회
      */
     suspend fun getRecentAttributions(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         limit: Int = 20
     ): RecentAttributionsResult {
         return try {
-            val snapshot = db.collection("regions")
-                .document(regionId)
+            val snapshot = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("customers")
@@ -105,7 +111,7 @@ class ReadOnlyAttributionService {
                         attributionScore = it.attributionScore ?: 0,
                         attributionSource = it.attributionSource ?: "unknown",
                         matchedAt = it.registeredAt,
-                        isHighScore = (it.attributionScore ?: 0) >= getAttributionThreshold(regionId, officeId),
+                        isHighScore = (it.attributionScore ?: 0) >= getAttributionThreshold(provinceId, cityId, officeId),
                         referralDriverId = it.referralDriverId,
                         referralDriverName = it.referralDriverName
                     )
@@ -124,13 +130,16 @@ class ReadOnlyAttributionService {
      * 소스별 어트리뷰션 분석
      */
     suspend fun getAttributionBySource(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         source: String? = null
     ): SourceAttributionResult {
         return try {
-            var query = db.collection("regions")
-                .document(regionId)
+            var query = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("customers")
@@ -146,7 +155,7 @@ class ReadOnlyAttributionService {
                 doc.toObject(CustomerInfo::class.java)
             }
 
-            val threshold = getAttributionThreshold(regionId, officeId)
+            val threshold = getAttributionThreshold(provinceId, cityId, officeId)
 
             // 소스별 분석
             val sourceAnalysis = customers.groupBy { it.attributionSource ?: "unknown" }
@@ -176,7 +185,8 @@ class ReadOnlyAttributionService {
      * 일별 어트리뷰션 트렌드 조회 (최근 30일)
      */
     suspend fun getDailyAttributionTrend(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String
     ): DailyTrendResult {
         return try {
@@ -184,8 +194,10 @@ class ReadOnlyAttributionService {
                 add(Calendar.DAY_OF_MONTH, -30)
             }.time
 
-            val snapshot = db.collection("regions")
-                .document(regionId)
+            val snapshot = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("customers")
@@ -199,7 +211,7 @@ class ReadOnlyAttributionService {
                 doc.toObject(CustomerInfo::class.java)
             }
 
-            val threshold = getAttributionThreshold(regionId, officeId)
+            val threshold = getAttributionThreshold(provinceId, cityId, officeId)
 
             // 일별 그룹핑
             val dailyData = customers.groupBy { customer ->
@@ -226,10 +238,12 @@ class ReadOnlyAttributionService {
     /**
      * 어트리뷰션 임계값 조회 (읽기 전용)
      */
-    private suspend fun getAttributionThreshold(regionId: String, officeId: String): Int {
+    private suspend fun getAttributionThreshold(provinceId: String, cityId: String, officeId: String): Int {
         return try {
-            val settingsDoc = db.collection("regions")
-                .document(regionId)
+            val settingsDoc = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("settings")
@@ -249,7 +263,8 @@ class ReadOnlyAttributionService {
      * QR 스캔 통계 조회
      */
     suspend fun getQRScanStats(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         periodDays: Int = 7
     ): QRScanStatsResult {
@@ -259,8 +274,10 @@ class ReadOnlyAttributionService {
             calendar.add(Calendar.DAY_OF_MONTH, -periodDays)
             val startDate = Timestamp(calendar.time)
 
-            val snapshot = db.collection("regions")
-                .document(regionId)
+            val snapshot = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("customers")
@@ -276,7 +293,7 @@ class ReadOnlyAttributionService {
 
             val stats = QRScanStats(
                 totalScans = qrScanCustomers.size,
-                successfulMatches = qrScanCustomers.count { (it.attributionScore ?: 0) >= getAttributionThreshold(regionId, officeId) },
+                successfulMatches = qrScanCustomers.count { (it.attributionScore ?: 0) >= getAttributionThreshold(provinceId, cityId, officeId) },
                 periodDays = periodDays,
                 dailyAverage = qrScanCustomers.size.toDouble() / periodDays
             )
@@ -293,12 +310,15 @@ class ReadOnlyAttributionService {
      * 기사별 추천 통계 조회
      */
     suspend fun getDriverReferralStats(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String
     ): DriverReferralStatsResult {
         return try {
-            val snapshot = db.collection("regions")
-                .document(regionId)
+            val snapshot = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("customers")

@@ -40,7 +40,8 @@ import com.designated.callmanager.data.CustomerInfo
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomerManagementScreen(
-    regionId: String,
+    provinceId: String,
+    cityId: String,
     officeId: String,
     viewModel: CustomerManagementViewModel = viewModel(),
     onNavigateBack: () -> Unit,
@@ -63,9 +64,9 @@ fun CustomerManagementScreen(
     var selectedCustomer by remember { mutableStateOf<CustomerInfo?>(null) }
     var showCustomerDetail by remember { mutableStateOf(false) }
 
-    LaunchedEffect(regionId, officeId) {
-        if (regionId.isNotBlank() && officeId.isNotBlank()) {
-            viewModel.fetchCustomers(regionId, officeId)
+    LaunchedEffect(provinceId, cityId, officeId) {
+        if (provinceId.isNotBlank() && cityId.isNotBlank() && officeId.isNotBlank()) {
+            viewModel.fetchCustomers(provinceId, cityId, officeId)
         }
     }
 
@@ -74,7 +75,7 @@ fun CustomerManagementScreen(
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
             .collect { lastVisibleIndex ->
                 if (lastVisibleIndex != null && lastVisibleIndex >= customers.size - 3) {
-                    viewModel.loadMoreCustomers(regionId, officeId)
+                    viewModel.loadMoreCustomers(provinceId, cityId, officeId)
                 }
             }
     }
@@ -102,7 +103,7 @@ fun CustomerManagementScreen(
                         Icon(Icons.Default.DeleteForever, contentDescription = "휴면 회원 삭제")
                     }
                     // 새로고침 버튼
-                    IconButton(onClick = { viewModel.fetchCustomers(regionId, officeId) }) {
+                    IconButton(onClick = { viewModel.fetchCustomers(provinceId, cityId, officeId) }) {
                         Icon(Icons.Default.Refresh, contentDescription = "새로고침")
                     }
                 }
@@ -141,13 +142,13 @@ fun CustomerManagementScreen(
                 onSearch = { query ->
                     keyboardController?.hide()
                     if (query.isNotBlank()) {
-                        viewModel.searchCustomer(regionId, officeId, query)
+                        viewModel.searchCustomer(provinceId, cityId, officeId, query)
                     } else {
-                        viewModel.clearSearch(regionId, officeId)
+                        viewModel.clearSearch(provinceId, cityId, officeId)
                     }
                 },
                 onClearSearch = {
-                    viewModel.clearSearch(regionId, officeId)
+                    viewModel.clearSearch(provinceId, cityId, officeId)
                 }
             )
 
@@ -157,7 +158,7 @@ fun CustomerManagementScreen(
             GradeFilterChips(
                 selectedGrade = selectedGradeFilter,
                 onGradeSelected = { grade ->
-                    viewModel.filterByGrade(regionId, officeId, grade)
+                    viewModel.filterByGrade(provinceId, cityId, officeId, grade)
                 }
             )
 
@@ -168,7 +169,7 @@ fun CustomerManagementScreen(
                 selectedStatus = selectedActivityFilter,
                 customers = customers,
                 onStatusSelected = { status ->
-                    viewModel.filterByActivityStatus(regionId, officeId, status)
+                    viewModel.filterByActivityStatus(provinceId, cityId, officeId, status)
                 }
             )
 
@@ -241,7 +242,7 @@ fun CustomerManagementScreen(
                 dormantCount = customers.count { it.getActivityStatus() == "dormant" },
                 onConfirm = {
                     showDeleteDialog = false
-                    viewModel.deleteDormantCustomers(regionId, officeId) { deletedCount ->
+                    viewModel.deleteDormantCustomers(provinceId, cityId, officeId) { deletedCount ->
                         deleteResultMessage = if (deletedCount > 0) {
                             "휴면 회원 ${deletedCount}명이 삭제되었습니다"
                         } else {

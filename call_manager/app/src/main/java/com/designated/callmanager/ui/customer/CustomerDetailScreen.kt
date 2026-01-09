@@ -27,7 +27,8 @@ import java.util.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomerDetailScreen(
-    regionId: String,
+    provinceId: String,
+    cityId: String,
     officeId: String,
     customerId: String,
     viewModel: CustomerDetailViewModel = viewModel(),
@@ -38,9 +39,9 @@ fun CustomerDetailScreen(
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
 
-    LaunchedEffect(regionId, officeId, customerId) {
-        if (regionId.isNotBlank() && officeId.isNotBlank() && customerId.isNotBlank()) {
-            viewModel.loadCustomerDetail(regionId, officeId, customerId)
+    LaunchedEffect(provinceId, cityId, officeId, customerId) {
+        if (provinceId.isNotBlank() && cityId.isNotBlank() && officeId.isNotBlank() && customerId.isNotBlank()) {
+            viewModel.loadCustomerDetail(provinceId, cityId, officeId, customerId)
         }
     }
 
@@ -63,7 +64,7 @@ fun CustomerDetailScreen(
                 actions = {
                     // 새로고침 버튼
                     IconButton(onClick = {
-                        viewModel.loadCustomerDetail(regionId, officeId, customerId)
+                        viewModel.loadCustomerDetail(provinceId, cityId, officeId, customerId)
                     }) {
                         Icon(Icons.Default.Refresh, contentDescription = "새로고침")
                     }

@@ -33,7 +33,8 @@ import com.designated.callmanager.data.OfficeSettings
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AttributionManagementScreen(
-    regionId: String,
+    provinceId: String,
+    cityId: String,
     officeId: String,
     viewModel: AttributionManagementViewModel = viewModel(),
     onNavigateBack: () -> Unit
@@ -44,9 +45,9 @@ fun AttributionManagementScreen(
     val officeSettings by viewModel.officeSettings.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
 
-    LaunchedEffect(regionId, officeId) {
-        if (regionId.isNotBlank() && officeId.isNotBlank()) {
-            viewModel.loadAttributionData(regionId, officeId)
+    LaunchedEffect(provinceId, cityId, officeId) {
+        if (provinceId.isNotBlank() && cityId.isNotBlank() && officeId.isNotBlank()) {
+            viewModel.loadAttributionData(provinceId, cityId, officeId)
         }
     }
 
@@ -60,7 +61,7 @@ fun AttributionManagementScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.refreshData(regionId, officeId) }) {
+                    IconButton(onClick = { viewModel.refreshData(provinceId, cityId, officeId) }) {
                         Icon(Icons.Default.Refresh, contentDescription = "새로고침")
                     }
                 }
@@ -120,7 +121,8 @@ fun AttributionManagementScreen(
                             onDismiss = { showEditDialog = false },
                             onSave = {
                                 viewModel.updateOfficeInfo(
-                                    regionId = regionId,
+                                    provinceId = provinceId,
+                                    cityId = cityId,
                                     officeId = officeId,
                                     phone = officePhone,
                                     bank = bankName,

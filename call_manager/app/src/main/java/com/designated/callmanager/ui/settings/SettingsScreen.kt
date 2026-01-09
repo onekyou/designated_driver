@@ -44,16 +44,17 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(
     dashboardViewModel: DashboardViewModel,
     onNavigateBack: () -> Unit,
-    onNavigateToPendingDrivers: (regionId: String, officeId: String) -> Unit,
+    onNavigateToPendingDrivers: (provinceId: String, cityId: String, officeId: String) -> Unit,
     onNavigateToSettlement: () -> Unit,
     onNavigateToExcludeNumber: () -> Unit = {},
-    onNavigateToCustomerManagement: (regionId: String, officeId: String) -> Unit = { _, _ -> },
-    onNavigateToAttributionManagement: (regionId: String, officeId: String) -> Unit = { _, _ -> },
+    onNavigateToCustomerManagement: (provinceId: String, cityId: String, officeId: String) -> Unit = { _, _, _ -> },
+    onNavigateToAttributionManagement: (provinceId: String, cityId: String, officeId: String) -> Unit = { _, _, _ -> },
 ) {
     val settlementViewModel: SettlementViewModel = viewModel()
     val context = LocalContext.current
     val officeStatus by dashboardViewModel.officeStatus.collectAsStateWithLifecycle()
-    val regionId by dashboardViewModel.regionId.collectAsStateWithLifecycle()
+    val provinceId by dashboardViewModel.provinceId.collectAsStateWithLifecycle()
+    val cityId by dashboardViewModel.cityId.collectAsStateWithLifecycle()
     val officeId by dashboardViewModel.officeId.collectAsStateWithLifecycle()
 
     // 백업 관련 상태
@@ -66,8 +67,8 @@ fun SettingsScreen(
     var showRestoreDialog by remember { mutableStateOf(false) }
 
     // 백업 체크
-    LaunchedEffect(regionId, officeId) {
-        if (regionId != null && officeId != null) {
+    LaunchedEffect(provinceId, cityId, officeId) {
+        if (provinceId != null && cityId != null && officeId != null) {
             settlementViewModel.checkCloudBackups()
         }
     }
@@ -240,8 +241,8 @@ fun SettingsScreen(
                     description = "대기 중인 기사 승인",
                     icon = Icons.Filled.PersonAdd,
                     onClick = {
-                        if (regionId != null && officeId != null) {
-                            onNavigateToPendingDrivers(regionId!!, officeId!!)
+                        if (provinceId != null && cityId != null && officeId != null) {
+                            onNavigateToPendingDrivers(provinceId!!, cityId!!, officeId!!)
                         }
                     }
                 )
@@ -251,8 +252,8 @@ fun SettingsScreen(
                     description = "고객 정보, 포인트 관리",
                     icon = Icons.Filled.People,
                     onClick = {
-                        if (regionId != null && officeId != null) {
-                            onNavigateToCustomerManagement(regionId!!, officeId!!)
+                        if (provinceId != null && cityId != null && officeId != null) {
+                            onNavigateToCustomerManagement(provinceId!!, cityId!!, officeId!!)
                         }
                     }
                 )
@@ -262,8 +263,8 @@ fun SettingsScreen(
                     description = "QR 코드, KPI 모니터링",
                     icon = Icons.Filled.Analytics,
                     onClick = {
-                        if (regionId != null && officeId != null) {
-                            onNavigateToAttributionManagement(regionId!!, officeId!!)
+                        if (provinceId != null && cityId != null && officeId != null) {
+                            onNavigateToAttributionManagement(provinceId!!, cityId!!, officeId!!)
                         }
                     }
                 )
@@ -451,7 +452,7 @@ fun SettingsScreen(
 
                 SettingsInfoItem(
                     label = "지역",
-                    value = regionId ?: "미설정"
+                    value = provinceId ?: "미설정"
                 )
 
                 SettingsInfoItem(

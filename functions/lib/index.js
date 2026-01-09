@@ -53,10 +53,10 @@ admin.initializeApp();
 const DRIVER_COLLECTION_NAME = "designated_drivers";
 exports.oncallassigned = (0, firestore_1.onDocumentWritten)({
     region: "asia-northeast3",
-    document: "regions/{regionId}/offices/{officeId}/calls/{callId}"
+    document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/calls/{callId}"
 }, async (event) => {
-    var _a, _b;
-    const { regionId, officeId, callId } = event.params;
+    var _a, _b, _c;
+    const { provinceId, cityId, officeId, callId } = event.params;
     // 1. 이벤트 데이터와 변경 후 데이터 존재 여부 확인 (가장 안전한 방법)
     if (!event.data || !event.data.after) {
         logger.info(`[${callId}] 이벤트 데이터가 없어 함수를 종료합니다.`);
@@ -91,7 +91,8 @@ exports.oncallassigned = (0, firestore_1.onDocumentWritten)({
     try {
         // 3. 기사 문서에서 FCM 토큰 및 정보 가져오기
         const driverRef = admin.firestore()
-            .collection("regions").doc(regionId)
+            .collection("provinces").doc(provinceId)
+            .collection("cities").doc(cityId)
             .collection("offices").doc(officeId)
             .collection(DRIVER_COLLECTION_NAME).doc(driverId);
         const driverDoc = await driverRef.get();
@@ -133,7 +134,8 @@ exports.oncallassigned = (0, firestore_1.onDocumentWritten)({
             try {
                 // 고객 FCM 토큰 조회
                 const customerDoc = await admin.firestore()
-                    .collection("regions").doc(regionId)
+                    .collection("provinces").doc(provinceId)
+                    .collection("cities").doc(cityId)
                     .collection("offices").doc(officeId)
                     .collection("customerInfo")
                     .doc(customerPhone)
@@ -170,7 +172,48 @@ exports.oncallassigned = (0, firestore_1.onDocumentWritten)({
         else {
             logger.info(`[${callId}] 앱 고객이 아니거나 전화번호 없음 - 고객 알림 스킵. isAppCustomer: ${isAppCustomer}, phoneNumber: ${customerPhone}`);
         }
-        // 6. 콜매니저에게도 배차 상태 변경 알림 전송            try {                const managerTokensSnapshot = await admin.firestore()                    .collection("regions").doc(regionId)                    .collection("offices").doc(officeId)                    .collection("managerTokens")                    .get();                if (!managerTokensSnapshot.empty) {                    const managerTokens: string[] = [];                    managerTokensSnapshot.forEach((doc) => {                        const token = doc.data().fcmToken;                        if (token) managerTokens.push(token);                    });                    if (managerTokens.length > 0) {                        const managerPayload = {                            data: {                                type: "CALL_STATUS_UPDATE",                                callId: callId,                                status: "ASSIGNED",                                assignedDriverId: driverId,                                assignedDriverName: driverName,                                customerName: afterData.customerName || "고객",                                customerPhone: afterData.phoneNumber || "",                                regionId: regionId,                                officeId: officeId                            },                            tokens: managerTokens                        };                        const response = await admin.messaging().sendEachForMulticast(managerPayload);                        logger.info(`[${callId}] 콜매니저 FCM 전송 완료 - 성공: ${response.successCount}, 실패: ${response.failureCount}`);                    }                }            } catch (managerError) {                logger.error(`[${callId}] 콜매니저 알림 전송 오류:`, managerError);            }
+        // 6. 콜매니저에게도 배차 상태 변경 알림 전송
+        try {
+            const managerTokensSnapshot = await admin.firestore()
+                .collection("provinces").doc(provinceId)
+                .collection("cities").doc(cityId)
+                .collection("offices").doc(officeId)
+                .collection("managerTokens")
+                .get();
+            if (!managerTokensSnapshot.empty) {
+                const managerTokens = [];
+                managerTokensSnapshot.forEach((doc) => {
+                    const token = doc.data().fcmToken;
+                    if (token)
+                        managerTokens.push(token);
+                });
+                if (managerTokens.length > 0) {
+                    const managerPayload = {
+                        data: {
+                            type: "CALL_STATUS_UPDATE",
+                            callId: callId,
+                            status: "ASSIGNED",
+                            assignedDriverId: driverId,
+                            assignedDriverName: driverName,
+                            customerName: afterData.customerName || "고객",
+                            customerPhone: afterData.phoneNumber || "",
+                            departure: afterData.departure || "",
+                            destination: afterData.destination || "",
+                            fare: ((_c = afterData.fare) !== null && _c !== void 0 ? _c : 0).toString(),
+                            provinceId: provinceId,
+                            cityId: cityId,
+                            officeId: officeId
+                        },
+                        tokens: managerTokens
+                    };
+                    const response = await admin.messaging().sendEachForMulticast(managerPayload);
+                    logger.info(`[${callId}] 콜매니저 FCM 전송 완료 - 성공: ${response.successCount}, 실패: ${response.failureCount}`);
+                }
+            }
+        }
+        catch (managerError) {
+            logger.error(`[${callId}] 콜매니저 알림 전송 오류:`, managerError);
+        }
     }
     catch (error) {
         logger.error(`[${callId}] 알림 전송 중 오류 발생:`, error);
@@ -187,9 +230,9 @@ exports.oncallassigned = (0, firestore_1.onDocumentWritten)({
  */
 exports.sendNewCallNotification = (0, firestore_1.onDocumentCreated)({
     region: "asia-northeast3",
-    document: "regions/{regionId}/offices/{officeId}/calls/{callId}"
+    document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/calls/{callId}"
 }, async (event) => {
-    const { regionId, officeId, callId } = event.params;
+    const { provinceId, cityId, officeId, callId } = event.params;
     if (!event.data) {
         logger.warn(`[new-call:${callId}] 이벤트 데이터가 없습니다.`);
         return;
@@ -216,7 +259,8 @@ exports.sendNewCallNotification = (0, firestore_1.onDocumentCreated)({
         // 해당 사무실의 관리자 FCM 토큰 조회
         const adminsSnapshot = await admin.firestore()
             .collection("admins")
-            .where("associatedRegionId", "==", regionId)
+            .where("associatedProvinceId", "==", provinceId)
+            .where("associatedCityId", "==", cityId)
             .where("associatedOfficeId", "==", officeId)
             .get();
         const tokens = [];
@@ -299,18 +343,19 @@ exports.onSharedCallCreated = (0, firestore_1.onDocumentCreated)({
         return;
     }
     logger.info(`[shared-created:${callId}] 새로운 공유콜 생성됨. 대상 지역 관리자들에게 알림 전송 시작.`);
-    logger.info(`[shared-created:${callId}] 공유콜 데이터: sourceRegionId=${sharedCallData.sourceRegionId}, sourceOfficeId=${sharedCallData.sourceOfficeId}, targetRegionId=${sharedCallData.targetRegionId}`);
+    logger.info(`[shared-created:${callId}] 공유콜 데이터: sourceProvinceId=${sharedCallData.sourceProvinceId}, sourceCityId=${sharedCallData.sourceCityId}, sourceOfficeId=${sharedCallData.sourceOfficeId}, targetProvinceId=${sharedCallData.targetProvinceId}, targetCityId=${sharedCallData.targetCityId}`);
     try {
         // 대상 지역의 모든 관리자 FCM 토큰 조회 (원본 사무실 제외)
         const adminQuery = await admin
             .firestore()
             .collection("admins")
-            .where("associatedRegionId", "==", sharedCallData.targetRegionId)
+            .where("associatedProvinceId", "==", sharedCallData.targetProvinceId)
+            .where("associatedCityId", "==", sharedCallData.targetCityId)
             .get();
         const tokens = [];
         adminQuery.docs.forEach((doc) => {
             const adminData = doc.data();
-            logger.info(`[shared-created:${callId}] 관리자 확인: regionId=${adminData.associatedRegionId}, officeId=${adminData.associatedOfficeId}, sourceOfficeId=${sharedCallData.sourceOfficeId}`);
+            logger.info(`[shared-created:${callId}] 관리자 확인: provinceId=${adminData.associatedProvinceId}, cityId=${adminData.associatedCityId}, officeId=${adminData.associatedOfficeId}, sourceOfficeId=${sharedCallData.sourceOfficeId}`);
             // 원본 사무실은 제외 (sourceOfficeId와 동일한 사무실 제외)
             if (adminData.associatedOfficeId === sharedCallData.sourceOfficeId) {
                 logger.info(`[shared-created:${callId}] ⛔ 원본 사무실 제외: ${adminData.associatedOfficeId} (sourceOfficeId: ${sharedCallData.sourceOfficeId})`);
@@ -421,13 +466,15 @@ exports.notifyCustomerOnOfficeClosed = (0, firestore_1.onDocumentCreated)({
         logger.warn(`[customer-closed:${callId}] 전화번호가 없어 고객 알림을 보낼 수 없습니다.`);
         return;
     }
-    const sourceRegionId = sharedCallData.sourceRegionId;
+    const sourceProvinceId = sharedCallData.sourceProvinceId;
+    const sourceCityId = sharedCallData.sourceCityId;
     const sourceOfficeId = sharedCallData.sourceOfficeId;
     logger.info(`[customer-closed:${callId}] 사무실 마감으로 인한 공유콜 생성. 고객에게 알림 전송 시작: ${phoneNumber}`);
     try {
         // 원본 사무실의 customerInfo에서 고객 FCM 토큰 조회
         const customerDoc = await admin.firestore()
-            .collection("regions").doc(sourceRegionId)
+            .collection("provinces").doc(sourceProvinceId)
+            .collection("cities").doc(sourceCityId)
             .collection("offices").doc(sourceOfficeId)
             .collection("customerInfo")
             .doc(phoneNumber)
@@ -466,7 +513,8 @@ exports.notifyCustomerOnOfficeClosed = (0, firestore_1.onDocumentCreated)({
             logger.warn(`[customer-closed:${callId}] 무효한 FCM 토큰 발견, 자동 정리: ${phoneNumber}`);
             try {
                 await admin.firestore()
-                    .collection("regions").doc(sourceRegionId)
+                    .collection("provinces").doc(sourceProvinceId)
+                    .collection("cities").doc(sourceCityId)
                     .collection("offices").doc(sourceOfficeId)
                     .collection("customerInfo")
                     .doc(phoneNumber)
@@ -506,8 +554,10 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
                 // 원본 사무실의 콜을 WAITING 상태로 복구
                 const originalCallRef = admin
                     .firestore()
-                    .collection("regions")
-                    .doc(afterData.sourceRegionId)
+                    .collection("provinces")
+                    .doc(afterData.sourceProvinceId)
+                    .collection("cities")
+                    .doc(afterData.sourceCityId)
                     .collection("offices")
                     .doc(afterData.sourceOfficeId)
                     .collection("calls")
@@ -531,7 +581,8 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
             const adminQuery = await admin
                 .firestore()
                 .collection("admins")
-                .where("associatedRegionId", "==", afterData.sourceRegionId)
+                .where("associatedProvinceId", "==", afterData.sourceProvinceId)
+                .where("associatedCityId", "==", afterData.sourceCityId)
                 .where("associatedOfficeId", "==", afterData.sourceOfficeId)
                 .get();
             const tokens = [];
@@ -583,14 +634,17 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
                 var _a, _b, _c;
                 // 1. 기사 정보 읽기 (배정된 기사가 있을 경우)
                 driverSnap = afterData.claimedDriverId ? await tx.get(admin.firestore()
-                    .collection("regions").doc(afterData.targetRegionId)
+                    .collection("provinces").doc(afterData.targetProvinceId)
+                    .collection("cities").doc(afterData.targetCityId)
                     .collection("offices").doc(afterData.claimedOfficeId)
                     .collection("designated_drivers").doc(afterData.claimedDriverId)) : null;
                 // 2. 원본 콜 문서 존재 여부 확인
                 const sourceCallRef = admin
                     .firestore()
-                    .collection("regions")
-                    .doc(afterData.sourceRegionId)
+                    .collection("provinces")
+                    .doc(afterData.sourceProvinceId)
+                    .collection("cities")
+                    .doc(afterData.sourceCityId)
                     .collection("offices")
                     .doc(afterData.sourceOfficeId)
                     .collection("calls")
@@ -606,8 +660,10 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
                 // 1. 대상 사무실에 콜 복사
                 const destCallsRef = admin
                     .firestore()
-                    .collection("regions")
-                    .doc(afterData.targetRegionId)
+                    .collection("provinces")
+                    .doc(afterData.targetProvinceId)
+                    .collection("cities")
+                    .doc(afterData.targetCityId)
                     .collection("offices")
                     .doc(afterData.claimedOfficeId)
                     .collection("calls")
@@ -671,12 +727,14 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
                 const adminColl = admin.firestore().collection("admins");
                 // 원본 사무실 관리자 토큰
                 const srcSnap = await adminColl
-                    .where("associatedRegionId", "==", afterData.sourceRegionId)
+                    .where("associatedProvinceId", "==", afterData.sourceProvinceId)
+                    .where("associatedCityId", "==", afterData.sourceCityId)
                     .where("associatedOfficeId", "==", afterData.sourceOfficeId)
                     .get();
                 // 수락 사무실 관리자 토큰
                 const tgtSnap = await adminColl
-                    .where("associatedRegionId", "==", afterData.targetRegionId)
+                    .where("associatedProvinceId", "==", afterData.targetProvinceId)
+                    .where("associatedCityId", "==", afterData.targetCityId)
                     .where("associatedOfficeId", "==", afterData.claimedOfficeId)
                     .get();
                 const tokens = [];
@@ -729,8 +787,10 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
             if (beforeData.claimedOfficeId) {
                 const copiedCallRef = admin
                     .firestore()
-                    .collection("regions")
-                    .doc(afterData.targetRegionId)
+                    .collection("provinces")
+                    .doc(afterData.targetProvinceId)
+                    .collection("cities")
+                    .doc(afterData.targetCityId)
                     .collection("offices")
                     .doc(beforeData.claimedOfficeId)
                     .collection("calls")
@@ -756,7 +816,7 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
 // 공유콜이 기사에 의해 취소될 때 처리하는 함수
 exports.onSharedCallCancelledByDriver = (0, firestore_1.onDocumentUpdated)({
     region: "asia-northeast3",
-    document: "regions/{regionId}/offices/{officeId}/calls/{callId}"
+    document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/calls/{callId}"
 }, async (event) => {
     const { callId } = event.params;
     if (!event.data) {
@@ -787,7 +847,7 @@ exports.onSharedCallCancelledByDriver = (0, firestore_1.onDocumentUpdated)({
             }
             const sharedCallData = sharedCallSnap.data();
             const originalCallId = sharedCallData.originalCallId;
-            logger.info(`[call-cancelled:${callId}] shared_calls 정보: sourceRegionId=${sharedCallData.sourceRegionId}, sourceOfficeId=${sharedCallData.sourceOfficeId}, originalCallId=${originalCallId}`);
+            logger.info(`[call-cancelled:${callId}] shared_calls 정보: sourceProvinceId=${sharedCallData.sourceProvinceId}, sourceCityId=${sharedCallData.sourceCityId}, sourceOfficeId=${sharedCallData.sourceOfficeId}, originalCallId=${originalCallId}`);
             if (!originalCallId) {
                 logger.error(`[call-cancelled:${callId}] originalCallId가 없습니다. shared_calls 데이터를 확인하세요.`);
                 return;
@@ -795,7 +855,8 @@ exports.onSharedCallCancelledByDriver = (0, firestore_1.onDocumentUpdated)({
             await admin.firestore().runTransaction(async (tx) => {
                 // 원본 사무실의 콜 문서 레퍼런스 (originalCallId 사용!)
                 const originalCallRef = admin.firestore()
-                    .collection("regions").doc(sharedCallData.sourceRegionId)
+                    .collection("provinces").doc(sharedCallData.sourceProvinceId)
+                    .collection("cities").doc(sharedCallData.sourceCityId)
                     .collection("offices").doc(sharedCallData.sourceOfficeId)
                     .collection("calls").doc(originalCallId);
                 // 원본 콜 문서 존재 여부 확인
@@ -831,7 +892,8 @@ exports.onSharedCallCancelledByDriver = (0, firestore_1.onDocumentUpdated)({
             const adminQuery = await admin
                 .firestore()
                 .collection("admins")
-                .where("associatedRegionId", "==", sharedCallData.sourceRegionId)
+                .where("associatedProvinceId", "==", sharedCallData.sourceProvinceId)
+                .where("associatedCityId", "==", sharedCallData.sourceCityId)
                 .where("associatedOfficeId", "==", sharedCallData.sourceOfficeId)
                 .get();
             const tokens = [];
@@ -881,10 +943,10 @@ exports.onSharedCallCancelledByDriver = (0, firestore_1.onDocumentUpdated)({
 // =============================
 exports.notifyCustomerOnComplete = (0, firestore_1.onDocumentUpdated)({
     region: "asia-northeast3",
-    document: "regions/{regionId}/offices/{officeId}/calls/{callId}"
+    document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/calls/{callId}"
 }, async (event) => {
     var _a;
-    const { regionId, officeId, callId } = event.params;
+    const { provinceId, cityId, officeId, callId } = event.params;
     if (!event.data) {
         logger.warn(`[notifyCustomerOnComplete:${callId}] 이벤트 데이터가 없습니다.`);
         return;
@@ -907,7 +969,8 @@ exports.notifyCustomerOnComplete = (0, firestore_1.onDocumentUpdated)({
         try {
             // 고객 FCM 토큰 조회
             const customerDoc = await admin.firestore()
-                .collection("regions").doc(regionId)
+                .collection("provinces").doc(provinceId)
+                .collection("cities").doc(cityId)
                 .collection("offices").doc(officeId)
                 .collection("customerInfo")
                 .doc(phoneNumber)
@@ -943,10 +1006,10 @@ exports.notifyCustomerOnComplete = (0, firestore_1.onDocumentUpdated)({
 // 콜 상태 변경 시 알림 (운행시작, 정산완료 등)
 exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
     region: "asia-northeast3",
-    document: "regions/{regionId}/offices/{officeId}/calls/{callId}",
+    document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/calls/{callId}",
 }, async (event) => {
-    var _a, _b, _c, _d, _e, _f;
-    const { regionId, officeId, callId } = event.params;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    const { provinceId, cityId, officeId, callId } = event.params;
     if (!event.data) {
         logger.warn(`[onCallStatusChanged:${callId}] No event data.`);
         return;
@@ -972,7 +1035,8 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
     // ✅ 콜매니저에 상태 변경 알림 전송
     try {
         const managerTokensSnapshot = await admin.firestore()
-            .collection("regions").doc(regionId)
+            .collection("provinces").doc(provinceId)
+            .collection("cities").doc(cityId)
             .collection("offices").doc(officeId)
             .collection("managerTokens")
             .get();
@@ -994,7 +1058,9 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
                         assignedDriverName: afterData.assignedDriverName || "",
                         departure: afterData.departure_set || afterData.departure || "",
                         destination: afterData.destination_set || afterData.destination || "",
-                        regionId: regionId,
+                        fare: ((_d = (_c = afterData.fare_set) !== null && _c !== void 0 ? _c : afterData.fare) !== null && _d !== void 0 ? _d : 0).toString(),
+                        provinceId: provinceId,
+                        cityId: cityId,
                         officeId: officeId
                     },
                     android: {
@@ -1016,7 +1082,8 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
         // 콜매니저 FCM 토큰 조회 (managerTokens 사용)
         const managerTokensSnapshot = await admin
             .firestore()
-            .collection("regions").doc(regionId)
+            .collection("provinces").doc(provinceId)
+            .collection("cities").doc(cityId)
             .collection("offices").doc(officeId)
             .collection("managerTokens")
             .get();
@@ -1057,7 +1124,7 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
                     driverName: driverDisplayName,
                     departure: afterData.departure_set || afterData.departure || "",
                     destination: afterData.destination_set || afterData.destination || "",
-                    fare: ((_d = (_c = afterData.fare_set) !== null && _c !== void 0 ? _c : afterData.fare) !== null && _d !== void 0 ? _d : 0).toString()
+                    fare: ((_f = (_e = afterData.fare_set) !== null && _e !== void 0 ? _e : afterData.fare) !== null && _f !== void 0 ? _f : 0).toString()
                 },
                 android: {
                     priority: "high",
@@ -1103,7 +1170,7 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
                     driverName: driverName,
                     departure: afterData.departure_set || afterData.departure || "",
                     destination: afterData.destination_set || afterData.destination || "",
-                    fare: ((_f = (_e = afterData.fare_set) !== null && _e !== void 0 ? _e : afterData.fare) !== null && _f !== void 0 ? _f : 0).toString()
+                    fare: ((_h = (_g = afterData.fare_set) !== null && _g !== void 0 ? _g : afterData.fare) !== null && _h !== void 0 ? _h : 0).toString()
                 },
                 android: {
                     priority: "high",
@@ -1140,13 +1207,14 @@ exports.onDriverSignupRequest = (0, firestore_1.onDocumentCreated)({
         logger.warn(`[onDriverSignupRequest:${driverId}] No driver data found.`);
         return;
     }
-    const { targetRegionId, targetOfficeId, name, phoneNumber } = driverData;
+    const { targetProvinceId, targetCityId, targetOfficeId, name, phoneNumber } = driverData;
     logger.info(`[onDriverSignupRequest:${driverId}] New driver signup: ${name} for office ${targetOfficeId}`);
     try {
         // 해당 사무실의 관리자들 FCM 토큰 가져오기
         const adminsSnapshot = await admin.firestore()
             .collection("admins")
-            .where("associatedRegionId", "==", targetRegionId)
+            .where("associatedProvinceId", "==", targetProvinceId)
+            .where("associatedCityId", "==", targetCityId)
             .where("associatedOfficeId", "==", targetOfficeId)
             .get();
         const tokens = [];
@@ -1205,7 +1273,7 @@ exports.onDriverSignupRequest = (0, firestore_1.onDocumentCreated)({
 // =============================
 exports.onSharedCallStatusSync = (0, firestore_1.onDocumentUpdated)({
     region: "asia-northeast3",
-    document: "regions/{regionId}/offices/{officeId}/calls/{callId}"
+    document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/calls/{callId}"
 }, async (event) => {
     const { callId } = event.params;
     if (!event.data) {
@@ -1245,7 +1313,8 @@ exports.onSharedCallStatusSync = (0, firestore_1.onDocumentUpdated)({
         logger.info(`[shared-sync:${callId}] sharedCallData: ${JSON.stringify(sharedCallData)}`);
         if (originalCallId) {
             const originalCallRef = admin.firestore()
-                .collection("regions").doc(sharedCallData.sourceRegionId)
+                .collection("provinces").doc(sharedCallData.sourceProvinceId)
+                .collection("cities").doc(sharedCallData.sourceCityId)
                 .collection("offices").doc(sharedCallData.sourceOfficeId)
                 .collection("calls").doc(originalCallId);
             const originalCallSnap = await originalCallRef.get();
@@ -1265,7 +1334,8 @@ exports.onSharedCallStatusSync = (0, firestore_1.onDocumentUpdated)({
             logger.warn(`[shared-sync:${callId}] originalCallId가 없습니다. 대신 callId로 시도합니다.`);
             // originalCallId가 없으면 shared_calls의 ID와 원본 콜 ID가 같을 수 있음
             const fallbackCallRef = admin.firestore()
-                .collection("regions").doc(sharedCallData.sourceRegionId)
+                .collection("provinces").doc(sharedCallData.sourceProvinceId)
+                .collection("cities").doc(sharedCallData.sourceCityId)
                 .collection("offices").doc(sharedCallData.sourceOfficeId)
                 .collection("calls").doc(afterData.sourceSharedCallId);
             const fallbackSnap = await fallbackCallRef.get();
@@ -1289,9 +1359,9 @@ exports.onSharedCallStatusSync = (0, firestore_1.onDocumentUpdated)({
 // =============================
 exports.onSharedCallCompleted = (0, firestore_1.onDocumentUpdated)({
     region: "asia-northeast3",
-    document: "regions/{regionId}/offices/{officeId}/calls/{callId}"
+    document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/calls/{callId}"
 }, async (event) => {
-    const { regionId, officeId, callId } = event.params;
+    const { provinceId, cityId, officeId, callId } = event.params;
     if (!event.data) {
         logger.warn(`[call-completed:${callId}] 이벤트 데이터가 없습니다.`);
         return;
@@ -1327,7 +1397,7 @@ exports.onSharedCallCompleted = (0, firestore_1.onDocumentUpdated)({
                 destCallId: callId
             });
             // 2. 포인트 처리 (별도 함수 호출)
-            await (0, points_1.processSharedCallPoints)(sharedCallData, regionId, officeId, fare, sourceSharedCallId);
+            await (0, points_1.processSharedCallPoints)(sharedCallData, provinceId, cityId, officeId, fare, sourceSharedCallId);
             logger.info(`[call-completed:${callId}] 공유콜 완료 처리 및 포인트 분배 완료. SharedCallId: ${sourceSharedCallId}`);
         }
         catch (error) {
@@ -1369,16 +1439,19 @@ exports.migratePickupDrivers = (0, https_1.onCall)({
             try {
                 const driverData = doc.data();
                 const driverId = doc.id;
-                // 경로에서 regionId와 officeId 추출
+                // 경로에서 provinceId, cityId, officeId 추출
                 const pathSegments = doc.ref.path.split('/');
-                const regionId = pathSegments[1]; // regions/{regionId}
-                const officeId = pathSegments[3]; // offices/{officeId}
-                logger.info(`마이그레이션 중: ${driverData.name} (${regionId}/${officeId})`);
+                const provinceId = pathSegments[1]; // provinces/{provinceId}
+                const cityId = pathSegments[3]; // cities/{cityId}
+                const officeId = pathSegments[5]; // offices/{officeId}
+                logger.info(`마이그레이션 중: ${driverData.name} (${provinceId}/${cityId}/${officeId})`);
                 // pickup_drivers 컬렉션에 새 문서 생성
                 const pickupDriverRef = admin
                     .firestore()
-                    .collection("regions")
-                    .doc(regionId)
+                    .collection("provinces")
+                    .doc(provinceId)
+                    .collection("cities")
+                    .doc(cityId)
                     .collection("offices")
                     .doc(officeId)
                     .collection("pickup_drivers")
@@ -1387,7 +1460,7 @@ exports.migratePickupDrivers = (0, https_1.onCall)({
                 // 원본 designated_drivers 문서 삭제
                 await doc.ref.delete();
                 results.migrated++;
-                results.details.push(`✅ ${driverData.name} (${regionId}/${officeId}) 마이그레이션 완료`);
+                results.details.push(`✅ ${driverData.name} (${provinceId}/${cityId}/${officeId}) 마이그레이션 완료`);
             }
             catch (error) {
                 results.errors++;
@@ -1580,68 +1653,79 @@ exports.matchAttribution = (0, https_1.onCall)({ region: "asia-northeast3" }, as
     try {
         // 모든 지역의 모든 사무실에서 attribution 데이터 찾기
         const db = admin.firestore();
-        const regionsSnapshot = await db.collection("regions").get();
+        const provincesSnapshot = await db.collection("provinces").get();
         let bestMatch = null;
         let bestScore = 0;
         let totalAttributions = 0;
-        logger.warn(`[matchAttribution] 검색할 지역 수: ${regionsSnapshot.size}개`);
-        // 모든 지역 순회
-        for (const regionDoc of regionsSnapshot.docs) {
-            const regionId = regionDoc.id;
-            logger.info(`[matchAttribution] 지역 확인: ${regionId}`);
-            // 해당 지역의 모든 사무실 순회
-            const officesSnapshot = await db
-                .collection("regions").doc(regionId)
-                .collection("offices")
+        logger.warn(`[matchAttribution] 검색할 도 수: ${provincesSnapshot.size}개`);
+        // 모든 도 순회
+        for (const provinceDoc of provincesSnapshot.docs) {
+            const provinceId = provinceDoc.id;
+            logger.info(`[matchAttribution] 도 확인: ${provinceId}`);
+            // 해당 도의 모든 시 순회
+            const citiesSnapshot = await db
+                .collection("provinces").doc(provinceId)
+                .collection("cities")
                 .get();
-            logger.info(`[matchAttribution] ${regionId} 지역의 사무실 수: ${officesSnapshot.size}개`);
-            for (const officeDoc of officesSnapshot.docs) {
-                const officeId = officeDoc.id;
-                // 각 사무실의 attributions 확인
-                const attributionsSnapshot = await db
-                    .collection("regions").doc(regionId)
-                    .collection("offices").doc(officeId)
-                    .collection("attributions")
+            logger.info(`[matchAttribution] ${provinceId} 도의 시 수: ${citiesSnapshot.size}개`);
+            for (const cityDoc of citiesSnapshot.docs) {
+                const cityId = cityDoc.id;
+                // 해당 시의 모든 사무실 순회
+                const officesSnapshot = await db
+                    .collection("provinces").doc(provinceId)
+                    .collection("cities").doc(cityId)
+                    .collection("offices")
                     .get();
-                if (!attributionsSnapshot.empty) {
-                    logger.info(`[matchAttribution] ${regionId}/${officeId} - Attribution 데이터: ${attributionsSnapshot.size}개`);
-                    totalAttributions += attributionsSnapshot.size;
-                    attributionsSnapshot.forEach((doc) => {
-                        const attribution = doc.data();
-                        // Option 2: 만료된 핑거프린트는 스킵
-                        if (attribution.expiresAt) {
-                            const expiresAtMillis = attribution.expiresAt.toMillis ? attribution.expiresAt.toMillis() : attribution.expiresAt;
-                            const now = Date.now();
-                            if (now > expiresAtMillis) {
-                                logger.info(`[matchAttribution] 만료된 핑거프린트 스킵 - 문서 ${doc.id} (만료: ${new Date(expiresAtMillis).toISOString()})`);
-                                return;
+                logger.info(`[matchAttribution] ${provinceId}/${cityId}의 사무실 수: ${officesSnapshot.size}개`);
+                for (const officeDoc of officesSnapshot.docs) {
+                    const officeId = officeDoc.id;
+                    // 각 사무실의 attributions 확인
+                    const attributionsSnapshot = await db
+                        .collection("provinces").doc(provinceId)
+                        .collection("cities").doc(cityId)
+                        .collection("offices").doc(officeId)
+                        .collection("attributions")
+                        .get();
+                    if (!attributionsSnapshot.empty) {
+                        logger.info(`[matchAttribution] ${provinceId}/${cityId}/${officeId} - Attribution 데이터: ${attributionsSnapshot.size}개`);
+                        totalAttributions += attributionsSnapshot.size;
+                        attributionsSnapshot.forEach((doc) => {
+                            const attribution = doc.data();
+                            // Option 2: 만료된 핑거프린트는 스킵
+                            if (attribution.expiresAt) {
+                                const expiresAtMillis = attribution.expiresAt.toMillis ? attribution.expiresAt.toMillis() : attribution.expiresAt;
+                                const now = Date.now();
+                                if (now > expiresAtMillis) {
+                                    logger.info(`[matchAttribution] 만료된 핑거프린트 스킵 - 문서 ${doc.id} (만료: ${new Date(expiresAtMillis).toISOString()})`);
+                                    return;
+                                }
                             }
-                        }
-                        const score = calculateAttributionScore(attribution, fingerprint);
-                        logger.info(`[matchAttribution] 문서 ${doc.id} (${regionId}/${officeId}):`, {
-                            source: attribution.source,
-                            score: score,
-                            fingerprintData: {
-                                screenResolution: fingerprint.screenResolution,
-                                timezone: fingerprint.timezone,
-                                language: fingerprint.language
-                            },
-                            attributionData: {
-                                screenResolution: attribution.screenResolution,
-                                timezone: attribution.timezone,
-                                language: attribution.language
+                            const score = calculateAttributionScore(attribution, fingerprint);
+                            logger.info(`[matchAttribution] 문서 ${doc.id} (${provinceId}/${cityId}/${officeId}):`, {
+                                source: attribution.source,
+                                score: score,
+                                fingerprintData: {
+                                    screenResolution: fingerprint.screenResolution,
+                                    timezone: fingerprint.timezone,
+                                    language: fingerprint.language
+                                },
+                                attributionData: {
+                                    screenResolution: attribution.screenResolution,
+                                    timezone: attribution.timezone,
+                                    language: attribution.language
+                                }
+                            });
+                            // 점수가 더 높거나, 같은 점수일 때는 최신 것을 선택
+                            const isNewBetter = score > bestScore ||
+                                (score === bestScore && attribution.createdAt && (bestMatch === null || bestMatch === void 0 ? void 0 : bestMatch.createdAt) &&
+                                    attribution.createdAt.toMillis() > bestMatch.createdAt.toMillis());
+                            if (isNewBetter) {
+                                bestScore = score;
+                                bestMatch = Object.assign(Object.assign({ id: doc.id }, attribution), { provinceId: provinceId, cityId: cityId, officeId: officeId });
+                                logger.info(`[matchAttribution] 새로운 bestMatch 발견! 점수: ${bestScore}, provinceId: ${provinceId}, cityId: ${cityId}, officeId: ${officeId}, createdAt: ${attribution.createdAt ? new Date(attribution.createdAt.toMillis()).toISOString() : 'N/A'}`);
                             }
                         });
-                        // 점수가 더 높거나, 같은 점수일 때는 최신 것을 선택
-                        const isNewBetter = score > bestScore ||
-                            (score === bestScore && attribution.createdAt && (bestMatch === null || bestMatch === void 0 ? void 0 : bestMatch.createdAt) &&
-                                attribution.createdAt.toMillis() > bestMatch.createdAt.toMillis());
-                        if (isNewBetter) {
-                            bestScore = score;
-                            bestMatch = Object.assign(Object.assign({ id: doc.id }, attribution), { regionId: regionId, officeId: officeId });
-                            logger.info(`[matchAttribution] 새로운 bestMatch 발견! 점수: ${bestScore}, regionId: ${regionId}, officeId: ${officeId}, createdAt: ${attribution.createdAt ? new Date(attribution.createdAt.toMillis()).toISOString() : 'N/A'}`);
-                        }
-                    });
+                    }
                 }
             }
         }
@@ -1659,11 +1743,12 @@ exports.matchAttribution = (0, https_1.onCall)({ region: "asia-northeast3" }, as
         logger.info(`[matchAttribution] bestMatch 상태:`, bestMatch ? `존재 - officeId: ${bestMatch.officeId}` : "null");
         // 10점 이상이면 자동 매칭 (테스트용으로 임시 조정)
         if (bestScore >= 10 && bestMatch) {
-            logger.info(`[matchAttribution] 자동 매칭 성공 - regionId: ${bestMatch.regionId}, officeId: ${bestMatch.officeId}`);
+            logger.info(`[matchAttribution] 자동 매칭 성공 - provinceId: ${bestMatch.provinceId}, cityId: ${bestMatch.cityId}, officeId: ${bestMatch.officeId}`);
             // attributions 컬렉션에 저장
             await admin.firestore().collection("attributions").add({
                 phoneNumber,
-                regionId: bestMatch.regionId,
+                provinceId: bestMatch.provinceId,
+                cityId: bestMatch.cityId,
                 officeId: bestMatch.officeId,
                 fingerprintId: bestMatch.id,
                 attributionScore: bestScore,
@@ -1673,7 +1758,8 @@ exports.matchAttribution = (0, https_1.onCall)({ region: "asia-northeast3" }, as
             });
             return {
                 success: true,
-                regionId: bestMatch.regionId,
+                provinceId: bestMatch.provinceId,
+                cityId: bestMatch.cityId,
                 officeId: bestMatch.officeId,
                 score: bestScore,
                 confidence: "HIGH",
@@ -1683,11 +1769,12 @@ exports.matchAttribution = (0, https_1.onCall)({ region: "asia-northeast3" }, as
         }
         // 50-69점이면 수동 확인 필요
         else if (bestScore >= 50 && bestMatch) {
-            logger.info(`[matchAttribution] 수동 확인 필요 - regionId: ${bestMatch.regionId}, officeId: ${bestMatch.officeId}, score: ${bestScore}`);
+            logger.info(`[matchAttribution] 수동 확인 필요 - provinceId: ${bestMatch.provinceId}, cityId: ${bestMatch.cityId}, officeId: ${bestMatch.officeId}, score: ${bestScore}`);
             return {
                 success: false,
                 requiresManualConfirmation: true,
-                regionId: bestMatch.regionId,
+                provinceId: bestMatch.provinceId,
+                cityId: bestMatch.cityId,
                 officeId: bestMatch.officeId,
                 score: bestScore,
                 confidence: "MEDIUM"
@@ -1747,53 +1834,58 @@ exports.matchByToken = (0, https_1.onCall)({ region: "asia-northeast3" }, async 
                 message: "토큰이 제공되지 않았습니다"
             };
         }
-        // regions/.../offices/.../attributions 컬렉션에서 토큰 검색
+        // provinces/.../cities/.../offices/.../attributions 컬렉션에서 토큰 검색
         const db = admin.firestore();
-        const regionsSnapshot = await db.collection("regions").get();
-        for (const regionDoc of regionsSnapshot.docs) {
-            const regionId = regionDoc.id;
-            const officesSnapshot = await db.collection(`regions/${regionId}/offices`).get();
-            for (const officeDoc of officesSnapshot.docs) {
-                const officeId = officeDoc.id;
-                const officeData = officeDoc.data();
-                // 해당 사무실의 attributions에서 토큰 검색
-                const attributionsQuery = await db
-                    .collection(`regions/${regionId}/offices/${officeId}/attributions`)
-                    .where("token", "==", token)
-                    .limit(1)
-                    .get();
-                if (!attributionsQuery.empty) {
-                    const attributionDoc = attributionsQuery.docs[0];
-                    const attributionData = attributionDoc.data();
-                    // 만료 확인 (생성 후 7일)
-                    const now = admin.firestore.Timestamp.now();
-                    const createdAt = attributionData.createdAt;
-                    const expiryTime = createdAt.toMillis() + (7 * 24 * 60 * 60 * 1000);
-                    if (now.toMillis() > expiryTime) {
-                        logger.warn(`[matchByToken] 만료된 토큰: ${token}`);
+        const provincesSnapshot = await db.collection("provinces").get();
+        for (const provinceDoc of provincesSnapshot.docs) {
+            const provinceId = provinceDoc.id;
+            const citiesSnapshot = await db.collection(`provinces/${provinceId}/cities`).get();
+            for (const cityDoc of citiesSnapshot.docs) {
+                const cityId = cityDoc.id;
+                const officesSnapshot = await db.collection(`provinces/${provinceId}/cities/${cityId}/offices`).get();
+                for (const officeDoc of officesSnapshot.docs) {
+                    const officeId = officeDoc.id;
+                    const officeData = officeDoc.data();
+                    // 해당 사무실의 attributions에서 토큰 검색
+                    const attributionsQuery = await db
+                        .collection(`provinces/${provinceId}/cities/${cityId}/offices/${officeId}/attributions`)
+                        .where("token", "==", token)
+                        .limit(1)
+                        .get();
+                    if (!attributionsQuery.empty) {
+                        const attributionDoc = attributionsQuery.docs[0];
+                        const attributionData = attributionDoc.data();
+                        // 만료 확인 (생성 후 7일)
+                        const now = admin.firestore.Timestamp.now();
+                        const createdAt = attributionData.createdAt;
+                        const expiryTime = createdAt.toMillis() + (7 * 24 * 60 * 60 * 1000);
+                        if (now.toMillis() > expiryTime) {
+                            logger.warn(`[matchByToken] 만료된 토큰: ${token}`);
+                            return {
+                                success: false,
+                                message: "만료된 QR 코드입니다 (7일 경과)"
+                            };
+                        }
+                        // 이미 사용된 토큰인지 확인 (재사용 허용)
+                        if (attributionData.claimed === true) {
+                            logger.info(`[matchByToken] 이미 사용된 토큰이지만 재사용 허용: ${token}`);
+                        }
+                        // 성공 응답
+                        logger.info(`[matchByToken] 매칭 성공 - provinceId: ${provinceId}, cityId: ${cityId}, officeId: ${officeId}, driverId: ${attributionData.driverId || 'null'}, driverName: ${attributionData.driverName || 'null'}`);
                         return {
-                            success: false,
-                            message: "만료된 QR 코드입니다 (7일 경과)"
+                            success: true,
+                            provinceId: provinceId,
+                            cityId: cityId,
+                            officeId: officeId,
+                            officeName: officeData.name || "",
+                            officePhone: officeData.phoneNumber || "",
+                            bankName: officeData.bankName || "",
+                            accountNumber: officeData.accountNumber || "",
+                            accountHolder: officeData.accountHolder || "",
+                            referralDriverId: attributionData.driverId || null,
+                            referralDriverName: attributionData.driverName || null
                         };
                     }
-                    // 이미 사용된 토큰인지 확인 (재사용 허용)
-                    if (attributionData.claimed === true) {
-                        logger.info(`[matchByToken] 이미 사용된 토큰이지만 재사용 허용: ${token}`);
-                    }
-                    // 성공 응답
-                    logger.info(`[matchByToken] 매칭 성공 - regionId: ${regionId}, officeId: ${officeId}, driverId: ${attributionData.driverId || 'null'}, driverName: ${attributionData.driverName || 'null'}`);
-                    return {
-                        success: true,
-                        regionId: regionId,
-                        officeId: officeId,
-                        officeName: officeData.name || "",
-                        officePhone: officeData.phoneNumber || "",
-                        bankName: officeData.bankName || "",
-                        accountNumber: officeData.accountNumber || "",
-                        accountHolder: officeData.accountHolder || "",
-                        referralDriverId: attributionData.driverId || null,
-                        referralDriverName: attributionData.driverName || null
-                    };
                 }
             }
         }
@@ -1838,10 +1930,10 @@ exports.claimToken = (0, https_1.onCall)({ region: "asia-northeast3" }, async (r
 // =============================
 exports.onCallCancelledByDriver = (0, firestore_1.onDocumentUpdated)({
     region: "asia-northeast3",
-    document: "regions/{regionId}/offices/{officeId}/calls/{callId}"
+    document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/calls/{callId}"
 }, async (event) => {
     var _a;
-    const { regionId, officeId, callId } = event.params;
+    const { provinceId, cityId, officeId, callId } = event.params;
     if (!event.data) {
         return;
     }
@@ -1867,7 +1959,8 @@ exports.onCallCancelledByDriver = (0, firestore_1.onDocumentUpdated)({
     try {
         // 고객 FCM 토큰 조회
         const customerDoc = await admin.firestore()
-            .collection("regions").doc(regionId)
+            .collection("provinces").doc(provinceId)
+            .collection("cities").doc(cityId)
             .collection("offices").doc(officeId)
             .collection("customerInfo")
             .doc(customerPhone)
@@ -1902,9 +1995,9 @@ exports.onCallCancelledByDriver = (0, firestore_1.onDocumentUpdated)({
 // =============================
 exports.onNewCustomerRegistered = (0, firestore_1.onDocumentCreated)({
     region: "asia-northeast3",
-    document: "regions/{regionId}/offices/{officeId}/customers/{customerId}"
+    document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/customers/{customerId}"
 }, async (event) => {
-    const { regionId, officeId, customerId } = event.params;
+    const { provinceId, cityId, officeId, customerId } = event.params;
     if (!event.data) {
         logger.info(`[onNewCustomerRegistered] 이벤트 데이터 없음`);
         return;
@@ -1918,7 +2011,8 @@ exports.onNewCustomerRegistered = (0, firestore_1.onDocumentCreated)({
     try {
         // 콜매니저 FCM 토큰 조회
         const managerTokensSnapshot = await admin.firestore()
-            .collection("regions").doc(regionId)
+            .collection("provinces").doc(provinceId)
+            .collection("cities").doc(cityId)
             .collection("offices").doc(officeId)
             .collection("managerTokens")
             .get();
@@ -1926,7 +2020,7 @@ exports.onNewCustomerRegistered = (0, firestore_1.onDocumentCreated)({
             .map(doc => ({ docId: doc.id, token: doc.data().fcmToken }))
             .filter(item => item.token);
         if (tokenDocs.length === 0) {
-            logger.warn(`[onNewCustomerRegistered] 콜매니저 FCM 토큰 없음 - regionId: ${regionId}, officeId: ${officeId}`);
+            logger.warn(`[onNewCustomerRegistered] 콜매니저 FCM 토큰 없음 - provinceId: ${provinceId}, cityId: ${cityId}, officeId: ${officeId}`);
             return;
         }
         logger.info(`[onNewCustomerRegistered] 콜매니저 FCM 토큰 ${tokenDocs.length}개 발견`);
@@ -1972,7 +2066,8 @@ exports.onNewCustomerRegistered = (0, firestore_1.onDocumentCreated)({
         // 만료된 토큰 자동 삭제 및 갱신 요청
         if (invalidTokenDocIds.length > 0) {
             const deletePromises = invalidTokenDocIds.map(docId => admin.firestore()
-                .collection("regions").doc(regionId)
+                .collection("provinces").doc(provinceId)
+                .collection("cities").doc(cityId)
                 .collection("offices").doc(officeId)
                 .collection("managerTokens")
                 .doc(docId)
@@ -1981,7 +2076,8 @@ exports.onNewCustomerRegistered = (0, firestore_1.onDocumentCreated)({
             logger.info(`[onNewCustomerRegistered] 만료된 토큰 ${invalidTokenDocIds.length}개 삭제 완료`);
             // 각 만료된 토큰에 대해 갱신 요청 생성
             const refreshRequests = invalidTokenDocIds.map(managerId => admin.firestore()
-                .collection("regions").doc(regionId)
+                .collection("provinces").doc(provinceId)
+                .collection("cities").doc(cityId)
                 .collection("offices").doc(officeId)
                 .collection("tokenRefreshRequests")
                 .doc(managerId)
@@ -2006,20 +2102,22 @@ exports.onNewCustomerRegistered = (0, firestore_1.onDocumentCreated)({
 // 기사 추가/삭제 시 driverCount 업데이트
 exports.onDriverCountChange = (0, firestore_1.onDocumentWritten)({
     region: "asia-northeast3",
-    document: "regions/{regionId}/offices/{officeId}/designated_drivers/{driverId}"
+    document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/designated_drivers/{driverId}"
 }, async (event) => {
-    const { regionId, officeId } = event.params;
+    const { provinceId, cityId, officeId } = event.params;
     try {
         // 해당 사무실의 전체 기사 수 조회
         const driversSnapshot = await admin.firestore()
-            .collection("regions").doc(regionId)
+            .collection("provinces").doc(provinceId)
+            .collection("cities").doc(cityId)
             .collection("offices").doc(officeId)
             .collection("designated_drivers")
             .get();
         const driverCount = driversSnapshot.size;
         // 사무실 문서 업데이트
         await admin.firestore()
-            .collection("regions").doc(regionId)
+            .collection("provinces").doc(provinceId)
+            .collection("cities").doc(cityId)
             .collection("offices").doc(officeId)
             .update({
             driverCount: driverCount,
@@ -2034,20 +2132,22 @@ exports.onDriverCountChange = (0, firestore_1.onDocumentWritten)({
 // 고객 추가/삭제 시 customerCount 업데이트
 exports.onCustomerCountChange = (0, firestore_1.onDocumentWritten)({
     region: "asia-northeast3",
-    document: "regions/{regionId}/offices/{officeId}/customers/{customerId}"
+    document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/customers/{customerId}"
 }, async (event) => {
-    const { regionId, officeId } = event.params;
+    const { provinceId, cityId, officeId } = event.params;
     try {
         // 해당 사무실의 전체 고객 수 조회
         const customersSnapshot = await admin.firestore()
-            .collection("regions").doc(regionId)
+            .collection("provinces").doc(provinceId)
+            .collection("cities").doc(cityId)
             .collection("offices").doc(officeId)
             .collection("customers")
             .get();
         const customerCount = customersSnapshot.size;
         // 사무실 문서 업데이트
         await admin.firestore()
-            .collection("regions").doc(regionId)
+            .collection("provinces").doc(provinceId)
+            .collection("cities").doc(cityId)
             .collection("offices").doc(officeId)
             .update({
             customerCount: customerCount,
@@ -2078,21 +2178,22 @@ exports.onCallDetectorCrash = (0, firestore_1.onDocumentCreated)({
         logger.info(`[${alertId}] EMERGENCY_CRASH_ALERT가 아니므로 알림을 보내지 않습니다. type: ${alertData.type}`);
         return;
     }
-    const { regionId, officeId, deviceId, message, crashTime } = alertData;
-    if (!regionId || !officeId) {
-        logger.error(`[${alertId}] regionId 또는 officeId가 없습니다.`, alertData);
+    const { provinceId, cityId, officeId, deviceId, message, crashTime } = alertData;
+    if (!provinceId || !cityId || !officeId) {
+        logger.error(`[${alertId}] provinceId, cityId 또는 officeId가 없습니다.`, alertData);
         return;
     }
-    logger.info(`[${alertId}] 콜 디텍터 크래시 감지 - regionId: ${regionId}, officeId: ${officeId}, deviceId: ${deviceId}`);
+    logger.info(`[${alertId}] 콜 디텍터 크래시 감지 - provinceId: ${provinceId}, cityId: ${cityId}, officeId: ${officeId}, deviceId: ${deviceId}`);
     try {
         // 해당 사무실의 관리자들 조회
         const db = admin.firestore();
         const adminsSnapshot = await db.collection("admins")
-            .where("associatedRegionId", "==", regionId)
+            .where("associatedProvinceId", "==", provinceId)
+            .where("associatedCityId", "==", cityId)
             .where("associatedOfficeId", "==", officeId)
             .get();
         if (adminsSnapshot.empty) {
-            logger.warn(`[${alertId}] 해당 사무실의 관리자를 찾을 수 없습니다. regionId: ${regionId}, officeId: ${officeId}`);
+            logger.warn(`[${alertId}] 해당 사무실의 관리자를 찾을 수 없습니다. provinceId: ${provinceId}, cityId: ${cityId}, officeId: ${officeId}`);
             return;
         }
         // FCM 토큰 수집
@@ -2104,7 +2205,7 @@ exports.onCallDetectorCrash = (0, firestore_1.onDocumentCreated)({
             }
         });
         if (fcmTokens.length === 0) {
-            logger.warn(`[${alertId}] 관리자의 FCM 토큰이 없습니다. regionId: ${regionId}, officeId: ${officeId}`);
+            logger.warn(`[${alertId}] 관리자의 FCM 토큰이 없습니다. provinceId: ${provinceId}, cityId: ${cityId}, officeId: ${officeId}`);
             return;
         }
         logger.info(`[${alertId}] ${fcmTokens.length}명의 관리자에게 알림 전송 시작`);
@@ -2117,7 +2218,8 @@ exports.onCallDetectorCrash = (0, firestore_1.onDocumentCreated)({
             type: "CALL_DETECTOR_CRASH",
             alertId: alertId,
             deviceId: deviceId || "",
-            regionId: regionId,
+            provinceId: provinceId,
+            cityId: cityId,
             officeId: officeId,
             crashTime: crashTime ? crashTime.toString() : "",
             priority: "CRITICAL"
@@ -2171,40 +2273,47 @@ exports.scheduledDataCleanup = (0, scheduler_1.onSchedule)({
     try {
         // ===== 1. WAITING 콜 삭제 (1시간 이상) =====
         logger.info("📞 WAITING 콜 정리 시작...");
-        const regionsSnapshot = await db.collection("regions").get();
-        for (const regionDoc of regionsSnapshot.docs) {
-            const regionId = regionDoc.id;
-            const officesSnapshot = await db.collection("regions").doc(regionId)
-                .collection("offices").get();
-            for (const officeDoc of officesSnapshot.docs) {
-                const officeId = officeDoc.id;
-                // WAITING 상태 + 1시간 이상 된 콜 조회
-                const oldWaitingCalls = await db.collection("regions").doc(regionId)
-                    .collection("offices").doc(officeId)
-                    .collection("calls")
-                    .where("status", "==", "WAITING")
-                    .where("timestamp", "<", admin.firestore.Timestamp.fromMillis(oneHourAgo))
-                    .get();
-                // Batch 삭제 (최대 500개씩)
-                if (oldWaitingCalls.size > 0) {
-                    const batches = [];
-                    let batch = db.batch();
-                    let operationCount = 0;
-                    for (const doc of oldWaitingCalls.docs) {
-                        batch.delete(doc.ref);
-                        operationCount++;
-                        if (operationCount === 500) {
-                            batches.push(batch.commit());
-                            batch = db.batch();
-                            operationCount = 0;
+        const provincesSnapshot = await db.collection("provinces").get();
+        for (const provinceDoc of provincesSnapshot.docs) {
+            const provinceId = provinceDoc.id;
+            const citiesSnapshot = await db.collection("provinces").doc(provinceId)
+                .collection("cities").get();
+            for (const cityDoc of citiesSnapshot.docs) {
+                const cityId = cityDoc.id;
+                const officesSnapshot = await db.collection("provinces").doc(provinceId)
+                    .collection("cities").doc(cityId)
+                    .collection("offices").get();
+                for (const officeDoc of officesSnapshot.docs) {
+                    const officeId = officeDoc.id;
+                    // WAITING 상태 + 1시간 이상 된 콜 조회
+                    const oldWaitingCalls = await db.collection("provinces").doc(provinceId)
+                        .collection("cities").doc(cityId)
+                        .collection("offices").doc(officeId)
+                        .collection("calls")
+                        .where("status", "==", "WAITING")
+                        .where("timestamp", "<", admin.firestore.Timestamp.fromMillis(oneHourAgo))
+                        .get();
+                    // Batch 삭제 (최대 500개씩)
+                    if (oldWaitingCalls.size > 0) {
+                        const batches = [];
+                        let batch = db.batch();
+                        let operationCount = 0;
+                        for (const doc of oldWaitingCalls.docs) {
+                            batch.delete(doc.ref);
+                            operationCount++;
+                            if (operationCount === 500) {
+                                batches.push(batch.commit());
+                                batch = db.batch();
+                                operationCount = 0;
+                            }
                         }
+                        if (operationCount > 0) {
+                            batches.push(batch.commit());
+                        }
+                        await Promise.all(batches);
+                        totalDeleted += oldWaitingCalls.size;
+                        logger.info(`✅ ${provinceId}/${cityId}/${officeId}: WAITING 콜 ${oldWaitingCalls.size}개 삭제`);
                     }
-                    if (operationCount > 0) {
-                        batches.push(batch.commit());
-                    }
-                    await Promise.all(batches);
-                    totalDeleted += oldWaitingCalls.size;
-                    logger.info(`✅ ${regionId}/${officeId}: WAITING 콜 ${oldWaitingCalls.size}개 삭제`);
                 }
             }
         }
@@ -2212,39 +2321,46 @@ exports.scheduledDataCleanup = (0, scheduler_1.onSchedule)({
         // ===== 2. HOLD (보류) 콜 삭제 (1시간 이상) =====
         logger.info("⏸️ HOLD 콜 정리 시작...");
         let holdDeleted = 0;
-        const regionsSnapshotHold = await db.collection("regions").get();
-        for (const regionDoc of regionsSnapshotHold.docs) {
-            const regionId = regionDoc.id;
-            const officesSnapshot = await db.collection("regions").doc(regionId)
-                .collection("offices").get();
-            for (const officeDoc of officesSnapshot.docs) {
-                const officeId = officeDoc.id;
-                // HOLD 상태 + 1시간 이상 된 콜 조회
-                const oldHoldCalls = await db.collection("regions").doc(regionId)
-                    .collection("offices").doc(officeId)
-                    .collection("calls")
-                    .where("status", "==", "HOLD")
-                    .where("timestamp", "<", admin.firestore.Timestamp.fromMillis(oneHourAgo))
-                    .get();
-                if (oldHoldCalls.size > 0) {
-                    const batches = [];
-                    let batch = db.batch();
-                    let operationCount = 0;
-                    for (const doc of oldHoldCalls.docs) {
-                        batch.delete(doc.ref);
-                        operationCount++;
-                        if (operationCount === 500) {
-                            batches.push(batch.commit());
-                            batch = db.batch();
-                            operationCount = 0;
+        const provincesSnapshotHold = await db.collection("provinces").get();
+        for (const provinceDoc of provincesSnapshotHold.docs) {
+            const provinceId = provinceDoc.id;
+            const citiesSnapshot = await db.collection("provinces").doc(provinceId)
+                .collection("cities").get();
+            for (const cityDoc of citiesSnapshot.docs) {
+                const cityId = cityDoc.id;
+                const officesSnapshot = await db.collection("provinces").doc(provinceId)
+                    .collection("cities").doc(cityId)
+                    .collection("offices").get();
+                for (const officeDoc of officesSnapshot.docs) {
+                    const officeId = officeDoc.id;
+                    // HOLD 상태 + 1시간 이상 된 콜 조회
+                    const oldHoldCalls = await db.collection("provinces").doc(provinceId)
+                        .collection("cities").doc(cityId)
+                        .collection("offices").doc(officeId)
+                        .collection("calls")
+                        .where("status", "==", "HOLD")
+                        .where("timestamp", "<", admin.firestore.Timestamp.fromMillis(oneHourAgo))
+                        .get();
+                    if (oldHoldCalls.size > 0) {
+                        const batches = [];
+                        let batch = db.batch();
+                        let operationCount = 0;
+                        for (const doc of oldHoldCalls.docs) {
+                            batch.delete(doc.ref);
+                            operationCount++;
+                            if (operationCount === 500) {
+                                batches.push(batch.commit());
+                                batch = db.batch();
+                                operationCount = 0;
+                            }
                         }
+                        if (operationCount > 0) {
+                            batches.push(batch.commit());
+                        }
+                        await Promise.all(batches);
+                        holdDeleted += oldHoldCalls.size;
+                        logger.info(`✅ ${provinceId}/${cityId}/${officeId}: HOLD 콜 ${oldHoldCalls.size}개 삭제`);
                     }
-                    if (operationCount > 0) {
-                        batches.push(batch.commit());
-                    }
-                    await Promise.all(batches);
-                    holdDeleted += oldHoldCalls.size;
-                    logger.info(`✅ ${regionId}/${officeId}: HOLD 콜 ${oldHoldCalls.size}개 삭제`);
                 }
             }
         }
@@ -2253,45 +2369,53 @@ exports.scheduledDataCleanup = (0, scheduler_1.onSchedule)({
         // ===== 3. CANCELLED 콜 즉시 삭제 (모든 취소 상태) =====
         logger.info("❌ CANCELLED 콜 정리 시작...");
         let cancelledDeleted = 0;
-        const regionsSnapshotCancelled = await db.collection("regions").get();
-        for (const regionDoc of regionsSnapshotCancelled.docs) {
-            const regionId = regionDoc.id;
-            const officesSnapshot = await db.collection("regions").doc(regionId)
-                .collection("offices").get();
-            for (const officeDoc of officesSnapshot.docs) {
-                const officeId = officeDoc.id;
-                // CANCELLED 상태 조회 (시간 제한 없음)
-                const cancelledCalls = await db.collection("regions").doc(regionId)
-                    .collection("offices").doc(officeId)
-                    .collection("calls")
-                    .where("status", "==", "CANCELLED")
-                    .get();
-                // CANCELLED_BY_DRIVER 상태 조회
-                const cancelledByDriverCalls = await db.collection("regions").doc(regionId)
-                    .collection("offices").doc(officeId)
-                    .collection("calls")
-                    .where("status", "==", "CANCELLED_BY_DRIVER")
-                    .get();
-                const allCancelled = [...cancelledCalls.docs, ...cancelledByDriverCalls.docs];
-                if (allCancelled.length > 0) {
-                    const batches = [];
-                    let batch = db.batch();
-                    let operationCount = 0;
-                    for (const doc of allCancelled) {
-                        batch.delete(doc.ref);
-                        operationCount++;
-                        if (operationCount === 500) {
-                            batches.push(batch.commit());
-                            batch = db.batch();
-                            operationCount = 0;
+        const provincesSnapshotCancelled = await db.collection("provinces").get();
+        for (const provinceDoc of provincesSnapshotCancelled.docs) {
+            const provinceId = provinceDoc.id;
+            const citiesSnapshot = await db.collection("provinces").doc(provinceId)
+                .collection("cities").get();
+            for (const cityDoc of citiesSnapshot.docs) {
+                const cityId = cityDoc.id;
+                const officesSnapshot = await db.collection("provinces").doc(provinceId)
+                    .collection("cities").doc(cityId)
+                    .collection("offices").get();
+                for (const officeDoc of officesSnapshot.docs) {
+                    const officeId = officeDoc.id;
+                    // CANCELLED 상태 조회 (시간 제한 없음)
+                    const cancelledCalls = await db.collection("provinces").doc(provinceId)
+                        .collection("cities").doc(cityId)
+                        .collection("offices").doc(officeId)
+                        .collection("calls")
+                        .where("status", "==", "CANCELLED")
+                        .get();
+                    // CANCELLED_BY_DRIVER 상태 조회
+                    const cancelledByDriverCalls = await db.collection("provinces").doc(provinceId)
+                        .collection("cities").doc(cityId)
+                        .collection("offices").doc(officeId)
+                        .collection("calls")
+                        .where("status", "==", "CANCELLED_BY_DRIVER")
+                        .get();
+                    const allCancelled = [...cancelledCalls.docs, ...cancelledByDriverCalls.docs];
+                    if (allCancelled.length > 0) {
+                        const batches = [];
+                        let batch = db.batch();
+                        let operationCount = 0;
+                        for (const doc of allCancelled) {
+                            batch.delete(doc.ref);
+                            operationCount++;
+                            if (operationCount === 500) {
+                                batches.push(batch.commit());
+                                batch = db.batch();
+                                operationCount = 0;
+                            }
                         }
+                        if (operationCount > 0) {
+                            batches.push(batch.commit());
+                        }
+                        await Promise.all(batches);
+                        cancelledDeleted += allCancelled.length;
+                        logger.info(`✅ ${provinceId}/${cityId}/${officeId}: CANCELLED 콜 ${allCancelled.length}개 삭제`);
                     }
-                    if (operationCount > 0) {
-                        batches.push(batch.commit());
-                    }
-                    await Promise.all(batches);
-                    cancelledDeleted += allCancelled.length;
-                    logger.info(`✅ ${regionId}/${officeId}: CANCELLED 콜 ${allCancelled.length}개 삭제`);
                 }
             }
         }
@@ -2327,39 +2451,46 @@ exports.scheduledDataCleanup = (0, scheduler_1.onSchedule)({
         }
         // ===== 3. 만료된 attributions 삭제 (24시간 이상) =====
         logger.info("🔍 만료된 attributions 정리 시작...");
-        const regionsSnapshot2 = await db.collection("regions").get();
+        const provincesSnapshot2 = await db.collection("provinces").get();
         let expiredCount = 0;
-        for (const regionDoc of regionsSnapshot2.docs) {
-            const regionId = regionDoc.id;
-            const officesSnapshot = await db.collection("regions").doc(regionId)
-                .collection("offices").get();
-            for (const officeDoc of officesSnapshot.docs) {
-                const officeId = officeDoc.id;
-                // 만료된 attributions 조회
-                const expiredAttributions = await db.collection("regions").doc(regionId)
-                    .collection("offices").doc(officeId)
-                    .collection("attributions")
-                    .where("expiresAt", "<", new Date(now))
-                    .get();
-                if (expiredAttributions.size > 0) {
-                    const batches = [];
-                    let batch = db.batch();
-                    let operationCount = 0;
-                    for (const doc of expiredAttributions.docs) {
-                        batch.delete(doc.ref);
-                        operationCount++;
-                        if (operationCount === 500) {
-                            batches.push(batch.commit());
-                            batch = db.batch();
-                            operationCount = 0;
+        for (const provinceDoc of provincesSnapshot2.docs) {
+            const provinceId = provinceDoc.id;
+            const citiesSnapshot = await db.collection("provinces").doc(provinceId)
+                .collection("cities").get();
+            for (const cityDoc of citiesSnapshot.docs) {
+                const cityId = cityDoc.id;
+                const officesSnapshot = await db.collection("provinces").doc(provinceId)
+                    .collection("cities").doc(cityId)
+                    .collection("offices").get();
+                for (const officeDoc of officesSnapshot.docs) {
+                    const officeId = officeDoc.id;
+                    // 만료된 attributions 조회
+                    const expiredAttributions = await db.collection("provinces").doc(provinceId)
+                        .collection("cities").doc(cityId)
+                        .collection("offices").doc(officeId)
+                        .collection("attributions")
+                        .where("expiresAt", "<", new Date(now))
+                        .get();
+                    if (expiredAttributions.size > 0) {
+                        const batches = [];
+                        let batch = db.batch();
+                        let operationCount = 0;
+                        for (const doc of expiredAttributions.docs) {
+                            batch.delete(doc.ref);
+                            operationCount++;
+                            if (operationCount === 500) {
+                                batches.push(batch.commit());
+                                batch = db.batch();
+                                operationCount = 0;
+                            }
                         }
+                        if (operationCount > 0) {
+                            batches.push(batch.commit());
+                        }
+                        await Promise.all(batches);
+                        expiredCount += expiredAttributions.size;
+                        logger.info(`✅ ${provinceId}/${cityId}/${officeId}: 만료된 attributions ${expiredAttributions.size}개 삭제`);
                     }
-                    if (operationCount > 0) {
-                        batches.push(batch.commit());
-                    }
-                    await Promise.all(batches);
-                    expiredCount += expiredAttributions.size;
-                    logger.info(`✅ ${regionId}/${officeId}: 만료된 attributions ${expiredAttributions.size}개 삭제`);
                 }
             }
         }
@@ -2393,78 +2524,86 @@ exports.archiveOldCalls = (0, scheduler_1.onSchedule)({
     let totalArchived = 0;
     let totalDeleted = 0;
     try {
-        const regionsSnapshot = await db.collection("regions").get();
-        for (const regionDoc of regionsSnapshot.docs) {
-            const regionId = regionDoc.id;
-            const officesSnapshot = await db.collection("regions").doc(regionId)
-                .collection("offices").get();
-            for (const officeDoc of officesSnapshot.docs) {
-                const officeId = officeDoc.id;
-                const officeName = officeDoc.data().officeName || officeId;
-                // 모든 COMPLETED 콜 조회 (최신순)
-                const allCompletedCalls = await db.collection("regions").doc(regionId)
-                    .collection("offices").doc(officeId)
-                    .collection("calls")
-                    .where("status", "==", "COMPLETED")
-                    .orderBy("completedAt", "desc")
-                    .get();
-                if (allCompletedCalls.size <= KEEP_RECENT_COUNT) {
-                    logger.info(`ℹ️ ${officeName}: COMPLETED 콜 ${allCompletedCalls.size}개 - 아카이브 불필요`);
-                    continue;
-                }
-                // 50개 초과 + 7일 이상 된 콜만 아카이브 대상
-                const callsToArchive = allCompletedCalls.docs.slice(KEEP_RECENT_COUNT).filter(doc => {
-                    var _a, _b;
-                    const completedAt = ((_a = doc.data().completedAt) === null || _a === void 0 ? void 0 : _a.toMillis()) || ((_b = doc.data().updatedAt) === null || _b === void 0 ? void 0 : _b.toMillis()) || 0;
-                    return completedAt < sevenDaysAgo;
-                });
-                if (callsToArchive.length === 0) {
-                    logger.info(`ℹ️ ${officeName}: 아카이브할 COMPLETED 콜 없음`);
-                    continue;
-                }
-                // Cloud Storage에 JSON Lines 형식으로 저장
-                const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-                const archiveFileName = `archives/calls/${regionId}/${officeId}/completed_${today}.jsonl`;
-                const jsonLines = callsToArchive.map(doc => {
-                    var _a, _b, _c;
-                    const data = doc.data();
-                    return JSON.stringify(Object.assign(Object.assign({ id: doc.id }, data), { completedAt: ((_a = data.completedAt) === null || _a === void 0 ? void 0 : _a.toMillis()) || null, createdAt: ((_b = data.createdAt) === null || _b === void 0 ? void 0 : _b.toMillis()) || null, updatedAt: ((_c = data.updatedAt) === null || _c === void 0 ? void 0 : _c.toMillis()) || null, archivedAt: now }));
-                }).join('\n');
-                // Cloud Storage에 저장
-                const file = bucket.file(archiveFileName);
-                await file.save(jsonLines, {
-                    metadata: {
-                        contentType: 'application/x-ndjson',
+        const provincesSnapshot = await db.collection("provinces").get();
+        for (const provinceDoc of provincesSnapshot.docs) {
+            const provinceId = provinceDoc.id;
+            const citiesSnapshot = await db.collection("provinces").doc(provinceId)
+                .collection("cities").get();
+            for (const cityDoc of citiesSnapshot.docs) {
+                const cityId = cityDoc.id;
+                const officesSnapshot = await db.collection("provinces").doc(provinceId)
+                    .collection("cities").doc(cityId)
+                    .collection("offices").get();
+                for (const officeDoc of officesSnapshot.docs) {
+                    const officeId = officeDoc.id;
+                    const officeName = officeDoc.data().officeName || officeId;
+                    // 모든 COMPLETED 콜 조회 (최신순)
+                    const allCompletedCalls = await db.collection("provinces").doc(provinceId)
+                        .collection("cities").doc(cityId)
+                        .collection("offices").doc(officeId)
+                        .collection("calls")
+                        .where("status", "==", "COMPLETED")
+                        .orderBy("completedAt", "desc")
+                        .get();
+                    if (allCompletedCalls.size <= KEEP_RECENT_COUNT) {
+                        logger.info(`ℹ️ ${officeName}: COMPLETED 콜 ${allCompletedCalls.size}개 - 아카이브 불필요`);
+                        continue;
+                    }
+                    // 50개 초과 + 7일 이상 된 콜만 아카이브 대상
+                    const callsToArchive = allCompletedCalls.docs.slice(KEEP_RECENT_COUNT).filter(doc => {
+                        var _a, _b;
+                        const completedAt = ((_a = doc.data().completedAt) === null || _a === void 0 ? void 0 : _a.toMillis()) || ((_b = doc.data().updatedAt) === null || _b === void 0 ? void 0 : _b.toMillis()) || 0;
+                        return completedAt < sevenDaysAgo;
+                    });
+                    if (callsToArchive.length === 0) {
+                        logger.info(`ℹ️ ${officeName}: 아카이브할 COMPLETED 콜 없음`);
+                        continue;
+                    }
+                    // Cloud Storage에 JSON Lines 형식으로 저장
+                    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+                    const archiveFileName = `archives/calls/${provinceId}/${cityId}/${officeId}/completed_${today}.jsonl`;
+                    const jsonLines = callsToArchive.map(doc => {
+                        var _a, _b, _c;
+                        const data = doc.data();
+                        return JSON.stringify(Object.assign(Object.assign({ id: doc.id }, data), { completedAt: ((_a = data.completedAt) === null || _a === void 0 ? void 0 : _a.toMillis()) || null, createdAt: ((_b = data.createdAt) === null || _b === void 0 ? void 0 : _b.toMillis()) || null, updatedAt: ((_c = data.updatedAt) === null || _c === void 0 ? void 0 : _c.toMillis()) || null, archivedAt: now }));
+                    }).join('\n');
+                    // Cloud Storage에 저장
+                    const file = bucket.file(archiveFileName);
+                    await file.save(jsonLines, {
                         metadata: {
-                            regionId,
-                            officeId,
-                            officeName,
-                            archivedAt: new Date().toISOString(),
-                            callCount: callsToArchive.length.toString()
+                            contentType: 'application/x-ndjson',
+                            metadata: {
+                                provinceId,
+                                cityId,
+                                officeId,
+                                officeName,
+                                archivedAt: new Date().toISOString(),
+                                callCount: callsToArchive.length.toString()
+                            }
+                        }
+                    });
+                    totalArchived += callsToArchive.length;
+                    logger.info(`📦 ${officeName}: ${callsToArchive.length}개 아카이브 완료 → ${archiveFileName}`);
+                    // Firestore에서 삭제
+                    const batches = [];
+                    let batch = db.batch();
+                    let operationCount = 0;
+                    for (const doc of callsToArchive) {
+                        batch.delete(doc.ref);
+                        operationCount++;
+                        if (operationCount === 500) {
+                            batches.push(batch.commit());
+                            batch = db.batch();
+                            operationCount = 0;
                         }
                     }
-                });
-                totalArchived += callsToArchive.length;
-                logger.info(`📦 ${officeName}: ${callsToArchive.length}개 아카이브 완료 → ${archiveFileName}`);
-                // Firestore에서 삭제
-                const batches = [];
-                let batch = db.batch();
-                let operationCount = 0;
-                for (const doc of callsToArchive) {
-                    batch.delete(doc.ref);
-                    operationCount++;
-                    if (operationCount === 500) {
+                    if (operationCount > 0) {
                         batches.push(batch.commit());
-                        batch = db.batch();
-                        operationCount = 0;
                     }
+                    await Promise.all(batches);
+                    totalDeleted += callsToArchive.length;
+                    logger.info(`✅ ${officeName}: ${callsToArchive.length}개 Firestore에서 삭제 완료`);
                 }
-                if (operationCount > 0) {
-                    batches.push(batch.commit());
-                }
-                await Promise.all(batches);
-                totalDeleted += callsToArchive.length;
-                logger.info(`✅ ${officeName}: ${callsToArchive.length}개 Firestore에서 삭제 완료`);
             }
         }
         logger.info(`✅ COMPLETED 콜 아카이브 완료 - 아카이브: ${totalArchived}개, 삭제: ${totalDeleted}개`);
@@ -2482,8 +2621,9 @@ exports.archiveOldCalls = (0, scheduler_1.onSchedule)({
  *
  * @param data.startDate - 시작 날짜 (YYYY-MM-DD)
  * @param data.endDate - 종료 날짜 (YYYY-MM-DD)
- * @param data.regionId - 지역 ID (선택)
- * @param data.officeId - 사무실 ID (선택, regionId 필요)
+ * @param data.provinceId - 도/광역시 ID (선택)
+ * @param data.cityId - 시/군/구 ID (선택, provinceId 필요)
+ * @param data.officeId - 사무실 ID (선택, provinceId, cityId 필요)
  *
  * @returns 기간별 통계 데이터
  */
@@ -2492,11 +2632,11 @@ exports.getArchivedStats = (0, https_1.onCall)({
     cors: ["http://localhost:3000", "https://calldetector-5d61e.web.app", "https://calldetector-5d61e.firebaseapp.com"]
 }, async (request) => {
     var _a;
-    const { startDate, endDate, regionId, officeId } = request.data;
+    const { startDate, endDate, provinceId, cityId, officeId } = request.data;
     if (!startDate || !endDate) {
         throw new Error("startDate와 endDate는 필수입니다.");
     }
-    logger.info(`📊 아카이브 통계 조회: ${startDate} ~ ${endDate}, region: ${regionId || '전체'}, office: ${officeId || '전체'}`);
+    logger.info(`📊 아카이브 통계 조회: ${startDate} ~ ${endDate}, province: ${provinceId || '전체'}, city: ${cityId || '전체'}, office: ${officeId || '전체'}`);
     try {
         const bucket = admin.storage().bucket();
         const db = admin.firestore();
@@ -2519,13 +2659,15 @@ exports.getArchivedStats = (0, https_1.onCall)({
         };
         // 조회할 사무실 목록 결정
         let officesToQuery = [];
-        if (regionId && officeId) {
+        if (provinceId && cityId && officeId) {
             // 특정 사무실만
-            const officeDoc = await db.collection('regions').doc(regionId)
+            const officeDoc = await db.collection('provinces').doc(provinceId)
+                .collection('cities').doc(cityId)
                 .collection('offices').doc(officeId).get();
             if (officeDoc.exists) {
                 officesToQuery.push({
-                    regionId,
+                    provinceId,
+                    cityId,
                     officeId,
                     officeName: ((_a = officeDoc.data()) === null || _a === void 0 ? void 0 : _a.name) || officeId
                 });
@@ -2533,23 +2675,29 @@ exports.getArchivedStats = (0, https_1.onCall)({
         }
         else {
             // 전체 사무실
-            const regionsSnapshot = await db.collection('regions').get();
-            for (const regionDoc of regionsSnapshot.docs) {
-                const officesSnapshot = await db.collection('regions').doc(regionDoc.id)
-                    .collection('offices').get();
-                for (const officeDoc of officesSnapshot.docs) {
-                    officesToQuery.push({
-                        regionId: regionDoc.id,
-                        officeId: officeDoc.id,
-                        officeName: officeDoc.data().name || officeDoc.id
-                    });
+            const provincesSnapshot = await db.collection('provinces').get();
+            for (const provinceDoc of provincesSnapshot.docs) {
+                const citiesSnapshot = await db.collection('provinces').doc(provinceDoc.id)
+                    .collection('cities').get();
+                for (const cityDoc of citiesSnapshot.docs) {
+                    const officesSnapshot = await db.collection('provinces').doc(provinceDoc.id)
+                        .collection('cities').doc(cityDoc.id)
+                        .collection('offices').get();
+                    for (const officeDoc of officesSnapshot.docs) {
+                        officesToQuery.push({
+                            provinceId: provinceDoc.id,
+                            cityId: cityDoc.id,
+                            officeId: officeDoc.id,
+                            officeName: officeDoc.data().name || officeDoc.id
+                        });
+                    }
                 }
             }
         }
         logger.info(`🏢 조회할 사무실: ${officesToQuery.length}개`);
         // 각 사무실별, 날짜별 아카이브 파일 읽기
         for (const office of officesToQuery) {
-            const officeKey = `${office.regionId}/${office.officeId}`;
+            const officeKey = `${office.provinceId}/${office.cityId}/${office.officeId}`;
             if (!stats.officeStats[officeKey]) {
                 stats.officeStats[officeKey] = {
                     officeName: office.officeName,
@@ -2560,7 +2708,7 @@ exports.getArchivedStats = (0, https_1.onCall)({
                 };
             }
             for (const date of dates) {
-                const filePath = `archives/calls/${office.regionId}/${office.officeId}/completed_${date}.jsonl`;
+                const filePath = `archives/calls/${office.provinceId}/${office.cityId}/${office.officeId}/completed_${date}.jsonl`;
                 try {
                     const file = bucket.file(filePath);
                     const [exists] = await file.exists();
@@ -2619,7 +2767,8 @@ exports.getArchivedStats = (0, https_1.onCall)({
  * @param data.driverName - 기사명 (선택)
  * @param data.startDate - 시작 날짜 (필수)
  * @param data.endDate - 종료 날짜 (필수)
- * @param data.regionId - 지역 ID (선택)
+ * @param data.provinceId - 도/광역시 ID (선택)
+ * @param data.cityId - 시/군/구 ID (선택)
  * @param data.officeId - 사무실 ID (선택)
  *
  * @returns 검색된 콜 목록
@@ -2629,7 +2778,7 @@ exports.searchArchivedCalls = (0, https_1.onCall)({
     cors: ["http://localhost:3000", "https://calldetector-5d61e.web.app", "https://calldetector-5d61e.firebaseapp.com"]
 }, async (request) => {
     var _a, _b;
-    const { phoneNumber, driverName, startDate, endDate, regionId, officeId } = request.data;
+    const { phoneNumber, driverName, startDate, endDate, provinceId, cityId, officeId } = request.data;
     if (!startDate || !endDate) {
         throw new Error("startDate와 endDate는 필수입니다.");
     }
@@ -2646,28 +2795,36 @@ exports.searchArchivedCalls = (0, https_1.onCall)({
         }
         // 조회할 사무실 목록 결정
         let officesToQuery = [];
-        if (regionId && officeId) {
-            const officeDoc = await db.collection('regions').doc(regionId)
+        if (provinceId && cityId && officeId) {
+            const officeDoc = await db.collection('provinces').doc(provinceId)
+                .collection('cities').doc(cityId)
                 .collection('offices').doc(officeId).get();
             if (officeDoc.exists) {
                 officesToQuery.push({
-                    regionId,
+                    provinceId,
+                    cityId,
                     officeId,
                     officeName: ((_a = officeDoc.data()) === null || _a === void 0 ? void 0 : _a.name) || officeId
                 });
             }
         }
         else {
-            const regionsSnapshot = await db.collection('regions').get();
-            for (const regionDoc of regionsSnapshot.docs) {
-                const officesSnapshot = await db.collection('regions').doc(regionDoc.id)
-                    .collection('offices').get();
-                for (const officeDoc of officesSnapshot.docs) {
-                    officesToQuery.push({
-                        regionId: regionDoc.id,
-                        officeId: officeDoc.id,
-                        officeName: officeDoc.data().name || officeDoc.id
-                    });
+            const provincesSnapshot = await db.collection('provinces').get();
+            for (const provinceDoc of provincesSnapshot.docs) {
+                const citiesSnapshot = await db.collection('provinces').doc(provinceDoc.id)
+                    .collection('cities').get();
+                for (const cityDoc of citiesSnapshot.docs) {
+                    const officesSnapshot = await db.collection('provinces').doc(provinceDoc.id)
+                        .collection('cities').doc(cityDoc.id)
+                        .collection('offices').get();
+                    for (const officeDoc of officesSnapshot.docs) {
+                        officesToQuery.push({
+                            provinceId: provinceDoc.id,
+                            cityId: cityDoc.id,
+                            officeId: officeDoc.id,
+                            officeName: officeDoc.data().name || officeDoc.id
+                        });
+                    }
                 }
             }
         }
@@ -2675,7 +2832,7 @@ exports.searchArchivedCalls = (0, https_1.onCall)({
         // 각 사무실, 날짜별 아카이브 검색
         for (const office of officesToQuery) {
             for (const date of dates) {
-                const filePath = `archives/calls/${office.regionId}/${office.officeId}/completed_${date}.jsonl`;
+                const filePath = `archives/calls/${office.provinceId}/${office.cityId}/${office.officeId}/completed_${date}.jsonl`;
                 try {
                     const file = bucket.file(filePath);
                     const [exists] = await file.exists();
@@ -2695,7 +2852,7 @@ exports.searchArchivedCalls = (0, https_1.onCall)({
                             match = false;
                         }
                         if (match) {
-                            results.push(Object.assign(Object.assign({}, call), { officeName: office.officeName, regionId: office.regionId, officeId: office.officeId }));
+                            results.push(Object.assign(Object.assign({}, call), { officeName: office.officeName, provinceId: office.provinceId, cityId: office.cityId, officeId: office.officeId }));
                         }
                     }
                 }
@@ -2728,7 +2885,8 @@ exports.searchArchivedCalls = (0, https_1.onCall)({
 /**
  * 사무실별 리포트 생성
  *
- * @param data.regionId - 지역 ID
+ * @param data.provinceId - 도/광역시 ID
+ * @param data.cityId - 시/군/구 ID
  * @param data.officeId - 사무실 ID
  * @param data.year - 연도 (예: 2025)
  * @param data.month - 월 (1-12)
@@ -2740,16 +2898,17 @@ exports.getOfficeReport = (0, https_1.onCall)({
     cors: ["http://localhost:3000", "https://calldetector-5d61e.web.app", "https://calldetector-5d61e.firebaseapp.com"]
 }, async (request) => {
     var _a;
-    const { regionId, officeId, year, month } = request.data;
-    if (!regionId || !officeId || !year || !month) {
-        throw new Error("regionId, officeId, year, month는 필수입니다.");
+    const { provinceId, cityId, officeId, year, month } = request.data;
+    if (!provinceId || !cityId || !officeId || !year || !month) {
+        throw new Error("provinceId, cityId, officeId, year, month는 필수입니다.");
     }
-    logger.info(`📋 사무실 리포트 생성: ${regionId}/${officeId}, ${year}년 ${month}월`);
+    logger.info(`📋 사무실 리포트 생성: ${provinceId}/${cityId}/${officeId}, ${year}년 ${month}월`);
     try {
         const bucket = admin.storage().bucket();
         const db = admin.firestore();
         // 사무실 정보 조회
-        const officeDoc = await db.collection('regions').doc(regionId)
+        const officeDoc = await db.collection('provinces').doc(provinceId)
+            .collection('cities').doc(cityId)
             .collection('offices').doc(officeId).get();
         if (!officeDoc.exists) {
             throw new Error("사무실을 찾을 수 없습니다.");
@@ -2765,7 +2924,8 @@ exports.getOfficeReport = (0, https_1.onCall)({
         // 리포트 데이터 구조
         const report = {
             office: {
-                regionId,
+                provinceId,
+                cityId,
                 officeId,
                 officeName: (officeData === null || officeData === void 0 ? void 0 : officeData.name) || officeId,
                 address: (officeData === null || officeData === void 0 ? void 0 : officeData.address) || 'N/A',
@@ -2790,7 +2950,7 @@ exports.getOfficeReport = (0, https_1.onCall)({
         };
         // 각 날짜별 아카이브 읽기
         for (const date of dates) {
-            const filePath = `archives/calls/${regionId}/${officeId}/completed_${date}.jsonl`;
+            const filePath = `archives/calls/${provinceId}/${cityId}/${officeId}/completed_${date}.jsonl`;
             let dailyCalls = 0;
             let dailyFare = 0;
             let dailyDriverFee = 0;
@@ -2874,10 +3034,10 @@ exports.getOfficeReport = (0, https_1.onCall)({
  */
 exports.onDriverStatusChange = (0, firestore_1.onDocumentUpdated)({
     region: "asia-northeast3",
-    document: "regions/{regionId}/offices/{officeId}/designated_drivers/{driverId}"
+    document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/designated_drivers/{driverId}"
 }, async (event) => {
     var _a;
-    const { regionId, officeId, driverId } = event.params;
+    const { provinceId, cityId, officeId, driverId } = event.params;
     if (!event.data || !event.data.after || !event.data.after.exists) {
         logger.info(`[기사상태] ${driverId}: 데이터 없음`);
         return;
@@ -2898,7 +3058,8 @@ exports.onDriverStatusChange = (0, firestore_1.onDocumentUpdated)({
     try {
         // 관리자 토큰 가져오기
         const managerTokensSnapshot = await admin.firestore()
-            .collection("regions").doc(regionId)
+            .collection("provinces").doc(provinceId)
+            .collection("cities").doc(cityId)
             .collection("offices").doc(officeId)
             .collection("managerTokens")
             .get();
@@ -2947,7 +3108,8 @@ exports.onDriverStatusChange = (0, firestore_1.onDocumentUpdated)({
                 newStatus: newStatus,
                 oldStatus: oldStatus,
                 statusMessage: statusMessage,
-                regionId: regionId,
+                provinceId: provinceId,
+                cityId: cityId,
                 officeId: officeId,
                 timestamp: Date.now().toString()
             },

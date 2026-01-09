@@ -23,12 +23,14 @@ class DriverManagementViewModel : ViewModel() {
 
     private val TAG = "DriverManagementVM"
 
-    fun fetchPendingDrivers(regionId: String, officeId: String) {
+    fun fetchPendingDrivers(provinceId: String, cityId: String, officeId: String) {
         viewModelScope.launch {
             _isLoading.value = true
             try {
                 val driversCollection =
-                    db.collection("regions").document(regionId).collection("offices").document(officeId)
+                    db.collection("provinces").document(provinceId)
+                        .collection("cities").document(cityId)
+                        .collection("offices").document(officeId)
                         .collection("designated_drivers")
                 val snapshot = driversCollection
                     .whereEqualTo("approvalStatus", Constants.APPROVAL_STATUS_PENDING) // "status" -> "approvalStatus"로 필드명 수정
@@ -48,10 +50,11 @@ class DriverManagementViewModel : ViewModel() {
         }
     }
 
-    fun approveDriver(regionId: String, officeId: String, driverId: String) {
+    fun approveDriver(provinceId: String, cityId: String, officeId: String, driverId: String) {
         viewModelScope.launch {
             try {
-                val driverRef = db.collection("regions").document(regionId)
+                val driverRef = db.collection("provinces").document(provinceId)
+                    .collection("cities").document(cityId)
                     .collection("offices").document(officeId)
                     .collection("designated_drivers").document(driverId)
 
@@ -60,7 +63,7 @@ class DriverManagementViewModel : ViewModel() {
                 val driverName = driverSnapshot.getString("name") ?: ""
 
                 // 추천 QR URL 생성
-                val referralQrUrl = buildReferralUrl(regionId, officeId, driverId, driverName)
+                val referralQrUrl = buildReferralUrl(provinceId, cityId, officeId, driverId, driverName)
 
                 // 승인 및 QR URL 저장
                 driverRef.update(
@@ -69,34 +72,37 @@ class DriverManagementViewModel : ViewModel() {
                     "referralQrUrl", referralQrUrl
                 ).await()
 
-                fetchPendingDrivers(regionId, officeId)
+                fetchPendingDrivers(provinceId, cityId, officeId)
             } catch (e: Exception) {
             }
         }
     }
 
     private fun buildReferralUrl(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         driverId: String,
         driverName: String
     ): String {
         // Play Store Install Referrer 방식
         val encodedName = URLEncoder.encode(driverName, "UTF-8")
-        val referrerParams = "r=$regionId&o=$officeId&d=$driverId&dn=$encodedName"
+        val referrerParams = "p=$provinceId&c=$cityId&o=$officeId&d=$driverId&dn=$encodedName"
         return "https://play.google.com/store/apps/details" +
                "?id=com.designated.customer" +
                "&referrer=${URLEncoder.encode(referrerParams, "UTF-8")}"
     }
 
-    fun rejectDriver(regionId: String, officeId: String, driverId: String) {
+    fun rejectDriver(provinceId: String, cityId: String, officeId: String, driverId: String) {
         viewModelScope.launch {
             try {
-                db.collection("regions").document(regionId).collection("offices").document(officeId)
+                db.collection("provinces").document(provinceId)
+                    .collection("cities").document(cityId)
+                    .collection("offices").document(officeId)
                     .collection("designated_drivers").document(driverId)
                     .update("approvalStatus", Constants.APPROVAL_STATUS_REJECTED)
                     .await()
-                fetchPendingDrivers(regionId, officeId)
+                fetchPendingDrivers(provinceId, cityId, officeId)
             } catch (e: Exception) {
             }
         }

@@ -6,7 +6,8 @@ const logger = functions.logger;
 /**
  * 공유콜 완료 시 포인트 분배 처리
  * @param sharedCallData 공유콜 데이터
- * @param regionId 대상 사무실 지역 ID
+ * @param provinceId 대상 사무실 도/광역시 ID
+ * @param cityId 대상 사무실 시/군/구 ID
  * @param officeId 대상 사무실 ID
  * @param fare 요금
  * @param sourceSharedCallId 원본 공유콜 ID
@@ -14,7 +15,8 @@ const logger = functions.logger;
  */
 export async function processSharedCallPoints(
   sharedCallData: any,
-  regionId: string,
+  provinceId: string,
+  cityId: string,
   officeId: string,
   fare: number,
   sourceSharedCallId: string
@@ -28,11 +30,13 @@ export async function processSharedCallPoints(
     // ====== 중복 처리 방지 체크 ======
     // 이미 이 공유콜에 대한 포인트 거래가 존재하는지 확인
     const sourceOfficeRef = admin.firestore()
-      .collection("regions").doc(sharedCallData.sourceRegionId)
+      .collection("provinces").doc(sharedCallData.sourceProvinceId)
+      .collection("cities").doc(sharedCallData.sourceCityId)
       .collection("offices").doc(sharedCallData.sourceOfficeId);
 
     const targetOfficeRef = admin.firestore()
-      .collection("regions").doc(regionId)
+      .collection("provinces").doc(provinceId)
+      .collection("cities").doc(cityId)
       .collection("offices").doc(officeId);
 
     // 이미 처리된 거래가 있는지 확인
@@ -114,9 +118,10 @@ export async function processSharedCallPoints(
 /**
  * 포인트 초기화 (테스트용)
  */
-export async function initializePoints(regionId: string, officeId: string, initialBalance: number = 0): Promise<void> {
+export async function initializePoints(provinceId: string, cityId: string, officeId: string, initialBalance: number = 0): Promise<void> {
   const pointsRef = admin.firestore()
-    .collection("regions").doc(regionId)
+    .collection("provinces").doc(provinceId)
+    .collection("cities").doc(cityId)
     .collection("offices").doc(officeId)
     .collection("points").doc("points");
 
@@ -125,15 +130,16 @@ export async function initializePoints(regionId: string, officeId: string, initi
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
-  logger.info(`[points] 포인트 초기화 완료. Region: ${regionId}, Office: ${officeId}, Balance: ${initialBalance}`);
+  logger.info(`[points] 포인트 초기화 완료. Province: ${provinceId}, City: ${cityId}, Office: ${officeId}, Balance: ${initialBalance}`);
 }
 
 /**
  * 포인트 잔액 조회
  */
-export async function getPointBalance(regionId: string, officeId: string): Promise<number> {
+export async function getPointBalance(provinceId: string, cityId: string, officeId: string): Promise<number> {
   const pointsRef = admin.firestore()
-    .collection("regions").doc(regionId)
+    .collection("provinces").doc(provinceId)
+    .collection("cities").doc(cityId)
     .collection("offices").doc(officeId)
     .collection("points").doc("points");
 

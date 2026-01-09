@@ -115,9 +115,9 @@ enum class Screen {
 
 sealed class NavigationParams {
     object None : NavigationParams()
-    data class DriverManagement(val regionId: String, val officeId: String) : NavigationParams()
-    data class CustomerManagement(val regionId: String, val officeId: String) : NavigationParams()
-    data class AttributionManagement(val regionId: String, val officeId: String) : NavigationParams()
+    data class DriverManagement(val provinceId: String, val cityId: String, val officeId: String) : NavigationParams()
+    data class CustomerManagement(val provinceId: String, val cityId: String, val officeId: String) : NavigationParams()
+    data class AttributionManagement(val provinceId: String, val cityId: String, val officeId: String) : NavigationParams()
 }
 
 class MainActivity : ComponentActivity() {
@@ -126,7 +126,8 @@ class MainActivity : ComponentActivity() {
         androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory(application)
     }
 
-    private var regionId: String? = null
+    private var provinceId: String? = null
+    private var cityId: String? = null
     private var officeId: String? = null
     private var managerId: String? = null
 
@@ -314,13 +315,14 @@ class MainActivity : ComponentActivity() {
 
                     when (currentScreenState) {
                         Screen.Login -> LoginScreen(
-                            onLoginComplete = { regionId, officeId ->
-                                this@MainActivity.regionId = regionId
+                            onLoginComplete = { provinceId, cityId, officeId ->
+                                this@MainActivity.provinceId = provinceId
+                                this@MainActivity.cityId = cityId
                                 this@MainActivity.officeId = officeId
                                 this@MainActivity.managerId = auth.currentUser?.uid
 
-                                dashboardViewModel.loadDataForUser(regionId, officeId)
-                                updateFcmTokenForAdmin(regionId, officeId)
+                                dashboardViewModel.loadDataForUser(provinceId, cityId, officeId)
+                                updateFcmTokenForAdmin(provinceId, cityId, officeId)
                                 screenState = Screen.Dashboard
                             },
                             onNavigateToSignUp = { screenState = Screen.SignUp },
@@ -350,8 +352,8 @@ class MainActivity : ComponentActivity() {
                             SettingsScreen(
                                 dashboardViewModel = dashboardViewModel,
                                 onNavigateBack = { screenState = Screen.Dashboard },
-                                onNavigateToPendingDrivers = { regionId, officeId ->
-                                    navigationParams = NavigationParams.DriverManagement(regionId, officeId)
+                                onNavigateToPendingDrivers = { provinceId, cityId, officeId ->
+                                    navigationParams = NavigationParams.DriverManagement(provinceId, cityId, officeId)
                                     screenState = Screen.PendingDrivers
                                 },
                                 onNavigateToSettlement = {
@@ -360,12 +362,12 @@ class MainActivity : ComponentActivity() {
                                 onNavigateToExcludeNumber = {
                                     screenState = Screen.ExcludeNumber
                                 },
-                                onNavigateToCustomerManagement = { regionId, officeId ->
-                                    navigationParams = NavigationParams.CustomerManagement(regionId, officeId)
+                                onNavigateToCustomerManagement = { provinceId, cityId, officeId ->
+                                    navigationParams = NavigationParams.CustomerManagement(provinceId, cityId, officeId)
                                     screenState = Screen.CustomerManagement
                                 },
-                                onNavigateToAttributionManagement = { regionId, officeId ->
-                                    navigationParams = NavigationParams.AttributionManagement(regionId, officeId)
+                                onNavigateToAttributionManagement = { provinceId, cityId, officeId ->
+                                    navigationParams = NavigationParams.AttributionManagement(provinceId, cityId, officeId)
                                     screenState = Screen.AttributionManagement
                                 }
                             )
@@ -374,7 +376,8 @@ class MainActivity : ComponentActivity() {
                             val params = navigationParams
                             if (params is NavigationParams.DriverManagement) {
                                 PendingDriversScreen(
-                                    regionId = params.regionId,
+                                    provinceId = params.provinceId,
+                                    cityId = params.cityId,
                                     officeId = params.officeId,
                                     onNavigateBack = { screenState = Screen.Settings }
                                 )
@@ -408,7 +411,8 @@ class MainActivity : ComponentActivity() {
                             val params = navigationParams
                             if (params is NavigationParams.CustomerManagement) {
                                 CustomerManagementScreen(
-                                    regionId = params.regionId,
+                                    provinceId = params.provinceId,
+                                    cityId = params.cityId,
                                     officeId = params.officeId,
                                     onNavigateBack = { screenState = Screen.Settings },
                                     onCustomerClick = { customer ->
@@ -431,7 +435,8 @@ class MainActivity : ComponentActivity() {
                             val params = navigationParams
                             if (params is NavigationParams.AttributionManagement) {
                                 AttributionManagementScreen(
-                                    regionId = params.regionId,
+                                    provinceId = params.provinceId,
+                                    cityId = params.cityId,
                                     officeId = params.officeId,
                                     onNavigateBack = { screenState = Screen.Settings }
                                 )
@@ -867,7 +872,7 @@ class MainActivity : ComponentActivity() {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 
-    private fun updateFcmTokenForAdmin(regionId: String, officeId: String) {
+    private fun updateFcmTokenForAdmin(provinceId: String, cityId: String, officeId: String) {
         val adminId = auth.currentUser?.uid ?: return
 
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
@@ -915,18 +920,20 @@ class MainActivity : ComponentActivity() {
                     .get()
                     .addOnSuccessListener { document ->
                         if (document.exists()) {
-                            val regionId = document.getString("associatedRegionId")
+                            val provinceId = document.getString("associatedProvinceId")
+                            val cityId = document.getString("associatedCityId")
                             val officeId = document.getString("associatedOfficeId")
 
-                            if (regionId != null && officeId != null) {
+                            if (provinceId != null && cityId != null && officeId != null) {
 
-                                this@MainActivity.regionId = regionId
+                                this@MainActivity.provinceId = provinceId
+                                this@MainActivity.cityId = cityId
                                 this@MainActivity.officeId = officeId
                                 this@MainActivity.managerId = adminId
 
                                 // DashboardViewModel이 이미 init에서 리스너를 시작하므로 loadDataForUser 호출 불필요
                                 // 콜 디텍터 설정만 동기화
-                                dashboardViewModel.syncCallDetectorSettings(regionId, officeId)
+                                dashboardViewModel.syncCallDetectorSettings(provinceId, cityId, officeId)
 
                             } else {
                             }
@@ -944,12 +951,13 @@ class MainActivity : ComponentActivity() {
      * 토큰 갱신 요청 실시간 리스너 설정
      */
     private fun setupTokenRefreshListener() {
-        val currentRegionId = regionId
+        val currentProvinceId = provinceId
+        val currentCityId = cityId
         val currentOfficeId = officeId
         val currentManagerId = managerId
 
-        if (currentRegionId.isNullOrBlank() || currentOfficeId.isNullOrBlank() || currentManagerId.isNullOrBlank()) {
-            android.util.Log.w("MainActivity", "[TokenRefresh] regionId, officeId 또는 managerId가 없어 리스너 설정 불가")
+        if (currentProvinceId.isNullOrBlank() || currentCityId.isNullOrBlank() || currentOfficeId.isNullOrBlank() || currentManagerId.isNullOrBlank()) {
+            android.util.Log.w("MainActivity", "[TokenRefresh] provinceId, cityId, officeId 또는 managerId가 없어 리스너 설정 불가")
             return
         }
 
@@ -959,7 +967,8 @@ class MainActivity : ComponentActivity() {
         android.util.Log.d("MainActivity", "[TokenRefresh] 토큰 갱신 요청 리스너 시작 - managerId: $currentManagerId")
 
         tokenRefreshListener = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-            .collection("regions").document(currentRegionId)
+            .collection("provinces").document(currentProvinceId)
+            .collection("cities").document(currentCityId)
             .collection("offices").document(currentOfficeId)
             .collection("tokenRefreshRequests")
             .document(currentManagerId)
@@ -993,7 +1002,8 @@ class MainActivity : ComponentActivity() {
                                 )
 
                                 com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                                    .collection("regions").document(currentRegionId)
+                                    .collection("provinces").document(currentProvinceId)
+                                    .collection("cities").document(currentCityId)
                                     .collection("offices").document(currentOfficeId)
                                     .collection("managerTokens").document(currentManagerId)
                                     .set(managerTokenData, com.google.firebase.firestore.SetOptions.merge())

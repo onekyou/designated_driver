@@ -22,6 +22,8 @@ import kotlinx.coroutines.tasks.await
 // TODO: Implement SignUpViewModel logic
 
 data class RegionItem(val id: String, val name: String)
+data class ProvinceItem(val id: String, val name: String)
+data class CityItem(val id: String, val name: String)
 
 object KoreanBanks {
     val banks = listOf(
@@ -73,40 +75,76 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
     var confirmAccountNumber by mutableStateOf("")
     var accountHolder by mutableStateOf("")
 
-    private val _regions = MutableStateFlow<List<RegionItem>>(emptyList())
-    val regions: StateFlow<List<RegionItem>> = _regions.asStateFlow()
+    private val _provinces = MutableStateFlow<List<ProvinceItem>>(emptyList())
+    val provinces: StateFlow<List<ProvinceItem>> = _provinces.asStateFlow()
 
-    var selectedRegion by mutableStateOf<RegionItem?>(null)
+    private val _cities = MutableStateFlow<List<CityItem>>(emptyList())
+    val cities: StateFlow<List<CityItem>> = _cities.asStateFlow()
+
+    var selectedProvince by mutableStateOf<ProvinceItem?>(null)
+        private set
+
+    var selectedCity by mutableStateOf<CityItem?>(null)
         private set
 
     private val _signUpState = MutableStateFlow<SignUpState>(SignUpState.Idle)
     val signUpState: StateFlow<SignUpState> = _signUpState.asStateFlow()
 
     init {
-        fetchRegions()
+        fetchProvinces()
     }
 
-    fun onRegionSelected(region: RegionItem) {
-        selectedRegion = region
+    fun onProvinceSelected(province: ProvinceItem) {
+        selectedProvince = province
+        selectedCity = null
+        _cities.value = emptyList()
+        fetchCities(province.id)
     }
 
-    private fun fetchRegions() {
+    fun onCitySelected(city: CityItem) {
+        selectedCity = city
+    }
+
+    private fun fetchProvinces() {
         _signUpState.value = SignUpState.LoadingRegions
         viewModelScope.launch {
             try {
-                val snapshot = db.collection("regions").get().await()
-                val regionList = snapshot.documents.mapNotNull { doc ->
+                val snapshot = db.collection("provinces").get().await()
+                val provinceList = snapshot.documents.mapNotNull { doc ->
                     val name = doc.getString("name")
                     if (name != null) {
-                        RegionItem(id = doc.id, name = name)
+                        ProvinceItem(id = doc.id, name = name)
                     } else {
                         null
                     }
                 }.sortedBy { it.name }
-                _regions.value = regionList
+                _provinces.value = provinceList
                 _signUpState.value = SignUpState.Idle
             } catch (e: Exception) {
                 _signUpState.value = SignUpState.Error("지역 목록을 불러오는데 실패했습니다: ${e.message}")
+            }
+        }
+    }
+
+    private fun fetchCities(provinceId: String) {
+        viewModelScope.launch {
+            try {
+                val snapshot = db.collection("provinces")
+                    .document(provinceId)
+                    .collection("cities")
+                    .get()
+                    .await()
+                val cityList = snapshot.documents.mapNotNull { doc ->
+                    val name = doc.getString("name")
+                    if (name != null) {
+                        CityItem(id = doc.id, name = name)
+                    } else {
+                        null
+                    }
+                }.sortedBy { it.name }
+                _cities.value = cityList
+            } catch (e: Exception) {
+                _signUpState.value = SignUpState.Error("시/군/구 목록을 불러오는데 실패했습니다: ${e.message}")
             }
         }
     }
@@ -129,9 +167,14 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
             _signUpState.value = SignUpState.Error("이름을 입력해주세요.")
             return
         }
-        val currentSelectedRegion = selectedRegion
-        if (currentSelectedRegion == null) {
-            _signUpState.value = SignUpState.Error("지역을 선택해주세요.")
+        val currentSelectedProvince = selectedProvince
+        val currentSelectedCity = selectedCity
+        if (currentSelectedProvince == null) {
+            _signUpState.value = SignUpState.Error("도/시를 선택해주세요.")
+            return
+        }
+        if (currentSelectedCity == null) {
+            _signUpState.value = SignUpState.Error("시/군/구를 선택해주세요.")
             return
         }
         if (officeName.isBlank()) {
@@ -168,8 +211,10 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
 
                 if (newUser != null) {
                     // 2. 새 사무실 문서 생성
-                    val officeRef = db.collection("regions")
-                        .document(currentSelectedRegion.id)
+                    val officeRef = db.collection("provinces")
+                        .document(currentSelectedProvince.id)
+                        .collection("cities")
+                        .document(currentSelectedCity.id)
                         .collection("offices")
                         .document() // 자동 ID 생성
 
@@ -190,7 +235,8 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
                     val adminData = hashMapOf(
                         "email" to email,
                         "name" to adminName,
-                        "associatedRegionId" to currentSelectedRegion.id,
+                        "associatedProvinceId" to currentSelectedProvince.id,
+                        "associatedCityId" to currentSelectedCity.id,
                         "associatedOfficeId" to newOfficeId,
                         "createdAt" to com.google.firebase.Timestamp.now()
                     )
@@ -198,7 +244,8 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
 
                     // 4. QR 코드 자동 생성 및 저장
                     generateAndSaveQRCode(
-                        currentSelectedRegion.id,
+                        currentSelectedProvince.id,
+                        currentSelectedCity.id,
                         newOfficeId,
                         officePhone,
                         bankName,
@@ -218,7 +265,8 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private suspend fun generateAndSaveQRCode(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         phone: String,
         bank: String,
@@ -227,7 +275,7 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
     ) {
         try {
             // Play Store Install Referrer 방식
-            val referrerParams = "r=$regionId&o=$officeId" +
+            val referrerParams = "p=$provinceId&c=$cityId&o=$officeId" +
                     "&phone=${android.net.Uri.encode(phone)}" +
                     "&bank=${android.net.Uri.encode(bank)}" +
                     "&account=${android.net.Uri.encode(account)}" +
@@ -250,8 +298,10 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
                 "createdAt" to com.google.firebase.Timestamp.now()
             )
 
-            db.collection("regions")
-                .document(regionId)
+            db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("settings")

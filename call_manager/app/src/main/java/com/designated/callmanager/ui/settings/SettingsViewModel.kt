@@ -33,12 +33,14 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         _isOfficeOpen.value = isOpen
         /*
         viewModelScope.launch {
-            val regionId = ...
+            val provinceId = ...
+            val cityId = ...
             val officeId = ...
-            if (userId != null && regionId != null && officeId != null) {
+            if (userId != null && provinceId != null && cityId != null && officeId != null) {
                 try {
                     val status = if (isOpen) "operating" else "closed_sharing"
-                    firestore.collection("regions").document(regionId)
+                    firestore.collection("provinces").document(provinceId)
+                             .collection("cities").document(cityId)
                              .collection("offices").document(officeId)
                              .update("status", status).await()
                     _isOfficeOpen.value = isOpen

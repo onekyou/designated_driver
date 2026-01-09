@@ -89,13 +89,12 @@ class CallRepository(
                         customerName = data["customerName"] as? String,
                         customerAddress = data["customerAddress"] as? String,
                         status = data["status"] as? String ?: "WAITING",
-                        timestamp = data["timestamp"] as? Timestamp,
+                        timestamp = data["timestamp"] as? Timestamp ?: Timestamp.now(),
                         departure_set = data["departure_set"] as? String,
                         destination_set = data["destination_set"] as? String,
                         waypoints_set = data["waypoints_set"] as? String,
                         fare_set = (data["fare_set"] as? Number)?.toLong(),
                         assignedDriverId = data["assignedDriverId"] as? String,
-                        assignedDriverAuthUid = data["assignedDriverAuthUid"] as? String,
                         assignedDriverName = data["assignedDriverName"] as? String,
                         assignedDriverPhone = data["assignedDriverPhone"] as? String,
                         callType = data["callType"] as? String,
@@ -160,7 +159,6 @@ class CallRepository(
     suspend fun assignCall(
         callId: String,
         driverId: String,
-        driverAuthUid: String?,
         driverName: String,
         driverPhone: String
     ) = withContext(Dispatchers.IO) {
@@ -169,7 +167,6 @@ class CallRepository(
             callDao.updateAssignment(
                 callId = callId,
                 driverId = driverId,
-                driverAuthUid = driverAuthUid,
                 driverName = driverName,
                 driverPhone = driverPhone,
                 status = CallStatus.ASSIGNED.firestoreValue
@@ -184,7 +181,6 @@ class CallRepository(
                         .update(
                             mapOf(
                                 "assignedDriverId" to driverId,
-                                "assignedDriverAuthUid" to driverAuthUid,
                                 "assignedDriverName" to driverName,
                                 "assignedDriverPhone" to driverPhone,
                                 "status" to CallStatus.ASSIGNED.firestoreValue,

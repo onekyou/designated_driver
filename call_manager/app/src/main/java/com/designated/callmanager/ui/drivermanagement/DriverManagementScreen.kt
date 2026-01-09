@@ -21,7 +21,8 @@ import com.designated.callmanager.data.DriverInfo
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DriverManagementScreen(
-    regionId: String,
+    provinceId: String,
+    cityId: String,
     officeId: String,
     viewModel: DriverManagementViewModel = viewModel(),
     onNavigateBack: () -> Unit
@@ -30,9 +31,9 @@ fun DriverManagementScreen(
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    LaunchedEffect(regionId, officeId) {
-        if (regionId.isNotBlank() && officeId.isNotBlank()) {
-            viewModel.fetchPendingDrivers(regionId, officeId)
+    LaunchedEffect(provinceId, cityId, officeId) {
+        if (provinceId.isNotBlank() && cityId.isNotBlank() && officeId.isNotBlank()) {
+            viewModel.fetchPendingDrivers(provinceId, cityId, officeId)
         }
     }
 
@@ -69,11 +70,11 @@ fun DriverManagementScreen(
                         PendingDriverItem(
                             driver = driver,
                             onApproveClick = {
-                                viewModel.approveDriver(regionId, officeId, driver.id)
+                                viewModel.approveDriver(provinceId, cityId, officeId, driver.id)
                                 Toast.makeText(context, "${driver.name} 기사님을 승인했습니다.", Toast.LENGTH_SHORT).show()
                             },
                             onRejectClick = {
-                                viewModel.rejectDriver(regionId, officeId, driver.id)
+                                viewModel.rejectDriver(provinceId, cityId, officeId, driver.id)
                                 Toast.makeText(context, "${driver.name} 기사님을 거절했습니다.", Toast.LENGTH_SHORT).show()
                             },
                             isLoading = isLoading

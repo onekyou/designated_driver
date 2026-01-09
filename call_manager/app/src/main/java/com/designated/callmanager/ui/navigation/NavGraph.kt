@@ -25,7 +25,7 @@ fun AppNavGraph(
     ) {
         composable(Screen.Login.route) {
             LoginScreen(
-                onLoginComplete = { _, _ ->
+                onLoginComplete = { _, _, _ ->
                     navController.navigate(Screen.MainDashboard.route) {
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
@@ -43,7 +43,8 @@ fun AppNavGraph(
         }
         composable(Screen.PendingDrivers.route) {
              PendingDriversScreen(
-                 regionId = "default", // TODO: 실제 regionId 전달
+                 provinceId = "default", // TODO: 실제 provinceId 전달
+                 cityId = "default", // TODO: 실제 cityId 전달
                  officeId = "default", // TODO: 실제 officeId 전달
                  onNavigateBack = { navController.popBackStack() }
              )

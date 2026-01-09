@@ -39,7 +39,8 @@ class SettlementBackupRepository(
      * 정산 데이터 백업
      */
     suspend fun backupSettlements(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         settlements: List<SettlementData>
     ): Result<String> {
@@ -49,7 +50,7 @@ class SettlementBackupRepository(
             }
 
             val backupDate = dateFormat.format(Date())
-            val backupId = "${regionId}_${officeId}_${System.currentTimeMillis()}"
+            val backupId = "${provinceId}_${cityId}_${officeId}_${System.currentTimeMillis()}"
 
             // 백업 데이터 생성
             val backupItems = settlements.map { SettlementBackupItem.fromSettlementData(it) }
@@ -57,7 +58,7 @@ class SettlementBackupRepository(
 
             val backup = SettlementBackup(
                 backupId = backupId,
-                regionId = regionId,
+                provinceId = provinceId,
                 officeId = officeId,
                 backupDate = backupDate,
                 createdAt = System.currentTimeMillis(),
@@ -67,14 +68,15 @@ class SettlementBackupRepository(
 
             // Firebase Realtime Database에 저장
             val backupRef = database.getReference(BACKUP_ROOT)
-                .child(regionId)
+                .child(provinceId)
+                .child(cityId)
                 .child(officeId)
                 .child(backupId)
 
             backupRef.setValue(backup).await()
 
             // 오래된 백업 정리
-            cleanupOldBackups(regionId, officeId)
+            cleanupOldBackups(provinceId, cityId, officeId)
 
             Log.d(TAG, "정산 데이터 백업 완료: ${settlements.size}건, ID: $backupId")
             Result.success(backupId)
@@ -89,18 +91,20 @@ class SettlementBackupRepository(
      * 정산 데이터 복원
      */
     suspend fun restoreSettlements(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         backupId: String? = null
     ): Result<List<SettlementData>> {
         return try {
-            val targetBackupId = backupId ?: getLatestBackupId(regionId, officeId)
+            val targetBackupId = backupId ?: getLatestBackupId(provinceId, cityId, officeId)
             if (targetBackupId == null) {
                 return Result.failure(Exception("복원할 백업이 없습니다"))
             }
 
             val backupRef = database.getReference(BACKUP_ROOT)
-                .child(regionId)
+                .child(provinceId)
+                .child(cityId)
                 .child(officeId)
                 .child(targetBackupId)
 
@@ -112,7 +116,7 @@ class SettlementBackupRepository(
             val backup = snapshot.getValue(SettlementBackup::class.java)
                 ?: return Result.failure(Exception("백업 데이터 파싱 실패"))
 
-            val settlements = backup.settlements.map { it.toSettlementData(regionId, officeId) }
+            val settlements = backup.settlements.map { it.toSettlementData(provinceId, officeId) }
 
             Log.d(TAG, "정산 데이터 복원 완료: ${settlements.size}건, ID: $targetBackupId")
             Result.success(settlements)
@@ -126,9 +130,10 @@ class SettlementBackupRepository(
     /**
      * 백업 목록 조회
      */
-    fun getBackupList(regionId: String, officeId: String): Flow<List<SettlementBackup>> = callbackFlow {
+    fun getBackupList(provinceId: String, cityId: String, officeId: String): Flow<List<SettlementBackup>> = callbackFlow {
         val backupRef = database.getReference(BACKUP_ROOT)
-            .child(regionId)
+            .child(provinceId)
+            .child(cityId)
             .child(officeId)
 
         val listener = object : ValueEventListener {
@@ -167,10 +172,11 @@ class SettlementBackupRepository(
     /**
      * 백업 삭제
      */
-    suspend fun deleteBackup(regionId: String, officeId: String, backupId: String): Result<Unit> {
+    suspend fun deleteBackup(provinceId: String, cityId: String, officeId: String, backupId: String): Result<Unit> {
         return try {
             val backupRef = database.getReference(BACKUP_ROOT)
-                .child(regionId)
+                .child(provinceId)
+                .child(cityId)
                 .child(officeId)
                 .child(backupId)
 
@@ -188,10 +194,11 @@ class SettlementBackupRepository(
     /**
      * 백업 존재 여부 확인
      */
-    suspend fun hasBackups(regionId: String, officeId: String): Boolean {
+    suspend fun hasBackups(provinceId: String, cityId: String, officeId: String): Boolean {
         return try {
             val backupRef = database.getReference(BACKUP_ROOT)
-                .child(regionId)
+                .child(provinceId)
+                .child(cityId)
                 .child(officeId)
 
             val snapshot = backupRef.limitToFirst(1).get().await()
@@ -206,10 +213,11 @@ class SettlementBackupRepository(
     /**
      * 최신 백업 ID 조회
      */
-    private suspend fun getLatestBackupId(regionId: String, officeId: String): String? {
+    private suspend fun getLatestBackupId(provinceId: String, cityId: String, officeId: String): String? {
         return try {
             val backupRef = database.getReference(BACKUP_ROOT)
-                .child(regionId)
+                .child(provinceId)
+                .child(cityId)
                 .child(officeId)
 
             val snapshot = backupRef.orderByChild("createdAt").limitToLast(1).get().await()
@@ -258,10 +266,11 @@ class SettlementBackupRepository(
     /**
      * 오래된 백업 정리
      */
-    private suspend fun cleanupOldBackups(regionId: String, officeId: String) {
+    private suspend fun cleanupOldBackups(provinceId: String, cityId: String, officeId: String) {
         try {
             val backupRef = database.getReference(BACKUP_ROOT)
-                .child(regionId)
+                .child(provinceId)
+                .child(cityId)
                 .child(officeId)
 
             val snapshot = backupRef.orderByChild("createdAt").get().await()

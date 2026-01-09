@@ -98,7 +98,6 @@ interface CallDao {
     @Query("""
         UPDATE calls
         SET assignedDriverId = :driverId,
-            assignedDriverAuthUid = :driverAuthUid,
             assignedDriverName = :driverName,
             assignedDriverPhone = :driverPhone,
             status = :status,
@@ -108,7 +107,6 @@ interface CallDao {
     suspend fun updateAssignment(
         callId: String,
         driverId: String,
-        driverAuthUid: String?,
         driverName: String,
         driverPhone: String,
         status: String,

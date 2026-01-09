@@ -10,6 +10,7 @@ data class PendingDriverInfo(
     val driverType: String = "대리기사",
     val status: String = "승인대기중",
     val requestedAt: Timestamp? = null,
-    val targetRegionId: String = "",
+    val targetProvinceId: String = "",
+    val targetCityId: String = "",
     val targetOfficeId: String = ""
 )

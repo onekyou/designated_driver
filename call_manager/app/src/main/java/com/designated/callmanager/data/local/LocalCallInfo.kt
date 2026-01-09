@@ -32,7 +32,6 @@ data class LocalCallInfo(
 
     // 배차 정보
     val assignedDriverId: String?,
-    val assignedDriverAuthUid: String?,
     val assignedDriverName: String?,
     val assignedDriverPhone: String?,
 
@@ -65,7 +64,6 @@ fun LocalCallInfo.toCallInfo(): CallInfo {
         waypoints_set = waypoints_set,
         fare_set = fare_set,
         assignedDriverId = assignedDriverId,
-        assignedDriverAuthUid = assignedDriverAuthUid,
         assignedDriverName = assignedDriverName,
         assignedDriverPhone = assignedDriverPhone,
         callType = callType,
@@ -83,13 +81,12 @@ fun CallInfo.toLocalCallInfo(regionId: String, officeId: String): LocalCallInfo 
         customerName = customerName,
         customerAddress = customerAddress,
         status = status,
-        timestamp = timestamp?.seconds?.times(1000) ?: System.currentTimeMillis(),
+        timestamp = timestamp.seconds.times(1000),
         departure_set = departure_set,
         destination_set = destination_set,
         waypoints_set = waypoints_set,
         fare_set = fare_set,
         assignedDriverId = assignedDriverId,
-        assignedDriverAuthUid = assignedDriverAuthUid,
         assignedDriverName = assignedDriverName,
         assignedDriverPhone = assignedDriverPhone,
         callType = callType,

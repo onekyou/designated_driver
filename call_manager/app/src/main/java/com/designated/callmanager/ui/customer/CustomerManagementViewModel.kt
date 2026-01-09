@@ -43,7 +43,7 @@ class CustomerManagementViewModel : ViewModel() {
 
     private val TAG = "CustomerManagementVM"
 
-    fun fetchCustomers(regionId: String, officeId: String, refresh: Boolean = true) {
+    fun fetchCustomers(provinceId: String, cityId: String, officeId: String, refresh: Boolean = true) {
         viewModelScope.launch {
             if (refresh) {
                 _isLoading.value = true
@@ -56,7 +56,8 @@ class CustomerManagementViewModel : ViewModel() {
 
             try {
                 val result = customerService.getCustomerList(
-                    regionId = regionId,
+                    provinceId = provinceId,
+                    cityId = cityId,
                     officeId = officeId,
                     limit = 20,
                     lastCustomerId = if (refresh) null else lastCustomerId
@@ -82,7 +83,7 @@ class CustomerManagementViewModel : ViewModel() {
 
                 // 통계도 함께 로드 (첫 번째 로드 시에만)
                 if (refresh) {
-                    loadCustomerStats(regionId, officeId)
+                    loadCustomerStats(provinceId, cityId, officeId)
                 }
 
             } catch (e: Exception) {
@@ -95,15 +96,15 @@ class CustomerManagementViewModel : ViewModel() {
         }
     }
 
-    fun loadMoreCustomers(regionId: String, officeId: String) {
+    fun loadMoreCustomers(provinceId: String, cityId: String, officeId: String) {
         if (canLoadMore && !_isLoadingMore.value && !_isLoading.value) {
-            fetchCustomers(regionId, officeId, refresh = false)
+            fetchCustomers(provinceId, cityId, officeId, refresh = false)
         }
     }
 
-    private suspend fun loadCustomerStats(regionId: String, officeId: String) {
+    private suspend fun loadCustomerStats(provinceId: String, cityId: String, officeId: String) {
         try {
-            val result = customerService.getCustomerStats(regionId, officeId)
+            val result = customerService.getCustomerStats(provinceId, cityId, officeId)
             when (result) {
                 is CustomerStatsResult.Success -> {
                     _customerStats.value = result.stats
@@ -117,7 +118,7 @@ class CustomerManagementViewModel : ViewModel() {
         }
     }
 
-    fun filterByGrade(regionId: String, officeId: String, grade: String?) {
+    fun filterByGrade(provinceId: String, cityId: String, officeId: String, grade: String?) {
         viewModelScope.launch {
             _selectedGradeFilter.value = grade
             _selectedActivityFilter.value = null // 활동 상태 필터 초기화
@@ -125,9 +126,9 @@ class CustomerManagementViewModel : ViewModel() {
 
             try {
                 val result = if (grade != null) {
-                    customerService.getCustomersByGrade(regionId, officeId, grade)
+                    customerService.getCustomersByGrade(provinceId, cityId, officeId, grade)
                 } else {
-                    customerService.getCustomerList(regionId, officeId)
+                    customerService.getCustomerList(provinceId, cityId, officeId)
                 }
 
                 when (result) {
@@ -150,13 +151,13 @@ class CustomerManagementViewModel : ViewModel() {
         }
     }
 
-    fun searchCustomer(regionId: String, officeId: String, phoneNumber: String) {
+    fun searchCustomer(provinceId: String, cityId: String, officeId: String, phoneNumber: String) {
         viewModelScope.launch {
             _searchQuery.value = phoneNumber
             _isLoading.value = true
 
             try {
-                val result = customerService.searchCustomerByPhone(regionId, officeId, phoneNumber)
+                val result = customerService.searchCustomerByPhone(provinceId, cityId, officeId, phoneNumber)
                 when (result) {
                     is com.designated.callmanager.service.CustomerSearchResult.Success -> {
                         _customers.value = listOf(result.customer)
@@ -178,12 +179,12 @@ class CustomerManagementViewModel : ViewModel() {
         }
     }
 
-    fun clearSearch(regionId: String, officeId: String) {
+    fun clearSearch(provinceId: String, cityId: String, officeId: String) {
         _searchQuery.value = ""
-        fetchCustomers(regionId, officeId, refresh = true)
+        fetchCustomers(provinceId, cityId, officeId, refresh = true)
     }
 
-    fun filterByActivityStatus(regionId: String, officeId: String, status: String?) {
+    fun filterByActivityStatus(provinceId: String, cityId: String, officeId: String, status: String?) {
         viewModelScope.launch {
             _selectedActivityFilter.value = status
             _selectedGradeFilter.value = null // 등급 필터 초기화
@@ -191,7 +192,7 @@ class CustomerManagementViewModel : ViewModel() {
 
             try {
                 // 먼저 전체 고객 목록을 가져옴
-                val result = customerService.getCustomerList(regionId, officeId)
+                val result = customerService.getCustomerList(provinceId, cityId, officeId)
 
                 when (result) {
                     is CustomerListResult.Success -> {
@@ -221,17 +222,17 @@ class CustomerManagementViewModel : ViewModel() {
     /**
      * 휴면 회원 일괄 삭제 (90일 이상 비활성)
      */
-    fun deleteDormantCustomers(regionId: String, officeId: String, onComplete: (Int) -> Unit) {
+    fun deleteDormantCustomers(provinceId: String, cityId: String, officeId: String, onComplete: (Int) -> Unit) {
         viewModelScope.launch {
             _isLoading.value = true
 
             try {
-                val result = customerService.deleteDormantCustomers(regionId, officeId)
+                val result = customerService.deleteDormantCustomers(provinceId, cityId, officeId)
                 when (result) {
                     is com.designated.callmanager.service.DormantDeleteResult.Success -> {
                         android.util.Log.d(TAG, "휴면 회원 ${result.deletedCount}명 삭제 완료")
                         // 삭제 후 목록 새로고침
-                        fetchCustomers(regionId, officeId, refresh = true)
+                        fetchCustomers(provinceId, cityId, officeId, refresh = true)
                         onComplete(result.deletedCount)
                     }
                     is com.designated.callmanager.service.DormantDeleteResult.Error -> {

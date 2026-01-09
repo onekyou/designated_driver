@@ -25,7 +25,8 @@ class BasicKPIService {
      * 일반관리자용 단순 지표만 제공
      */
     suspend fun getBasicKPI(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         periodDays: Int = 30 // 기본 30일
     ): BasicKPIResult {
@@ -36,9 +37,9 @@ class BasicKPIService {
             val startDate = Timestamp(calendar.time)
 
             // 병렬로 데이터 수집
-            val callsTask = getCallStats(regionId, officeId, startDate, endDate)
-            val customersTask = getCustomerStats(regionId, officeId)
-            val pointsTask = getPointStats(regionId, officeId, startDate, endDate)
+            val callsTask = getCallStats(provinceId, cityId, officeId, startDate, endDate)
+            val customersTask = getCustomerStats(provinceId, cityId, officeId)
+            val pointsTask = getPointStats(provinceId, cityId, officeId, startDate, endDate)
 
             val callStats = callsTask
             val customerStats = customersTask
@@ -88,14 +89,17 @@ class BasicKPIService {
      * 콜 통계 수집
      */
     private suspend fun getCallStats(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         startDate: Timestamp,
         endDate: Timestamp
     ): CallStats {
         return try {
-            val snapshot = db.collection("regions")
-                .document(regionId)
+            val snapshot = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("calls")
@@ -128,12 +132,15 @@ class BasicKPIService {
      * 고객 통계 수집
      */
     private suspend fun getCustomerStats(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String
     ): CustomerStatsBasic {
         return try {
-            val snapshot = db.collection("regions")
-                .document(regionId)
+            val snapshot = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("customers")
@@ -178,14 +185,17 @@ class BasicKPIService {
      * 포인트 통계 수집
      */
     private suspend fun getPointStats(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         startDate: Timestamp,
         endDate: Timestamp
     ): PointStats {
         return try {
-            val snapshot = db.collection("regions")
-                .document(regionId)
+            val snapshot = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("pointTransactions")
@@ -217,7 +227,8 @@ class BasicKPIService {
      * 월별 트렌드 데이터 조회 (최근 6개월)
      */
     suspend fun getMonthlyTrend(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String
     ): MonthlyTrendResult {
         return try {
@@ -234,7 +245,7 @@ class BasicKPIService {
                 calendar.set(Calendar.DAY_OF_MONTH, calendar.getActualMaximum(Calendar.DAY_OF_MONTH))
                 val monthEnd = Timestamp(calendar.time)
 
-                val monthStats = getBasicKPI(regionId, officeId,
+                val monthStats = getBasicKPI(provinceId, cityId, officeId,
                     calendar.getActualMaximum(Calendar.DAY_OF_MONTH))
 
                 if (monthStats is BasicKPIResult.Success) {

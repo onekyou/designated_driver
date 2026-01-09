@@ -24,7 +24,7 @@ fun LoginScreen(
     viewModel: LoginViewModel = viewModel(
         factory = LoginViewModel.Factory(LocalContext.current.applicationContext as Application)
     ),
-    onLoginComplete: (regionId: String, officeId: String) -> Unit,
+    onLoginComplete: (provinceId: String, cityId: String, officeId: String) -> Unit,
     onNavigateToSignUp: () -> Unit,
     onNavigateToPasswordReset: () -> Unit
 ) {
@@ -42,7 +42,7 @@ fun LoginScreen(
                 viewModel.resetLoginState()
             }
             is LoginState.Success -> {
-                onLoginComplete(state.regionId, state.officeId)
+                onLoginComplete(state.provinceId, state.cityId, state.officeId)
                 viewModel.resetLoginState()
             }
             else -> { /* Idle, Loading */ }

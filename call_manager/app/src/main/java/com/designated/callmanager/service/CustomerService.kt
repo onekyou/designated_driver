@@ -24,14 +24,17 @@ class CustomerService {
      * ✅ customerPoints 컬렉션에서 실제 포인트 정보도 함께 조회
      */
     suspend fun getCustomerList(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         limit: Int = 20,
         lastCustomerId: String? = null
     ): CustomerListResult {
         return try {
-            var query = db.collection("regions")
-                .document(regionId)
+            var query = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("customers")
@@ -40,8 +43,10 @@ class CustomerService {
 
             // 페이지네이션 처리
             if (lastCustomerId != null) {
-                val lastDoc = db.collection("regions")
-                    .document(regionId)
+                val lastDoc = db.collection("provinces")
+                    .document(provinceId)
+                    .collection("cities")
+                    .document(cityId)
                     .collection("offices")
                     .document(officeId)
                     .collection("customers")
@@ -68,8 +73,10 @@ class CustomerService {
             val pointsMap = if (phoneNumbers.isNotEmpty()) {
                 // Firestore whereIn은 최대 10개까지만 지원하므로 청크로 나눔
                 phoneNumbers.chunked(10).flatMap { chunk ->
-                    db.collection("regions")
-                        .document(regionId)
+                    db.collection("provinces")
+                        .document(provinceId)
+                        .collection("cities")
+                        .document(cityId)
                         .collection("offices")
                         .document(officeId)
                         .collection("customerPoints")
@@ -124,13 +131,16 @@ class CustomerService {
      * 기본 정보만 제공 (감사 로그 제외)
      */
     suspend fun getCustomerDetail(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         customerId: String
     ): CustomerDetailResult {
         return try {
-            val customerDoc = db.collection("regions")
-                .document(regionId)
+            val customerDoc = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("customers")
@@ -146,8 +156,10 @@ class CustomerService {
                 ?: return CustomerDetailResult.Error("데이터 변환 실패")
 
             // 포인트 거래 내역 조회 (최근 10건)
-            val transactionSnapshot = db.collection("regions")
-                .document(regionId)
+            val transactionSnapshot = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("pointTransactions")
@@ -174,13 +186,16 @@ class CustomerService {
      * ✅ customerPoints 컬렉션에서 실제 포인트 정보도 함께 조회
      */
     suspend fun searchCustomerByPhone(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         phoneNumber: String
     ): CustomerSearchResult {
         return try {
-            val snapshot = db.collection("regions")
-                .document(regionId)
+            val snapshot = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("customers")
@@ -198,8 +213,10 @@ class CustomerService {
                 ?: return CustomerSearchResult.Error("데이터 변환 실패")
 
             // ✅ customerPoints 컬렉션에서 실제 포인트 조회
-            val pointsDoc = db.collection("regions")
-                .document(regionId)
+            val pointsDoc = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("customerPoints")
@@ -233,12 +250,15 @@ class CustomerService {
      * ✅ customerPoints 컬렉션에서 실제 포인트 정보도 함께 조회
      */
     suspend fun getCustomerStats(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String
     ): CustomerStatsResult {
         return try {
-            val snapshot = db.collection("regions")
-                .document(regionId)
+            val snapshot = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("customers")
@@ -254,8 +274,10 @@ class CustomerService {
             val phoneNumbers = customers.map { it.phoneNumber }
             val pointsMap = if (phoneNumbers.isNotEmpty()) {
                 phoneNumbers.chunked(10).flatMap { chunk ->
-                    db.collection("regions")
-                        .document(regionId)
+                    db.collection("provinces")
+                        .document(provinceId)
+                        .collection("cities")
+                        .document(cityId)
                         .collection("offices")
                         .document(officeId)
                         .collection("customerPoints")
@@ -321,15 +343,18 @@ class CustomerService {
      * ✅ customerPoints 컬렉션에서 실제 포인트 정보도 함께 조회
      */
     suspend fun getCustomersByGrade(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         grade: String,
         limit: Int = 20
     ): CustomerListResult {
         return try {
             // 인덱스 없이 작동하도록 정렬 제거하고 클라이언트 측에서 정렬
-            val snapshot = db.collection("regions")
-                .document(regionId)
+            val snapshot = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("customers")
@@ -346,8 +371,10 @@ class CustomerService {
             val phoneNumbers = customers.map { it.phoneNumber }
             val pointsMap = if (phoneNumbers.isNotEmpty()) {
                 phoneNumbers.chunked(10).flatMap { chunk ->
-                    db.collection("regions")
-                        .document(regionId)
+                    db.collection("provinces")
+                        .document(provinceId)
+                        .collection("cities")
+                        .document(cityId)
                         .collection("offices")
                         .document(officeId)
                         .collection("customerPoints")
@@ -393,12 +420,15 @@ class CustomerService {
      * 포인트 정책 조회 (읽기 전용)
      */
     suspend fun getPointPolicy(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String
     ): PointPolicyResult {
         return try {
-            val policyDoc = db.collection("regions")
-                .document(regionId)
+            val policyDoc = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("settings")
@@ -425,13 +455,16 @@ class CustomerService {
      * 휴면 회원 일괄 삭제 (90일 이상 비활성)
      */
     suspend fun deleteDormantCustomers(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String
     ): DormantDeleteResult {
         return try {
             // 전체 고객 조회
-            val snapshot = db.collection("regions")
-                .document(regionId)
+            val snapshot = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("customers")
@@ -452,8 +485,10 @@ class CustomerService {
             // 배치 삭제
             var deletedCount = 0
             val batch = db.batch()
-            val customerRef = db.collection("regions")
-                .document(regionId)
+            val customerRef = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("customers")

@@ -7,7 +7,7 @@ package com.designated.callmanager.data
  */
 data class SettlementBackup(
     val backupId: String = "",
-    val regionId: String = "",
+    val provinceId: String = "",
     val officeId: String = "",
     val backupDate: String = "", // "yyyy-MM-dd" 형식
     val createdAt: Long = System.currentTimeMillis(),

@@ -21,7 +21,7 @@ import kotlinx.coroutines.tasks.await
 sealed class LoginState {
     object Idle : LoginState()
     object Loading : LoginState()
-    data class Success(val provinceId: String, val officeId: String) : LoginState()
+    data class Success(val provinceId: String, val cityId: String, val officeId: String) : LoginState()
     data class Error(val message: String) : LoginState()
 }
 
@@ -123,7 +123,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                             android.util.Log.d("LoginViewModel", "[fetchAdminInfoAndProceed] 로그인 성공 - managerTokens 동기화 시작")
                             saveFcmTokenToManagerTokens(uid, provinceId, cityId, officeId)
 
-                            _loginState.value = LoginState.Success(provinceId, officeId)
+                            _loginState.value = LoginState.Success(provinceId, cityId, officeId)
                         } else {
                             _loginState.value = LoginState.Error("로그인 정보 저장 실패")
                             auth.signOut()

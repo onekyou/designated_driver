@@ -40,7 +40,8 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
 
     private val firestore = FirebaseFirestore.getInstance()
 
-    private var currentRegionId: String? = null
+    private var currentProvinceId: String? = null
+    private var currentCityId: String? = null
     private var currentOfficeId: String? = null
     private var lastClearedMillisCache: Long = 0L
     private val prefs = getApplication<Application>().getSharedPreferences("settlement_prefs", Context.MODE_PRIVATE)
@@ -131,10 +132,11 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
         }
 
         val loginPrefs = getApplication<Application>().getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
-        val region = loginPrefs.getString("regionId", null)
+        val province = loginPrefs.getString("provinceId", null)
+        val city = loginPrefs.getString("cityId", null)
         val office = loginPrefs.getString("officeId", null)
-        if (!region.isNullOrBlank() && !office.isNullOrBlank()) {
-            loadSettlementData(region, office)
+        if (!province.isNullOrBlank() && !city.isNullOrBlank() && !office.isNullOrBlank()) {
+            loadSettlementData(province, city, office)
         }
     }
 
@@ -203,22 +205,24 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
         return SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.time)
     }
 
-    fun loadSettlementData(regionId: String, officeId: String) {
-        currentRegionId = regionId
+    fun loadSettlementData(provinceId: String, cityId: String, officeId: String) {
+        currentProvinceId = provinceId
+        currentCityId = cityId
         currentOfficeId = officeId
-        val localKey = "${regionId}_${officeId}_lastCleared"
+        val localKey = "${provinceId}_${cityId}_${officeId}_lastCleared"
         lastClearedMillisCache = prefs.getLong(localKey, 0L)
 
         _isLoading.value = true
         _error.value = null
 
-        firestore.collection("regions").document(regionId)
+        firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
             .collection("offices").document(officeId)
             .get()
             .addOnSuccessListener { officeDoc ->
                 val lastClearedMillis = officeDoc.getTimestamp("settlementLastCleared")?.toDate()?.time ?: 0L
 
-                fetchCompletedCalls(regionId, officeId, lastClearedMillis)
+                fetchCompletedCalls(provinceId, cityId, officeId, lastClearedMillis)
 
             }
             .addOnFailureListener { e ->
@@ -227,10 +231,11 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
             }
     }
 
-    private fun fetchCompletedCalls(regionId: String, officeId: String, lastCleared: Long) {
+    private fun fetchCompletedCalls(provinceId: String, cityId: String, officeId: String, lastCleared: Long) {
         val effectiveLastCleared = maxOf(lastCleared, lastClearedMillisCache)
 
-        firestore.collection("regions").document(regionId)
+        firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
             .collection("offices").document(officeId)
             .collection("calls")
             .whereEqualTo("status", "COMPLETED")
@@ -265,7 +270,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                             creditAmount = creditAmount ?: 0,
                             completedAt = completedTimestamp,
                             driverId = doc.getString("assignedDriverId") ?: "",
-                            regionId = regionId,
+                            regionId = provinceId,
                             officeId = officeId,
                             workDate = calculateWorkDate(completedTimestamp)
                         )
@@ -307,7 +312,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                 _isLoading.value = false
             }
             .addOnSuccessListener {
-                startCallsListener(regionId, officeId, effectiveLastCleared)
+                startCallsListener(provinceId, cityId, officeId, effectiveLastCleared)
             }
             .addOnFailureListener { e ->
                 _error.value = e.localizedMessage
@@ -316,9 +321,10 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     /** 신규 COMPLETED 콜에 대한 실시간 리스너 */
-    private fun startCallsListener(regionId: String, officeId: String, sinceMillis: Long) {
+    private fun startCallsListener(provinceId: String, cityId: String, officeId: String, sinceMillis: Long) {
         callsListener?.remove()
-        val baseQuery = firestore.collection("regions").document(regionId)
+        val baseQuery = firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
             .collection("offices").document(officeId)
             .collection("calls")
             .whereEqualTo("status", "COMPLETED")
@@ -354,7 +360,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                             creditAmount = doc.getLong("creditAmount")?.toInt() ?: 0,
                             completedAt = completedTimestamp,
                             driverId = doc.getString("assignedDriverId") ?: "",
-                            regionId = regionId,
+                            regionId = provinceId,
                             officeId = officeId,
                             workDate = calculateWorkDate(completedTimestamp)
                         )
@@ -371,7 +377,8 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                 }
             }
 
-        firestore.collection("regions").document(regionId)
+        firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
             .collection("offices").document(officeId)
             .collection("calls")
             .whereEqualTo("status", "COMPLETED")
@@ -405,7 +412,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                             creditAmount = doc.getLong("creditAmount")?.toInt() ?: 0,
                             completedAt = completedTimestamp,
                             driverId = doc.getString("assignedDriverId") ?: "",
-                            regionId = regionId,
+                            regionId = provinceId,
                             officeId = officeId,
                             workDate = calculateWorkDate(completedTimestamp)
                         )
@@ -492,12 +499,13 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
         }
 
         // 마감 시간을 DashboardViewModel이 사용할 수 있도록 기록
-        val region = currentRegionId
+        val province = currentProvinceId
+        val city = currentCityId
         val office = currentOfficeId
-        if (region != null && office != null) {
+        if (province != null && city != null && office != null) {
             val closingPrefs = getApplication<Application>().getSharedPreferences("closing_times", Context.MODE_PRIVATE)
             closingPrefs.edit()
-                .putLong("last_closing_time_${region}_${office}", closingTime)
+                .putLong("last_closing_time_${province}_${city}_${office}", closingTime)
                 .apply()
         }
 
@@ -513,9 +521,10 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
      */
     private fun updateLastClearedTimestamp(ts: Long) {
         lastClearedMillisCache = ts
-        val r = currentRegionId ?: return
+        val p = currentProvinceId ?: return
+        val c = currentCityId ?: return
         val o = currentOfficeId ?: return
-        val key = "${r}_${o}_lastCleared"
+        val key = "${p}_${c}_${o}_lastCleared"
         prefs.edit().putLong(key, ts).apply()
     }
 
@@ -532,10 +541,12 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
      * 임시로 Room 캐시에서 검색하거나 null 콜백.
      */
     fun fetchPhoneForCall(callId: String, cb: (String?) -> Unit) {
-        val region = currentRegionId
+        val province = currentProvinceId
+        val city = currentCityId
         val office = currentOfficeId
-        if(region==null || office==null) { cb(null); return }
-        firestore.collection("regions").document(region)
+        if(province==null || city==null || office==null) { cb(null); return }
+        firestore.collection("provinces").document(province)
+            .collection("cities").document(city)
             .collection("offices").document(office)
             .collection("calls").document(callId)
             .get()
@@ -549,10 +560,11 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
      * 정산 데이터를 클라우드에 백업
      */
     fun backupSettlements() {
-        val regionId = currentRegionId
+        val provinceId = currentProvinceId
+        val cityId = currentCityId
         val officeId = currentOfficeId
 
-        if (regionId == null || officeId == null) {
+        if (provinceId == null || cityId == null || officeId == null) {
             _backupState.value = BackupState.Error("사무실 정보가 설정되지 않았습니다")
             return
         }
@@ -567,7 +579,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
             _backupState.value = BackupState.Loading
 
             try {
-                val result = backupRepository.backupSettlements(regionId, officeId, settlements)
+                val result = backupRepository.backupSettlements(provinceId, cityId, officeId, settlements)
 
                 if (result.isSuccess) {
                     _backupState.value = BackupState.Success("${settlements.size}건의 정산 데이터를 백업했습니다")
@@ -589,10 +601,11 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
      * 클라우드에서 정산 데이터 복원
      */
     fun restoreSettlements(backupId: String? = null) {
-        val regionId = currentRegionId
+        val provinceId = currentProvinceId
+        val cityId = currentCityId
         val officeId = currentOfficeId
 
-        if (regionId == null || officeId == null) {
+        if (provinceId == null || cityId == null || officeId == null) {
             _backupState.value = BackupState.Error("사무실 정보가 설정되지 않았습니다")
             return
         }
@@ -601,7 +614,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
             _backupState.value = BackupState.Loading
 
             try {
-                val result = backupRepository.restoreSettlements(regionId, officeId, backupId)
+                val result = backupRepository.restoreSettlements(provinceId, cityId, officeId, backupId)
 
                 if (result.isSuccess) {
                     val restoredSettlements = result.getOrNull() ?: emptyList()
@@ -632,20 +645,21 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
      * 클라우드 백업 존재 여부 확인
      */
     fun checkCloudBackups() {
-        val regionId = currentRegionId
+        val provinceId = currentProvinceId
+        val cityId = currentCityId
         val officeId = currentOfficeId
 
-        if (regionId == null || officeId == null) {
+        if (provinceId == null || cityId == null || officeId == null) {
             return
         }
 
         viewModelScope.launch {
             try {
-                val hasBackups = backupRepository.hasBackups(regionId, officeId)
+                val hasBackups = backupRepository.hasBackups(provinceId, cityId, officeId)
                 _hasCloudBackups.value = hasBackups
 
                 // 백업 목록도 로드
-                backupRepository.getBackupList(regionId, officeId).collect { backups ->
+                backupRepository.getBackupList(provinceId, cityId, officeId).collect { backups ->
                     _backupList.value = backups
                 }
 
@@ -660,16 +674,17 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
      * 특정 백업 삭제
      */
     fun deleteBackup(backupId: String) {
-        val regionId = currentRegionId
+        val provinceId = currentProvinceId
+        val cityId = currentCityId
         val officeId = currentOfficeId
 
-        if (regionId == null || officeId == null) {
+        if (provinceId == null || cityId == null || officeId == null) {
             return
         }
 
         viewModelScope.launch {
             try {
-                val result = backupRepository.deleteBackup(regionId, officeId, backupId)
+                val result = backupRepository.deleteBackup(provinceId, cityId, officeId, backupId)
 
                 if (result.isSuccess) {
                     _backupState.value = BackupState.Success("백업이 삭제되었습니다")
