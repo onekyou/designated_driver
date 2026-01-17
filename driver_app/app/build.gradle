@@ -9,7 +9,7 @@ plugins {
 
 android {
     namespace 'com.designated.driverapp'
-    compileSdk 35 // Use a recent SDK version
+    compileSdk 36
 
     // 키스토어 정보 로드
     def keystorePropertiesFile = rootProject.file("keystore/keystore.properties")
@@ -32,7 +32,7 @@ android {
     defaultConfig {
         applicationId "com.designated.driverapp"
         minSdk 24
-        targetSdk 35
+        targetSdk 36
         versionCode 3
         versionName "1.0.2"
 
