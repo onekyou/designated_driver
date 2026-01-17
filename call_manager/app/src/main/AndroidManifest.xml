@@ -108,10 +108,11 @@
         </receiver>
         
         <!-- Call Detector 상태 수신 BroadcastReceiver -->
+        <!-- exported=false: 커스텀 액션이므로 외부 앱에서 접근할 필요 없음 -->
         <receiver
             android:name=".receiver.CallDetectorStatusReceiver"
             android:enabled="true"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="com.designated.CALL_DETECTOR_STATUS" />
             </intent-filter>
