@@ -84,8 +84,7 @@
             android:name=".service.CallManagerService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="dataSync|mediaPlayback"
-            tools:ignore="ForegroundServiceType" />
+            android:foregroundServiceType="dataSync" />
             
 
         <!-- FCM 메시징 서비스 등록 -->
