@@ -127,22 +127,24 @@ class CallDetectorService : Service() {
                     
                     // 수신전화 종료 시 사무실 상태 확인 후 처리
                     serviceScope.launch {
-                        val regionId = sharedPreferences.getString("regionId", null)
+                        val provinceId = sharedPreferences.getString("provinceId", null)
+                        val cityId = sharedPreferences.getString("cityId", null)
                         val officeId = sharedPreferences.getString("officeId", null)
                         val deviceName = sharedPreferences.getString("deviceName", "") ?: ""
 
-                        if (regionId == null || officeId == null || deviceName.isBlank()) {
-                            Log.e(TAG, "❌ Error: Region ID, Office ID, or Device Name not configured. Cannot process call.")
+                        if (provinceId == null || cityId == null || officeId == null || deviceName.isBlank()) {
+                            Log.e(TAG, "❌ Error: Province ID, City ID, Office ID, or Device Name not configured. Cannot process call.")
                             return@launch
                         }
-                        Log.i(TAG, "ℹ️ Using configuration - Region: $regionId, Office: $officeId, Device: $deviceName")
+                        Log.i(TAG, "ℹ️ Using configuration - Province: $provinceId, City: $cityId, Office: $officeId, Device: $deviceName")
 
                         val (contactName, contactAddress) = getContactInfo(applicationContext, phoneNumber)
                         Log.i(TAG, "📞 Contact info for $phoneNumber: Name='$contactName', Address='$contactAddress'")
 
                         // 사무실 상태에 따라 일반 콜 또는 공유 콜 생성
                         checkOfficeStatusAndSaveCall(
-                            regionId,
+                            provinceId,
+                            cityId,
                             officeId,
                             phoneNumber,
                             contactName,
@@ -177,11 +179,12 @@ class CallDetectorService : Service() {
                 
                 // 마감 상태인지 확인 후 2-3초 후 SMS 발송
                 serviceScope.launch {
-                    val regionId = sharedPreferences.getString("regionId", null)
+                    val provinceId = sharedPreferences.getString("provinceId", null)
+                    val cityId = sharedPreferences.getString("cityId", null)
                     val officeId = sharedPreferences.getString("officeId", null)
-                    
-                    if (regionId != null && officeId != null) {
-                        checkOfficeStatusForQuickResponse(regionId, officeId, phoneNumber)
+
+                    if (provinceId != null && cityId != null && officeId != null) {
+                        checkOfficeStatusForQuickResponse(provinceId, cityId, officeId, phoneNumber)
                     }
                 }
             } else {
@@ -283,63 +286,64 @@ class CallDetectorService : Service() {
     /**
      * 새 콜 감지 시 MainActivity를 포그라운드로 전환하고 팝업 트리거
      */
-    private fun bringMainActivityToForegroundForNewCall(callId: String, phoneNumber: String, contactName: String?, contactAddress: String?, regionId: String, officeId: String) {
+    private fun bringMainActivityToForegroundForNewCall(callId: String, phoneNumber: String, contactName: String?, contactAddress: String?, provinceId: String, cityId: String, officeId: String) {
         try {
             Log.i(TAG, "🔍 [DEBUG] bringMainActivityToForegroundForNewCall 시작")
             Log.i(TAG, "🔍 [DEBUG] 파라미터 - callId: $callId, phoneNumber: $phoneNumber, contactName: $contactName, contactAddress: $contactAddress")
-            Log.i(TAG, "🔍 [DEBUG] 파라미터 - regionId: $regionId, officeId: $officeId")
-            
+            Log.i(TAG, "🔍 [DEBUG] 파라미터 - provinceId: $provinceId, cityId: $cityId, officeId: $officeId")
+
             // MainActivity로 이동하면서 콜 정보 전달
             val intent = Intent(this, com.designated.calldetector.MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
-                       Intent.FLAG_ACTIVITY_CLEAR_TOP or 
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                       Intent.FLAG_ACTIVITY_CLEAR_TOP or
                        Intent.FLAG_ACTIVITY_SINGLE_TOP or
                        Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
                        Intent.FLAG_ACTIVITY_NO_ANIMATION
-                
+
                 // Android 10+ 백그라운드 Activity 실행을 위한 추가 플래그
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
                     addCategory(Intent.CATEGORY_DEFAULT)
                 }
-                
+
                 // 새 콜 팝업을 위한 액션과 데이터 (Firebase ID 포함)
                 action = com.designated.calldetector.MainActivity.ACTION_SHOW_DISPATCH_POPUP
                 putExtra("callId", callId) // Firebase document ID 추가
                 putExtra("phoneNumber", phoneNumber)
                 contactName?.let { putExtra("contactName", it) }
                 contactAddress?.let { putExtra("contactAddress", it) }
-                putExtra("regionId", regionId)
+                putExtra("provinceId", provinceId)
+                putExtra("cityId", cityId)
                 putExtra("officeId", officeId)
                 putExtra("deviceName", getDeviceName(this@CallDetectorService))
                 putExtra("FROM_NEW_CALL", true) // 새 콜에서 왔음을 표시
-                
+
                 // Android 10+ 예외 조건들 활용
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
                     addCategory(Intent.CATEGORY_DEFAULT)
                 }
             }
-            
+
             // WindowManager 방식 - 콜매니저와 동일한 방식
-            showOverlayPopup(callId, phoneNumber, contactName, contactAddress, regionId, officeId)
-            
+            showOverlayPopup(callId, phoneNumber, contactName, contactAddress, provinceId, cityId, officeId)
+
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to show overlay popup", e)
             // 폴백으로 Full-Screen Intent 사용
             Log.w(TAG, "⚠️ Using Full-Screen Intent fallback")
-            showFullScreenIntentNotification(callId, phoneNumber, contactName, contactAddress, regionId, officeId)
+            showFullScreenIntentNotification(callId, phoneNumber, contactName, contactAddress, provinceId, cityId, officeId)
         }
-        
+
         // 기존 catch 블록들 (주석 처리 - callId 파라미터 추가됨)
         /*
         } catch (e: SecurityException) {
             Log.w(TAG, "⚠️ Direct activity start failed for new call, using Full-Screen Intent fallback")
-            showFullScreenIntentNotification(callId, phoneNumber, contactName, contactAddress, regionId, officeId)
+            showFullScreenIntentNotification(callId, phoneNumber, contactName, contactAddress, provinceId, cityId, officeId)
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to bring MainActivity to foreground for new call", e)
             Log.w(TAG, "⚠️ Using Full-Screen Intent fallback instead")
-            showFullScreenIntentNotification(callId, phoneNumber, contactName, contactAddress, regionId, officeId)
+            showFullScreenIntentNotification(callId, phoneNumber, contactName, contactAddress, provinceId, cityId, officeId)
         }
         */
     }
@@ -347,49 +351,50 @@ class CallDetectorService : Service() {
     /**
      * WindowManager를 사용한 오버레이 팝업 생성 (콜매니저 방식)
      */
-    private fun showOverlayPopup(callId: String, phoneNumber: String, contactName: String?, contactAddress: String?, regionId: String, officeId: String) {
+    private fun showOverlayPopup(callId: String, phoneNumber: String, contactName: String?, contactAddress: String?, provinceId: String, cityId: String, officeId: String) {
         try {
             Log.i(TAG, "🎯 showOverlayPopup 시작 - 권한 체크")
-            
+
             // SYSTEM_ALERT_WINDOW 권한 체크
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
                 Log.w(TAG, "❌ SYSTEM_ALERT_WINDOW 권한 없음 - Full-Screen Intent로 폴백")
-                showFullScreenIntentNotification(callId, phoneNumber, contactName, contactAddress, regionId, officeId)
+                showFullScreenIntentNotification(callId, phoneNumber, contactName, contactAddress, provinceId, cityId, officeId)
                 return
             }
-            
-            
+
+
             // SYSTEM_ALERT_WINDOW 권한이 있으므로 DispatchActivity를 바로 실행 가능
             val dispatchIntent = Intent(this, com.designated.calldetector.ui.DispatchActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
                        Intent.FLAG_ACTIVITY_SINGLE_TOP or
                        Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
-                       
+
                 putExtra("EXTRA_CALL_ID", callId) // Firebase document ID 추가
                 putExtra("EXTRA_PHONE_NUMBER", phoneNumber)
                 contactName?.let { putExtra("EXTRA_CONTACT_NAME", it) }
                 contactAddress?.let { putExtra("EXTRA_CONTACT_ADDRESS", it) }
-                putExtra("EXTRA_REGION_ID", regionId)
+                putExtra("EXTRA_PROVINCE_ID", provinceId)
+                putExtra("EXTRA_CITY_ID", cityId)
                 putExtra("EXTRA_OFFICE_ID", officeId)
                 putExtra("EXTRA_DEVICE_NAME", getDeviceName(this@CallDetectorService))
             }
-            
+
             startActivity(dispatchIntent)
             Log.i(TAG, "🎉 SYSTEM_ALERT_WINDOW 권한으로 DispatchActivity 직접 실행 성공!")
-            
+
         } catch (e: Exception) {
             Log.e(TAG, "❌ 오버레이 팝업 생성 실패", e)
             throw e // 외부 catch에서 폴백 처리
         }
     }
 
-    private fun showFullScreenIntentNotification(callId: String, phoneNumber: String, contactName: String?, contactAddress: String?, regionId: String, officeId: String) {
+    private fun showFullScreenIntentNotification(callId: String, phoneNumber: String, contactName: String?, contactAddress: String?, provinceId: String, cityId: String, officeId: String) {
         try {
             Log.i(TAG, "🚀 [DEBUG] showFullScreenIntentNotification 시작")
-            
+
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            
+
             // 채널 생성 (Android 8.0+)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val channel = NotificationChannel(
@@ -404,28 +409,29 @@ class CallDetectorService : Service() {
                 }
                 notificationManager.createNotificationChannel(channel)
             }
-            
+
             // MainActivity 실행 인텐트 (Full-Screen용)
             val intent = Intent(this, com.designated.calldetector.MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
-                       Intent.FLAG_ACTIVITY_CLEAR_TOP or 
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                       Intent.FLAG_ACTIVITY_CLEAR_TOP or
                        Intent.FLAG_ACTIVITY_SINGLE_TOP or
                        Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
                        Intent.FLAG_ACTIVITY_NO_ANIMATION
-                
+
                 // Android 10+ 백그라운드 Activity 실행을 위한 추가 플래그
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
                     addCategory(Intent.CATEGORY_DEFAULT)
                 }
-                
+
                 // 새 콜 팝업을 위한 액션과 데이터
                 action = com.designated.calldetector.MainActivity.ACTION_SHOW_DISPATCH_POPUP
                 putExtra("callId", callId) // Firebase document ID 추가
                 putExtra("phoneNumber", phoneNumber)
                 contactName?.let { putExtra("contactName", it) }
                 contactAddress?.let { putExtra("contactAddress", it) }
-                putExtra("regionId", regionId)
+                putExtra("provinceId", provinceId)
+                putExtra("cityId", cityId)
                 putExtra("officeId", officeId)
                 putExtra("deviceName", getDeviceName(this@CallDetectorService))
                 putExtra("FROM_FULL_SCREEN_INTENT", true) // Full-Screen Intent에서 왔음을 표시
@@ -491,7 +497,8 @@ class CallDetectorService : Service() {
             putExtra("EXTRA_PHONE_NUMBER", phoneNumber)
             contactName?.let { putExtra("EXTRA_CONTACT_NAME", it) }
             contactAddress?.let { putExtra("EXTRA_CONTACT_ADDRESS", it) }
-            putExtra("EXTRA_REGION_ID", getRegionId(context))
+            putExtra("EXTRA_PROVINCE_ID", getProvinceId(context))
+            putExtra("EXTRA_CITY_ID", getCityId(context))
             putExtra("EXTRA_OFFICE_ID", getOfficeId(context))
             putExtra("EXTRA_DEVICE_NAME", getDeviceName(context))
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -561,7 +568,8 @@ class CallDetectorService : Service() {
         phoneNumber: String,
         contactName: String?,
         contactAddress: String?,
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         deviceName: String
     ): HashMap<String, Any> {
@@ -572,7 +580,8 @@ class CallDetectorService : Service() {
             "status" to CallStatus.WAITING.firestoreValue,
             "timestamp" to FieldValue.serverTimestamp(),
             "detectedTimestamp" to FieldValue.serverTimestamp(),
-            "regionId" to regionId,
+            "provinceId" to provinceId,
+            "cityId" to cityId,
             "officeId" to officeId,
             "deviceName" to deviceName,
             "callType" to "수신",
@@ -585,31 +594,34 @@ class CallDetectorService : Service() {
      * 부재중 전화에 대한 사무실 상태 확인 및 처리
      */
     private suspend fun checkOfficeStatusForMissedCall(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         phoneNumber: String,
         contactName: String?
     ) {
         try {
-            val document = db.collection("regions").document(regionId)
+            val document = db.collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
                 .collection("offices").document(officeId)
                 .get()
                 .await()
-            
+
             val officeStatus = document.getString("status") ?: "OPEN"
             val officeName = document.getString("name") ?: "사무실"
-            
+
             Log.i(TAG, "🌙 부재중 전화 - 사무실 상태: $officeStatus")
-            
+
             if (officeStatus == "CLOSED") {
                 Log.i(TAG, "✅ 마감 상태 - 부재중 전화 자동 처리 시작")
-                
+
                 val deviceName = sharedPreferences.getString("deviceName", "") ?: ""
-                
+
                 // 공유콜 생성
                 val sharedCallData = hashMapOf<String, Any>(
                     "phoneNumber" to phoneNumber,
-                    "sourceRegionId" to regionId,
+                    "sourceProvinceId" to provinceId,
+                    "sourceCityId" to cityId,
                     "sourceOfficeId" to officeId,
                     "deviceName" to deviceName,
                     "status" to "OPEN",
@@ -617,9 +629,9 @@ class CallDetectorService : Service() {
                     "callType" to "MISSED_AFTER_HOURS", // 마감 후 부재중
                     "timestampClient" to System.currentTimeMillis()
                 )
-                
+
                 contactName?.let { sharedCallData["customerName"] = it }
-                
+
                 db.collection("shared_calls")
                     .add(sharedCallData)
                     .addOnSuccessListener {
@@ -642,7 +654,8 @@ class CallDetectorService : Service() {
      * 사무실 상태 확인 후 일반 콜 또는 공유 콜 생성
      */
     private suspend fun checkOfficeStatusAndSaveCall(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         phoneNumber: String,
         contactName: String?,
@@ -651,7 +664,8 @@ class CallDetectorService : Service() {
     ) {
         try {
             // 사무실 상태 확인
-            val document = db.collection("regions").document(regionId)
+            val document = db.collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
                 .collection("offices").document(officeId)
                 .get()
                 .await()
@@ -664,19 +678,19 @@ class CallDetectorService : Service() {
             when (officeStatus) {
                 "CLOSED" -> {
                     // 마감 상태: shared_calls에 저장 (Cloud Functions에서 FCM 알림 처리)
-                    createSharedCall(regionId, officeId, phoneNumber, contactName, contactAddress, deviceName)
+                    createSharedCall(provinceId, cityId, officeId, phoneNumber, contactName, contactAddress, deviceName)
                     // SMS 발송 제거 - Cloud Functions에서 FCM으로 처리
                     // sendAutoSMS(phoneNumber, officeName)
                 }
                 else -> {
                     // 운영중: 기존대로 calls에 저장
-                    createNormalCall(regionId, officeId, phoneNumber, contactName, contactAddress, deviceName)
+                    createNormalCall(provinceId, cityId, officeId, phoneNumber, contactName, contactAddress, deviceName)
                 }
             }
         } catch (e: Exception) {
             Log.e(TAG, "사무실 상태 확인 실패", e)
             // 실패시 기본적으로 calls에 저장
-            createNormalCall(regionId, officeId, phoneNumber, contactName, contactAddress, deviceName)
+            createNormalCall(provinceId, cityId, officeId, phoneNumber, contactName, contactAddress, deviceName)
         }
     }
     
@@ -684,7 +698,8 @@ class CallDetectorService : Service() {
      * 일반 콜 생성 (운영중)
      */
     private suspend fun createNormalCall(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         phoneNumber: String,
         contactName: String?,
@@ -695,7 +710,8 @@ class CallDetectorService : Service() {
             // ✅ 추가: customerInfo 컬렉션 확인하여 앱 회원 여부 판별
             Log.i(TAG, "📱 customerInfo 컬렉션 조회 시작: $phoneNumber")
             val customerDoc = db
-                .collection("regions").document(regionId)
+                .collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
                 .collection("offices").document(officeId)
                 .collection("customerInfo")
                 .document(phoneNumber)
@@ -718,7 +734,8 @@ class CallDetectorService : Service() {
                 "status" to CallStatus.WAITING.firestoreValue,
                 "timestamp" to FieldValue.serverTimestamp(),
                 "detectedTimestamp" to FieldValue.serverTimestamp(),
-                "regionId" to regionId,
+                "provinceId" to provinceId,
+                "cityId" to cityId,
                 "officeId" to officeId,
                 "deviceName" to deviceName,
                 "callType" to "수신",
@@ -730,7 +747,7 @@ class CallDetectorService : Service() {
             )
 
             // Firebase에 먼저 업로드하고 ID를 받아서 팝업 생성 (콜매니저와 동일한 방식)
-            val targetPath = "regions/$regionId/offices/$officeId/calls"
+            val targetPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/calls"
             Log.i(TAG, "🚨 About to upload callData: $callData")
             Log.i(TAG, "🚨 fromCallDetector value: ${callData["fromCallDetector"]}")
             Log.i(TAG, "🚨 isAppCustomer value: ${callData["isAppCustomer"]}")
@@ -747,7 +764,8 @@ class CallDetectorService : Service() {
                 phoneNumber,
                 contactName,
                 contactAddress,
-                regionId,
+                provinceId,
+                cityId,
                 officeId
             )
 
@@ -762,7 +780,8 @@ class CallDetectorService : Service() {
                 phoneNumber,
                 contactName,
                 contactAddress,
-                regionId,
+                provinceId,
+                cityId,
                 officeId
             )
         }
@@ -772,7 +791,8 @@ class CallDetectorService : Service() {
      * 공유 콜 생성 (마감 상태)
      */
     private fun createSharedCall(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         phoneNumber: String,
         contactName: String?,
@@ -781,7 +801,8 @@ class CallDetectorService : Service() {
     ) {
         val sharedCallData = hashMapOf<String, Any>(
             "phoneNumber" to phoneNumber,
-            "sourceRegionId" to regionId,
+            "sourceProvinceId" to provinceId,
+            "sourceCityId" to cityId,
             "sourceOfficeId" to officeId,
             "deviceName" to deviceName,
             "status" to "OPEN",
@@ -790,10 +811,10 @@ class CallDetectorService : Service() {
             "timestampClient" to System.currentTimeMillis(),
             "fromCallDetector" to true // 독립 콜디텍터에서 생성된 콜 (콜매니저에서 팝업 표시 방지)
         )
-        
+
         contactName?.let { sharedCallData["customerName"] = it }
         contactAddress?.let { sharedCallData["customerAddress"] = it }
-        
+
         db.collection("shared_calls")
             .add(sharedCallData)
             .addOnSuccessListener { documentReference ->
@@ -840,32 +861,34 @@ class CallDetectorService : Service() {
      * 마감 상태 확인 후 빠른 SMS 발송 (RINGING 상태용)
      */
     private suspend fun checkOfficeStatusForQuickResponse(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         phoneNumber: String
     ) {
         try {
-            val document = db.collection("regions").document(regionId)
+            val document = db.collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
                 .collection("offices").document(officeId)
                 .get()
                 .await()
-            
+
             val officeStatus = document.getString("status") ?: "OPEN"
             val officeName = document.getString("name") ?: "사무실"
-            
+
             Log.i(TAG, "📞 RINGING 상태에서 사무실 상태 확인: $officeStatus")
-            
+
             if (officeStatus == "CLOSED") {
                 Log.i(TAG, "🌙 마감 상태 - 2초 후 SMS 발송 시작")
-                
+
                 // 2초 대기 후 SMS 발송
                 kotlinx.coroutines.delay(2000)
-                
+
                 val (contactName, contactAddress) = getContactInfo(applicationContext, phoneNumber)
                 val deviceName = sharedPreferences.getString("deviceName", "") ?: ""
-                
+
                 // 공유콜 생성 (RINGING에서)
-                createSharedCallFromRinging(regionId, officeId, phoneNumber, contactName, contactAddress, deviceName)
+                createSharedCallFromRinging(provinceId, cityId, officeId, phoneNumber, contactName, contactAddress, deviceName)
 
                 // SMS 발송 제거 - Cloud Functions에서 FCM으로 처리
                 // sendAutoSMS(phoneNumber, officeName)
@@ -881,7 +904,8 @@ class CallDetectorService : Service() {
      * RINGING 상태에서 공유 콜 생성
      */
     private fun createSharedCallFromRinging(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         phoneNumber: String,
         contactName: String?,
@@ -890,7 +914,8 @@ class CallDetectorService : Service() {
     ) {
         val sharedCallData = hashMapOf<String, Any>(
             "phoneNumber" to phoneNumber,
-            "sourceRegionId" to regionId,
+            "sourceProvinceId" to provinceId,
+            "sourceCityId" to cityId,
             "sourceOfficeId" to officeId,
             "deviceName" to deviceName,
             "status" to "OPEN",
@@ -900,10 +925,10 @@ class CallDetectorService : Service() {
             "fromCallDetector" to true, // 독립 콜디텍터에서 생성된 콜 (콜매니저에서 팝업 표시 방지)
             "fromRinging" to true // RINGING 상태에서 생성됨을 표시
         )
-        
+
         contactName?.let { sharedCallData["customerName"] = it }
         contactAddress?.let { sharedCallData["customerAddress"] = it }
-        
+
         db.collection("shared_calls")
             .add(sharedCallData)
             .addOnSuccessListener { documentReference ->
@@ -923,16 +948,21 @@ class CallDetectorService : Service() {
     }
     
     // 헬퍼 함수들
-    private fun getRegionId(context: Context): String {
+    private fun getProvinceId(context: Context): String {
         val prefs = context.getSharedPreferences("detector_config", Context.MODE_PRIVATE)
-        return prefs.getString("regionId", "") ?: ""
+        return prefs.getString("provinceId", "") ?: ""
     }
-    
+
+    private fun getCityId(context: Context): String {
+        val prefs = context.getSharedPreferences("detector_config", Context.MODE_PRIVATE)
+        return prefs.getString("cityId", "") ?: ""
+    }
+
     private fun getOfficeId(context: Context): String {
         val prefs = context.getSharedPreferences("detector_config", Context.MODE_PRIVATE)
         return prefs.getString("officeId", "") ?: ""
     }
-    
+
     private fun getDeviceName(context: Context): String {
         val prefs = context.getSharedPreferences("detector_config", Context.MODE_PRIVATE)
         return prefs.getString("deviceName", "") ?: ""

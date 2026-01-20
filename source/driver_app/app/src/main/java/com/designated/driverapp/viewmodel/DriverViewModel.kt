@@ -127,9 +127,10 @@ class DriverViewModel @Inject constructor(
 
     }
 
-    fun initializeListenersWithInfo(regionId: String, officeId: String, driverId: String) {
+    fun initializeListenersWithInfo(provinceId: String, cityId: String, officeId: String, driverId: String) {
         sharedPreferences.edit()
-            .putString(Constants.PREF_KEY_REGION_ID, regionId)
+            .putString(Constants.PREF_KEY_PROVINCE_ID, provinceId)
+            .putString(Constants.PREF_KEY_CITY_ID, cityId)
             .putString(Constants.PREF_KEY_OFFICE_ID, officeId)
             .apply()
 
@@ -139,7 +140,7 @@ class DriverViewModel @Inject constructor(
 
         if (auth.currentUser?.uid == driverId) {
             // ✅ 리스너 대신 1회 조회로 현재 운행 중인 콜 확인 (앱 재시작 시 복구)
-            loadCurrentActiveCall(regionId, officeId, driverId)
+            loadCurrentActiveCall(provinceId, cityId, officeId, driverId)
         } else {
             _uiState.update { it.copy(errorMessage = "인증 정보가 일치하지 않습니다.") }
         }
@@ -150,14 +151,15 @@ class DriverViewModel @Inject constructor(
      * 정상 출근: 조회 결과 없음 → 빈 화면
      * 앱 재시작: 운행 중인 콜 있음 → 화면에 표시
      */
-    private fun loadCurrentActiveCall(regionId: String, officeId: String, driverId: String) {
+    private fun loadCurrentActiveCall(provinceId: String, cityId: String, officeId: String, driverId: String) {
         viewModelScope.launch {
             try {
                 _uiState.update { it.copy(isLoading = true) }
 
                 // ✅ 1. 기사 상태 조회
                 val driverDoc = firestore
-                    .collection(Constants.COLLECTION_REGIONS).document(regionId)
+                    .collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                    .collection(Constants.COLLECTION_CITIES).document(cityId)
                     .collection(Constants.COLLECTION_OFFICES).document(officeId)
                     .collection(Constants.COLLECTION_DRIVERS).document(driverId)
                     .get()
@@ -169,7 +171,8 @@ class DriverViewModel @Inject constructor(
 
                 // ✅ 2. 현재 배정된 콜 조회 (ASSIGNED, ACCEPTED, IN_PROGRESS, AWAITING_SETTLEMENT)
                 val assignedCallsSnapshot = firestore
-                    .collection(Constants.COLLECTION_REGIONS).document(regionId)
+                    .collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                    .collection(Constants.COLLECTION_CITIES).document(cityId)
                     .collection(Constants.COLLECTION_OFFICES).document(officeId)
                     .collection(Constants.COLLECTION_CALLS)
                     .whereEqualTo(Constants.FIELD_ASSIGNED_DRIVER_ID, driverId)
@@ -247,8 +250,9 @@ class DriverViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
-                val (regionId, officeId) = getDriverLocationInfo()
-                val callDocument = firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
+                val (provinceId, cityId, officeId) = getDriverLocationInfo()
+                val callDocument = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                    .collection(Constants.COLLECTION_CITIES).document(cityId)
                     .collection(Constants.COLLECTION_OFFICES).document(officeId)
                     .collection(Constants.COLLECTION_CALLS).document(callId)
                     .get()
@@ -281,7 +285,7 @@ class DriverViewModel @Inject constructor(
      *  Firestore 리스너가 activeCall 을 업데이트하므로 별도 fetch 는 생략.
      */
     fun acceptCall(callId: String) = performFirestoreUpdate {
-        val (regionId, officeId) = getDriverLocationInfo()
+        val (provinceId, cityId, officeId) = getDriverLocationInfo()
         val driverId = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
 
         // ✅ 1단계: 즉시 로컬 UI 업데이트 (리스너 기다리지 않음)
@@ -301,11 +305,13 @@ class DriverViewModel @Inject constructor(
         }
 
         // ✅ 2단계: Firestore 업데이트 (백그라운드)
-        val callRef = firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
+        val callRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+            .collection(Constants.COLLECTION_CITIES).document(cityId)
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_CALLS).document(callId)
 
-        val driverRef = firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
+        val driverRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+            .collection(Constants.COLLECTION_CITIES).document(cityId)
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_DRIVERS).document(driverId)
 
@@ -337,10 +343,11 @@ class DriverViewModel @Inject constructor(
      * - assignedDriverId를 null로 변경하여 다른 기사가 배정받을 수 있도록 함
      */
     fun cancelTrip(callId: String, cancelReason: String = "운행취소") = performFirestoreUpdate {
-        val (regionId, officeId) = getDriverLocationInfo()
+        val (provinceId, cityId, officeId) = getDriverLocationInfo()
         val driverId = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
 
-        val callRef = firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
+        val callRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+            .collection(Constants.COLLECTION_CITIES).document(cityId)
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_CALLS).document(callId)
 
@@ -368,7 +375,8 @@ class DriverViewModel @Inject constructor(
             callRef.update(callUpdates).await()
         }
 
-        val driverRef = firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
+        val driverRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+            .collection(Constants.COLLECTION_CITIES).document(cityId)
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_DRIVERS).document(driverId)
 
@@ -404,7 +412,7 @@ class DriverViewModel @Inject constructor(
         waypoints: String,
         fare: Int
     ) = performFirestoreUpdate {
-        val (regionId, officeId) = getDriverLocationInfo()
+        val (provinceId, cityId, officeId) = getDriverLocationInfo()
         val driverId = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
 
         val tripSummary = "출발: $departure, 도착: $destination, 경유: ${waypoints.ifEmpty { "없음" }}, 요금: $fare 원"
@@ -429,7 +437,8 @@ class DriverViewModel @Inject constructor(
         }
 
         // ✅ 2단계: Firestore 업데이트 (백그라운드)
-        val callRef = firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
+        val callRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+            .collection(Constants.COLLECTION_CITIES).document(cityId)
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_CALLS).document(callId)
 
@@ -445,7 +454,8 @@ class DriverViewModel @Inject constructor(
 
         callRef.update(callUpdates).await()
 
-        firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
+        firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+            .collection(Constants.COLLECTION_CITIES).document(cityId)
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_DRIVERS).document(driverId)
             .update(Constants.FIELD_STATUS, DriverStatus.ON_TRIP.value).await()
@@ -454,7 +464,7 @@ class DriverViewModel @Inject constructor(
     }
 
     fun completeCall(callId: String) = performFirestoreUpdate {
-        val (regionId, officeId) = getDriverLocationInfo()
+        val (provinceId, cityId, officeId) = getDriverLocationInfo()
 
         // ✅ 1단계: 즉시 로컬 UI 업데이트 (읽기 제거)
         _uiState.update { currentState ->
@@ -473,7 +483,8 @@ class DriverViewModel @Inject constructor(
         }
 
         // ✅ 2단계: Firestore 업데이트 (백그라운드, 읽기 없음)
-        val callRef = firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
+        val callRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+            .collection(Constants.COLLECTION_CITIES).document(cityId)
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_CALLS).document(callId)
 
@@ -493,11 +504,12 @@ class DriverViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
-                val (regionId, officeId) = getDriverLocationInfo()
+                val (provinceId, cityId, officeId) = getDriverLocationInfo()
                 val driverId = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
 
                 // ✅ 추가: 콜 정보 조회하여 앱 회원 여부 확인
-                val callDoc = firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
+                val callDoc = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                    .collection(Constants.COLLECTION_CITIES).document(cityId)
                     .collection(Constants.COLLECTION_OFFICES).document(officeId)
                     .collection(Constants.COLLECTION_CALLS).document(callId)
                     .get()
@@ -537,17 +549,20 @@ class DriverViewModel @Inject constructor(
                     tripData["creditAmount"] = fareToSet - cashAmount
                 }
 
-                firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
+                firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                    .collection(Constants.COLLECTION_CITIES).document(cityId)
                     .collection(Constants.COLLECTION_OFFICES).document(officeId)
                     .collection(Constants.COLLECTION_CALLS).document(callId)
                     .update(tripData).await()
 
-                firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
+                firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                    .collection(Constants.COLLECTION_CITIES).document(cityId)
                     .collection(Constants.COLLECTION_OFFICES).document(officeId)
                     .collection(Constants.COLLECTION_DRIVERS).document(driverId)
                     .update(Constants.FIELD_STATUS, DriverStatus.WAITING.value).await()
 
-                val callRef = firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
+                val callRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                    .collection(Constants.COLLECTION_CITIES).document(cityId)
                     .collection(Constants.COLLECTION_OFFICES).document(officeId)
                     .collection(Constants.COLLECTION_CALLS).document(callId)
                 val latestCallSnapshot = callRef.get().await()
@@ -604,14 +619,15 @@ class DriverViewModel @Inject constructor(
     }
 
     fun updateDriverStatus(newStatus: DriverStatus) = performFirestoreUpdate {
-        val (regionId, officeId) = getDriverLocationInfo()
+        val (provinceId, cityId, officeId) = getDriverLocationInfo()
         val driverId = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
 
         // ✅ 1단계: 즉시 로컬 UI 업데이트
         _uiState.update { it.copy(driverStatus = newStatus) }
 
         // ✅ 2단계: Firestore 업데이트 (백그라운드)
-        firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
+        firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+            .collection(Constants.COLLECTION_CITIES).document(cityId)
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_DRIVERS).document(driverId)
             .update(Constants.FIELD_STATUS, newStatus.value).await()
@@ -675,13 +691,14 @@ class DriverViewModel @Inject constructor(
         _uiState.update { it.copy(errorMessage = null) }
     }
 
-    private fun getDriverLocationInfo(): Pair<String, String> {
-        val regionId = sharedPreferences.getString(Constants.PREF_KEY_REGION_ID, null)
+    private fun getDriverLocationInfo(): Triple<String, String, String> {
+        val provinceId = sharedPreferences.getString(Constants.PREF_KEY_PROVINCE_ID, null)
+        val cityId = sharedPreferences.getString(Constants.PREF_KEY_CITY_ID, null)
         val officeId = sharedPreferences.getString(Constants.PREF_KEY_OFFICE_ID, null)
-        if (regionId.isNullOrBlank() || officeId.isNullOrBlank()) {
-            throw IllegalStateException("Region ID or Office ID is not set.")
+        if (provinceId.isNullOrBlank() || cityId.isNullOrBlank() || officeId.isNullOrBlank()) {
+            throw IllegalStateException("Province ID, City ID or Office ID is not set.")
         }
-        return Pair(regionId, officeId)
+        return Triple(provinceId, cityId, officeId)
     }
 
     private fun performFirestoreUpdate(block: suspend () -> Unit) {
@@ -696,9 +713,10 @@ class DriverViewModel @Inject constructor(
     }
 
     fun setFcmToken(token: String) {
-        val regionId = sharedPreferences.getString(Constants.PREF_KEY_REGION_ID, null)
+        val provinceId = sharedPreferences.getString(Constants.PREF_KEY_PROVINCE_ID, null)
+        val cityId = sharedPreferences.getString(Constants.PREF_KEY_CITY_ID, null)
         val officeId = sharedPreferences.getString(Constants.PREF_KEY_OFFICE_ID, null)
-        if (!regionId.isNullOrBlank() && !officeId.isNullOrBlank()) {
+        if (!provinceId.isNullOrBlank() && !cityId.isNullOrBlank() && !officeId.isNullOrBlank()) {
             registerFcmToken(token)
         } else {
             fcmTokenToRegister = token
@@ -707,8 +725,9 @@ class DriverViewModel @Inject constructor(
 
     private fun registerFcmToken(token: String) = performFirestoreUpdate {
         val driverId = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
-        val (regionId, officeId) = getDriverLocationInfo()
-        val driverRef = firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
+        val (provinceId, cityId, officeId) = getDriverLocationInfo()
+        val driverRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+            .collection(Constants.COLLECTION_CITIES).document(cityId)
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_DRIVERS).document(driverId)
         driverRef.update(Constants.FIELD_FCM_TOKEN, token).await()
@@ -751,11 +770,12 @@ class DriverViewModel @Inject constructor(
             return
         }
 
-        val regionId = sharedPreferences.getString(Constants.PREF_KEY_REGION_ID, null)
+        val provinceId = sharedPreferences.getString(Constants.PREF_KEY_PROVINCE_ID, null)
+        val cityId = sharedPreferences.getString(Constants.PREF_KEY_CITY_ID, null)
         val officeId = sharedPreferences.getString(Constants.PREF_KEY_OFFICE_ID, null)
 
-        if (!regionId.isNullOrBlank() && !officeId.isNullOrBlank()) {
-            loadCurrentActiveCall(regionId, officeId, driverId)
+        if (!provinceId.isNullOrBlank() && !cityId.isNullOrBlank() && !officeId.isNullOrBlank()) {
+            loadCurrentActiveCall(provinceId, cityId, officeId, driverId)
         }
     }
 
@@ -782,8 +802,9 @@ class DriverViewModel @Inject constructor(
         viewModelScope.launch {
             Log.d(TAG, "handleNotificationCallId: processing callId = $callId")
             try {
-                val (regionId, officeId) = getDriverLocationInfo()
-                val callDocument = firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
+                val (provinceId, cityId, officeId) = getDriverLocationInfo()
+                val callDocument = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                    .collection(Constants.COLLECTION_CITIES).document(cityId)
                     .collection(Constants.COLLECTION_OFFICES).document(officeId)
                     .collection(Constants.COLLECTION_CALLS).document(callId)
                     .get()
@@ -826,10 +847,11 @@ class DriverViewModel @Inject constructor(
     fun checkForPendingDispatch() {
         viewModelScope.launch {
             try {
-                val (regionId, officeId) = getDriverLocationInfo()
+                val (provinceId, cityId, officeId) = getDriverLocationInfo()
                 val driverId = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
 
-                val assignedCallsQuery = firestore.collection(Constants.COLLECTION_REGIONS).document(regionId)
+                val assignedCallsQuery = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                    .collection(Constants.COLLECTION_CITIES).document(cityId)
                     .collection(Constants.COLLECTION_OFFICES).document(officeId)
                     .collection(Constants.COLLECTION_CALLS)
                     .whereEqualTo(Constants.FIELD_ASSIGNED_DRIVER_ID, driverId)
@@ -892,11 +914,12 @@ class DriverViewModel @Inject constructor(
         pointsUsed: Int
     ): Boolean {
         return try {
-            val (regionId, officeId) = getDriverLocationInfo()
+            val (provinceId, cityId, officeId) = getDriverLocationInfo()
 
             // 중복 체크
             val existingTransactions = firestore
-                .collection("regions").document(regionId)
+                .collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
                 .collection("offices").document(officeId)
                 .collection("pointTransactions")
                 .whereEqualTo("callId", callId)
@@ -946,7 +969,8 @@ class DriverViewModel @Inject constructor(
             // Firestore 트랜잭션
             firestore.runTransaction { transaction ->
                 val pointsRef = firestore
-                    .collection("regions").document(regionId)
+                    .collection("provinces").document(provinceId)
+                    .collection("cities").document(cityId)
                     .collection("offices").document(officeId)
                     .collection("customerPoints")
                     .document(phoneNumber)
@@ -964,7 +988,8 @@ class DriverViewModel @Inject constructor(
                 // 포인트 사용 내역 추가 (사용한 경우만)
                 if (pointsUsed > 0) {
                     val useTransactionRef = firestore
-                        .collection("regions").document(regionId)
+                        .collection("provinces").document(provinceId)
+                        .collection("cities").document(cityId)
                         .collection("offices").document(officeId)
                         .collection("pointTransactions")
                         .document()
@@ -983,7 +1008,8 @@ class DriverViewModel @Inject constructor(
 
                 // 포인트 적립 내역 추가
                 val earnTransactionRef = firestore
-                    .collection("regions").document(regionId)
+                    .collection("provinces").document(provinceId)
+                    .collection("cities").document(cityId)
                     .collection("offices").document(officeId)
                     .collection("pointTransactions")
                     .document()

@@ -53,9 +53,10 @@ class CustomerPointsRepositoryImpl @Inject constructor(
             }
 
             // Firestore에서 조회
-            val (regionId, officeId) = getDriverLocationInfo()
+            val (provinceId, cityId, officeId) = getDriverLocationInfo()
             val doc = firestore
-                .collection("regions").document(regionId)
+                .collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
                 .collection("offices").document(officeId)
                 .collection("customerPoints")
                 .document(phoneNumber)
@@ -86,10 +87,11 @@ class CustomerPointsRepositoryImpl @Inject constructor(
         points: CustomerPoints
     ): Boolean {
         return try {
-            val (regionId, officeId) = getDriverLocationInfo()
+            val (provinceId, cityId, officeId) = getDriverLocationInfo()
 
             firestore
-                .collection("regions").document(regionId)
+                .collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
                 .collection("offices").document(officeId)
                 .collection("customerPoints")
                 .document(phoneNumber)
@@ -108,7 +110,7 @@ class CustomerPointsRepositoryImpl @Inject constructor(
     }
 
     override suspend fun createCustomerPoints(phoneNumber: String): CustomerPoints {
-        val (regionId, officeId) = getDriverLocationInfo()
+        val (provinceId, cityId, officeId) = getDriverLocationInfo()
 
         val newPoints = CustomerPoints(
             customerId = phoneNumber,
@@ -123,7 +125,8 @@ class CustomerPointsRepositoryImpl @Inject constructor(
         )
 
         firestore
-            .collection("regions").document(regionId)
+            .collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
             .collection("offices").document(officeId)
             .collection("customerPoints")
             .document(phoneNumber)
@@ -150,14 +153,15 @@ class CustomerPointsRepositoryImpl @Inject constructor(
     /**
      * SharedPreferences에서 드라이버 위치 정보 가져오기
      */
-    private fun getDriverLocationInfo(): Pair<String, String> {
-        val regionId = sharedPreferences.getString("regionId", "") ?: ""
+    private fun getDriverLocationInfo(): Triple<String, String, String> {
+        val provinceId = sharedPreferences.getString("provinceId", "") ?: ""
+        val cityId = sharedPreferences.getString("cityId", "") ?: ""
         val officeId = sharedPreferences.getString("officeId", "") ?: ""
 
-        if (regionId.isBlank() || officeId.isBlank()) {
+        if (provinceId.isBlank() || cityId.isBlank() || officeId.isBlank()) {
             throw IllegalStateException("Driver location info not found")
         }
 
-        return Pair(regionId, officeId)
+        return Triple(provinceId, cityId, officeId)
     }
 }

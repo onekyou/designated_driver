@@ -55,13 +55,15 @@ fun HomeScreen(
 
     LaunchedEffect(Unit) {
         val prefs = context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
-        val regionId = prefs.getString("regionId", null)
+        val provinceId = prefs.getString("provinceId", null)
+        val cityId = prefs.getString("cityId", null)
         val officeId = prefs.getString("officeId", null)
 
-        if (regionId != null && officeId != null) {
+        if (provinceId != null && cityId != null && officeId != null) {
             try {
                 val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                val document = firestore.collection("regions").document(regionId)
+                val document = firestore.collection("provinces").document(provinceId)
+                    .collection("cities").document(cityId)
                     .collection("offices").document(officeId).get().await()
                 officeName = if (document.exists()) {
                     document.getString("name") ?: officeId
@@ -314,13 +316,15 @@ fun SettlementSummaryPopup(
             isLoadingPoints = true
             try {
                 val prefs = context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
-                val regionId = prefs.getString("regionId", "") ?: ""
+                val provinceId = prefs.getString("provinceId", "") ?: ""
+                val cityId = prefs.getString("cityId", "") ?: ""
                 val officeId = prefs.getString("officeId", "") ?: ""
 
-                if (regionId.isNotEmpty() && officeId.isNotEmpty()) {
+                if (provinceId.isNotEmpty() && cityId.isNotEmpty() && officeId.isNotEmpty()) {
                     val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
                     val doc = firestore
-                        .collection("regions").document(regionId)
+                        .collection("provinces").document(provinceId)
+                        .collection("cities").document(cityId)
                         .collection("offices").document(officeId)
                         .collection("customerPoints")
                         .document(callInfo.phoneNumber)

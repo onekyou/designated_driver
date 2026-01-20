@@ -79,16 +79,18 @@ class DriverForegroundService : Service() {
         stopFirestoreListeners()
 
         val prefs = getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
-        val regionId = prefs.getString("regionId", null)
+        val provinceId = prefs.getString("provinceId", null)
+        val cityId = prefs.getString("cityId", null)
         val officeId = prefs.getString("officeId", null)
 
-        if (regionId == null || officeId == null) {
+        if (provinceId == null || cityId == null || officeId == null) {
             _driverStatus.value = DriverStatus.OFFLINE
             return
         }
 
-        val driverDocPath = "regions/$regionId/offices/$officeId/designated_drivers/$driverId"
-        driverStatusListener = firestore.collection("regions").document(regionId)
+        val driverDocPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/designated_drivers/$driverId"
+        driverStatusListener = firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
             .collection("offices").document(officeId)
             .collection("designated_drivers").document(driverId)
             .addSnapshotListener { snapshot, e ->
@@ -103,8 +105,9 @@ class DriverForegroundService : Service() {
                 }
             }
 
-        val callsPath = "regions/$regionId/offices/$officeId/calls"
-        assignedCallsListener = firestore.collection("regions").document(regionId)
+        val callsPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/calls"
+        assignedCallsListener = firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
             .collection("offices").document(officeId)
             .collection("calls")
             .whereEqualTo("assignedDriverId", driverId)

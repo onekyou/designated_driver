@@ -2,7 +2,8 @@ package com.designated.driverapp.data
 
 object Constants {
 
-    const val COLLECTION_REGIONS = "regions"
+    const val COLLECTION_PROVINCES = "provinces"
+    const val COLLECTION_CITIES = "cities"
     const val COLLECTION_OFFICES = "offices"
     const val COLLECTION_CALLS = "calls"
     const val COLLECTION_DRIVERS = "designated_drivers"
@@ -32,7 +33,8 @@ object Constants {
     const val FIELD_CASH_RECEIVED = "cashReceived"
 
     const val PREFS_NAME = "driver_app_prefs"
-    const val PREF_KEY_REGION_ID = "pref_region_id"
+    const val PREF_KEY_PROVINCE_ID = "pref_province_id"
+    const val PREF_KEY_CITY_ID = "pref_city_id"
     const val PREF_KEY_OFFICE_ID = "pref_office_id"
 
     const val STATUS_WAITING = "WAITING"

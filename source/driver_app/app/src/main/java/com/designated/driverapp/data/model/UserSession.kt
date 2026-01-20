@@ -6,7 +6,8 @@ package com.designated.driverapp.data.model
 data class UserSession(
     val userId: String,
     val email: String,
-    val regionId: String,
+    val provinceId: String,
+    val cityId: String,
     val officeId: String,
     val driverId: String,
     val driverName: String,
@@ -29,7 +30,8 @@ data class UserSession(
         val map = mutableMapOf<String, Any>(
             "userId" to userId,
             "email" to email,
-            "regionId" to regionId,
+            "provinceId" to provinceId,
+            "cityId" to cityId,
             "officeId" to officeId,
             "driverId" to driverId,
             "driverName" to driverName,
@@ -49,7 +51,8 @@ data class UserSession(
                 UserSession(
                     userId = map["userId"] as? String ?: return null,
                     email = map["email"] as? String ?: return null,
-                    regionId = map["regionId"] as? String ?: return null,
+                    provinceId = map["provinceId"] as? String ?: return null,
+                    cityId = map["cityId"] as? String ?: return null,
                     officeId = map["officeId"] as? String ?: return null,
                     driverId = map["driverId"] as? String ?: return null,
                     driverName = map["driverName"] as? String ?: "",

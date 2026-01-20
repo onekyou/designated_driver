@@ -42,7 +42,8 @@ data class CallInfo(
     val assignedPickupDriverId: String? = null,
     val deviceName: String? = null,  // ✅ nullable로 변경 (Firebase에서 null이 올 수 있음)
     val officeId: String = "",
-    val regionId: String = "",
+    val provinceId: String = "",
+    val cityId: String = "",
     val callType: String? = null,  // ✅ nullable로 변경 (Firebase에서 null이 올 수 있음)
     val isAppCustomer: Boolean = false,  // ✅ 추가: 앱 회원 여부
     val memo: String = "",

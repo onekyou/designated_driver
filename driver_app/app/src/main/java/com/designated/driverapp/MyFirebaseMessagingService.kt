@@ -31,12 +31,14 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         val sharedPreferences = applicationContext.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
-        val regionId = sharedPreferences.getString(Constants.PREF_KEY_REGION_ID, null)
+        val provinceId = sharedPreferences.getString(Constants.PREF_KEY_PROVINCE_ID, null)
+        val cityId = sharedPreferences.getString(Constants.PREF_KEY_CITY_ID, null)
         val officeId = sharedPreferences.getString(Constants.PREF_KEY_OFFICE_ID, null)
 
-        if (userId.isNotBlank() && !regionId.isNullOrBlank() && !officeId.isNullOrBlank()) {
+        if (userId.isNotBlank() && !provinceId.isNullOrBlank() && !cityId.isNullOrBlank() && !officeId.isNullOrBlank()) {
             val db = Firebase.firestore
-            val driverRef = db.collection(Constants.COLLECTION_REGIONS).document(regionId)
+            val driverRef = db.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                .collection(Constants.COLLECTION_CITIES).document(cityId)
                 .collection(Constants.COLLECTION_OFFICES).document(officeId)
                 .collection(Constants.COLLECTION_DRIVERS).document(userId)
 

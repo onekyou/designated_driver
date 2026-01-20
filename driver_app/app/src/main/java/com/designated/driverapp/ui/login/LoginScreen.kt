@@ -27,7 +27,7 @@ import android.util.Log
 fun LoginScreen(
     loginViewModel: LoginViewModel = hiltViewModel(),
     driverViewModel: DriverViewModel,
-    onLoginSuccess: (regionId: String, officeId: String, driverId: String) -> Unit,
+    onLoginSuccess: (provinceId: String, cityId: String, officeId: String, driverId: String) -> Unit,
     onNavigateToPasswordReset: () -> Unit,
     onNavigateToSignUp: () -> Unit
 ) {
@@ -59,7 +59,7 @@ fun LoginScreen(
                     }
                 }
 
-                onLoginSuccess(state.regionId, state.officeId, state.driverId)
+                onLoginSuccess(state.provinceId, state.cityId, state.officeId, state.driverId)
             }
             else -> { /* Idle, Loading */ }
         }

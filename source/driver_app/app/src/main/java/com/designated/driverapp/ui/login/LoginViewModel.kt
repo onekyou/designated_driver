@@ -30,7 +30,7 @@ import com.designated.driverapp.data.model.UserSession
 sealed class LoginState {
     object Idle : LoginState()
     object Loading : LoginState()
-    data class Success(val regionId: String, val officeId: String, val driverId: String, val needsTokenUpdate: Boolean) : LoginState()
+    data class Success(val provinceId: String, val cityId: String, val officeId: String, val driverId: String, val needsTokenUpdate: Boolean) : LoginState()
     data class Error(val message: String) : LoginState()
 }
 
@@ -128,7 +128,8 @@ class LoginViewModel @Inject constructor(
             Log.d(TAG, "오프라인 로그인 성공: ${cachedSession.email}")
 
             _loginState.value = LoginState.Success(
-                regionId = cachedSession.regionId,
+                provinceId = cachedSession.provinceId,
+                cityId = cachedSession.cityId,
                 officeId = cachedSession.officeId,
                 driverId = cachedSession.driverId,
                 needsTokenUpdate = false
@@ -166,7 +167,8 @@ class LoginViewModel @Inject constructor(
                 if (!querySnapshot.isEmpty) {
                     val documentSnapshot = querySnapshot.documents[0]
                     val driverRef = documentSnapshot.reference
-                    val regionId = documentSnapshot.getString("regionId")
+                    val provinceId = documentSnapshot.getString("provinceId")
+                    val cityId = documentSnapshot.getString("cityId")
                     val officeId = documentSnapshot.getString("officeId")
                     val driverApprovalStatus = documentSnapshot.getString("approvalStatus")
                     val currentDriverStatus = documentSnapshot.getString("status")
@@ -184,10 +186,11 @@ class LoginViewModel @Inject constructor(
                          return@addOnSuccessListener
                     }
 
-                    if (!regionId.isNullOrBlank() && !officeId.isNullOrBlank()) {
+                    if (!provinceId.isNullOrBlank() && !cityId.isNullOrBlank() && !officeId.isNullOrBlank()) {
                         // 일반 정보는 일반 SharedPreferences에 저장
                         sharedPreferences.edit().apply {
-                            putString("regionId", regionId)
+                            putString("provinceId", provinceId)
+                            putString("cityId", cityId)
                             putString("officeId", officeId)
                             putString("driverId", userId)
                             apply()
@@ -208,7 +211,8 @@ class LoginViewModel @Inject constructor(
                             val session = UserSession(
                                 userId = userId,
                                 email = email,
-                                regionId = regionId,
+                                provinceId = provinceId,
+                                cityId = cityId,
                                 officeId = officeId,
                                 driverId = userId,
                                 driverName = driverName,
@@ -218,7 +222,7 @@ class LoginViewModel @Inject constructor(
                             )
                             sessionManager.saveSession(session)
 
-                            _loginState.value = LoginState.Success(regionId, officeId, userId, needsUpdate)
+                            _loginState.value = LoginState.Success(provinceId, cityId, officeId, userId, needsUpdate)
 
                             val onlineStatus = com.designated.driverapp.model.DriverStatus.ONLINE.value
                             if (currentDriverStatus != onlineStatus) {
@@ -229,7 +233,7 @@ class LoginViewModel @Inject constructor(
                         }
 
                     } else {
-                        _loginState.value = LoginState.Error("기사 정보(지역/사무실 ID)가 누락되었습니다.")
+                        _loginState.value = LoginState.Error("기사 정보(지역/도시/사무실 ID)가 누락되었습니다.")
                         auth.signOut()
                     }
                 } else {

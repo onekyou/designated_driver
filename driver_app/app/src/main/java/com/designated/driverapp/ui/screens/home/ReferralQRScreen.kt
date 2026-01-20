@@ -26,7 +26,8 @@ import kotlinx.coroutines.tasks.await
 @Composable
 fun ReferralQRScreen(
     driverId: String,
-    regionId: String,
+    provinceId: String,
+    cityId: String,
     officeId: String,
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -40,7 +41,8 @@ fun ReferralQRScreen(
     LaunchedEffect(driverId) {
         try {
             val doc = FirebaseFirestore.getInstance()
-                .collection("regions").document(regionId)
+                .collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
                 .collection("offices").document(officeId)
                 .collection("designated_drivers").document(driverId)
                 .get()

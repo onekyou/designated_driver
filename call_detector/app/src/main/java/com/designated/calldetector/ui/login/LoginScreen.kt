@@ -51,7 +51,7 @@ fun LoginScreen(
     viewModel: LoginViewModel = viewModel(
         factory = LoginViewModel.Factory(LocalContext.current.applicationContext as Application)
     ),
-    onLoginComplete: (regionId: String, officeId: String) -> Unit, // 로그인 완료 콜백
+    onLoginComplete: (provinceId: String, cityId: String, officeId: String) -> Unit, // 로그인 완료 콜백
     onNavigateToPasswordReset: () -> Unit // 비밀번호 찾기 화면 이동 콜백
 ) {
     val loginState by viewModel.loginState.collectAsState()
@@ -69,7 +69,7 @@ fun LoginScreen(
                 viewModel.resetLoginState() // 오류 표시 후 상태 초기화
             }
             is LoginState.Success -> {
-                onLoginComplete(state.regionId, state.officeId) // 콜백 호출
+                onLoginComplete(state.provinceId, state.cityId, state.officeId) // 콜백 호출
                 viewModel.resetLoginState() // 성공 처리 후 상태 초기화
             }
             else -> { /* Idle, Loading */ }

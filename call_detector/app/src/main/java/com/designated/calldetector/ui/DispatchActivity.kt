@@ -15,15 +15,16 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 
 class DispatchActivity : ComponentActivity() {
-    
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         val callId = intent.getStringExtra("EXTRA_CALL_ID") // Firebase document ID
         val phoneNumber = intent.getStringExtra("EXTRA_PHONE_NUMBER") ?: ""
         val contactName = intent.getStringExtra("EXTRA_CONTACT_NAME")
         val contactAddress = intent.getStringExtra("EXTRA_CONTACT_ADDRESS")
-        val regionId = intent.getStringExtra("EXTRA_REGION_ID") ?: ""
+        val provinceId = intent.getStringExtra("EXTRA_PROVINCE_ID") ?: ""
+        val cityId = intent.getStringExtra("EXTRA_CITY_ID") ?: ""
         val officeId = intent.getStringExtra("EXTRA_OFFICE_ID") ?: ""
         val deviceName = intent.getStringExtra("EXTRA_DEVICE_NAME") ?: ""
 
@@ -38,7 +39,7 @@ class DispatchActivity : ComponentActivity() {
                 var isLoading by remember { mutableStateOf(true) }
 
                 LaunchedEffect(Unit) {
-                    drivers = loadAvailableDrivers(regionId, officeId)
+                    drivers = loadAvailableDrivers(provinceId, cityId, officeId)
                     isLoading = false
                 }
 
@@ -60,10 +61,10 @@ class DispatchActivity : ComponentActivity() {
                         onDriverSelect = { driver ->
                             if (callId != null) {
                                 // Firebase ID가 있으면 기존 문서 업데이트
-                                updateCallWithDriver(callId, driver, regionId, officeId)
+                                updateCallWithDriver(callId, driver, provinceId, cityId, officeId)
                             } else {
                                 // ID가 없으면 새 문서 생성 (폴백)
-                                createCallWithDriver(phoneNumber, contactName, contactAddress, driver, regionId, officeId, deviceName)
+                                createCallWithDriver(phoneNumber, contactName, contactAddress, driver, provinceId, cityId, officeId, deviceName)
                             }
                             finish()
                         },
@@ -74,16 +75,16 @@ class DispatchActivity : ComponentActivity() {
                         onDelete = {
                             if (callId != null) {
                                 // Firebase ID가 있으면 해당 문서 삭제
-                                deleteCall(callId, regionId, officeId)
+                                deleteCall(callId, provinceId, cityId, officeId)
                             }
                             finish()
                         },
                         onShare = {
                             if (callId != null) {
                                 // 기존 콜 삭제 후 공유콜 생성
-                                deleteCall(callId, regionId, officeId)
+                                deleteCall(callId, provinceId, cityId, officeId)
                             }
-                            createSharedCall(phoneNumber, contactName, contactAddress, regionId, officeId, deviceName)
+                            createSharedCall(phoneNumber, contactName, contactAddress, provinceId, cityId, officeId, deviceName)
                             finish()
                         },
                         onDismiss = {
@@ -94,11 +95,11 @@ class DispatchActivity : ComponentActivity() {
             }
         }
     }
-    
-    private suspend fun loadAvailableDrivers(regionId: String, officeId: String): List<DriverInfo> {
+
+    private suspend fun loadAvailableDrivers(provinceId: String, cityId: String, officeId: String): List<DriverInfo> {
         return try {
             val db = FirebaseFirestore.getInstance()
-            val driversPath = "regions/$regionId/offices/$officeId/designated_drivers"
+            val driversPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/designated_drivers"
 
             // WAITING 또는 ONLINE 상태의 기사들을 모두 가져오기
             val waitingSnapshot = db.collection(driversPath)
@@ -148,18 +149,19 @@ class DispatchActivity : ComponentActivity() {
             emptyList()
         }
     }
-    
+
     /**
      * Firebase ID를 사용해 기존 콜 문서를 업데이트 (중복 방지)
      */
     private fun updateCallWithDriver(
         callId: String,
         driver: DriverInfo,
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String
     ) {
         val db = FirebaseFirestore.getInstance()
-        val callPath = "regions/$regionId/offices/$officeId/calls/$callId"
+        val callPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/calls/$callId"
 
         // 기존 콜 문서 업데이트
         val updateData = hashMapOf<String, Any>(
@@ -172,14 +174,14 @@ class DispatchActivity : ComponentActivity() {
         db.document(callPath)
             .update(updateData)
             .addOnSuccessListener {
-                android.util.Log.d("DispatchActivity", "✅ Call updated with driver: ${driver.name}")
+                android.util.Log.d("DispatchActivity", "Call updated with driver: ${driver.name}")
             }
             .addOnFailureListener { e ->
-                android.util.Log.e("DispatchActivity", "❌ Failed to update call", e)
+                android.util.Log.e("DispatchActivity", "Failed to update call", e)
             }
 
         // 기사 상태를 ON_TRIP으로 변경
-        val driverPath = "regions/$regionId/offices/$officeId/designated_drivers"
+        val driverPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/designated_drivers"
         db.collection(driverPath).document(driver.id)
             .update("status", "ON_TRIP")
     }
@@ -188,22 +190,24 @@ class DispatchActivity : ComponentActivity() {
      * 폴백용: Firebase ID가 없을 때 새 콜 생성 (기존 방식)
      */
     private fun createCallWithDriver(
-        phoneNumber: String, 
-        contactName: String?, 
+        phoneNumber: String,
+        contactName: String?,
         contactAddress: String?,
-        driver: DriverInfo, 
-        regionId: String, 
+        driver: DriverInfo,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         deviceName: String
     ) {
         val db = FirebaseFirestore.getInstance()
-        val callPath = "regions/$regionId/offices/$officeId/calls"
-        
+        val callPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/calls"
+
         val callData = hashMapOf<String, Any>(
             "phoneNumber" to phoneNumber,
             "customerName" to (contactName ?: phoneNumber),
             "detectedTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-            "regionId" to regionId,
+            "provinceId" to provinceId,
+            "cityId" to cityId,
             "officeId" to officeId,
             "deviceName" to deviceName,
             "status" to "ASSIGNED",
@@ -214,38 +218,39 @@ class DispatchActivity : ComponentActivity() {
             "assignedDriverName" to driver.name,
             "assignedTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
         )
-        
+
         contactAddress?.let { callData["customerAddress"] = it }
-        
+
         // 콜 문서 생성
         db.collection(callPath).add(callData)
-        
+
         // 기사 상태를 ON_TRIP으로 변경
-        val driverPath = "regions/$regionId/offices/$officeId/designated_drivers"
+        val driverPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/designated_drivers"
         db.collection(driverPath).document(driver.id)
             .update("status", "ON_TRIP")
     }
-    
+
     // createCallOnHold 함수 삭제됨 - 이미 CallDetectorService에서 WAITING 상태로 콜이 생성되므로 중복 생성 방지
-    
+
     /**
      * 콜 문서 삭제
      */
     private fun deleteCall(
         callId: String,
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String
     ) {
         val db = FirebaseFirestore.getInstance()
-        val callPath = "regions/$regionId/offices/$officeId/calls/$callId"
+        val callPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/calls/$callId"
 
         db.document(callPath)
             .delete()
             .addOnSuccessListener {
-                android.util.Log.d("DispatchActivity", "✅ Call deleted: $callId")
+                android.util.Log.d("DispatchActivity", "Call deleted: $callId")
             }
             .addOnFailureListener { e ->
-                android.util.Log.e("DispatchActivity", "❌ Failed to delete call", e)
+                android.util.Log.e("DispatchActivity", "Failed to delete call", e)
             }
     }
 
@@ -253,37 +258,41 @@ class DispatchActivity : ComponentActivity() {
         phoneNumber: String,
         contactName: String?,
         contactAddress: String?,
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         deviceName: String
     ) {
         val db = FirebaseFirestore.getInstance()
-        val sharedCallsPath = "regions/$regionId/offices/$officeId/shared_calls"
-        
+        // 공유콜은 루트 레벨의 shared_calls 컬렉션에 저장
+        val sharedCallsPath = "shared_calls"
+
         val sharedCallData = hashMapOf<String, Any>(
             "phoneNumber" to phoneNumber,
             "customerName" to (contactName ?: phoneNumber),
             "sharedTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
             "status" to "SHARED",
-            "regionId" to regionId,
-            "officeId" to officeId,
+            "sourceProvinceId" to provinceId,
+            "sourceCityId" to cityId,
+            "sourceOfficeId" to officeId,
             "deviceName" to deviceName,
             "callType" to "수신",
             "timestampClient" to System.currentTimeMillis()
         )
-        
+
         contactAddress?.let { sharedCallData["customerAddress"] = it }
-        
+
         db.collection(sharedCallsPath).add(sharedCallData)
     }
-    
+
     companion object {
         fun startDispatchDialog(
             context: Context,
             phoneNumber: String,
             contactName: String?,
             contactAddress: String?,
-            regionId: String,
+            provinceId: String,
+            cityId: String,
             officeId: String,
             deviceName: String
         ) {
@@ -291,7 +300,8 @@ class DispatchActivity : ComponentActivity() {
                 putExtra("EXTRA_PHONE_NUMBER", phoneNumber)
                 putExtra("EXTRA_CONTACT_NAME", contactName)
                 putExtra("EXTRA_CONTACT_ADDRESS", contactAddress)
-                putExtra("EXTRA_REGION_ID", regionId)
+                putExtra("EXTRA_PROVINCE_ID", provinceId)
+                putExtra("EXTRA_CITY_ID", cityId)
                 putExtra("EXTRA_OFFICE_ID", officeId)
                 putExtra("EXTRA_DEVICE_NAME", deviceName)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -320,7 +330,7 @@ fun CallDetectorAppTheme(content: @Composable () -> Unit) {
         error = androidx.compose.ui.graphics.Color(0xFFCF6679),
         onError = androidx.compose.ui.graphics.Color.Black
     )
-    
+
     MaterialTheme(
         colorScheme = darkColorScheme,
         content = content

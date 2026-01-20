@@ -34,7 +34,8 @@ fun SignUpScreen(
     onNavigateBack: () -> Unit
 ) {
     val signUpState by viewModel.signUpState.collectAsStateWithLifecycle()
-    val regions by viewModel.regions.collectAsStateWithLifecycle()
+    val provinces by viewModel.provinces.collectAsStateWithLifecycle()
+    val cities by viewModel.cities.collectAsStateWithLifecycle()
     val offices by viewModel.offices.collectAsStateWithLifecycle()
 
     var showPassword by remember { mutableStateOf(false) }
@@ -42,10 +43,12 @@ fun SignUpScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
 
-    var regionExpanded by remember { mutableStateOf(false) }
+    var provinceExpanded by remember { mutableStateOf(false) }
+    var cityExpanded by remember { mutableStateOf(false) }
     var officeExpanded by remember { mutableStateOf(false) }
 
-    val isLoadingRegions = signUpState == SignUpState.LoadingRegions
+    val isLoadingProvinces = signUpState == SignUpState.LoadingProvinces
+    val isLoadingCities = signUpState == SignUpState.LoadingCities
     val isLoadingOffices = signUpState == SignUpState.LoadingOffices
     val isSigningUp = signUpState == SignUpState.Loading
 
@@ -100,54 +103,100 @@ fun SignUpScreen(
              OutlinedTextField(value = viewModel.name, onValueChange = { viewModel.name = it }, label = { Text("이름") }, singleLine = true, enabled = !isSigningUp, modifier = Modifier.fillMaxWidth())
              OutlinedTextField(value = viewModel.phoneNumber, onValueChange = { viewModel.phoneNumber = it }, label = { Text("전화번호") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), enabled = !isSigningUp, modifier = Modifier.fillMaxWidth())
 
+            // 시/도 선택
             ExposedDropdownMenuBox(
-                expanded = regionExpanded,
+                expanded = provinceExpanded,
                 onExpandedChange = { shouldExpand ->
                     val currentState = viewModel.signUpState.value
-                    val canChange = currentState !is SignUpState.LoadingRegions && currentState !is SignUpState.Loading
+                    val canChange = currentState !is SignUpState.LoadingProvinces && currentState !is SignUpState.Loading
                     if (canChange) {
-                        regionExpanded = shouldExpand
-                    } else {
+                        provinceExpanded = shouldExpand
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 OutlinedTextField(
-                    value = viewModel.selectedRegion?.name ?: "지역 선택",
+                    value = viewModel.selectedProvince?.name ?: "시/도 선택",
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("소속 지역") },
+                    label = { Text("시/도") },
                     trailingIcon = {
-                        if (isLoadingRegions) CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        else ExposedDropdownMenuDefaults.TrailingIcon(expanded = regionExpanded)
+                        if (isLoadingProvinces) CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        else ExposedDropdownMenuDefaults.TrailingIcon(expanded = provinceExpanded)
                     },
-                    enabled = !isLoadingRegions && !isSigningUp,
+                    enabled = !isLoadingProvinces && !isSigningUp,
                     modifier = Modifier
                         .menuAnchor()
                         .fillMaxWidth()
-                        .also { }
                 )
                 ExposedDropdownMenu(
-                    expanded = regionExpanded && !isLoadingRegions,
-                    onDismissRequest = { regionExpanded = false },
+                    expanded = provinceExpanded && !isLoadingProvinces,
+                    onDismissRequest = { provinceExpanded = false },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    regions.forEach { region ->
+                    provinces.forEach { province ->
                         DropdownMenuItem(
-                            text = { Text(region.name) },
+                            text = { Text(province.name) },
                             onClick = {
-                                viewModel.onRegionSelected(region)
-                                regionExpanded = false
+                                viewModel.onProvinceSelected(province)
+                                provinceExpanded = false
                             }
                         )
                     }
                 }
             }
 
+            // 시/군/구 선택
+            ExposedDropdownMenuBox(
+                expanded = cityExpanded,
+                onExpandedChange = {
+                    if (viewModel.selectedProvince != null && !isLoadingCities && !isSigningUp) {
+                        cityExpanded = !cityExpanded
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = viewModel.selectedCity?.name ?: "시/군/구 선택",
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("시/군/구") },
+                    trailingIcon = {
+                        if (isLoadingCities) CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        else ExposedDropdownMenuDefaults.TrailingIcon(expanded = cityExpanded)
+                    },
+                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                    enabled = viewModel.selectedProvince != null && !isLoadingCities && !isSigningUp
+                )
+                ExposedDropdownMenu(
+                    expanded = cityExpanded && !isLoadingCities,
+                    onDismissRequest = { cityExpanded = false },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    cities.forEach { city ->
+                        DropdownMenuItem(
+                            text = { Text(city.name) },
+                            onClick = {
+                                viewModel.onCitySelected(city)
+                                cityExpanded = false
+                            }
+                        )
+                    }
+                    if (cities.isEmpty() && !isLoadingCities && viewModel.selectedProvince != null) {
+                        DropdownMenuItem(
+                            text = { Text("선택 가능한 시/군/구가 없습니다.") },
+                            onClick = { },
+                            enabled = false
+                        )
+                    }
+                }
+            }
+
+            // 사무실 선택
             ExposedDropdownMenuBox(
                 expanded = officeExpanded,
                 onExpandedChange = {
-                    if (viewModel.selectedRegion != null && !isLoadingOffices && !isSigningUp) {
+                    if (viewModel.selectedCity != null && !isLoadingOffices && !isSigningUp) {
                         officeExpanded = !officeExpanded
                     }
                 },
@@ -163,7 +212,7 @@ fun SignUpScreen(
                          else ExposedDropdownMenuDefaults.TrailingIcon(expanded = officeExpanded)
                      },
                     modifier = Modifier.menuAnchor().fillMaxWidth(),
-                    enabled = viewModel.selectedRegion != null && !isLoadingOffices && !isSigningUp
+                    enabled = viewModel.selectedCity != null && !isLoadingOffices && !isSigningUp
                 )
                  ExposedDropdownMenu(
                      expanded = officeExpanded && !isLoadingOffices,
@@ -179,7 +228,7 @@ fun SignUpScreen(
                              }
                          )
                      }
-                     if (offices.isEmpty() && !isLoadingOffices && viewModel.selectedRegion != null) {
+                     if (offices.isEmpty() && !isLoadingOffices && viewModel.selectedCity != null) {
                          DropdownMenuItem(
                              text = { Text("선택 가능한 사무실이 없습니다.") },
                              onClick = { },
@@ -193,7 +242,7 @@ fun SignUpScreen(
 
             Button(
                 onClick = { viewModel.signUp() },
-                enabled = !isSigningUp && !isLoadingRegions && !isLoadingOffices,
+                enabled = !isSigningUp && !isLoadingProvinces && !isLoadingCities && !isLoadingOffices,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 if (isSigningUp) {

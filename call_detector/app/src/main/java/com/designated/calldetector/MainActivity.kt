@@ -32,8 +32,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.designated.calldetector.data.CityItem
 import com.designated.calldetector.data.OfficeItem
-import com.designated.calldetector.data.RegionItem
+import com.designated.calldetector.data.ProvinceItem
 import com.designated.calldetector.ui.DetectorConfigViewModel
 import com.designated.calldetector.ui.DetectorConfigViewModelFactory
 import com.designated.calldetector.ui.ScreenState
@@ -59,23 +60,25 @@ class MainActivity : ComponentActivity() {
                 val phoneNumber = intent.getStringExtra("EXTRA_PHONE_NUMBER")
                 val contactName = intent.getStringExtra("EXTRA_CONTACT_NAME")
                 val contactAddress = intent.getStringExtra("EXTRA_CONTACT_ADDRESS")
-                val regionId = intent.getStringExtra("EXTRA_REGION_ID")
+                val provinceId = intent.getStringExtra("EXTRA_PROVINCE_ID")
+                val cityId = intent.getStringExtra("EXTRA_CITY_ID")
                 val officeId = intent.getStringExtra("EXTRA_OFFICE_ID")
                 val deviceName = intent.getStringExtra("EXTRA_DEVICE_NAME")
-                
+
                 Log.i(tag, "📞 Received internal dispatch broadcast - callId: $callId, phoneNumber: $phoneNumber")
-                
+
                 if (callId != null && phoneNumber != null) {
                     val dispatchIntent = Intent(this@MainActivity, com.designated.calldetector.ui.DispatchActivity::class.java).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
-                               Intent.FLAG_ACTIVITY_CLEAR_TOP or 
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                               Intent.FLAG_ACTIVITY_CLEAR_TOP or
                                Intent.FLAG_ACTIVITY_SINGLE_TOP
-                        
+
                         putExtra("EXTRA_CALL_ID", callId)
                         putExtra("EXTRA_PHONE_NUMBER", phoneNumber)
                         contactName?.let { putExtra("EXTRA_CONTACT_NAME", it) }
                         contactAddress?.let { putExtra("EXTRA_CONTACT_ADDRESS", it) }
-                        regionId?.let { putExtra("EXTRA_REGION_ID", it) }
+                        provinceId?.let { putExtra("EXTRA_PROVINCE_ID", it) }
+                        cityId?.let { putExtra("EXTRA_CITY_ID", it) }
                         officeId?.let { putExtra("EXTRA_OFFICE_ID", it) }
                         deviceName?.let { putExtra("EXTRA_DEVICE_NAME", it) }
                         putExtra("FROM_NEW_CALL", true)
@@ -187,27 +190,29 @@ class MainActivity : ComponentActivity() {
 
                 when (currentScreen) {
                     ScreenState.LOGIN -> LoginScreen(
-                        onLoginComplete = { regionId, officeId -> 
+                        onLoginComplete = { provinceId, cityId, officeId ->
                             // 로그인 성공시 자동 로그인 정보 저장
                             val authPrefs = getSharedPreferences("call_detector_auth", Context.MODE_PRIVATE)
                             authPrefs.edit().apply {
                                 putBoolean("is_logged_in", true)
-                                putString("region_id", regionId)
+                                putString("province_id", provinceId)
+                                putString("city_id", cityId)
                                 putString("office_id", officeId)
                                 putLong("login_timestamp", System.currentTimeMillis())
                                 remove("explicitly_logged_out") // 명시적 로그아웃 플래그 해제
                                 apply()
                             }
-                            
+
                             // 콜디텍터 설정에도 저장 (서비스에서 사용)
                             val detectorPrefs = getSharedPreferences("detector_config", Context.MODE_PRIVATE)
                             detectorPrefs.edit().apply {
-                                putString("regionId", regionId)
+                                putString("provinceId", provinceId)
+                                putString("cityId", cityId)
                                 putString("officeId", officeId)
                                 putString("deviceName", android.os.Build.MODEL) // 기기 모델명을 deviceName으로 사용
                                 apply()
                             }
-                            
+
                             currentScreen = ScreenState.STATUS
                             startCallDetectorServiceIfNeeded() // 서비스 시작
                         },
@@ -217,18 +222,22 @@ class MainActivity : ComponentActivity() {
                     ScreenState.STATUS -> {
                         // 권한 상태를 실시간으로 반영하기 위한 상태
                         var hasAllPermissions by remember { mutableStateOf(areAllPermissionsGranted()) }
-                        
+                        // 스팸 차단 앱 설정 상태
+                        var isCallScreeningRoleHeld by remember { mutableStateOf(isCallScreeningRoleHeld()) }
+
                         // 권한 새로고침 콜백 등록
                         val refreshCallback = {
                             hasAllPermissions = areAllPermissionsGranted()
+                            isCallScreeningRoleHeld = isCallScreeningRoleHeld()
                         }
-                        
+
                         // 콜백 등록 및 초기 상태 설정
                         LaunchedEffect(Unit) {
                             hasAllPermissions = areAllPermissionsGranted()
+                            isCallScreeningRoleHeld = isCallScreeningRoleHeld()
                             permissionRefreshCallback = refreshCallback
                         }
-                        
+
                         StatusScreen(
                             hasAllPermissions = hasAllPermissions,
                             onNavigateToSettings = { currentScreen = ScreenState.SETTINGS },
@@ -238,6 +247,7 @@ class MainActivity : ComponentActivity() {
                             onRequestCallScreeningRole = {
                                 requestCallScreeningRole()
                             },
+                            isCallScreeningRoleHeld = isCallScreeningRoleHeld,
                             onLogout = {
                                 // 로그아웃 처리
                                 val authPrefs = getSharedPreferences("call_detector_auth", Context.MODE_PRIVATE)
@@ -297,12 +307,13 @@ class MainActivity : ComponentActivity() {
                 val phoneNumber = intent.getStringExtra("phoneNumber")
                 val contactName = intent.getStringExtra("contactName")
                 val contactAddress = intent.getStringExtra("contactAddress")
-                val regionId = intent.getStringExtra("regionId")
+                val provinceId = intent.getStringExtra("provinceId")
+                val cityId = intent.getStringExtra("cityId")
                 val officeId = intent.getStringExtra("officeId")
                 val deviceName = intent.getStringExtra("deviceName")
 
                 // DispatchActivity 실행 (Firebase ID 포함)
-                if (phoneNumber != null && regionId != null && officeId != null) {
+                if (phoneNumber != null && provinceId != null && cityId != null && officeId != null) {
                     val dispatchIntent = Intent(this, com.designated.calldetector.ui.DispatchActivity::class.java).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                                Intent.FLAG_ACTIVITY_CLEAR_TOP or
@@ -312,12 +323,13 @@ class MainActivity : ComponentActivity() {
                         putExtra("EXTRA_PHONE_NUMBER", phoneNumber)
                         contactName?.let { putExtra("EXTRA_CONTACT_NAME", it) }
                         contactAddress?.let { putExtra("EXTRA_CONTACT_ADDRESS", it) }
-                        putExtra("EXTRA_REGION_ID", regionId)
+                        putExtra("EXTRA_PROVINCE_ID", provinceId)
+                        putExtra("EXTRA_CITY_ID", cityId)
                         putExtra("EXTRA_OFFICE_ID", officeId)
                         deviceName?.let { putExtra("EXTRA_DEVICE_NAME", it) }
                         putExtra("FROM_NEW_CALL", true)
                     }
-                    
+
                     startActivity(dispatchIntent)
                 }
             }
@@ -479,10 +491,11 @@ fun MainScreen(viewModel: DetectorConfigViewModel) {
     val focusManager = LocalFocusManager.current
 
     // MainScreen 재구성 시 상태 로깅
-    Log.d("MainScreen", "Recomposing: selectedRegion=${uiState.selectedRegion?.name}, isLoadingOffices=${uiState.isLoadingOffices}, officesCount=${uiState.offices.size}, selectedOffice=${uiState.selectedOffice?.name}")
+    Log.d("MainScreen", "Recomposing: selectedProvince=${uiState.selectedProvince?.name}, selectedCity=${uiState.selectedCity?.name}, isLoadingOffices=${uiState.isLoadingOffices}, officesCount=${uiState.offices.size}, selectedOffice=${uiState.selectedOffice?.name}")
 
-    val isOfficeDropdownEnabled = uiState.selectedRegion != null && !uiState.isLoadingOffices
-    Log.d("MainScreen", "isOfficeDropdownEnabled: $isOfficeDropdownEnabled")
+    val isCityDropdownEnabled = uiState.selectedProvince != null && !uiState.isLoadingCities
+    val isOfficeDropdownEnabled = uiState.selectedCity != null && !uiState.isLoadingOffices
+    Log.d("MainScreen", "isCityDropdownEnabled: $isCityDropdownEnabled, isOfficeDropdownEnabled: $isOfficeDropdownEnabled")
 
     // 저장 성공 또는 오류 메시지 표시 (ViewModel의 uiState 사용)
     LaunchedEffect(uiState.saveSuccess) {
@@ -517,20 +530,20 @@ fun MainScreen(viewModel: DetectorConfigViewModel) {
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 지역 선택 드롭다운
-            var regionExpanded by remember { mutableStateOf(false) }
+            // 도/광역시 선택 드롭다운
+            var provinceExpanded by remember { mutableStateOf(false) }
             ExposedDropdownMenuBox(
-                expanded = regionExpanded,
-                onExpandedChange = { regionExpanded = !regionExpanded }
+                expanded = provinceExpanded,
+                onExpandedChange = { provinceExpanded = !provinceExpanded }
             ) {
                 OutlinedTextField(
-                    value = uiState.selectedRegion?.name ?: "지역 선택",
+                    value = uiState.selectedProvince?.name ?: "도/광역시 선택",
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("지역", color = Color(0xFFB0B0B0)) },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = regionExpanded) },
+                    label = { Text("도/광역시", color = Color(0xFFB0B0B0)) },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = provinceExpanded) },
                     modifier = Modifier
-                        .menuAnchor() // 필수
+                        .menuAnchor()
                         .fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Color(0xFFFFB000),
@@ -543,30 +556,30 @@ fun MainScreen(viewModel: DetectorConfigViewModel) {
                     )
                 )
                 ExposedDropdownMenu(
-                    expanded = regionExpanded,
-                    onDismissRequest = { regionExpanded = false },
+                    expanded = provinceExpanded,
+                    onDismissRequest = { provinceExpanded = false },
                     modifier = Modifier.background(Color(0xFF2A2A2A))
                 ) {
-                    if (uiState.isLoadingRegions) {
+                    if (uiState.isLoadingProvinces) {
                         DropdownMenuItem(
                             text = { Text("지역 정보 로딩 중...", color = Color.White) },
                             onClick = {},
                             enabled = false
                         )
-                    } else if (uiState.regions.isEmpty()) {
+                    } else if (uiState.provinces.isEmpty()) {
                         DropdownMenuItem(
                             text = { Text("사용 가능한 지역 없음", color = Color.White) },
                             onClick = {},
                             enabled = false
                         )
                     } else {
-                        uiState.regions.forEach { region ->
+                        uiState.provinces.forEach { province ->
                             DropdownMenuItem(
-                                text = { Text(region.name, color = Color.White) },
+                                text = { Text(province.name, color = Color.White) },
                                 onClick = {
-                                    viewModel.selectRegion(region)
-                                    regionExpanded = false
-                                    focusManager.clearFocus() // 키보드 숨기기
+                                    viewModel.selectProvince(province)
+                                    provinceExpanded = false
+                                    focusManager.clearFocus()
                                 }
                             )
                         }
@@ -575,7 +588,82 @@ fun MainScreen(viewModel: DetectorConfigViewModel) {
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "서비스를 제공할 지역을 선택하세요.",
+                "서비스를 제공할 도/광역시를 선택하세요.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFB0B0B0),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 시/군/구 선택 드롭다운
+            var cityExpanded by remember { mutableStateOf(false) }
+            ExposedDropdownMenuBox(
+                expanded = cityExpanded && isCityDropdownEnabled,
+                onExpandedChange = {
+                    val canExpandNow = uiState.selectedProvince != null && !uiState.isLoadingCities
+                    if (canExpandNow) {
+                        cityExpanded = !cityExpanded
+                    }
+                }
+            ) {
+                OutlinedTextField(
+                    value = uiState.selectedCity?.name ?: "시/군/구 선택",
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("시/군/구", color = Color(0xFFB0B0B0)) },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = cityExpanded && isCityDropdownEnabled) },
+                    enabled = isCityDropdownEnabled,
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFFFFB000),
+                        unfocusedBorderColor = Color(0xFF404040),
+                        disabledBorderColor = Color(0xFF404040),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        disabledTextColor = Color(0xFF808080),
+                        cursorColor = Color(0xFFFFB000),
+                        focusedTrailingIconColor = Color(0xFFFFB000),
+                        unfocusedTrailingIconColor = Color(0xFFB0B0B0),
+                        disabledTrailingIconColor = Color(0xFF808080)
+                    )
+                )
+                ExposedDropdownMenu(
+                    expanded = cityExpanded && isCityDropdownEnabled,
+                    onDismissRequest = { cityExpanded = false },
+                    modifier = Modifier.background(Color(0xFF2A2A2A))
+                ) {
+                    if (uiState.isLoadingCities && uiState.selectedProvince != null) {
+                        DropdownMenuItem(
+                            text = { Text("시/군/구 정보 로딩 중...", color = Color.White) },
+                            onClick = {},
+                            enabled = false
+                        )
+                    } else if (uiState.cities.isEmpty() && uiState.selectedProvince != null) {
+                        DropdownMenuItem(
+                            text = { Text("선택한 지역에 시/군/구 없음", color = Color.White) },
+                            onClick = {},
+                            enabled = false
+                        )
+                    } else {
+                        uiState.cities.forEach { city ->
+                            DropdownMenuItem(
+                                text = { Text(city.name, color = Color.White) },
+                                onClick = {
+                                    viewModel.selectCity(city)
+                                    cityExpanded = false
+                                    focusManager.clearFocus()
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "선택한 도/광역시 내의 시/군/구를 선택하세요.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Color(0xFFB0B0B0),
                 modifier = Modifier.fillMaxWidth()
@@ -585,18 +673,12 @@ fun MainScreen(viewModel: DetectorConfigViewModel) {
 
             // 사무실 선택 드롭다운
             var officeExpanded by remember { mutableStateOf(false) }
-
             ExposedDropdownMenuBox(
                 expanded = officeExpanded && isOfficeDropdownEnabled,
                 onExpandedChange = {
-                    // 현재 uiState를 직접 사용하여 확장 가능 여부를 판단합니다.
-                    val canExpandNow = uiState.selectedRegion != null && !uiState.isLoadingOffices
-                    Log.d("MainScreen", "Office ExposedDropdownMenuBox onExpandedChange. Captured isOfficeDropdownEnabled: $isOfficeDropdownEnabled, Evaluated canExpandNow: $canExpandNow")
-                    if (canExpandNow) { // 캡처된 변수 대신 직접 평가한 값 사용
+                    val canExpandNow = uiState.selectedCity != null && !uiState.isLoadingOffices
+                    if (canExpandNow) {
                         officeExpanded = !officeExpanded
-                        Log.d("MainScreen", "Office officeExpanded toggled to: $officeExpanded")
-                    } else {
-                        Log.d("MainScreen", "Office dropdown not expanded because canExpandNow is false (or captured isOfficeDropdownEnabled was false).")
                     }
                 }
             ) {
@@ -628,15 +710,15 @@ fun MainScreen(viewModel: DetectorConfigViewModel) {
                     onDismissRequest = { officeExpanded = false },
                     modifier = Modifier.background(Color(0xFF2A2A2A))
                 ) {
-                    if (uiState.isLoadingOffices && uiState.selectedRegion != null) {
-                         DropdownMenuItem(
+                    if (uiState.isLoadingOffices && uiState.selectedCity != null) {
+                        DropdownMenuItem(
                             text = { Text("사무실 정보 로딩 중...", color = Color.White) },
                             onClick = {},
                             enabled = false
                         )
-                    } else if (uiState.offices.isEmpty() && uiState.selectedRegion != null) {
-                         DropdownMenuItem(
-                            text = { Text("선택한 지역에 사무실 없음", color = Color.White) },
+                    } else if (uiState.offices.isEmpty() && uiState.selectedCity != null) {
+                        DropdownMenuItem(
+                            text = { Text("선택한 시/군/구에 사무실 없음", color = Color.White) },
                             onClick = {},
                             enabled = false
                         )
@@ -656,7 +738,7 @@ fun MainScreen(viewModel: DetectorConfigViewModel) {
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "선택한 지역 내의 사무실을 선택하세요.",
+                "선택한 시/군/구 내의 사무실을 선택하세요.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Color(0xFFB0B0B0),
                 modifier = Modifier.fillMaxWidth()
@@ -720,7 +802,7 @@ fun MainScreen(viewModel: DetectorConfigViewModel) {
                 onClick = {
                     viewModel.saveSelection()
                 },
-                enabled = !uiState.isLoadingRegions && !uiState.isLoadingOffices, // 로딩 중 아닐 때만 활성화
+                enabled = !uiState.isLoadingProvinces && !uiState.isLoadingCities && !uiState.isLoadingOffices,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFFFFB000),
@@ -750,18 +832,10 @@ fun StatusScreen(
     onRequestPermissions: () -> Unit,
     onLogout: () -> Unit,
     onRefreshPermissions: () -> Unit = {},
-    onRequestCallScreeningRole: () -> Unit = {}
+    onRequestCallScreeningRole: () -> Unit = {},
+    isCallScreeningRoleHeld: Boolean = true
 ) {
     val context = LocalContext.current as? MainActivity
-    val isCallScreeningRoleHeld = remember {
-        mutableStateOf(context?.isCallScreeningRoleHeld() ?: true)
-    }
-
-    // 화면이 다시 보일 때마다 CallScreeningService 상태 확인
-    androidx.compose.runtime.DisposableEffect(Unit) {
-        isCallScreeningRoleHeld.value = context?.isCallScreeningRoleHeld() ?: true
-        onDispose { }
-    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -857,7 +931,7 @@ fun StatusScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             // CallScreeningService 설정 안내 카드 (Android 10+ 전용, 미설정 시에만 표시)
-            if (!isCallScreeningRoleHeld.value && hasAllPermissions && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (!isCallScreeningRoleHeld && hasAllPermissions && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(

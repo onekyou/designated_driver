@@ -35,7 +35,8 @@ class PointRepository(
     private val pointTransactionDao = database.pointTransactionDao()
     private val pointsInfoDao = database.pointsInfoDao()
 
-    private var currentRegionId: String? = null
+    private var currentProvinceId: String? = null
+    private var currentCityId: String? = null
     private var currentOfficeId: String? = null
     private var syncListener: ListenerRegistration? = null
 
@@ -44,11 +45,11 @@ class PointRepository(
     /**
      * 포인트 잔액 정보 Flow (로컬 우선)
      */
-    fun getPointsInfoFlow(regionId: String, officeId: String): Flow<PointsInfo?> {
-        ensureSyncSetup(regionId, officeId)
+    fun getPointsInfoFlow(provinceId: String, cityId: String, officeId: String): Flow<PointsInfo?> {
+        ensureSyncSetup(provinceId, cityId, officeId)
 
-        return pointsInfoDao.getPointsInfoFlow(regionId, officeId)
-            .combine(getTransactionsFlow(regionId, officeId)) { localPointsInfo, transactions ->
+        return pointsInfoDao.getPointsInfoFlow(provinceId, officeId)
+            .combine(getTransactionsFlow(provinceId, cityId, officeId)) { localPointsInfo, transactions ->
                 // 로컬 잔액이 있으면 사용, 없으면 거래 내역으로 계산
                 localPointsInfo?.toFirebasePointsInfo() ?: run {
                     val calculatedBalance = transactions.sumOf { it.amount }
@@ -60,16 +61,16 @@ class PointRepository(
     /**
      * 포인트 잔액 업데이트 (로컬 + Firebase)
      */
-    suspend fun updateBalance(regionId: String, officeId: String, newBalance: Int) {
+    suspend fun updateBalance(provinceId: String, cityId: String, officeId: String, newBalance: Int) {
         try {
             val now = System.currentTimeMillis()
 
             // 1. 로컬 업데이트
             val localPointsInfo = LocalPointsInfo(
-                id = LocalPointsInfo.generateId(regionId, officeId),
+                id = LocalPointsInfo.generateId(provinceId, officeId),
                 balance = newBalance,
                 updatedAt = now,
-                regionId = regionId,
+                regionId = provinceId,
                 officeId = officeId,
                 synced = false, // Firebase 동기화 전
                 lastUpdated = now
@@ -84,14 +85,15 @@ class PointRepository(
                         updatedAt = com.google.firebase.Timestamp.now()
                     )
 
-                    firestore.collection("regions").document(regionId)
+                    firestore.collection("provinces").document(provinceId)
+                        .collection("cities").document(cityId)
                         .collection("offices").document(officeId)
                         .collection("points").document("points")
                         .set(firebasePointsInfo)
                         .await()
 
                     // 동기화 완료 표시
-                    pointsInfoDao.updateSyncStatus(regionId, officeId, true, System.currentTimeMillis())
+                    pointsInfoDao.updateSyncStatus(provinceId, officeId, true, System.currentTimeMillis())
 
                 } catch (e: Exception) {
                     Log.e(TAG, "Firebase 잔액 업데이트 실패", e)
@@ -109,11 +111,11 @@ class PointRepository(
     /**
      * 거래 내역 Flow (로컬 우선)
      */
-    fun getTransactionsFlow(regionId: String, officeId: String): Flow<List<PointTransaction>> {
-        ensureSyncSetup(regionId, officeId)
+    fun getTransactionsFlow(provinceId: String, cityId: String, officeId: String): Flow<List<PointTransaction>> {
+        ensureSyncSetup(provinceId, cityId, officeId)
 
-        return pointTransactionDao.getTransactionsByOffice(regionId, officeId)
-            .combine(pointsInfoDao.getPointsInfoFlow(regionId, officeId)) { transactions, _ ->
+        return pointTransactionDao.getTransactionsByOffice(provinceId, officeId)
+            .combine(pointsInfoDao.getPointsInfoFlow(provinceId, officeId)) { transactions, _ ->
                 transactions.map { it.toFirebaseTransaction() }
             }
     }
@@ -121,10 +123,10 @@ class PointRepository(
     /**
      * 최근 거래 내역 조회 (제한된 개수)
      */
-    suspend fun getRecentTransactions(regionId: String, officeId: String, limit: Int): List<PointTransaction> {
-        ensureSyncSetup(regionId, officeId)
+    suspend fun getRecentTransactions(provinceId: String, cityId: String, officeId: String, limit: Int): List<PointTransaction> {
+        ensureSyncSetup(provinceId, cityId, officeId)
 
-        val localTransactions = pointTransactionDao.getRecentTransactions(regionId, officeId, limit)
+        val localTransactions = pointTransactionDao.getRecentTransactions(provinceId, officeId, limit)
         return localTransactions.map { it.toFirebaseTransaction() }
     }
 
@@ -132,7 +134,8 @@ class PointRepository(
      * 새 거래 내역 추가
      */
     suspend fun addTransaction(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
         transaction: PointTransaction
     ) {
@@ -140,21 +143,22 @@ class PointRepository(
             // 1. 로컬에 저장
             val localTransaction = LocalPointTransaction.fromFirebaseTransaction(
                 transaction,
-                regionId,
+                provinceId,
                 officeId
             ).copy(synced = false) // Firebase 동기화 전
 
             pointTransactionDao.insertTransaction(localTransaction)
 
             // 2. 잔액 업데이트
-            val currentBalance = pointsInfoDao.getPointsInfo(regionId, officeId)?.balance ?: 0
+            val currentBalance = pointsInfoDao.getPointsInfo(provinceId, officeId)?.balance ?: 0
             val newBalance = currentBalance + transaction.amount
-            updateBalance(regionId, officeId, newBalance)
+            updateBalance(provinceId, cityId, officeId, newBalance)
 
             // 3. Firebase 동기화 (백그라운드)
             scope.launch {
                 try {
-                    firestore.collection("regions").document(regionId)
+                    firestore.collection("provinces").document(provinceId)
+                        .collection("cities").document(cityId)
                         .collection("offices").document(officeId)
                         .collection("point_transactions")
                         .add(transaction)
@@ -179,11 +183,12 @@ class PointRepository(
     /**
      * 동기화 설정 확인 및 초기화
      */
-    private fun ensureSyncSetup(regionId: String, officeId: String) {
-        if (currentRegionId != regionId || currentOfficeId != officeId) {
+    private fun ensureSyncSetup(provinceId: String, cityId: String, officeId: String) {
+        if (currentProvinceId != provinceId || currentCityId != cityId || currentOfficeId != officeId) {
             stopSync()
-            startSync(regionId, officeId)
-            currentRegionId = regionId
+            startSync(provinceId, cityId, officeId)
+            currentProvinceId = provinceId
+            currentCityId = cityId
             currentOfficeId = officeId
         }
     }
@@ -191,10 +196,11 @@ class PointRepository(
     /**
      * Firebase 실시간 동기화 시작
      */
-    private fun startSync(regionId: String, officeId: String) {
-        Log.d(TAG, "포인트 동기화 시작: $regionId/$officeId")
+    private fun startSync(provinceId: String, cityId: String, officeId: String) {
+        Log.d(TAG, "포인트 동기화 시작: $provinceId/$cityId/$officeId")
 
-        val officeRef = firestore.collection("regions").document(regionId)
+        val officeRef = firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
             .collection("offices").document(officeId)
 
         // 새로운 거래만 동기화 (전체 다시 읽기 방지)
@@ -209,7 +215,7 @@ class PointRepository(
 
                 scope.launch {
                     try {
-                        syncNewTransactions(snapshots?.documents ?: emptyList(), regionId, officeId)
+                        syncNewTransactions(snapshots?.documents ?: emptyList(), provinceId, officeId)
                     } catch (ex: Exception) {
                         Log.e(TAG, "거래 동기화 실패", ex)
                     }
@@ -222,10 +228,10 @@ class PointRepository(
      */
     private suspend fun syncNewTransactions(
         firebaseDocuments: List<com.google.firebase.firestore.DocumentSnapshot>,
-        regionId: String,
+        provinceId: String,
         officeId: String
     ) {
-        val lastLocalTimestamp = pointTransactionDao.getLastTransactionTimestamp(regionId, officeId) ?: 0
+        val lastLocalTimestamp = pointTransactionDao.getLastTransactionTimestamp(provinceId, officeId) ?: 0
 
         val newTransactions = firebaseDocuments.mapNotNull { doc ->
             try {
@@ -234,7 +240,7 @@ class PointRepository(
 
                 // 로컬에 없는 새로운 거래만 동기화
                 if (transaction != null && timestamp > lastLocalTimestamp) {
-                    LocalPointTransaction.fromFirebaseTransaction(transaction, regionId, officeId)
+                    LocalPointTransaction.fromFirebaseTransaction(transaction, provinceId, officeId)
                 } else null
             } catch (e: Exception) {
                 Log.e(TAG, "거래 파싱 실패: ${doc.id}", e)
@@ -251,11 +257,12 @@ class PointRepository(
     /**
      * 전체 데이터 새로고침 (수동 동기화)
      */
-    suspend fun refreshData(regionId: String, officeId: String) {
+    suspend fun refreshData(provinceId: String, cityId: String, officeId: String) {
         Log.d(TAG, "수동 데이터 새로고침 시작")
 
         try {
-            val officeRef = firestore.collection("regions").document(regionId)
+            val officeRef = firestore.collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
                 .collection("offices").document(officeId)
 
             // 1. 포인트 잔액 동기화
@@ -264,7 +271,7 @@ class PointRepository(
                 val firebasePointsInfo = pointsSnapshot.toObject(PointsInfo::class.java)
                 if (firebasePointsInfo != null) {
                     val localPointsInfo = LocalPointsInfo.fromFirebasePointsInfo(
-                        firebasePointsInfo, regionId, officeId
+                        firebasePointsInfo, provinceId, officeId
                     )
                     pointsInfoDao.insertPointsInfo(localPointsInfo)
                 }
@@ -281,7 +288,7 @@ class PointRepository(
                 try {
                     val transaction = doc.toObject(PointTransaction::class.java)?.apply { id = doc.id }
                     if (transaction != null) {
-                        LocalPointTransaction.fromFirebaseTransaction(transaction, regionId, officeId)
+                        LocalPointTransaction.fromFirebaseTransaction(transaction, provinceId, officeId)
                     } else null
                 } catch (e: Exception) {
                     Log.e(TAG, "거래 파싱 실패: ${doc.id}", e)
@@ -307,7 +314,8 @@ class PointRepository(
     fun stopSync() {
         syncListener?.remove()
         syncListener = null
-        currentRegionId = null
+        currentProvinceId = null
+        currentCityId = null
         currentOfficeId = null
         Log.d(TAG, "포인트 동기화 중지")
     }
@@ -317,10 +325,10 @@ class PointRepository(
     /**
      * 잔액 정합성 검증
      */
-    suspend fun validateBalance(regionId: String, officeId: String): Boolean {
+    suspend fun validateBalance(provinceId: String, officeId: String): Boolean {
         try {
-            val storedBalance = pointsInfoDao.getPointsInfo(regionId, officeId)?.balance ?: 0
-            val calculatedBalance = pointTransactionDao.getCalculatedBalance(regionId, officeId)
+            val storedBalance = pointsInfoDao.getPointsInfo(provinceId, officeId)?.balance ?: 0
+            val calculatedBalance = pointTransactionDao.getCalculatedBalance(provinceId, officeId)
 
             val isValid = storedBalance == calculatedBalance
             if (!isValid) {

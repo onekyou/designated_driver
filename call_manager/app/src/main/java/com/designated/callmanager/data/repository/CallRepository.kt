@@ -4,6 +4,7 @@ import android.util.Log
 import com.designated.callmanager.data.CallInfo
 import com.designated.callmanager.data.CallStatus
 import com.designated.callmanager.data.local.AppDatabase
+import com.designated.callmanager.data.local.LocalCallInfo
 import com.designated.callmanager.data.local.toCallInfo
 import com.designated.callmanager.data.local.toLocalCallInfo
 import com.google.firebase.Timestamp
@@ -42,11 +43,26 @@ class CallRepository(
     // ========================================
 
     /**
-     * 콜 목록 Flow 구독
+     * 콜 목록 Flow 구독 (최근 1시간 이내)
      * UI가 이 Flow를 collect하면 DB 변경 시 자동 업데이트
+     * 시간 필터는 매 emit마다 동적으로 적용됨
      */
     fun getCallsFlow(provinceId: String, officeId: String): Flow<List<CallInfo>> {
-        return callDao.getCallsFlow(provinceId, officeId)
+        return callDao.getAllCallsFlow(provinceId, officeId)
+            .map { localCalls ->
+                val oneHourAgo = System.currentTimeMillis() - (60 * 60 * 1000) // 1시간 전
+                localCalls
+                    .filter { it.timestamp >= oneHourAgo }
+                    .map { it.toCallInfo() }
+            }
+    }
+
+    /**
+     * 전체 콜 목록 Flow 구독 (시간 제한 없음)
+     * 정산 등 전체 조회가 필요한 경우 사용
+     */
+    fun getAllCallsFlow(provinceId: String, officeId: String): Flow<List<CallInfo>> {
+        return callDao.getAllCallsFlow(provinceId, officeId)
             .map { localCalls ->
                 localCalls.map { it.toCallInfo() }
             }
@@ -144,6 +160,54 @@ class CallRepository(
             }
         } catch (e: Exception) {
             Log.e(TAG, "[FCM] 콜 업데이트 실패: $callId", e)
+        }
+    }
+
+    /**
+     * FCM NEW_CALL 메시지로부터 새 콜 삽입
+     * 로컬 DB에만 저장 (Firebase는 이미 저장됨)
+     */
+    suspend fun insertCallFromFCM(
+        callId: String,
+        phoneNumber: String,
+        customerName: String?,
+        customerAddress: String?,
+        status: String,
+        provinceId: String,
+        officeId: String,
+        callType: String? = null,
+        fromCallDetector: Boolean? = null,
+        assignedDriverId: String? = null,
+        assignedDriverName: String? = null,
+        assignedDriverPhone: String? = null
+    ) = withContext(Dispatchers.IO) {
+        try {
+            val localCall = LocalCallInfo(
+                id = callId,
+                phoneNumber = phoneNumber,
+                customerName = customerName,
+                customerAddress = customerAddress,
+                status = status,
+                timestamp = System.currentTimeMillis(),
+                departure_set = null,
+                destination_set = null,
+                waypoints_set = null,
+                fare_set = null,
+                assignedDriverId = assignedDriverId,
+                assignedDriverName = assignedDriverName,
+                assignedDriverPhone = assignedDriverPhone,
+                callType = callType,
+                fromCallDetector = fromCallDetector,
+                regionId = provinceId, // regionId 필드에 provinceId 저장
+                officeId = officeId,
+                synced = true,
+                lastUpdated = System.currentTimeMillis()
+            )
+
+            callDao.upsertCall(localCall)
+            Log.d(TAG, "[FCM] 새 콜 로컬 DB 삽입 완료: $callId")
+        } catch (e: Exception) {
+            Log.e(TAG, "[FCM] 새 콜 삽입 실패: $callId", e)
         }
     }
 

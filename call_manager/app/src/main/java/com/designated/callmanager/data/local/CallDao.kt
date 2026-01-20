@@ -16,15 +16,27 @@ interface CallDao {
     // ========================================
 
     /**
-     * 특정 사무실의 모든 콜을 Flow로 구독
+     * 특정 사무실의 최근 1시간 이내 콜을 Flow로 구독
      * UI가 이 Flow를 collect하면 DB 변경 시 자동 업데이트
+     */
+    @Query("""
+        SELECT * FROM calls
+        WHERE regionId = :regionId AND officeId = :officeId
+          AND timestamp >= :cutoffTime
+        ORDER BY timestamp DESC
+    """)
+    fun getCallsFlow(regionId: String, officeId: String, cutoffTime: Long): Flow<List<LocalCallInfo>>
+
+    /**
+     * 특정 사무실의 모든 콜을 Flow로 구독 (시간 제한 없음)
+     * 정산 등 전체 콜 조회가 필요한 경우 사용
      */
     @Query("""
         SELECT * FROM calls
         WHERE regionId = :regionId AND officeId = :officeId
         ORDER BY timestamp DESC
     """)
-    fun getCallsFlow(regionId: String, officeId: String): Flow<List<LocalCallInfo>>
+    fun getAllCallsFlow(regionId: String, officeId: String): Flow<List<LocalCallInfo>>
 
     // ========================================
     // 단일 조회 (suspend)

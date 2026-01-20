@@ -20,12 +20,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
-data class RegionItem(val id: String, val name: String)
+data class ProvinceItem(val id: String, val name: String)
+data class CityItem(val id: String, val name: String)
 data class OfficeItem(val id: String, val name: String)
 
 sealed class SignUpState {
     object Idle : SignUpState()
-    object LoadingRegions : SignUpState()
+    object LoadingProvinces : SignUpState()
+    object LoadingCities : SignUpState()
     object LoadingOffices : SignUpState()
     object Loading : SignUpState()
     object Success : SignUpState() // 성공 시 "승인 대기" 상태임을 안내
@@ -48,49 +50,80 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
     var phoneNumber by mutableStateOf("")
     var driverType by mutableStateOf("대리기사")
 
-    private val _regions = MutableStateFlow<List<RegionItem>>(emptyList())
-    val regions: StateFlow<List<RegionItem>> = _regions.asStateFlow()
+    private val _provinces = MutableStateFlow<List<ProvinceItem>>(emptyList())
+    val provinces: StateFlow<List<ProvinceItem>> = _provinces.asStateFlow()
+
+    private val _cities = MutableStateFlow<List<CityItem>>(emptyList())
+    val cities: StateFlow<List<CityItem>> = _cities.asStateFlow()
 
     private val _offices = MutableStateFlow<List<OfficeItem>>(emptyList())
     val offices: StateFlow<List<OfficeItem>> = _offices.asStateFlow()
 
-    var selectedRegion by mutableStateOf<RegionItem?>(null)
+    var selectedProvince by mutableStateOf<ProvinceItem?>(null)
+        private set
+
+    var selectedCity by mutableStateOf<CityItem?>(null)
         private set
 
     var selectedOffice by mutableStateOf<OfficeItem?>(null)
         private set
 
     init {
-        fetchRegions()
+        fetchProvinces()
     }
 
-    private fun fetchRegions() {
-        _signUpState.value = SignUpState.LoadingRegions
+    private fun fetchProvinces() {
+        _signUpState.value = SignUpState.LoadingProvinces
         viewModelScope.launch {
             try {
-                val snapshot = firestore.collection("regions").get().await()
-                val regionList = snapshot.documents.mapNotNull { doc ->
-                    val regionName = doc.getString("name")
-                    if (regionName != null) {
-                        RegionItem(id = doc.id, name = regionName)
+                val snapshot = firestore.collection("provinces").get().await()
+                val provinceList = snapshot.documents.mapNotNull { doc ->
+                    val provinceName = doc.getString("name")
+                    if (provinceName != null) {
+                        ProvinceItem(id = doc.id, name = provinceName)
                     } else {
                         null
                     }
                 }.sortedBy { it.name }
-                _regions.value = regionList
+                _provinces.value = provinceList
                 _signUpState.value = SignUpState.Idle
             } catch (e: Exception) {
-                _signUpState.value = SignUpState.Error("지역 목록 로드 실패: ${e.message}")
+                _signUpState.value = SignUpState.Error("시/도 목록 로드 실패: ${e.message}")
             }
         }
     }
 
-    private fun fetchOffices(regionId: String) {
+    private fun fetchCities(provinceId: String) {
+        _signUpState.value = SignUpState.LoadingCities
+        _cities.value = emptyList()
+        _offices.value = emptyList()
+        viewModelScope.launch {
+            try {
+                val snapshot = firestore.collection("provinces").document(provinceId)
+                    .collection("cities").get().await()
+                val cityList = snapshot.documents.mapNotNull { doc ->
+                    val cityName = doc.getString("name")
+                    if (cityName != null) {
+                        CityItem(id = doc.id, name = cityName)
+                    } else {
+                        null
+                    }
+                }.sortedBy { it.name }
+                _cities.value = cityList
+                _signUpState.value = SignUpState.Idle
+            } catch (e: Exception) {
+                _signUpState.value = SignUpState.Error("시/군/구 목록 로드 실패: ${e.message}")
+            }
+        }
+    }
+
+    private fun fetchOffices(provinceId: String, cityId: String) {
         _signUpState.value = SignUpState.LoadingOffices
         _offices.value = emptyList()
         viewModelScope.launch {
             try {
-                val snapshot = firestore.collection("regions").document(regionId)
+                val snapshot = firestore.collection("provinces").document(provinceId)
+                    .collection("cities").document(cityId)
                     .collection("offices").get().await()
                 val officeList = snapshot.documents.mapNotNull { doc ->
                     val officeName = doc.getString("name")
@@ -108,10 +141,19 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun onRegionSelected(region: RegionItem) {
-        selectedRegion = region
+    fun onProvinceSelected(province: ProvinceItem) {
+        selectedProvince = province
+        selectedCity = null
         selectedOffice = null
-        fetchOffices(region.id)
+        fetchCities(province.id)
+    }
+
+    fun onCitySelected(city: CityItem) {
+        selectedCity = city
+        selectedOffice = null
+        selectedProvince?.let { province ->
+            fetchOffices(province.id, city.id)
+        }
     }
 
     fun onOfficeSelected(office: OfficeItem) {
@@ -124,8 +166,12 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
             _signUpState.value = SignUpState.Error("모든 필드를 입력해주세요.")
             return
         }
-        if (selectedRegion == null) {
-             _signUpState.value = SignUpState.Error("지역을 선택해주세요.")
+        if (selectedProvince == null) {
+             _signUpState.value = SignUpState.Error("시/도를 선택해주세요.")
+             return
+        }
+        if (selectedCity == null) {
+             _signUpState.value = SignUpState.Error("시/군/구를 선택해주세요.")
              return
         }
         if (selectedOffice == null) {
@@ -145,7 +191,8 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
                     "phoneNumber" to phoneNumber,
                     "email" to email,
                     "driverType" to driverType,
-                    "targetRegionId" to selectedRegion!!.id,
+                    "targetProvinceId" to selectedProvince!!.id,
+                    "targetCityId" to selectedCity!!.id,
                     "targetOfficeId" to selectedOffice!!.id,
                     "status" to "승인대기중",
                     "requestedAt" to com.google.firebase.Timestamp.now()

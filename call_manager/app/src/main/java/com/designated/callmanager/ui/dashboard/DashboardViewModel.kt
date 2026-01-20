@@ -367,7 +367,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
         // 1. 포인트 잔액 구독
         viewModelScope.launch {
-            pointRepository.getPointsInfoFlow(provinceId, officeId)
+            pointRepository.getPointsInfoFlow(provinceId, cityId, officeId)
                 .collect { pointsInfo ->
                     _pointsInfo.value = pointsInfo ?: PointsInfo(0, null)
                     Log.d(TAG, "포인트 잔액 업데이트: ${pointsInfo?.balance ?: 0}")
@@ -376,7 +376,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
         // 2. 거래 내역 구독
         viewModelScope.launch {
-            pointRepository.getTransactionsFlow(provinceId, officeId)
+            pointRepository.getTransactionsFlow(provinceId, cityId, officeId)
                 .collect { transactions ->
                     _pointTransactions.value = transactions
                     Log.d(TAG, "포인트 거래 내역 업데이트: ${transactions.size}개")
@@ -389,7 +389,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         // 3. 초기 데이터 새로고침 (백그라운드)
         viewModelScope.launch {
             try {
-                pointRepository.refreshData(provinceId, officeId)
+                pointRepository.refreshData(provinceId, cityId, officeId)
                 Log.d(TAG, "포인트 데이터 새로고침 완료")
             } catch (e: Exception) {
                 Log.e(TAG, "포인트 데이터 새로고침 실패", e)
@@ -842,12 +842,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             try {
                 val nowTs = Timestamp.now()
+                val timestampClient = System.currentTimeMillis()
                 val data = hashMapOf(
                     "phoneNumber" to "",
                     "customerAddress" to "",
                     "customerName" to "",
                     "timestamp" to nowTs,
-                    "timestampClient" to System.currentTimeMillis(),
+                    "timestampClient" to timestampClient,
                     "status" to CallStatus.WAITING.firestoreValue,
                     "provinceId" to province,
                     "cityId" to city,
@@ -856,7 +857,25 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 )
 
                 val docRef = officeRef.collection("calls").add(data).await()
+
+                // 로컬 DB에도 저장하여 UI에 즉시 반영
+                callRepository.insertCallFromFCM(
+                    callId = docRef.id,
+                    phoneNumber = "",
+                    customerName = "",
+                    customerAddress = "",
+                    status = CallStatus.WAITING.firestoreValue,
+                    provinceId = province,
+                    officeId = office,
+                    callType = null,
+                    fromCallDetector = false,
+                    assignedDriverId = null,
+                    assignedDriverName = null,
+                    assignedDriverPhone = null
+                )
+                Log.d(TAG, "새 콜 생성 완료: ${docRef.id}")
             } catch (e: Exception) {
+                Log.e(TAG, "새 콜 생성 실패", e)
             }
         }
     }
@@ -1536,6 +1555,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
      */
     fun createTestPointTransaction(amount: Int, type: String, description: String) {
         val province = _provinceId.value ?: return
+        val city = _cityId.value ?: return
         val office = _officeId.value ?: return
 
         viewModelScope.launch {
@@ -1552,7 +1572,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     relatedSharedCallId = null
                 )
 
-                pointRepository.addTransaction(province, office, transaction)
+                pointRepository.addTransaction(province, city, office, transaction)
 
                 Log.d(TAG, "테스트 거래 생성 완료: $amount, $type")
             } catch (e: Exception) {

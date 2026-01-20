@@ -2,7 +2,7 @@ package com.designated.callmanager.data
 
 object Constants {
 
-    const val COLLECTION_REGIONS = "regions"
+    const val COLLECTION_PROVINCES = "provinces"
     const val COLLECTION_OFFICES = "offices"
     const val COLLECTION_CALLS = "calls"
     const val COLLECTION_DRIVERS = "designated_drivers"

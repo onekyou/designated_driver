@@ -5,8 +5,9 @@ import android.content.Context
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.designated.calldetector.data.CityItem
 import com.designated.calldetector.data.OfficeItem
-import com.designated.calldetector.data.RegionItem
+import com.designated.calldetector.data.ProvinceItem
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -20,13 +21,16 @@ import kotlinx.coroutines.launch
 
 // Data class to hold the UI state
 data class DetectorConfigUiState(
-    val regions: List<RegionItem> = emptyList(),
+    val provinces: List<ProvinceItem> = emptyList(),
+    val cities: List<CityItem> = emptyList(),
     val offices: List<OfficeItem> = emptyList(),
     val availableDeviceNames: List<String> = listOf("전화기 1", "전화기 2", "전화기 3", "전화기 4", "전화기 5"), // 기본값 또는 로드된 값
-    val selectedRegion: RegionItem? = null,
+    val selectedProvince: ProvinceItem? = null,
+    val selectedCity: CityItem? = null,
     val selectedOffice: OfficeItem? = null,
     val selectedDeviceName: String = "",
-    val isLoadingRegions: Boolean = false,
+    val isLoadingProvinces: Boolean = false,
+    val isLoadingCities: Boolean = false,
     val isLoadingOffices: Boolean = false,
     val error: String? = null, // 오류 메시지
     val saveSuccess: Boolean = false // 저장 성공 시 토스트 메시지 표시용
@@ -55,57 +59,90 @@ class DetectorConfigViewModel(application: Application) : AndroidViewModel(appli
     }
 
     private fun loadInitialConfig() {
-        val regionId = sharedPreferences.getString("regionId", null)
-        val regionName = sharedPreferences.getString("regionName", null)
+        val provinceId = sharedPreferences.getString("provinceId", null)
+        val provinceName = sharedPreferences.getString("provinceName", null)
+        val cityId = sharedPreferences.getString("cityId", null)
+        val cityName = sharedPreferences.getString("cityName", null)
         val officeId = sharedPreferences.getString("officeId", null)
         val officeName = sharedPreferences.getString("officeName", null)
         val deviceName = sharedPreferences.getString("deviceName", "") ?: ""
 
-        val initialRegion = if (regionId != null && regionName != null) RegionItem(regionId, regionName) else null
+        val initialProvince = if (provinceId != null && provinceName != null) ProvinceItem(provinceId, provinceName) else null
+        val initialCity = if (cityId != null && cityName != null) CityItem(cityId, cityName) else null
         val initialOffice = if (officeId != null && officeName != null) OfficeItem(officeId, officeName) else null
 
         _uiState.update {
             it.copy(
-                selectedRegion = initialRegion,
+                selectedProvince = initialProvince,
+                selectedCity = initialCity,
                 selectedOffice = initialOffice,
                 selectedDeviceName = deviceName
             )
         }
-        fetchRegions() // 지역 목록 로드
-        if (initialRegion != null) {
-            fetchOffices(initialRegion.id) // 선택된 지역이 있으면 해당 사무실 로드
+        fetchProvinces() // 지역(도/광역시) 목록 로드
+        if (initialProvince != null) {
+            fetchCities(initialProvince.id) // 선택된 도/광역시가 있으면 시/군/구 로드
+            if (initialCity != null) {
+                fetchOffices(initialProvince.id, initialCity.id) // 선택된 시/군/구가 있으면 사무실 로드
+            }
         }
-        Log.d(TAG, "Loaded initial config: Region=$initialRegion, Office=$initialOffice, Device=$deviceName")
+        Log.d(TAG, "Loaded initial config: Province=$initialProvince, City=$initialCity, Office=$initialOffice, Device=$deviceName")
     }
 
 
-    fun fetchRegions() {
-        _uiState.update { it.copy(isLoadingRegions = true, error = null) }
-        db.collection("regions")
+    fun fetchProvinces() {
+        _uiState.update { it.copy(isLoadingProvinces = true, error = null) }
+        db.collection("provinces")
+            .whereEqualTo("active", true)
             .orderBy("name")
             .get()
             .addOnSuccessListener { documents ->
-                val regionList = documents.map { doc ->
-                    RegionItem(id = doc.id, name = doc.getString("name") ?: "")
+                val provinceList = documents.map { doc ->
+                    ProvinceItem(id = doc.id, name = doc.getString("name") ?: "")
                 }
                 _uiState.update {
                     it.copy(
-                        regions = regionList,
-                        isLoadingRegions = false
-                        // 기존 선택된 지역을 유지하고, 자동 선택 로직 제거
+                        provinces = provinceList,
+                        isLoadingProvinces = false
                     )
                 }
-                Log.d(TAG, "Fetched regions: ${regionList.size} items")
+                Log.d(TAG, "Fetched provinces: ${provinceList.size} items")
             }
             .addOnFailureListener { exception ->
-                _uiState.update { it.copy(isLoadingRegions = false, error = "지역 정보를 가져오는데 실패했습니다: ${exception.message}") }
-                Log.e(TAG, "Error fetching regions", exception)
+                _uiState.update { it.copy(isLoadingProvinces = false, error = "지역 정보를 가져오는데 실패했습니다: ${exception.message}") }
+                Log.e(TAG, "Error fetching provinces", exception)
             }
     }
 
-    fun fetchOffices(regionId: String) {
-        _uiState.update { it.copy(isLoadingOffices = true, error = null, offices = emptyList()) } // 사무실 목록 초기화
-        db.collection("regions").document(regionId).collection("offices")
+    fun fetchCities(provinceId: String) {
+        _uiState.update { it.copy(isLoadingCities = true, error = null, cities = emptyList(), offices = emptyList()) }
+        db.collection("provinces").document(provinceId).collection("cities")
+            .whereEqualTo("active", true)
+            .orderBy("name")
+            .get()
+            .addOnSuccessListener { documents ->
+                val cityList = documents.map { doc ->
+                    CityItem(id = doc.id, name = doc.getString("name") ?: "")
+                }
+                _uiState.update {
+                    it.copy(
+                        cities = cityList,
+                        isLoadingCities = false
+                    )
+                }
+                Log.d(TAG, "Fetched cities for province $provinceId: ${cityList.size} items")
+            }
+            .addOnFailureListener { exception ->
+                _uiState.update { it.copy(isLoadingCities = false, error = "시/군/구 정보를 가져오는데 실패했습니다: ${exception.message}") }
+                Log.e(TAG, "Error fetching cities for province $provinceId", exception)
+            }
+    }
+
+    fun fetchOffices(provinceId: String, cityId: String) {
+        _uiState.update { it.copy(isLoadingOffices = true, error = null, offices = emptyList()) }
+        db.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
+            .collection("offices")
             .orderBy("name")
             .get()
             .addOnSuccessListener { documents ->
@@ -116,26 +153,41 @@ class DetectorConfigViewModel(application: Application) : AndroidViewModel(appli
                     it.copy(
                         offices = officeList,
                         isLoadingOffices = false
-                        // 기존 선택된 사무실을 유지하고, 자동 선택 로직 제거
                     )
                 }
-                Log.d(TAG, "Fetched offices for region $regionId: ${officeList.size} items")
+                Log.d(TAG, "Fetched offices for province $provinceId, city $cityId: ${officeList.size} items")
             }
             .addOnFailureListener { exception ->
                 _uiState.update { it.copy(isLoadingOffices = false, error = "사무실 정보를 가져오는데 실패했습니다: ${exception.message}") }
-                Log.e(TAG, "Error fetching offices for region $regionId", exception)
+                Log.e(TAG, "Error fetching offices for province $provinceId, city $cityId", exception)
             }
     }
 
-    fun selectRegion(region: RegionItem) {
+    fun selectProvince(province: ProvinceItem) {
         _uiState.update {
             it.copy(
-                selectedRegion = region,
-                selectedOffice = null, // 지역 변경 시 사무실 선택 초기화
+                selectedProvince = province,
+                selectedCity = null, // 도/광역시 변경 시 시/군/구 선택 초기화
+                selectedOffice = null, // 사무실 선택도 초기화
+                cities = emptyList(), // 시/군/구 목록 초기화
                 offices = emptyList() // 사무실 목록 초기화
             )
         }
-        fetchOffices(region.id)
+        fetchCities(province.id)
+    }
+
+    fun selectCity(city: CityItem) {
+        val province = _uiState.value.selectedProvince
+        _uiState.update {
+            it.copy(
+                selectedCity = city,
+                selectedOffice = null, // 시/군/구 변경 시 사무실 선택 초기화
+                offices = emptyList() // 사무실 목록 초기화
+            )
+        }
+        if (province != null) {
+            fetchOffices(province.id, city.id)
+        }
     }
 
     fun selectOffice(office: OfficeItem) {
@@ -147,27 +199,30 @@ class DetectorConfigViewModel(application: Application) : AndroidViewModel(appli
     }
 
     fun saveSelection() {
-        val region = _uiState.value.selectedRegion
+        val province = _uiState.value.selectedProvince
+        val city = _uiState.value.selectedCity
         val office = _uiState.value.selectedOffice
         val deviceName = _uiState.value.selectedDeviceName
 
-        if (region != null && office != null && deviceName.isNotBlank()) {
+        if (province != null && city != null && office != null && deviceName.isNotBlank()) {
             sharedPreferences.edit()
-                .putString("regionId", region.id)
-                .putString("regionName", region.name)
+                .putString("provinceId", province.id)
+                .putString("provinceName", province.name)
+                .putString("cityId", city.id)
+                .putString("cityName", city.name)
                 .putString("officeId", office.id)
                 .putString("officeName", office.name)
                 .putString("deviceName", deviceName)
                 .apply()
             _uiState.update { it.copy(saveSuccess = true, error = null) } // 저장 성공 상태 업데이트
-             Log.d(TAG, "Saved selection: Region=${region.id}, Office=${office.id}, DeviceName=$deviceName")
+             Log.d(TAG, "Saved selection: Province=${province.id}, City=${city.id}, Office=${office.id}, DeviceName=$deviceName")
             viewModelScope.launch { // 추가
                 _onSettingsSaved.emit(true) // 저장 성공 이벤트 발생
             }
         } else {
             // 오류 상태 업데이트 (UI에서 메시지 표시용)
-            _uiState.update { it.copy(error = "지역, 사무실, 전화기 이름을 모두 선택해주세요.", saveSuccess = false) }
-            Log.e(TAG, "Error saving selection: Not all values selected. Region=$region, Office=$office, DeviceName=$deviceName")
+            _uiState.update { it.copy(error = "도/광역시, 시/군/구, 사무실, 전화기 이름을 모두 선택해주세요.", saveSuccess = false) }
+            Log.e(TAG, "Error saving selection: Not all values selected. Province=$province, City=$city, Office=$office, DeviceName=$deviceName")
             viewModelScope.launch { // 추가
                 _onSettingsSaved.emit(false) // 저장 실패 이벤트 발생
             }
@@ -178,7 +233,7 @@ class DetectorConfigViewModel(application: Application) : AndroidViewModel(appli
     fun clearError() {
         _uiState.update { it.copy(error = null) }
     }
-    
+
     // 저장 성공 메시지 표시 후 호출
     fun resetSaveStatus() {
          _uiState.update { it.copy(saveSuccess = false) }

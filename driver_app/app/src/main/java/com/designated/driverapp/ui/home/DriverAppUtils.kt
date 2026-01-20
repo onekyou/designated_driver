@@ -27,11 +27,12 @@ fun logoutUserAndExitApp(context: Context, scope: CoroutineScope, viewModel: Dri
 
     if (userId != null) {
         val prefs = context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
-        val regionId = prefs.getString("regionId", null)
+        val provinceId = prefs.getString("provinceId", null)
+        val cityId = prefs.getString("cityId", null)
         val officeId = prefs.getString("officeId", null)
 
-        if (regionId != null && officeId != null) {
-            val correctPath = "regions/$regionId/offices/$officeId/designated_drivers/$userId"
+        if (provinceId != null && cityId != null && officeId != null) {
+            val correctPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/designated_drivers/$userId"
             val driverRef = firestore.document(correctPath)
 
             Log.d("DriverAppUtils", "🔴 [LOGOUT] status를 OFFLINE으로 업데이트: $correctPath")

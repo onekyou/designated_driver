@@ -64,8 +64,8 @@ fun AppNavigation(
         composable(AppDestinations.LOGIN_ROUTE) {
             LoginScreen(
                 driverViewModel = driverViewModel,
-                onLoginSuccess = { regionId, officeId, driverId ->
-                    driverViewModel.initializeListenersWithInfo(regionId, officeId, driverId)
+                onLoginSuccess = { provinceId, cityId, officeId, driverId ->
+                    driverViewModel.initializeListenersWithInfo(provinceId, cityId, officeId, driverId)
                     navController.navigate(AppDestinations.HOME_ROUTE) {
                         popUpTo(AppDestinations.LOGIN_ROUTE) { inclusive = true }
                         launchSingleTop = true
@@ -127,13 +127,15 @@ fun AppNavigation(
         composable(AppDestinations.REFERRAL_QR_ROUTE) {
             val context = androidx.compose.ui.platform.LocalContext.current
             val prefs = context.getSharedPreferences("driver_prefs", android.content.Context.MODE_PRIVATE)
-            val regionId = prefs.getString("regionId", "") ?: ""
+            val provinceId = prefs.getString("provinceId", "") ?: ""
+            val cityId = prefs.getString("cityId", "") ?: ""
             val officeId = prefs.getString("officeId", "") ?: ""
             val driverId = prefs.getString("driverId", "") ?: ""
 
             ReferralQRScreen(
                 driverId = driverId,
-                regionId = regionId,
+                provinceId = provinceId,
+                cityId = cityId,
                 officeId = officeId,
                 onBackClick = { navController.popBackStack() }
             )

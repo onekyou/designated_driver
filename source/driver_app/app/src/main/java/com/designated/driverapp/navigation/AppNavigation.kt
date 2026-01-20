@@ -127,13 +127,15 @@ fun AppNavigation(
         composable(AppDestinations.REFERRAL_QR_ROUTE) {
             val context = androidx.compose.ui.platform.LocalContext.current
             val prefs = context.getSharedPreferences("driver_prefs", android.content.Context.MODE_PRIVATE)
-            val regionId = prefs.getString("regionId", "") ?: ""
+            val provinceId = prefs.getString("provinceId", "") ?: ""
+            val cityId = prefs.getString("cityId", "") ?: ""
             val officeId = prefs.getString("officeId", "") ?: ""
             val driverId = prefs.getString("driverId", "") ?: ""
 
             ReferralQRScreen(
                 driverId = driverId,
-                regionId = regionId,
+                provinceId = provinceId,
+                cityId = cityId,
                 officeId = officeId,
                 onBackClick = { navController.popBackStack() }
             )

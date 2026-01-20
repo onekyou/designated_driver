@@ -562,10 +562,51 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     private fun handleNewCall(remoteMessage: RemoteMessage, callId: String) {
+        val data = remoteMessage.data
+        val customerName = data["customerName"] ?: "신규 고객"
+        val customerPhone = data["customerPhone"] ?: "-"
+        val pickupLocation = data["pickupLocation"] ?: "위치 미확인"
+        val customerAddress = data["customerAddress"]
+        val status = data["status"] ?: "WAITING"
+        val callType = data["callType"]
+        val fromCallDetector = data["fromCallDetector"]?.toBooleanStrictOrNull()
+        val assignedDriverId = data["assignedDriverId"]
+        val assignedDriverName = data["assignedDriverName"]
+        val assignedDriverPhone = data["assignedDriverPhone"]
 
-        val customerName = remoteMessage.data["customerName"] ?: "신규 고객"
-        val customerPhone = remoteMessage.data["customerPhone"] ?: "-"
-        val pickupLocation = remoteMessage.data["pickupLocation"] ?: "위치 미확인"
+        // 로컬 DB에 콜 저장
+        val app = applicationContext as? com.designated.callmanager.CallManagerApplication
+        if (app != null) {
+            val sharedPreferences = getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
+            val provinceId = sharedPreferences.getString("provinceId", null)
+            val officeId = sharedPreferences.getString("officeId", null)
+
+            if (!provinceId.isNullOrBlank() && !officeId.isNullOrBlank()) {
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        app.callRepository.insertCallFromFCM(
+                            callId = callId,
+                            phoneNumber = customerPhone,
+                            customerName = customerName,
+                            customerAddress = customerAddress ?: pickupLocation,
+                            status = status,
+                            provinceId = provinceId,
+                            officeId = officeId,
+                            callType = callType,
+                            fromCallDetector = fromCallDetector,
+                            assignedDriverId = assignedDriverId,
+                            assignedDriverName = assignedDriverName,
+                            assignedDriverPhone = assignedDriverPhone
+                        )
+                        Log.d(TAG, "[handleNewCall] 로컬 DB에 새 콜 저장 완료: $callId")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "[handleNewCall] 로컬 DB 저장 실패: $callId", e)
+                    }
+                }
+            } else {
+                Log.w(TAG, "[handleNewCall] provinceId 또는 officeId 없음 - 로컬 DB 저장 스킵")
+            }
+        }
 
         showNotification(
             channelId = NEW_CALL_CHANNEL_ID,

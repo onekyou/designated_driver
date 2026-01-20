@@ -23,7 +23,7 @@ import kotlinx.coroutines.tasks.await
 sealed class LoginState {
     object Idle : LoginState() // 초기 상태
     object Loading : LoginState() // 로그인 시도 중
-    data class Success(val regionId: String, val officeId: String) : LoginState() // regionId, officeId 포함
+    data class Success(val provinceId: String, val cityId: String, val officeId: String) : LoginState() // provinceId, cityId, officeId 포함
     data class Error(val message: String) : LoginState() // 로그인 실패
 }
 
@@ -90,10 +90,11 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                 val adminDoc = db.collection("admins").document(uid).get().await()
 
                 if (adminDoc.exists()) {
-                    val regionId = adminDoc.getString("associatedRegionId")
+                    val provinceId = adminDoc.getString("associatedProvinceId")
+                    val cityId = adminDoc.getString("associatedCityId")
                     val officeId = adminDoc.getString("associatedOfficeId")
 
-                    if (regionId != null && officeId != null) {
+                    if (provinceId != null && cityId != null && officeId != null) {
                         // 자동 로그인이 체크되어 있으면 로그인 정보 저장
                         if (autoLogin) {
                             saveLoginInfo()
@@ -101,7 +102,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                             clearLoginInfo()
                         }
 
-                        _loginState.value = LoginState.Success(regionId, officeId)
+                        _loginState.value = LoginState.Success(provinceId, cityId, officeId)
                     } else {
                         _loginState.value = LoginState.Error("관리자 정보에 지역 또는 사무실 정보가 없습니다.")
                     }
