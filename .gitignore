@@ -9,6 +9,13 @@
 functions/node_modules/
 .firebase/
 
+# --- Node modules (all) ---
+**/node_modules/
+
+# --- Large files ---
+*.zip
+analysis_ready.zip
+
 # --- Sensitive keys ---
 *.keystore
 *.jks
