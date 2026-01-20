@@ -80,6 +80,9 @@ Thumbs.db
 # Google Cloud Service Account Key
 /credentials/serviceAccountKey.json
 /config/serviceAccountKey.json
+functions/service-account-key.json
+**/service-account-key.json
+**/serviceAccountKey.json
 
 # --- Security & Sensitive Data ---
 # Sensitive data files (never commit these)
