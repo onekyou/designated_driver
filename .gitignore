@@ -102,6 +102,13 @@ SENSITIVE_DATA.md
 # --- Flutter/Dart ---
 .dart_tool/
 *.ipa
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+**/ios/Pods/
+**/ios/.symlinks/
+**/.pub-cache/
+**/pubspec.lock
 
 # --- Firebase config (contains API keys) ---
 **/google-services.json
@@ -114,8 +121,6 @@ temp/
 # --- Unused project folders ---
 call_manager_backup/
 call_manager_current_broken/
-designated_customer_flutter/
-driver_app_flutter/
 Walkietalkie/
 pickup_app_ptt/
 firestore-export-json/

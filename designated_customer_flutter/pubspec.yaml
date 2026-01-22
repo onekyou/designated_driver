@@ -1,0 +1,67 @@
+name: designated_customer_flutter
+description: 대리운전 고객 앱 - Android & iOS 크로스 플랫폼
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # 상태 관리
+  flutter_riverpod: ^2.4.9
+
+  # Firebase
+  firebase_core: ^2.24.2
+  firebase_auth: ^4.16.0
+  cloud_firestore: ^4.14.0
+  cloud_functions: ^4.6.0
+  firebase_messaging: ^14.7.10
+  firebase_analytics: ^10.8.0
+
+  # 보안
+  flutter_secure_storage: ^9.0.0
+  crypto: ^3.0.3
+
+  # 로컬 저장소
+  shared_preferences: ^2.2.2
+
+  # 디바이스 정보
+  device_info_plus: ^9.1.1
+
+  # UI
+  google_fonts: ^6.1.0
+
+  # 위치 서비스
+  location: ^5.0.0
+  geocoding: ^2.1.1
+
+  # 음성 입력
+  speech_to_text: ^6.5.1
+
+  # 권한 관리
+  permission_handler: ^11.1.0
+
+  # QR 코드 스캔
+  mobile_scanner: ^3.5.5
+
+  # 날짜/시간
+  intl: ^0.18.1
+  url_launcher: ^6.3.1
+  package_info_plus: 5.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/logos/
