@@ -13,7 +13,8 @@ import kotlinx.coroutines.tasks.await
  * Firebase Firestore에서 배너 광고 정보를 가져오는 서비스
  */
 class BannerAdService(
-    private val regionId: String = "seoul",
+    private val provinceId: String,
+    private val cityId: String,
     private val officeId: String
 ) {
     private val firestore = FirebaseFirestore.getInstance()
@@ -23,10 +24,11 @@ class BannerAdService(
      * 활성화된 배너 광고 목록을 가져옵니다 (일회성)
      */
     suspend fun getActiveBanners(): List<BannerAdData> {
-        Log.d(TAG, "getActiveBanners 시작: regionId=$regionId, officeId=$officeId")
+        Log.d(TAG, "getActiveBanners 시작: provinceId=$provinceId, cityId=$cityId, officeId=$officeId")
         return try {
             val snapshot = firestore
-                .collection("regions").document(regionId)
+                .collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
                 .collection("offices").document(officeId)
                 .collection("bannerAds")
                 .get()
@@ -52,7 +54,8 @@ class BannerAdService(
         Log.d(TAG, "observeActiveBanners 시작")
 
         val listener = firestore
-            .collection("regions").document(regionId)
+            .collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
             .collection("offices").document(officeId)
             .collection("bannerAds")
             .addSnapshotListener { snapshot, error ->
@@ -85,7 +88,8 @@ class BannerAdService(
         Log.d(TAG, "getBannerById 시작: bannerId=$bannerId")
         return try {
             val snapshot = firestore
-                .collection("regions").document(regionId)
+                .collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
                 .collection("offices").document(officeId)
                 .collection("bannerAds")
                 .document(bannerId)

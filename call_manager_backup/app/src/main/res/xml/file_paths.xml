@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- QR 코드 공유를 위한 external-files 경로 -->
-    <external-files-path
-        name="qr_codes"
-        path="Pictures/QRCodes/" />
-</paths>

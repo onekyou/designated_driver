@@ -26,7 +26,8 @@ import java.util.*
 @Composable
 fun CallHistoryScreen(
     phoneNumber: String,
-    regionId: String,
+    provinceId: String,
+    cityId: String,
     officeId: String,
     onBackClick: () -> Unit,
     showBackButton: Boolean = true,
@@ -35,7 +36,8 @@ fun CallHistoryScreen(
     val viewModel = remember {
         CallHistoryViewModel(
             phoneNumber = phoneNumber,
-            regionId = regionId,
+            provinceId = provinceId,
+            cityId = cityId,
             officeId = officeId
         )
     }

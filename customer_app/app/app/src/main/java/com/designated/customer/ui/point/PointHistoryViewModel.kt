@@ -18,14 +18,15 @@ data class PointHistoryUiState(
 
 class PointHistoryViewModel(
     private val phoneNumber: String,
-    private val regionId: String,
+    private val provinceId: String,
+    private val cityId: String,
     private val officeId: String
 ) : ViewModel() {
 
     var uiState by mutableStateOf(PointHistoryUiState())
         private set
 
-    private val pointService = PointService(regionId = regionId, officeId = officeId)
+    private val pointService = PointService(provinceId = provinceId, cityId = cityId, officeId = officeId)
 
     init {
         loadPointHistory()

@@ -52,10 +52,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         Log.d(TAG, "FCM 메시지 수신: ${remoteMessage.data}")
 
-        // ✅ 로그인 체크: 로그인하지 않은 상태에서는 알림 무시
-        val currentUser = Firebase.auth.currentUser
-        if (currentUser == null) {
-            Log.d(TAG, "로그인하지 않은 상태 - FCM 메시지 무시")
+        // ✅ 로그인 체크: SharedPreferences로 확인 (백그라운드에서도 안정적)
+        // 참고: Hilt 모듈에서 "driver_prefs"로 생성됨
+        val prefs = getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
+        val officeId = prefs.getString(Constants.PREF_KEY_OFFICE_ID, null)
+        if (officeId.isNullOrBlank()) {
+            Log.d(TAG, "로그인하지 않은 상태 (officeId 없음) - FCM 메시지 무시")
             return
         }
 
@@ -63,7 +65,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val body = remoteMessage.notification?.body ?: "새로운 콜이 배정되었습니다."
         val callId = remoteMessage.data["callId"]
 
-        Log.d(TAG, "callId: $callId, title: $title, userId: ${currentUser.uid}")
+        Log.d(TAG, "callId: $callId, title: $title, officeId: $officeId")
 
         // 앱이 포그라운드에 있을 때도 MainActivity로 callId 전달하여 팝업 표시
         if (!callId.isNullOrBlank()) {

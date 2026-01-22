@@ -43,7 +43,8 @@ enum class GameRoute {
 
 @Composable
 fun MainNavigation(
-    regionId: String,
+    provinceId: String,
+    cityId: String,
     officeId: String,
     phoneNumber: String,
     customerInfo: com.designated.customer.data.model.CustomerInfo?,
@@ -136,7 +137,8 @@ fun MainNavigation(
                 NavTab.HOME -> {
                     HomeScreen(
                         modifier = Modifier.padding(paddingValues),
-                        regionId = regionId,
+                        provinceId = provinceId,
+                        cityId = cityId,
                         officeId = officeId,
                         phoneNumber = phoneNumber,
                         customerInfo = customerInfo,
@@ -146,7 +148,8 @@ fun MainNavigation(
                 NavTab.HISTORY -> {
                     CallHistoryScreen(
                         phoneNumber = phoneNumber,
-                        regionId = regionId,
+                        provinceId = provinceId,
+                        cityId = cityId,
                         officeId = officeId,
                         onBackClick = { selectedTab = NavTab.HOME },
                         showBackButton = false,
@@ -156,7 +159,8 @@ fun MainNavigation(
                 NavTab.POINTS -> {
                     PointScreen(
                         phoneNumber = phoneNumber,
-                        regionId = regionId,
+                        provinceId = provinceId,
+                        cityId = cityId,
                         officeId = officeId,
                         modifier = Modifier.padding(paddingValues)
                     )
@@ -164,7 +168,8 @@ fun MainNavigation(
                 NavTab.PROFILE -> {
                     ProfileScreen(
                         phoneNumber = phoneNumber,
-                        regionId = regionId,
+                        provinceId = provinceId,
+                        cityId = cityId,
                         officeId = officeId,
                         onLogout = onLogout,
                         modifier = Modifier.padding(paddingValues)

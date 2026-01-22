@@ -1,6 +1,7 @@
 package com.designated.driverapp.ui.home
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
@@ -142,9 +143,9 @@ fun HistorySettlementScreen(
         }
     }
 
-    // 시스템 뒤로가기 버튼 차단
+    // 시스템 뒤로가기 버튼 처리
     BackHandler(enabled = true) {
-        // 아무 동작도 하지 않음 - 상단 뒤로가기 버튼으로만 나갈 수 있음
+        onNavigateBack()
     }
 
     if (showDialog) {
@@ -217,7 +218,9 @@ fun HistorySettlementScreen(
     Scaffold(
         topBar = {
             Surface(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding(),
                 color = Color.Black,
                 shadowElevation = 4.dp
             ) {

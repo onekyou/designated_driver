@@ -52,7 +52,8 @@ import com.designated.customer.util.VoiceInputHelper
 @Composable
 fun HomeScreen(
     modifier: Modifier = Modifier,
-    regionId: String,
+    provinceId: String,
+    cityId: String,
     officeId: String,
     phoneNumber: String,
     customerInfo: com.designated.customer.data.model.CustomerInfo?,
@@ -86,10 +87,11 @@ fun HomeScreen(
         val stepRepository = StepRepository(stepDatabase.stepDao())
 
         MainViewModel(
-            callService = CallService(regionId = regionId, officeId = officeId),
+            callService = CallService(provinceId = provinceId, cityId = cityId, officeId = officeId),
             locationService = LocationService(context),
-            pointService = PointService(regionId = regionId, officeId = officeId),
-            regionId = regionId,
+            pointService = PointService(provinceId = provinceId, cityId = cityId, officeId = officeId),
+            provinceId = provinceId,
+            cityId = cityId,
             officeId = officeId,
             phoneNumber = phoneNumber,
             customerInfo = customerInfo,

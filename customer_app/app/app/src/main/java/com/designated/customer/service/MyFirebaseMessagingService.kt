@@ -19,6 +19,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
     companion object {
         private const val TAG = "CustomerFCM"
+        private const val CHANNEL_ID_CALL_RECEIVED = "call_received_channel"
         private const val CHANNEL_ID_DRIVER_ASSIGNED = "driver_assigned_channel"
         private const val CHANNEL_ID_RIDE_COMPLETED = "ride_completed_channel"
     }
@@ -35,6 +36,20 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             "call_assigned" -> {
                 // 기사앱용 알림 (사용 안함)
                 Log.d(TAG, "기사앱용 알림 - 무시")
+            }
+
+            "CALL_RECEIVED" -> {
+                // 콜 접수 완료 알림
+                val callId = message.data["callId"]
+                val notificationMessage = message.data["message"] ?: "콜이 접수되었습니다."
+
+                Log.d(TAG, "콜 접수 알림 수신 - callId: $callId")
+
+                // 접수 완료 브로드캐스트 전송
+                sendCallReceivedBroadcast(callId, notificationMessage)
+
+                // 알림 표시
+                showCallReceivedNotification(callId, notificationMessage)
             }
 
             "DRIVER_ASSIGNED" -> {
@@ -94,6 +109,16 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
+            // 콜 접수 알림 채널
+            val callReceivedChannel = NotificationChannel(
+                CHANNEL_ID_CALL_RECEIVED,
+                "콜 접수 알림",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "콜이 접수되었을 때 알림"
+                enableVibration(true)
+            }
+
             // 기사 배정 알림 채널
             val driverChannel = NotificationChannel(
                 CHANNEL_ID_DRIVER_ASSIGNED,
@@ -114,6 +139,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 enableVibration(true)
             }
 
+            notificationManager.createNotificationChannel(callReceivedChannel)
             notificationManager.createNotificationChannel(driverChannel)
             notificationManager.createNotificationChannel(completedChannel)
         }
@@ -231,20 +257,58 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         Log.d(TAG, "취소 브로드캐스트 전송 완료 - callId: $callId, reason: $cancelReason")
     }
 
-    private fun saveFcmTokenToFirestore(token: String) {
-        // SharedPreferences에서 phoneNumber, regionId, officeId 가져오기
-        val prefs = getSharedPreferences("customer_prefs", Context.MODE_PRIVATE)
-        val phoneNumber = prefs.getString("phoneNumber", null)
-        val regionId = prefs.getString("regionId", null)
-        val officeId = prefs.getString("officeId", null)
+    private fun sendCallReceivedBroadcast(callId: String?, message: String) {
+        val intent = Intent("com.designated.customer.CALL_RECEIVED").apply {
+            putExtra("callId", callId)
+            putExtra("message", message)
+        }
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+        Log.d(TAG, "콜 접수 브로드캐스트 전송 완료 - callId: $callId")
+    }
 
-        if (phoneNumber.isNullOrEmpty() || regionId.isNullOrEmpty() || officeId.isNullOrEmpty()) {
-            Log.w(TAG, "고객 정보가 없어 FCM 토큰 저장 스킵 - phoneNumber: $phoneNumber, regionId: $regionId, officeId: $officeId")
+    private fun showCallReceivedNotification(callId: String?, message: String) {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra("showCallReceived", true)
+            putExtra("callId", callId)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            System.currentTimeMillis().toInt(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID_CALL_RECEIVED)
+            .setContentTitle("콜 접수 완료")
+            .setContentText(message)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .build()
+
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(1000, notification)
+    }
+
+    private fun saveFcmTokenToFirestore(token: String) {
+        // SharedPreferences에서 phoneNumber, provinceId, cityId, officeId 가져오기
+        val prefs = getSharedPreferences("customer_app_prefs", Context.MODE_PRIVATE)
+        val phoneNumber = prefs.getString("phone_number", null)
+        val provinceId = prefs.getString("province_id", null) ?: prefs.getString("region_id", null)
+        val cityId = prefs.getString("city_id", null)
+        val officeId = prefs.getString("office_id", null)
+
+        if (phoneNumber.isNullOrEmpty() || provinceId.isNullOrEmpty() || cityId.isNullOrEmpty() || officeId.isNullOrEmpty()) {
+            Log.w(TAG, "고객 정보가 없어 FCM 토큰 저장 스킵 - phoneNumber: $phoneNumber, provinceId: $provinceId, cityId: $cityId, officeId: $officeId")
             return
         }
 
         FirebaseFirestore.getInstance()
-            .collection("regions").document(regionId)
+            .collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
             .collection("offices").document(officeId)
             .collection("customerInfo")
             .document(phoneNumber)

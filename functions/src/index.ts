@@ -336,6 +336,9 @@ export const sendNewCallNotification = onDocumentCreated(
           customerName: callData.customerName || callData.phoneNumber || "신규 고객",
           customerPhone: callData.phoneNumber || "",
           pickupLocation: callData.customerAddress || callData.departure || "위치 미확인",
+          provinceId: provinceId,
+          cityId: cityId,
+          officeId: officeId,
         },
         android: {
           priority: "high",
@@ -1097,6 +1100,82 @@ export const onSharedCallCancelledByDriver = onDocumentUpdated(
       } catch (error) {
         logger.error(`[call-cancelled:${callId}] 공유콜 취소 처리 오류:`, error);
       }
+    }
+  }
+);
+
+// =============================
+// 전화 콜 접수 시 앱 고객에게 FCM 알림 전송
+// =============================
+export const notifyCustomerOnPhoneCall = onDocumentCreated(
+  {
+    region: "asia-northeast3",
+    document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/calls/{callId}"
+  },
+  async (event: any) => {
+    const { provinceId, cityId, officeId, callId } = event.params;
+
+    if (!event.data) {
+      logger.warn(`[notifyCustomerOnPhoneCall:${callId}] 이벤트 데이터가 없습니다.`);
+      return;
+    }
+
+    const callData = event.data.data();
+    if (!callData) {
+      logger.warn(`[notifyCustomerOnPhoneCall:${callId}] 콜 데이터가 없습니다.`);
+      return;
+    }
+
+    const phoneNumber = callData.phoneNumber;
+    const isAppCustomer = callData.isAppCustomer || false;
+
+    logger.info(`[notifyCustomerOnPhoneCall:${callId}] 콜 생성 감지 - isAppCustomer: ${isAppCustomer}, phoneNumber: ${phoneNumber}`);
+
+    // 앱 고객이 아니면 알림 스킵
+    if (!isAppCustomer) {
+      logger.info(`[notifyCustomerOnPhoneCall:${callId}] 앱 고객이 아님 - 알림 스킵`);
+      return;
+    }
+
+    if (!phoneNumber) {
+      logger.warn(`[notifyCustomerOnPhoneCall:${callId}] 전화번호 없음 - 알림 스킵`);
+      return;
+    }
+
+    try {
+      // 고객 FCM 토큰 조회
+      const customerDoc = await admin.firestore()
+        .collection("provinces").doc(provinceId)
+        .collection("cities").doc(cityId)
+        .collection("offices").doc(officeId)
+        .collection("customerInfo")
+        .doc(phoneNumber)
+        .get();
+
+      const fcmToken = customerDoc.data()?.fcmToken;
+      if (!fcmToken) {
+        logger.warn(`[notifyCustomerOnPhoneCall:${callId}] FCM 토큰 없음: ${phoneNumber}`);
+        return;
+      }
+
+      // FCM 알림 전송
+      await admin.messaging().send({
+        data: {
+          type: "CALL_RECEIVED",
+          callId: callId,
+          message: "콜이 접수되었습니다. 기사 배정을 기다려주세요."
+        },
+        android: {
+          priority: "high",
+          ttl: 60000
+        },
+        token: fcmToken
+      });
+
+      logger.info(`[notifyCustomerOnPhoneCall:${callId}] 고객에게 접수 완료 알림 전송 완료: ${phoneNumber}`);
+
+    } catch (error) {
+      logger.error(`[notifyCustomerOnPhoneCall:${callId}] 알림 전송 오류:`, error);
     }
   }
 );

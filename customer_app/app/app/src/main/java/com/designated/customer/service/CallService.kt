@@ -9,14 +9,16 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 
 class CallService(
-    private val regionId: String = "seoul",
+    private val provinceId: String,
+    private val cityId: String,
     private val officeId: String
 ) {
     private val firestore = FirebaseFirestore.getInstance()
 
     suspend fun requestCall(call: CustomerCall): String {
         val callsCollection = firestore
-            .collection("regions").document(regionId)
+            .collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
             .collection("offices").document(officeId)
             .collection("calls")
         val documentRef = callsCollection.document()
@@ -29,10 +31,11 @@ class CallService(
     }
 
     suspend fun cancelCall(callId: String): Boolean {
-        android.util.Log.d("CallService", "cancelCall: callId=$callId, regionId=$regionId, officeId=$officeId")
+        android.util.Log.d("CallService", "cancelCall: callId=$callId, provinceId=$provinceId, cityId=$cityId, officeId=$officeId")
         return try {
             firestore
-                .collection("regions").document(regionId)
+                .collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
                 .collection("offices").document(officeId)
                 .collection("calls")
                 .document(callId)
@@ -53,10 +56,11 @@ class CallService(
         phoneNumber: String,
         limit: Long = 50
     ): List<CustomerCall> {
-        android.util.Log.d("CallService", "getCustomerCallHistory 시작: phoneNumber=$phoneNumber, regionId=$regionId, officeId=$officeId")
+        android.util.Log.d("CallService", "getCustomerCallHistory 시작: phoneNumber=$phoneNumber, provinceId=$provinceId, cityId=$cityId, officeId=$officeId")
         return try {
             val snapshot = firestore
-                .collection("regions").document(regionId)
+                .collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
                 .collection("offices").document(officeId)
                 .collection("calls")
                 .whereEqualTo("phoneNumber", phoneNumber)
@@ -81,7 +85,8 @@ class CallService(
      */
     fun observeCustomerCalls(phoneNumber: String): Flow<List<CustomerCall>> = callbackFlow {
         val listener = firestore
-            .collection("regions").document(regionId)
+            .collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
             .collection("offices").document(officeId)
             .collection("calls")
             .whereEqualTo("phoneNumber", phoneNumber)
@@ -115,7 +120,8 @@ class CallService(
             val discountedFare = maxOf(0, originalFare - pointsUsed)
 
             firestore
-                .collection("regions").document(regionId)
+                .collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
                 .collection("offices").document(officeId)
                 .collection("calls")
                 .document(callId)

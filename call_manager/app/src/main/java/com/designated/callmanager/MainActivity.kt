@@ -202,6 +202,50 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // 기사 상태 업데이트 브로드캐스트 리시버
+    private val driverStatusUpdateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "com.designated.callmanager.DRIVER_STATUS_UPDATE") {
+                val driverId = intent.getStringExtra("driverId")
+                val driverName = intent.getStringExtra("driverName")
+                val newStatus = intent.getStringExtra("newStatus")
+                Log.d("MainActivity", "📍 기사 상태 업데이트 브로드캐스트 수신 - $driverName: $newStatus")
+
+                // 기사 데이터 새로고침
+                dashboardViewModel.refreshDriverData()
+            }
+        }
+    }
+
+    // 운행 시작/완료 팝업 브로드캐스트 리시버
+    private val tripStatusPopupReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "com.designated.callmanager.TRIP_STATUS_POPUP") {
+                val statusText = intent.getStringExtra("statusText") ?: return
+                val driverName = intent.getStringExtra("driverName") ?: "기사"
+                val customerName = intent.getStringExtra("customerName") ?: "고객"
+                val departure = intent.getStringExtra("departure") ?: "정보없음"
+                val destination = intent.getStringExtra("destination") ?: "정보없음"
+                val fare = intent.getLongExtra("fare", 0L)
+
+                Log.d("MainActivity", "🚗 운행 상태 팝업 브로드캐스트 수신 - $statusText: $driverName")
+
+                val tripSummary = "출발: $departure\n도착: $destination\n요금: ${fare}원"
+
+                lifecycleScope.launch {
+                    if (_screenState.value != Screen.Dashboard) {
+                        _screenState.value = Screen.Dashboard
+                        delay(300)
+                    }
+                    when (statusText) {
+                        "운행 시작" -> dashboardViewModel.showTripStartedPopup(driverName, null, tripSummary, customerName)
+                        "운행 완료" -> dashboardViewModel.showTripCompletedPopup(driverName, customerName)
+                    }
+                }
+            }
+        }
+    }
+
     companion object {
         const val ACTION_SHOW_CALL_POPUP = "ACTION_SHOW_CALL_POPUP"
         const val ACTION_SHOW_SHARED_CALL = "ACTION_SHOW_SHARED_CALL"
@@ -628,6 +672,22 @@ class MainActivity : ComponentActivity() {
             registerReceiver(callDetectedReceiver, filter)
         }
 
+        // 기사 상태 업데이트 리시버 등록
+        val driverStatusFilter = IntentFilter("com.designated.callmanager.DRIVER_STATUS_UPDATE")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(driverStatusUpdateReceiver, driverStatusFilter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(driverStatusUpdateReceiver, driverStatusFilter)
+        }
+
+        // 운행 시작/완료 팝업 리시버 등록
+        val tripStatusFilter = IntentFilter("com.designated.callmanager.TRIP_STATUS_POPUP")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(tripStatusPopupReceiver, tripStatusFilter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(tripStatusPopupReceiver, tripStatusFilter)
+        }
+
         checkAndShowPendingPopup()
         setupTokenRefreshListener()
     }
@@ -636,6 +696,14 @@ class MainActivity : ComponentActivity() {
         super.onPause()
         try {
             unregisterReceiver(callDetectedReceiver)
+        } catch (e: IllegalArgumentException) {
+        }
+        try {
+            unregisterReceiver(driverStatusUpdateReceiver)
+        } catch (e: IllegalArgumentException) {
+        }
+        try {
+            unregisterReceiver(tripStatusPopupReceiver)
         } catch (e: IllegalArgumentException) {
         }
         tokenRefreshListener?.remove()

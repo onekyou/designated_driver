@@ -59,19 +59,32 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
 
-        // 포그라운드에서 처리할 메시지 타입들 (테스트를 위해 모든 공유콜 허용)
-        val sharedCallTypes = setOf(
+        // 포그라운드에서 처리할 메시지 타입들
+        val alwaysProcessTypes = setOf(
+            "NEW_CALL",              // 앱호출 새 콜은 항상 처리
             "NEW_SHARED_CALL",
             "SHARED_CALL_CANCELLED_POPUP",
-            "SHARED_CALL_CLAIMED"
+            "SHARED_CALL_CLAIMED",
+            "DRIVER_STATUS_UPDATE",  // 기사 상태 변경은 항상 처리
+            "CALL_STATUS_UPDATE",    // 콜 상태 업데이트는 항상 처리
+            "STATUS_CHANGE"          // 운행 시작/완료 알림은 항상 처리
         )
-        val shouldProcessInForeground = sharedCallTypes.contains(messageType)
+        val shouldProcessInForeground = alwaysProcessTypes.contains(messageType)
 
         val isInForeground = isAppInForeground()
         Log.d(TAG, "앱 포그라운드 상태: $isInForeground, shouldProcessInForeground: $shouldProcessInForeground")
 
         if (isInForeground && !shouldProcessInForeground) {
-            Log.d(TAG, "포그라운드에서 처리하지 않음 (공유콜 외) - return")
+            Log.d(TAG, "포그라운드에서 처리하지 않음 (공유콜/기사상태 외) - return")
+            return
+        }
+
+        // DRIVER_STATUS_UPDATE는 callId 대신 driverId 사용
+        if (messageType == "DRIVER_STATUS_UPDATE") {
+            val driverId = remoteMessage.data["driverId"] ?: return
+            Log.d(TAG, "🔔 [DEBUG] DRIVER_STATUS_UPDATE 처리 시작 - driverId: $driverId")
+            handleDriverStatusUpdate(remoteMessage, driverId)
+            Log.d(TAG, "🔔 [DEBUG] DRIVER_STATUS_UPDATE 처리 완료")
             return
         }
 
@@ -123,11 +136,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 handleStatusChange(remoteMessage, callId)
                 Log.d(TAG, "🔔 [DEBUG] STATUS_CHANGE 처리 완료")
             }
-            "DRIVER_STATUS_UPDATE" -> {
-                Log.d(TAG, "🔔 [DEBUG] DRIVER_STATUS_UPDATE 처리 시작")
-                handleDriverStatusUpdate(remoteMessage, callId)
-                Log.d(TAG, "🔔 [DEBUG] DRIVER_STATUS_UPDATE 처리 완료")
-            }
+            // DRIVER_STATUS_UPDATE는 위에서 별도 처리됨 (driverId 사용)
             "SHARED_CALL_CANCELLED_POPUP" -> {
                 Log.d(TAG, "🔔 [DEBUG] SHARED_CALL_CANCELLED_POPUP 처리 시작")
                 handleSharedCallCancelled(remoteMessage, callId)
@@ -578,10 +587,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val app = applicationContext as? com.designated.callmanager.CallManagerApplication
         if (app != null) {
             val sharedPreferences = getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
-            val provinceId = sharedPreferences.getString("provinceId", null)
-            val officeId = sharedPreferences.getString("officeId", null)
+            // FCM 데이터에서 먼저 가져오고, 없으면 SharedPreferences에서 가져옴
+            val provinceId = data["provinceId"] ?: sharedPreferences.getString("provinceId", null)
+            val cityId = data["cityId"] ?: sharedPreferences.getString("cityId", null)
+            val officeId = data["officeId"] ?: sharedPreferences.getString("officeId", null)
 
-            if (!provinceId.isNullOrBlank() && !officeId.isNullOrBlank()) {
+            if (!provinceId.isNullOrBlank() && !cityId.isNullOrBlank() && !officeId.isNullOrBlank()) {
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         app.callRepository.insertCallFromFCM(
@@ -604,7 +615,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     }
                 }
             } else {
-                Log.w(TAG, "[handleNewCall] provinceId 또는 officeId 없음 - 로컬 DB 저장 스킵")
+                Log.w(TAG, "[handleNewCall] provinceId/cityId/officeId 없음 - 로컬 DB 저장 스킵")
             }
         }
 
@@ -716,11 +727,48 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     private fun handleStatusChange(remoteMessage: RemoteMessage, callId: String) {
+        val data = remoteMessage.data
+        val statusText = data["statusText"] ?: "상태 변경"
+        val customerName = data["customerName"] ?: "고객"
+        val customerPhone = data["customerPhone"] ?: "-"
+        val driverName = data["driverName"] ?: "기사"
+        val departure = data["departure"]
+        val destination = data["destination"]
+        val fare = data["fare"]?.toLongOrNull()
 
-        val statusText = remoteMessage.data["statusText"] ?: "상태 변경"
-        val customerName = remoteMessage.data["customerName"] ?: "고객"
-        val customerPhone = remoteMessage.data["customerPhone"] ?: "-"
-        val driverName = remoteMessage.data["driverName"] ?: "기사"
+        // statusText를 실제 status 값으로 변환
+        val status = when (statusText) {
+            "운행 시작" -> "IN_PROGRESS"
+            "운행 완료" -> "COMPLETED"
+            "기사 수락" -> "ACCEPTED"
+            "정산 대기" -> "AWAITING_SETTLEMENT"
+            else -> null
+        }
+
+        Log.d(TAG, "[STATUS_CHANGE] callId=$callId, statusText=$statusText, status=$status")
+
+        // 로컬 DB 업데이트
+        if (status != null) {
+            val app = applicationContext as? com.designated.callmanager.CallManagerApplication
+            if (app != null) {
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        app.callRepository.updateCallStatusFromFCM(
+                            callId = callId,
+                            newStatus = status,
+                            departure = departure,
+                            destination = destination,
+                            fare = fare
+                        )
+                        Log.d(TAG, "[STATUS_CHANGE] 로컬 DB 업데이트 완료: $callId -> $status")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "[STATUS_CHANGE] 로컬 DB 업데이트 실패: $callId", e)
+                    }
+                }
+            } else {
+                Log.e(TAG, "[STATUS_CHANGE] CallManagerApplication을 가져올 수 없습니다")
+            }
+        }
 
         val (emoji, color) = when (statusText) {
             "운행 시작" -> "🚗" to ContextCompat.getColor(this, android.R.color.holo_green_dark)
@@ -728,12 +776,35 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             else -> "📢" to ContextCompat.getColor(this, android.R.color.holo_orange_dark)
         }
 
+        // 운행 시작/완료 시 앱 내 팝업 표시를 위한 브로드캐스트 전송
+        if (statusText == "운행 시작" || statusText == "운행 완료") {
+            val popupIntent = Intent("com.designated.callmanager.TRIP_STATUS_POPUP")
+            popupIntent.putExtra("statusText", statusText)
+            popupIntent.putExtra("driverName", driverName)
+            popupIntent.putExtra("customerName", customerName)
+            popupIntent.putExtra("departure", departure ?: "정보없음")
+            popupIntent.putExtra("destination", destination ?: "정보없음")
+            popupIntent.putExtra("fare", fare ?: 0L)
+            sendBroadcast(popupIntent)
+            Log.d(TAG, "[STATUS_CHANGE] 팝업 브로드캐스트 전송: $statusText")
+        }
+
+        // 알림 bigText에 출발지/도착지/요금 포함
+        val bigTextContent = buildString {
+            append("기사: $driverName\n")
+            append("고객: $customerName ($customerPhone)\n")
+            if (!departure.isNullOrBlank()) append("출발: $departure\n")
+            if (!destination.isNullOrBlank()) append("도착: $destination\n")
+            if (fare != null && fare > 0) append("요금: ${fare}원\n")
+            append("상태: $statusText")
+        }
+
         showNotification(
             channelId = STATUS_CHANGE_CHANNEL_ID,
             notificationId = callId.hashCode(),
             title = "$emoji $statusText",
             content = "$customerName ($customerPhone) - $driverName",
-            bigText = "고객: $customerName\n전화: $customerPhone\n기사: $driverName\n상태: $statusText",
+            bigText = bigTextContent,
             callId = callId,
             color = color,
             autoCancel = true,
@@ -741,18 +812,43 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         )
     }
 
-    private fun handleDriverStatusUpdate(remoteMessage: RemoteMessage, callId: String) {
-
+    private fun handleDriverStatusUpdate(remoteMessage: RemoteMessage, driverId: String) {
         val driverName = remoteMessage.data["driverName"] ?: "기사"
         val newStatus = remoteMessage.data["newStatus"] ?: "상태 변경"
+        val statusMessage = remoteMessage.data["statusMessage"] ?: newStatus
+
+        Log.d(TAG, "🔔 [DRIVER_STATUS] 기사 상태 업데이트 - driverId: $driverId, name: $driverName, status: $newStatus")
+
+        // 로컬 DB 직접 업데이트 (Room Flow가 자동으로 UI 업데이트)
+        val app = applicationContext as? com.designated.callmanager.CallManagerApplication
+        if (app != null) {
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    app.driverRepository.updateDriverStatusFromFCM(driverId, newStatus)
+                    Log.d(TAG, "🔔 [DRIVER_STATUS] 로컬 DB 업데이트 완료: $driverId -> $newStatus")
+                } catch (e: Exception) {
+                    Log.e(TAG, "🔔 [DRIVER_STATUS] 로컬 DB 업데이트 실패: $driverId", e)
+                }
+            }
+        } else {
+            Log.e(TAG, "🔔 [DRIVER_STATUS] CallManagerApplication을 가져올 수 없습니다")
+        }
+
+        // 브로드캐스트도 유지 (팝업 표시 등)
+        val intent = Intent("com.designated.callmanager.DRIVER_STATUS_UPDATE")
+        intent.putExtra("driverId", driverId)
+        intent.putExtra("driverName", driverName)
+        intent.putExtra("newStatus", newStatus)
+        intent.putExtra("statusMessage", statusMessage)
+        sendBroadcast(intent)
 
         showNotification(
             channelId = DRIVER_UPDATE_CHANNEL_ID,
-            notificationId = "driver_status_$callId".hashCode(),
+            notificationId = "driver_status_$driverId".hashCode(),
             title = "📍 기사 상태 업데이트",
-            content = "$driverName: $newStatus",
-            bigText = "기사: $driverName\n새로운 상태: $newStatus",
-            callId = callId,
+            content = "$driverName: $statusMessage",
+            bigText = "기사: $driverName\n상태: $statusMessage",
+            callId = driverId,
             color = ContextCompat.getColor(this, android.R.color.holo_blue_light),
             autoCancel = true,
             timeoutAfter = 10000

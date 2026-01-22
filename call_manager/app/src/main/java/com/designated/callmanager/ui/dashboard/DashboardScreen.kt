@@ -774,16 +774,16 @@ fun CallCard(call: CallInfo, onCallClick: (CallInfo) -> Unit) {
             )
             }
 
-            // 목적지를 Card 중앙에 오버레이로 배치
-            call.destination_set?.let { destination ->
-                if (destination.isNotBlank()) {
-                    Text(
-                        text = "목적지: $destination",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Color(0xFF03DAC6),
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                }
+            // 출발지-목적지를 Card 중앙에 오버레이로 배치
+            val departure = call.departure_set
+            val destination = call.destination_set
+            if (!departure.isNullOrBlank() || !destination.isNullOrBlank()) {
+                Text(
+                    text = "${departure ?: "출발지 미설정"} → ${destination ?: "목적지 미설정"}",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color(0xFF03DAC6),
+                    modifier = Modifier.align(Alignment.Center)
+                )
             }
         }
     }

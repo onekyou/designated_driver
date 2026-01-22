@@ -81,7 +81,8 @@ class MainViewModel(
     private val callService: CallService,
     private val locationService: LocationService,
     private val pointService: PointService,
-    private val regionId: String,
+    private val provinceId: String,
+    private val cityId: String,
     private val officeId: String,
     private val phoneNumber: String,
     private val customerInfo: com.designated.customer.data.model.CustomerInfo?,
@@ -102,7 +103,7 @@ class MainViewModel(
     private var driverAssignedReceiver: BroadcastReceiver? = null
     private var callCancelledReceiver: BroadcastReceiver? = null
     // 배너 광고 서비스
-    private val bannerAdService = BannerAdService(regionId = regionId, officeId = officeId)
+    private val bannerAdService = BannerAdService(provinceId = provinceId, cityId = cityId, officeId = officeId)
 
     // 사무실 연락처 정보 (customerInfo에서 추출, 없으면 SharedPreferences에서)
     val officePhone: String get() {
@@ -162,8 +163,10 @@ class MainViewModel(
             try {
                 val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
                 val officeDoc = firestore
-                    .collection("regions")
-                    .document(regionId)
+                    .collection("provinces")
+                    .document(provinceId)
+                    .collection("cities")
+                    .document(cityId)
                     .collection("offices")
                     .document(officeId)
                     .get()
@@ -171,23 +174,23 @@ class MainViewModel(
 
                 if (officeDoc.exists()) {
                     val officeName = officeDoc.getString("name") ?: officeId
-                    val regionName = when(regionId) {
+                    val provinceName = when(provinceId) {
                         "seoul" -> "서울"
                         "gyeonggi" -> "경기"
                         "Hongchon" -> "홍천"
-                        else -> regionId
+                        else -> provinceId
                     }
 
                     uiState = uiState.copy(
                         officeName = officeName,
-                        regionName = regionName
+                        regionName = provinceName
                     )
                 }
             } catch (e: Exception) {
                 // 사무실 정보 로드 실패 시 ID 표시
                 uiState = uiState.copy(
                     officeName = officeId,
-                    regionName = regionId
+                    regionName = provinceId
                 )
             }
         }
@@ -265,7 +268,8 @@ class MainViewModel(
                 val call = CustomerCall(
                     phoneNumber = phoneNumber,
                     officeId = officeId,
-                    regionId = regionId,
+                    provinceId = provinceId,
+                    cityId = cityId,
                     currentLocation = uiState.currentLocation,
                     destinationLocation = uiState.destinationLocation,
                     timestamp = System.currentTimeMillis(),
@@ -507,7 +511,8 @@ class MainViewModel(
         viewModelScope.launch {
             try {
                 val callDoc = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                    .collection("regions").document(regionId)
+                    .collection("provinces").document(provinceId)
+                    .collection("cities").document(cityId)
                     .collection("offices").document(officeId)
                     .collection("calls")
                     .document(callId)
@@ -562,7 +567,8 @@ class MainViewModel(
 
                 // Firestore에서 콜 정보를 가져와서 요금 확인
                 val callDoc = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                    .collection("regions").document(regionId)
+                    .collection("provinces").document(provinceId)
+                    .collection("cities").document(cityId)
                     .collection("offices").document(officeId)
                     .collection("calls")
                     .document(callId)
@@ -574,7 +580,8 @@ class MainViewModel(
 
                 // ✅ 추가: 중복 적립 방지 - 이미 거래 내역이 있으면 스킵
                 val existingTransactions = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                    .collection("regions").document(regionId)
+                    .collection("provinces").document(provinceId)
+                    .collection("cities").document(cityId)
                     .collection("offices").document(officeId)
                     .collection("pointTransactions")
                     .whereEqualTo("callId", callId)

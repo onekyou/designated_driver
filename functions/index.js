@@ -46,20 +46,28 @@ exports.sendCallDetectorTerminationNotification = functions.firestore
         
         console.log(`⏱️ Fresh notification (${ageInSeconds}s old), processing...`);
         
-        const regionId = data.regionId;
+        // provinceId/cityId 우선, regionId는 하위 호환용
+        const provinceId = data.provinceId || data.regionId;
+        const cityId = data.cityId || '';
         const officeId = data.officeId;
         const deviceName = data.deviceName;
         const message = data.message || `콜 디텍터 [${deviceName}]가 종료되었습니다.`;
-        
+
         // 간소화: 30초 시간 체크만으로 충분함 (위에서 이미 체크됨)
-        
+
         try {
             // 해당 사무실의 모든 관리자 FCM 토큰 가져오기
-            const adminsSnapshot = await admin.firestore()
+            let adminsQuery = admin.firestore()
                 .collection('admins')
-                .where('associatedRegionId', '==', regionId)
-                .where('associatedOfficeId', '==', officeId)
-                .get();
+                .where('associatedProvinceId', '==', provinceId)
+                .where('associatedOfficeId', '==', officeId);
+
+            // cityId가 있으면 추가 필터링
+            if (cityId) {
+                adminsQuery = adminsQuery.where('associatedCityId', '==', cityId);
+            }
+
+            const adminsSnapshot = await adminsQuery.get();
             
             const tokens = [];
             adminsSnapshot.forEach(doc => {
@@ -83,7 +91,8 @@ exports.sendCallDetectorTerminationNotification = functions.firestore
                 data: {
                     type: 'CALL_DETECTOR_TERMINATED',
                     deviceName: deviceName,
-                    regionId: regionId,
+                    provinceId: provinceId,
+                    cityId: cityId,
                     officeId: officeId,
                     timestamp: Date.now().toString()
                 },
@@ -120,16 +129,17 @@ exports.sendCallDetectorTerminationNotification = functions.firestore
 // 테스트용 함수 - 강제종료 알림 테스트
 exports.testTerminationNotification = functions.https.onRequest(async (req, res) => {
     try {
-        const { regionId = 'test-region', officeId = 'test-office', deviceName = 'TEST-DEVICE', minutesOld = 0 } = req.query;
-        
+        const { provinceId = 'test-province', cityId = 'test-city', officeId = 'test-office', deviceName = 'TEST-DEVICE', minutesOld = 0 } = req.query;
+
         // 테스트 시간 계산 (현재 시간에서 지정된 분만큼 이전)
         const testTime = admin.firestore.Timestamp.fromMillis(Date.now() - (minutesOld * 60 * 1000));
-        
+
         // 테스트 알림 문서 생성
         const notificationData = {
             type: 'CALL_DETECTOR_TERMINATED',
             deviceName: deviceName,
-            regionId: regionId,
+            provinceId: provinceId,
+            cityId: cityId,
             officeId: officeId,
             timestamp: testTime,
             message: `테스트: 콜 디텍터 [${deviceName}]가 종료되었습니다. (${minutesOld}분 전 알림)`
@@ -277,16 +287,24 @@ exports.onDeviceAlert = functions.firestore
             
             // 크래시 알림인 경우에만 FCM 전송
             if (alertData.type === 'CRASH' && alertData.requiresImmediateAction) {
-                const regionId = alertData.regionId || 'unknown';
+                // provinceId/cityId 우선, regionId는 하위 호환용
+                const provinceId = alertData.provinceId || alertData.regionId || 'unknown';
+                const cityId = alertData.cityId || '';
                 const officeId = alertData.officeId || 'unknown';
                 const deviceId = alertData.deviceId || 'unknown';
-                
+
                 // 해당 지역/사무실의 관리자들 찾기
-                const adminsSnapshot = await admin.firestore()
+                let adminsQuery = admin.firestore()
                     .collection('admins')
-                    .where('associatedRegionId', '==', regionId)
-                    .where('associatedOfficeId', '==', officeId)
-                    .get();
+                    .where('associatedProvinceId', '==', provinceId)
+                    .where('associatedOfficeId', '==', officeId);
+
+                // cityId가 있으면 추가 필터링
+                if (cityId) {
+                    adminsQuery = adminsQuery.where('associatedCityId', '==', cityId);
+                }
+
+                const adminsSnapshot = await adminsQuery.get();
                 
                 const tokens = [];
                 adminsSnapshot.forEach(doc => {
@@ -305,7 +323,8 @@ exports.onDeviceAlert = functions.firestore
                         data: {
                             type: 'DEVICE_CRASH_ALERT',
                             deviceId: deviceId,
-                            regionId: regionId,
+                            provinceId: provinceId,
+                            cityId: cityId,
                             officeId: officeId,
                             alertId: context.params.alertId,
                             timestamp: Date.now().toString()

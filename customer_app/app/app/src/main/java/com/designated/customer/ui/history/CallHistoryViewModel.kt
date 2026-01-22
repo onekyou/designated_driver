@@ -29,14 +29,15 @@ data class CallHistoryUiState(
 
 class CallHistoryViewModel(
     private val phoneNumber: String,
-    private val regionId: String,
+    private val provinceId: String,
+    private val cityId: String,
     private val officeId: String
 ) : ViewModel() {
 
     var uiState by mutableStateOf(CallHistoryUiState())
         private set
 
-    private val callService = CallService(regionId = regionId, officeId = officeId)
+    private val callService = CallService(provinceId = provinceId, cityId = cityId, officeId = officeId)
 
     init {
         loadCallHistory()

@@ -86,7 +86,9 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             Surface(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding(),
                 color = Color.Black,
                 shadowElevation = 4.dp
             ) {

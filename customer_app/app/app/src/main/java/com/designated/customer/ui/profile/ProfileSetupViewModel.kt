@@ -47,7 +47,8 @@ class ProfileSetupViewModel : ViewModel() {
      * 프로필 저장
      */
     fun saveProfile(
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String,
 
         driverId: String? = null,
@@ -93,12 +94,14 @@ class ProfileSetupViewModel : ViewModel() {
 
                 // Firestore에 고객 정보 저장
                 val now = Timestamp.now()
+                // 테스트 사무실은 VIP 등급으로 설정
+                val initialGrade = if (officeId == "testOffice") "vip" else "bronze"
                 val customerData = hashMapOf(
                     "id" to userId,
                     "phoneNumber" to state.phoneNumber,
                     "name" to state.nickname,
                     "homeAddress" to state.address,  // homeAddress로 저장
-                    "grade" to "bronze",
+                    "grade" to initialGrade,
                     "points" to 0,
                     "totalRides" to 0,
                     "totalSpent" to 0L,
@@ -129,8 +132,10 @@ class ProfileSetupViewModel : ViewModel() {
                     Log.d(TAG, "FCM token added to customer data")
                 }
 
-                db.collection("regions")
-                    .document(regionId)
+                db.collection("provinces")
+                    .document(provinceId)
+                    .collection("cities")
+                    .document(cityId)
                     .collection("offices")
                     .document(officeId)
                     .collection("customers")
@@ -140,8 +145,10 @@ class ProfileSetupViewModel : ViewModel() {
 
                 // customerInfo 컬렉션에도 FCM 토큰 저장 (functions에서 조회용)
                 if (fcmToken != null) {
-                    db.collection("regions")
-                        .document(regionId)
+                    db.collection("provinces")
+                        .document(provinceId)
+                        .collection("cities")
+                        .document(cityId)
                         .collection("offices")
                         .document(officeId)
                         .collection("customerInfo")
@@ -180,12 +187,15 @@ class ProfileSetupViewModel : ViewModel() {
      */
     suspend fun checkProfileExists(
         userId: String,
-        regionId: String,
+        provinceId: String,
+        cityId: String,
         officeId: String
     ): Boolean {
         return try {
-            val doc = db.collection("regions")
-                .document(regionId)
+            val doc = db.collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .collection("customers")

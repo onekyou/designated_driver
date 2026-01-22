@@ -372,9 +372,11 @@ class CallDetectorService : Service() {
     ) {
         val sharedCallData = hashMapOf<String, Any>(
             "phoneNumber" to phoneNumber,
-            "sourceRegionId" to provinceId,
+            "sourceProvinceId" to provinceId,
+            "sourceCityId" to cityId,
             "sourceOfficeId" to officeId,
-            "targetRegionId" to provinceId,
+            "targetProvinceId" to provinceId,
+            "targetCityId" to cityId,
             "deviceName" to deviceName,
             "status" to "OPEN",
             "timestamp" to FieldValue.serverTimestamp(),
@@ -643,7 +645,31 @@ class CallDetectorService : Service() {
                 firestore.collection(targetPath)
                     .add(callData)
                     .addOnSuccessListener { documentReference ->
-                        bringCallManagerToForegroundForNewCall(documentReference.id, phoneNumber, contactName, contactAddress)
+                        val callId = documentReference.id
+                        Log.d(TAG, "✅ Firestore 콜 저장 완료: $callId")
+
+                        // 로컬 DB에도 저장
+                        serviceScope.launch {
+                            try {
+                                val app = applicationContext as com.designated.callmanager.CallManagerApplication
+                                app.callRepository.insertCallFromFCM(
+                                    callId = callId,
+                                    phoneNumber = phoneNumber,
+                                    customerName = customerNickname ?: contactName,
+                                    customerAddress = customerHomeAddress.takeIf { it.isNotBlank() } ?: contactAddress,
+                                    status = CallStatus.WAITING.firestoreValue,
+                                    provinceId = provinceId,
+                                    officeId = officeId,
+                                    callType = "수신",
+                                    fromCallDetector = false
+                                )
+                                Log.d(TAG, "✅ 로컬 DB 콜 저장 완료: $callId")
+                            } catch (e: Exception) {
+                                Log.e(TAG, "❌ 로컬 DB 콜 저장 실패: ${e.message}")
+                            }
+                        }
+
+                        bringCallManagerToForegroundForNewCall(callId, phoneNumber, contactName, contactAddress)
                     }
                     .addOnFailureListener { e ->
                         bringCallManagerToForeground()
@@ -673,7 +699,31 @@ class CallDetectorService : Service() {
                 firestore.collection(targetPath)
                     .add(callData)
                     .addOnSuccessListener { documentReference ->
-                        bringCallManagerToForegroundForNewCall(documentReference.id, phoneNumber, contactName, contactAddress)
+                        val callId = documentReference.id
+                        Log.d(TAG, "✅ Firestore 콜 저장 완료 (fallback): $callId")
+
+                        // 로컬 DB에도 저장
+                        serviceScope.launch {
+                            try {
+                                val app = applicationContext as com.designated.callmanager.CallManagerApplication
+                                app.callRepository.insertCallFromFCM(
+                                    callId = callId,
+                                    phoneNumber = phoneNumber,
+                                    customerName = contactName,
+                                    customerAddress = contactAddress,
+                                    status = CallStatus.WAITING.firestoreValue,
+                                    provinceId = provinceId,
+                                    officeId = officeId,
+                                    callType = "수신",
+                                    fromCallDetector = false
+                                )
+                                Log.d(TAG, "✅ 로컬 DB 콜 저장 완료 (fallback): $callId")
+                            } catch (ex: Exception) {
+                                Log.e(TAG, "❌ 로컬 DB 콜 저장 실패 (fallback): ${ex.message}")
+                            }
+                        }
+
+                        bringCallManagerToForegroundForNewCall(callId, phoneNumber, contactName, contactAddress)
                     }
                     .addOnFailureListener { e2 ->
                         bringCallManagerToForeground()
@@ -696,9 +746,11 @@ class CallDetectorService : Service() {
     ) {
         val sharedCallData = hashMapOf<String, Any>(
             "phoneNumber" to phoneNumber,
-            "sourceRegionId" to provinceId,
+            "sourceProvinceId" to provinceId,
+            "sourceCityId" to cityId,
             "sourceOfficeId" to officeId,
-            "targetRegionId" to provinceId,
+            "targetProvinceId" to provinceId,
+            "targetCityId" to cityId,
             "deviceName" to deviceName,
             "status" to "OPEN",
             "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
@@ -854,9 +906,11 @@ class CallDetectorService : Service() {
     ) {
         val sharedCallData = hashMapOf<String, Any>(
             "phoneNumber" to phoneNumber,
-            "sourceRegionId" to provinceId,
+            "sourceProvinceId" to provinceId,
+            "sourceCityId" to cityId,
             "sourceOfficeId" to officeId,
-            "targetRegionId" to provinceId,
+            "targetProvinceId" to provinceId,
+            "targetCityId" to cityId,
             "deviceName" to deviceName,
             "status" to "OPEN",
             "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),

@@ -23,11 +23,12 @@ import java.util.*
 @Composable
 fun PointScreen(
     phoneNumber: String,
-    regionId: String,
+    provinceId: String,
+    cityId: String,
     officeId: String,
     modifier: Modifier = Modifier
 ) {
-    val pointService = remember { PointService(regionId = regionId, officeId = officeId) }
+    val pointService = remember { PointService(provinceId = provinceId, cityId = cityId, officeId = officeId) }
     var customerPoints by remember { mutableStateOf<com.designated.customer.data.model.CustomerPoints?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var isRefreshing by remember { mutableStateOf(false) }

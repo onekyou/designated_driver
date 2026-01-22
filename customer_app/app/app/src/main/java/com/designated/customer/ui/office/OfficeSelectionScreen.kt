@@ -26,21 +26,29 @@ import kotlinx.coroutines.tasks.await
 data class Office(
     val id: String = "",
     val name: String = "",
-    val regionId: String = "",
-    val regionName: String = "",
+    val provinceId: String = "",
+    val provinceName: String = "",
+    val cityId: String = "",
+    val cityName: String = "",
     val phoneNumber: String = "",
     val address: String = ""
 )
 
-data class Region(
+data class Province(
     val id: String = "",
     val name: String = ""
+)
+
+data class City(
+    val id: String = "",
+    val name: String = "",
+    val provinceId: String = ""
 )
 
 @Composable
 fun OfficeSelectionScreen(
     modifier: Modifier = Modifier,
-    onOfficeSelected: (officeId: String, regionId: String) -> Unit
+    onOfficeSelected: (officeId: String, provinceId: String, cityId: String) -> Unit
 ) {
     val viewModel: OfficeSelectionViewModel = viewModel()
     val state = viewModel.state.collectAsState().value
@@ -65,10 +73,10 @@ fun OfficeSelectionScreen(
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
-        // 테스트용 버튼
+        // 테스트용 버튼 - VIP 사무실 (양평군)
         Button(
             onClick = {
-                onOfficeSelected("testOffice", "testRegion")
+                onOfficeSelected("UoLbMg6QhUQoc8Bz73sC", "gyeonggi", "yangpyeong")
             },
             modifier = Modifier
                 .fillMaxWidth()
@@ -77,26 +85,28 @@ fun OfficeSelectionScreen(
                 containerColor = MaterialTheme.colorScheme.secondary
             )
         ) {
-            Text("🧪 테스트 사무실로 바로 이동 (개발용)")
+            Text("🧪 VIP 사무실 (양평군) - 테스트용")
         }
 
         Divider(modifier = Modifier.padding(bottom = 8.dp))
 
-        // 지역 선택 탭 (Firebase regions 컬렉션에서 동적 조회)
-        var selectedRegionIndex by remember { mutableStateOf(0) }
+        // 지역 선택 탭 (Firebase provinces 컬렉션에서 동적 조회)
+        var selectedProvinceIndex by remember { mutableStateOf(0) }
+        var selectedCityIndex by remember { mutableStateOf(0) }
 
-        if (state.regions.isNotEmpty()) {
-            TabRow(selectedTabIndex = selectedRegionIndex) {
-                state.regions.forEachIndexed { index, region ->
+        if (state.provinces.isNotEmpty()) {
+            TabRow(selectedTabIndex = selectedProvinceIndex) {
+                state.provinces.forEachIndexed { index, province ->
                     Tab(
-                        selected = selectedRegionIndex == index,
+                        selected = selectedProvinceIndex == index,
                         onClick = {
-                            selectedRegionIndex = index
-                            viewModel.loadOffices(region.id)
+                            selectedProvinceIndex = index
+                            selectedCityIndex = 0
+                            viewModel.loadCities(province.id)
                         }
                     ) {
                         Text(
-                            text = region.name,
+                            text = province.name,
                             modifier = Modifier.padding(vertical = 16.dp)
                         )
                     }
@@ -146,13 +156,10 @@ fun OfficeSelectionScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                // 현재 선택된 지역의 ID를 사용
-                                val currentRegionId = if (state.regions.isNotEmpty() && selectedRegionIndex < state.regions.size) {
-                                    state.regions[selectedRegionIndex].id
-                                } else {
-                                    office.regionId
-                                }
-                                onOfficeSelected(office.id, currentRegionId)
+                                // 현재 선택된 province/city ID를 사용
+                                val currentProvinceId = state.selectedProvinceId ?: office.provinceId
+                                val currentCityId = state.selectedCityId ?: office.cityId
+                                onOfficeSelected(office.id, currentProvinceId, currentCityId)
                             }
                     ) {
                         Column(
@@ -213,8 +220,11 @@ fun OfficeSelectionScreen(
 
 // ViewModel
 data class OfficeSelectionState(
-    val regions: List<Region> = emptyList(),
+    val provinces: List<Province> = emptyList(),
+    val cities: List<City> = emptyList(),
     val offices: List<Office> = emptyList(),
+    val selectedProvinceId: String? = null,
+    val selectedCityId: String? = null,
     val isLoading: Boolean = false,
     val error: String? = null
 )
@@ -225,29 +235,29 @@ class OfficeSelectionViewModel : ViewModel() {
     val state: StateFlow<OfficeSelectionState> = _state
 
     init {
-        loadRegions()
+        loadProvinces()
     }
 
-    fun loadRegions() {
+    fun loadProvinces() {
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoading = true, error = null)
             try {
-                val regionsSnapshot = firestore.collection("regions").get().await()
-                val regions = regionsSnapshot.documents.mapNotNull { doc ->
-                    Region(
+                val provincesSnapshot = firestore.collection("provinces").get().await()
+                val provinces = provincesSnapshot.documents.mapNotNull { doc ->
+                    Province(
                         id = doc.id,
                         name = doc.getString("name") ?: doc.id
                     )
                 }.sortedBy { it.name }
 
                 _state.value = _state.value.copy(
-                    regions = regions,
+                    provinces = provinces,
                     isLoading = false
                 )
 
-                // 첫 번째 지역의 사무실 자동 로드
-                if (regions.isNotEmpty()) {
-                    loadOffices(regions[0].id)
+                // 첫 번째 province의 cities 자동 로드
+                if (provinces.isNotEmpty()) {
+                    loadCities(provinces[0].id)
                 }
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
@@ -258,14 +268,55 @@ class OfficeSelectionViewModel : ViewModel() {
         }
     }
 
-    fun loadOffices(regionId: String) {
+    fun loadCities(provinceId: String) {
         viewModelScope.launch {
-            _state.value = _state.value.copy(isLoading = true, error = null)
+            _state.value = _state.value.copy(isLoading = true, error = null, selectedProvinceId = provinceId)
+
+            try {
+                val citiesSnapshot = firestore
+                    .collection("provinces")
+                    .document(provinceId)
+                    .collection("cities")
+                    .get()
+                    .await()
+
+                val cities = citiesSnapshot.documents.mapNotNull { doc ->
+                    City(
+                        id = doc.id,
+                        name = doc.getString("name") ?: doc.id,
+                        provinceId = provinceId
+                    )
+                }.sortedBy { it.name }
+
+                _state.value = _state.value.copy(
+                    cities = cities,
+                    offices = emptyList(),
+                    isLoading = false
+                )
+
+                // 첫 번째 city의 offices 자동 로드
+                if (cities.isNotEmpty()) {
+                    loadOffices(provinceId, cities[0].id)
+                }
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    error = "도시 목록을 불러오는데 실패했습니다."
+                )
+            }
+        }
+    }
+
+    fun loadOffices(provinceId: String, cityId: String) {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isLoading = true, error = null, selectedCityId = cityId)
 
             try {
                 val offices = firestore
-                    .collection("regions")
-                    .document(regionId)
+                    .collection("provinces")
+                    .document(provinceId)
+                    .collection("cities")
+                    .document(cityId)
                     .collection("offices")
                     .get()
                     .await()
@@ -273,8 +324,8 @@ class OfficeSelectionViewModel : ViewModel() {
                     .mapNotNull { doc ->
                         doc.toObject(Office::class.java)?.copy(
                             id = doc.id,
-                            regionId = regionId,
-                            regionName = if (regionId == "seoul") "서울" else "경기"
+                            provinceId = provinceId,
+                            cityId = cityId
                         )
                     }
 

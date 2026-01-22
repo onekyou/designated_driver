@@ -22,17 +22,18 @@ import kotlinx.coroutines.tasks.await
 @Composable
 fun ProfileScreen(
     phoneNumber: String,
-    regionId: String,
+    provinceId: String,
+    cityId: String,
     officeId: String,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var officeName by remember { mutableStateOf(officeId) }
-    var regionName by remember { mutableStateOf(regionId) }
+    var regionName by remember { mutableStateOf(provinceId) }
     var customerName by remember { mutableStateOf("고객님") }
 
     // Firebase에서 사무실 정보 및 고객 정보 로드
-    LaunchedEffect(officeId, regionId) {
+    LaunchedEffect(officeId, provinceId, cityId) {
         try {
             val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
             val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
@@ -40,8 +41,10 @@ fun ProfileScreen(
 
             // 사무실 정보 로드
             val officeDoc = firestore
-                .collection("regions")
-                .document(regionId)
+                .collection("provinces")
+                .document(provinceId)
+                .collection("cities")
+                .document(cityId)
                 .collection("offices")
                 .document(officeId)
                 .get()
@@ -54,8 +57,10 @@ fun ProfileScreen(
             // 고객 정보 로드 (닉네임)
             if (userId != null) {
                 val customerDoc = firestore
-                    .collection("regions")
-                    .document(regionId)
+                    .collection("provinces")
+                    .document(provinceId)
+                    .collection("cities")
+                    .document(cityId)
                     .collection("offices")
                     .document(officeId)
                     .collection("customers")
@@ -71,11 +76,11 @@ fun ProfileScreen(
                 }
             }
 
-            regionName = when(regionId) {
+            regionName = when(provinceId) {
                 "seoul" -> "서울"
                 "gyeonggi" -> "경기"
                 "Hongchon" -> "홍천"
-                else -> regionId
+                else -> provinceId
             }
         } catch (e: Exception) {
             // 실패 시 기본값 사용

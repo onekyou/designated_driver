@@ -26,15 +26,17 @@ import java.util.*
 @Composable
 fun PointHistoryScreen(
     phoneNumber: String,
-    regionId: String = "seoul",
-    officeId: String = "office1",
+    provinceId: String,
+    cityId: String,
+    officeId: String,
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val viewModel = remember {
         PointHistoryViewModel(
             phoneNumber = phoneNumber,
-            regionId = regionId,
+            provinceId = provinceId,
+            cityId = cityId,
             officeId = officeId
         )
     }

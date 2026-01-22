@@ -98,3 +98,24 @@ SENSITIVE_DATA.md
 **/test_credentials.json
 **/dev_api_keys.txtnul
 **/nul
+
+# --- Flutter/Dart ---
+.dart_tool/
+*.ipa
+
+# --- Firebase config (contains API keys) ---
+**/google-services.json
+
+# --- Backup folders (sensitive + unnecessary) ---
+backup_keys/
+backup/
+temp/
+
+# --- Unused project folders ---
+call_manager_backup/
+call_manager_current_broken/
+designated_customer_flutter/
+driver_app_flutter/
+Walkietalkie/
+pickup_app_ptt/
+firestore-export-json/

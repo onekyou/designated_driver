@@ -11,6 +11,10 @@ class PreferencesManager(context: Context) {
 
     companion object {
         private const val KEY_OFFICE_ID = "office_id"
+        private const val KEY_PROVINCE_ID = "province_id"
+        private const val KEY_CITY_ID = "city_id"
+        // 하위 호환용 (마이그레이션)
+        @Deprecated("Use KEY_PROVINCE_ID instead")
         private const val KEY_REGION_ID = "region_id"
         private const val KEY_PHONE_NUMBER = "phone_number"
         private const val KEY_IS_PHONE_VERIFIED = "is_phone_verified"
@@ -26,16 +30,25 @@ class PreferencesManager(context: Context) {
     }
 
     // 사무실 정보 저장/조회
-    fun saveOfficeInfo(officeId: String, regionId: String) {
+    fun saveOfficeInfo(officeId: String, provinceId: String, cityId: String) {
         prefs.edit().apply {
             putString(KEY_OFFICE_ID, officeId)
-            putString(KEY_REGION_ID, regionId)
+            putString(KEY_PROVINCE_ID, provinceId)
+            putString(KEY_CITY_ID, cityId)
+            // 하위 호환용 - 기존 regionId 키도 업데이트
+            @Suppress("DEPRECATION")
+            putString(KEY_REGION_ID, provinceId)
             apply()
         }
     }
 
     fun getOfficeId(): String? = prefs.getString(KEY_OFFICE_ID, null)
-    fun getRegionId(): String? = prefs.getString(KEY_REGION_ID, null)
+    fun getProvinceId(): String? = prefs.getString(KEY_PROVINCE_ID, null)
+        ?: prefs.getString(KEY_REGION_ID, null) // 하위 호환: 기존 regionId로 fallback
+    fun getCityId(): String? = prefs.getString(KEY_CITY_ID, null)
+
+    @Deprecated("Use getProvinceId() instead", ReplaceWith("getProvinceId()"))
+    fun getRegionId(): String? = getProvinceId()
 
     // 전화번호 저장/조회
     fun savePhoneNumber(phoneNumber: String) {
@@ -130,6 +143,9 @@ class PreferencesManager(context: Context) {
             remove(KEY_HOME_ADDRESS)
             remove(KEY_FAVORITE_ADDRESSES)
             remove(KEY_OFFICE_ID)
+            remove(KEY_PROVINCE_ID)
+            remove(KEY_CITY_ID)
+            @Suppress("DEPRECATION")
             remove(KEY_REGION_ID)
             remove(KEY_OFFICE_PHONE)
             remove(KEY_BANK_NAME)

@@ -43,7 +43,7 @@ class CallRepository(
     // ========================================
 
     /**
-     * 콜 목록 Flow 구독 (최근 1시간 이내)
+     * 콜 목록 Flow 구독 (최근 1시간 이내 + 운행완료 제외)
      * UI가 이 Flow를 collect하면 DB 변경 시 자동 업데이트
      * 시간 필터는 매 emit마다 동적으로 적용됨
      */
@@ -53,6 +53,7 @@ class CallRepository(
                 val oneHourAgo = System.currentTimeMillis() - (60 * 60 * 1000) // 1시간 전
                 localCalls
                     .filter { it.timestamp >= oneHourAgo }
+                    .filter { it.status != "COMPLETED" } // 운행완료 제외
                     .map { it.toCallInfo() }
             }
     }

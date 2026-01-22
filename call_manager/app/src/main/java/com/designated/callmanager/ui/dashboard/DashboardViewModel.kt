@@ -300,7 +300,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
 
         val listenerA = firestore.collection("shared_calls")
-            .whereEqualTo("sourceRegionId", provinceId)
+            .whereEqualTo("sourceProvinceId", provinceId)
             .whereEqualTo("status", "OPEN")
             .addSnapshotListener { snapshots, e ->
                 if (e != null) {
@@ -339,7 +339,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         sharedCallsListener = listenerA
 
         allSharedCallsListener = firestore.collection("shared_calls")
-            .whereEqualTo("sourceRegionId", provinceId)
+            .whereEqualTo("sourceProvinceId", provinceId)
             .addSnapshotListener { snapshots, e ->
                 if (e != null) {
                     return@addSnapshotListener
@@ -517,6 +517,44 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 Log.d(TAG, "기사 데이터 새로고침 완료")
             } catch (e: Exception) {
                 Log.e(TAG, "기사 데이터 새로고침 실패", e)
+            }
+        }
+    }
+
+    /**
+     * 기사 데이터 새로고침 (브로드캐스트 수신 시 호출)
+     */
+    fun refreshDriverData() {
+        val provinceId = _provinceId.value ?: return
+        val cityId = _cityId.value ?: return
+        val officeId = _officeId.value ?: return
+
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "📍 기사 데이터 새로고침 (브로드캐스트)")
+                driverRepository.refreshData(provinceId, cityId, officeId)
+                Log.d(TAG, "📍 기사 데이터 새로고침 완료")
+            } catch (e: Exception) {
+                Log.e(TAG, "기사 데이터 새로고침 실패", e)
+            }
+        }
+    }
+
+    /**
+     * 콜 데이터 새로고침 (브로드캐스트 수신 시 호출)
+     */
+    fun refreshCallData() {
+        val provinceId = _provinceId.value ?: return
+        val cityId = _cityId.value ?: return
+        val officeId = _officeId.value ?: return
+
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "📞 콜 데이터 새로고침 (브로드캐스트)")
+                callRepository.refreshData(provinceId, cityId, officeId)
+                Log.d(TAG, "📞 콜 데이터 새로고침 완료")
+            } catch (e: Exception) {
+                Log.e(TAG, "콜 데이터 새로고침 실패", e)
             }
         }
     }
@@ -991,9 +1029,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     "departure" to departure,
                     "destination" to destination,
                     "fare" to fare,
-                    "sourceRegionId" to province,
+                    "sourceProvinceId" to province,
+                    "sourceCityId" to city,
                     "sourceOfficeId" to office,
-                    "targetRegionId" to province,
+                    "targetProvinceId" to province,
+                    "targetCityId" to city,
                     "createdBy" to (auth.currentUser?.uid ?: ""),
                     "phoneNumber" to callInfo.phoneNumber,
                     "originalCallId" to callInfo.id,
@@ -1035,11 +1075,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     if (status != "OPEN") {
                         throw Exception("이미 수락된 콜입니다")
                     }
+                    val city = _cityId.value ?: throw Exception("cityId가 없습니다")
                     tx.update(docRef, mapOf(
                         "status" to "CLAIMED",
                         "claimedOfficeId" to office,
                         "claimedAt" to Timestamp.now(),
-                        "targetRegionId" to province
+                        "targetProvinceId" to province,
+                        "targetCityId" to city
                     ))
                 }.await()
             } catch (e: Exception) {
@@ -1061,6 +1103,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             try {
                 val province = _provinceId.value ?: return@launch
+                val city = _cityId.value ?: return@launch
                 val office = _officeId.value ?: return@launch
                 firestore.runTransaction { tx ->
                     val docRef = firestore.collection("shared_calls").document(sharedCallId)
@@ -1079,7 +1122,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                         "departure" to departure,
                         "destination" to destination,
                         "fare" to fare,
-                        "targetRegionId" to province
+                        "targetProvinceId" to province,
+                        "targetCityId" to city
                     )
                     driverId?.let {
                         updateMap["claimedDriverId"] = it

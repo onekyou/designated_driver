@@ -6,7 +6,8 @@ data class CustomerCall(
     val id: String = "",
     val phoneNumber: String,
     val officeId: String,
-    val regionId: String = "seoul", // 콜매니저 호환
+    val provinceId: String, // 콜매니저 호환
+    val cityId: String,     // 콜매니저 호환
     val currentLocation: String,
     val destinationLocation: String,
     val timestamp: Long,
@@ -30,7 +31,8 @@ data class CustomerCall(
             "id" to id,
             "phoneNumber" to phoneNumber,
             "officeId" to officeId,
-            "regionId" to regionId,
+            "provinceId" to provinceId,
+            "cityId" to cityId,
             "customerAddress" to currentLocation, // 콜매니저 필드명 (출발지만 저장 - 전화 호출과 동일)
             "departure" to currentLocation,
             "destination" to destinationLocation,
@@ -64,7 +66,8 @@ data class CustomerCall(
                 id = data["id"] as? String ?: "",
                 phoneNumber = data["phoneNumber"] as? String ?: "",
                 officeId = data["officeId"] as? String ?: "",
-                regionId = data["regionId"] as? String ?: "seoul",
+                provinceId = data["provinceId"] as? String ?: data["regionId"] as? String ?: "",
+                cityId = data["cityId"] as? String ?: "",
                 currentLocation = (data["customerAddress"] as? String) ?: (data["departure"] as? String) ?: "",
                 destinationLocation = data["destination"] as? String ?: "",
                 timestamp = timestamp,

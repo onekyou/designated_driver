@@ -84,7 +84,7 @@ class MainActivity : ComponentActivity() {
 
         // 기본값 설정
         remoteConfig.setDefaultsAsync(mapOf(
-            "allowDirectInstall" to false
+            "allowDirectInstall" to true
         ))
 
         // Remote Config 가져오기
@@ -244,7 +244,8 @@ class MainActivity : ComponentActivity() {
                 key to value
             }
 
-            val regionId = params["r"]
+            val provinceId = params["p"] ?: params["r"] // p=provinceId, r=regionId(하위호환)
+            val cityId = params["c"] ?: "" // c=cityId
             val officeId = params["o"]
             val driverId = params["driver"]
             val driverName = params["driverName"]
@@ -253,10 +254,10 @@ class MainActivity : ComponentActivity() {
             val accountNumber = params["account"]
             val accountHolder = params["holder"]
 
-            if (regionId != null && officeId != null) {
+            if (provinceId != null && cityId.isNotEmpty() && officeId != null) {
                 // SharedPreferences에 저장
                 val prefsManager = PreferencesManager(this)
-                prefsManager.saveOfficeInfo(officeId, regionId)
+                prefsManager.saveOfficeInfo(officeId, provinceId, cityId)
 
                 // 추가 정보 저장
                 if (driverId != null && driverName != null) {
@@ -267,12 +268,12 @@ class MainActivity : ComponentActivity() {
                     prefsManager.saveOfficeContactInfo(phoneNumber, bankName, accountNumber, accountHolder)
                 }
 
-                android.util.Log.d("InstallReferrer", "✅ 사무실 정보 저장 완료: $regionId/$officeId")
+                android.util.Log.d("InstallReferrer", "✅ 사무실 정보 저장 완료: $provinceId/$cityId/$officeId")
                 if (driverId != null) {
                     android.util.Log.d("InstallReferrer", "✅ 추천 기사: $driverName ($driverId)")
                 }
             } else {
-                android.util.Log.w("InstallReferrer", "필수 파라미터 누락: r=$regionId, o=$officeId")
+                android.util.Log.w("InstallReferrer", "필수 파라미터 누락: p=$provinceId, c=$cityId, o=$officeId")
             }
         } catch (e: Exception) {
             android.util.Log.e("InstallReferrer", "Referrer 파싱 중 오류", e)
@@ -330,14 +331,15 @@ class MainActivity : ComponentActivity() {
             val token = task.result
             android.util.Log.d("FCM", "FCM 토큰: $token")
 
-            // PreferencesManager에서 phoneNumber, regionId, officeId 가져와서 Firestore에 저장
+            // PreferencesManager에서 phoneNumber, provinceId, cityId, officeId 가져와서 Firestore에 저장
             val prefsManager = PreferencesManager(this)
             val phoneNumber = prefsManager.getPhoneNumber()
-            val regionId = prefsManager.getRegionId()
+            val provinceId = prefsManager.getProvinceId()
+            val cityId = prefsManager.getCityId()
             val officeId = prefsManager.getOfficeId()
 
-            if (!phoneNumber.isNullOrEmpty() && !regionId.isNullOrEmpty() && !officeId.isNullOrEmpty()) {
-                saveFcmTokenToFirestore(token, phoneNumber, regionId, officeId)
+            if (!phoneNumber.isNullOrEmpty() && !provinceId.isNullOrEmpty() && !cityId.isNullOrEmpty() && !officeId.isNullOrEmpty()) {
+                saveFcmTokenToFirestore(token, phoneNumber, provinceId, cityId, officeId)
             } else {
                 android.util.Log.d("FCM", "아직 사용자 정보 없음 - 나중에 저장됨")
             }
@@ -347,9 +349,10 @@ class MainActivity : ComponentActivity() {
     /**
      * FCM 토큰을 Firestore에 저장
      */
-    private fun saveFcmTokenToFirestore(token: String, phoneNumber: String, regionId: String, officeId: String) {
+    private fun saveFcmTokenToFirestore(token: String, phoneNumber: String, provinceId: String, cityId: String, officeId: String) {
         com.google.firebase.firestore.FirebaseFirestore.getInstance()
-            .collection("regions").document(regionId)
+            .collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
             .collection("offices").document(officeId)
             .collection("customerInfo")
             .document(phoneNumber)
@@ -413,7 +416,8 @@ fun CustomerApp(
 
     // 사무실 정보: SharedPreferences 또는 Attribution 매칭에서 얻음
     var currentOfficeId by remember { mutableStateOf<String?>(null) }
-    var currentRegionId by remember { mutableStateOf<String?>(null) }
+    var currentProvinceId by remember { mutableStateOf<String?>(null) }
+    var currentCityId by remember { mutableStateOf<String?>(null) }
     var currentUserId by remember { mutableStateOf<String?>(null) }
     var showProfileSetup by remember { mutableStateOf(false) }
     var hasProfileInFirestore by remember { mutableStateOf(false) }
@@ -425,10 +429,12 @@ fun CustomerApp(
     // 초기화: SharedPreferences에서 값 로드 + 익명 인증 확인
     LaunchedEffect(Unit) {
         val prefsOfficeId = preferencesManager.getOfficeId()
-        val prefsRegionId = preferencesManager.getRegionId()
+        val prefsProvinceId = preferencesManager.getProvinceId()
+        val prefsCityId = preferencesManager.getCityId()
 
         currentOfficeId = prefsOfficeId
-        currentRegionId = prefsRegionId
+        currentProvinceId = prefsProvinceId
+        currentCityId = prefsCityId
 
         // 익명 인증 상태 확인
         val currentUser = auth.currentUser
@@ -452,12 +458,13 @@ fun CustomerApp(
     var customerInfo by remember { mutableStateOf<com.designated.customer.data.model.CustomerInfo?>(null) }
 
     // 프로필 존재 여부 확인 (익명 인증 완료 + 사무실 매칭 완료 후)
-    LaunchedEffect(currentUserId, currentRegionId, currentOfficeId) {
-        if (currentUserId != null && currentRegionId != null && currentOfficeId != null) {
+    LaunchedEffect(currentUserId, currentProvinceId, currentCityId, currentOfficeId) {
+        if (currentUserId != null && currentProvinceId != null && currentCityId != null && currentOfficeId != null) {
             try {
                 val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
                 val doc = firestore
-                    .collection("regions").document(currentRegionId!!)
+                    .collection("provinces").document(currentProvinceId!!)
+                    .collection("cities").document(currentCityId!!)
                     .collection("offices").document(currentOfficeId!!)
                     .collection("customers").document(currentUserId!!)
                     .get()
@@ -478,7 +485,8 @@ fun CustomerApp(
                     // lastActiveAt 업데이트 (앱 실행 시마다)
                     try {
                         firestore
-                            .collection("regions").document(currentRegionId!!)
+                            .collection("provinces").document(currentProvinceId!!)
+                            .collection("cities").document(currentCityId!!)
                             .collection("offices").document(currentOfficeId!!)
                             .collection("customers").document(currentUserId!!)
                             .update("lastActiveAt", com.google.firebase.Timestamp.now())
@@ -534,9 +542,10 @@ fun CustomerApp(
             }
 
             // 2. 프로필 입력이 필요하면 프로필 입력 화면
-            showProfileSetup && currentRegionId != null && currentOfficeId != null -> {
+            showProfileSetup && currentProvinceId != null && currentCityId != null && currentOfficeId != null -> {
                 ProfileSetupScreen(
-                    regionId = currentRegionId!!,
+                    provinceId = currentProvinceId!!,
+                    cityId = currentCityId!!,
                     officeId = currentOfficeId!!,
 
                     onProfileComplete = {
@@ -550,7 +559,8 @@ fun CustomerApp(
                             try {
                                 val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
                                 val doc = firestore
-                                    .collection("regions").document(currentRegionId!!)
+                                    .collection("provinces").document(currentProvinceId!!)
+                                    .collection("cities").document(currentCityId!!)
                                     .collection("offices").document(currentOfficeId!!)
                                     .collection("customers").document(currentUserId!!)
                                     .get()
@@ -576,15 +586,16 @@ fun CustomerApp(
                 )
             }
             // 2. 사무실 정보가 없으면 Remote Config에 따라 처리
-            currentOfficeId == null || currentRegionId == null -> {
+            currentOfficeId == null || currentProvinceId == null || currentCityId == null -> {
                 if (allowDirectInstall) {
                     // Direct install 허용 시: 사무실 선택 화면 표시
                     com.designated.customer.ui.office.OfficeSelectionScreen(
                         modifier = Modifier.padding(paddingValues),
-                        onOfficeSelected = { officeId, regionId ->
-                            preferencesManager.saveOfficeInfo(officeId, regionId)
+                        onOfficeSelected = { officeId, provinceId, cityId ->
+                            preferencesManager.saveOfficeInfo(officeId, provinceId, cityId)
                             currentOfficeId = officeId
-                            currentRegionId = regionId
+                            currentProvinceId = provinceId
+                            currentCityId = cityId
                         }
                     )
                 } else {
@@ -625,9 +636,10 @@ fun CustomerApp(
                 }
             }
             // 3. 모든 정보가 있으면 메인 네비게이션
-            hasProfileInFirestore && currentRegionId != null && currentOfficeId != null && customerInfo != null -> {
+            hasProfileInFirestore && currentProvinceId != null && currentCityId != null && currentOfficeId != null && customerInfo != null -> {
                 MainNavigation(
-                    regionId = currentRegionId!!,
+                    provinceId = currentProvinceId!!,
+                    cityId = currentCityId!!,
                     officeId = currentOfficeId!!,
                     phoneNumber = customerInfo!!.phoneNumber,
                     customerInfo = customerInfo, // CustomerInfo 전달

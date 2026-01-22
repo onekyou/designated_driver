@@ -15,7 +15,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun ProfileSetupScreen(
-    regionId: String,
+    provinceId: String,
+    cityId: String,
     officeId: String,
 
     onProfileComplete: () -> Unit,
@@ -125,7 +126,7 @@ fun ProfileSetupScreen(
             // 시작하기 버튼
             Button(
                 onClick = {
-                    viewModel.saveProfile(regionId, officeId, driverId, driverName)
+                    viewModel.saveProfile(provinceId, cityId, officeId, driverId, driverName)
                 },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !uiState.isLoading &&
