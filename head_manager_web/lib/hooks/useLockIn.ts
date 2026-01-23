@@ -20,7 +20,7 @@ export function useLockIn() {
       setLoading(true);
       setError(null);
 
-      // collectionGroup으로 모든 region의 offices 조회
+      // collectionGroup으로 모든 provinces/cities의 offices 조회
       const officesQuery = collectionGroup(db, 'offices');
       const officesSnapshot = await getDocs(officesQuery);
 
@@ -29,7 +29,9 @@ export function useLockIn() {
       for (const officeDoc of officesSnapshot.docs) {
         const officeData = officeDoc.data();
         const pathParts = officeDoc.ref.path.split('/');
-        const regionId = pathParts[pathParts.indexOf('regions') + 1];
+        // provinces/{provinceId}/cities/{cityId}/offices/{officeId}
+        const provinceId = pathParts[pathParts.indexOf('provinces') + 1] || '';
+        const cityId = pathParts[pathParts.indexOf('cities') + 1] || '';
 
         // 사무실 통계 데이터 수집
         const stats = {
@@ -55,7 +57,7 @@ export function useLockIn() {
         officesList.push({
           officeId: officeDoc.id,
           officeName: officeData.name || '이름 없음',
-          region: regionId,
+          region: `${provinceId}/${cityId}`,
           lockInScore,
           subscriptionStatus: officeData.subscriptionStatus || 'trial',
           trialDaysElapsed,

@@ -258,38 +258,26 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             .collection("cities").document(cityId)
             .collection("offices").document(officeId)
 
-        officeRef.addSnapshotListener { snapshot, e ->
-            if (e != null) {
-                return@addSnapshotListener
-            }
-
-            if (snapshot != null && snapshot.exists()) {
-                val status = snapshot.getString("status") ?: "OPEN"
-                _officeStatus.value = status
-            } else {
-                _officeStatus.value = "OPEN"
-
-                officeRef.set(mapOf("status" to "OPEN"), com.google.firebase.firestore.SetOptions.merge())
-                    .addOnSuccessListener {
-                    }
-            }
-        }
-
         // Repository 패턴으로 교체됨 - Firebase 리스너 대신 Local DB Flow 구독
         // callsListener와 driversListener는 제거됨
         setupCallsAndDriversObservers(provinceId, cityId, officeId)
 
+        // 사무실 상태 리스너 (하나로 통합 - 메모리 누수 수정)
         officeStatusListener = officeRef.addSnapshotListener { snapshot, e ->
             if (e != null) {
                 return@addSnapshotListener
             }
             if (snapshot != null && snapshot.exists()) {
-                val status = snapshot.getString("status") ?: ""
+                val status = snapshot.getString("status") ?: "OPEN"
                 _officeStatus.value = status
 
                 // SharedPreferences에 사무실 상태 캐시 저장
                 val prefs = getApplication<Application>().getSharedPreferences("office_status_cache", Context.MODE_PRIVATE)
                 prefs.edit().putString("current_office_status", status).apply()
+            } else {
+                // 문서가 없으면 생성
+                _officeStatus.value = "OPEN"
+                officeRef.set(mapOf("status" to "OPEN"), com.google.firebase.firestore.SetOptions.merge())
             }
         }
 
@@ -596,7 +584,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 val callUpdates = mapOf(
                     "assignedDriverId" to driverAuthUid,
                     "assignedDriverName" to driverInfo.name,
+                    "assignedDriverPhone" to (driverInfo.phoneNumber ?: ""),
                     "status" to CallStatus.ASSIGNED.firestoreValue,
+                    "assignedTimestamp" to Timestamp.now(),
                     "updatedAt" to Timestamp.now()
                 )
                 callRef.update(callUpdates).await()

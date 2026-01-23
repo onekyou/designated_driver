@@ -186,11 +186,14 @@ export default function ArchiveStatsPage() {
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {Object.entries(stats.stats.officeStats).map(([key, stat]: [string, any]) => {
-                      const [regionId, officeId] = key.split('/');
+                      // key format: provinceId/cityId/officeId
+                      const parts = key.split('/');
+                      const location = parts.length >= 3 ? `${parts[0]}/${parts[1]}` : parts[0];
+                      const officeId = parts.length >= 3 ? parts[2] : parts[1];
                       return (
                         <tr key={key}>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {regionId}
+                            {location}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                             {stat.officeName || officeId}

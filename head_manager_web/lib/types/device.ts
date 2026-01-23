@@ -6,8 +6,9 @@ export interface EmergencyAlert {
   type: 'EMERGENCY_CRASH_ALERT' | 'DEVICE_OFFLINE' | 'PERMISSION_DENIED' | 'OTHER';
   priority: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 
-  // Region & Office
-  regionId: string;
+  // Province, City & Office
+  provinceId: string;
+  cityId: string;
   officeId: string;
   officeName?: string;
 

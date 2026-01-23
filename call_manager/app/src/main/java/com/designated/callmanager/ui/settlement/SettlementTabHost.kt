@@ -5,11 +5,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
 
 /**
  * 새 정산관리 메인 화면.
@@ -23,7 +23,10 @@ fun SettlementTabHost(
 ) {
     val pages = listOf("전체", "대기", "기사별", "일일", "외상")
     var selected by remember { mutableStateOf(0) }
-    val bg = Color(0xFFFFB000)
+
+    // 활성 탭: 밝은 노랑, 비활성 탭: 채도 낮은 색상
+    val activeColor = Color(0xFFFFB000)       // 밝은 노랑/주황
+    val inactiveTextColor = Color(0xFF888888) // 채도 낮은 회색
 
     Scaffold(
         topBar = {
@@ -45,9 +48,29 @@ fun SettlementTabHost(
         containerColor = Color(0xFF121212)
     ) { pad ->
         Column(Modifier.padding(pad)) {
-            TabRow(selectedTabIndex = selected, containerColor = bg, contentColor = Color.Black) {
+            TabRow(
+                selectedTabIndex = selected,
+                containerColor = Color(0xFF2A2A2A),
+                contentColor = activeColor,
+                indicator = { tabPositions ->
+                    TabRowDefaults.SecondaryIndicator(
+                        Modifier.tabIndicatorOffset(tabPositions[selected]),
+                        color = activeColor
+                    )
+                }
+            ) {
                 pages.forEachIndexed { i, t ->
-                    Tab(selected = selected == i, onClick = { selected = i }, text = { Text(t) })
+                    val isSelected = selected == i
+                    Tab(
+                        selected = isSelected,
+                        onClick = { selected = i },
+                        text = {
+                            Text(
+                                t,
+                                color = if (isSelected) activeColor else inactiveTextColor
+                            )
+                        }
+                    )
                 }
             }
             Spacer(Modifier.height(8.dp))

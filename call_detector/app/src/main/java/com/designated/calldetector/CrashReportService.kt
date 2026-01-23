@@ -90,95 +90,104 @@ class CrashReportService(private val context: Context) {
 
     /**
      * Firebase 연결 테스트 및 준비 상태 확인
+     * 비동기로 실행하여 메인 스레드 블로킹 방지 (ANR 방지)
      */
     private fun testFirebaseConnection() {
-        android.util.Log.d("CrashReport", "=== Firebase 연결 테스트 시작 ===")
-        android.util.Log.d("CrashReport", "Device ID: $deviceId")
-        android.util.Log.d("CrashReport", "Province ID: $provinceId")
-        android.util.Log.d("CrashReport", "City ID: $cityId")
-        android.util.Log.d("CrashReport", "Office ID: $officeId")
+        // 비동기로 Firebase 테스트 실행 (메인 스레드 블로킹 방지)
+        scope.launch {
+            android.util.Log.d("CrashReport", "=== Firebase 연결 테스트 시작 ===")
+            android.util.Log.d("CrashReport", "Device ID: $deviceId")
+            android.util.Log.d("CrashReport", "Province ID: $provinceId")
+            android.util.Log.d("CrashReport", "City ID: $cityId")
+            android.util.Log.d("CrashReport", "Office ID: $officeId")
 
-        crashlytics.log("Testing Firebase connection...")
+            crashlytics.log("Testing Firebase connection...")
 
-        // 0. Firebase 인증 상태 확인
-        val auth = FirebaseAuth.getInstance()
-        val currentUser = auth.currentUser
-        android.util.Log.d("CrashReport", "Firebase 인증 상태: ${if (currentUser != null) "인증됨 (${currentUser.uid})" else "인증되지 않음"}")
+            // 0. Firebase 인증 상태 확인
+            val auth = FirebaseAuth.getInstance()
+            val currentUser = auth.currentUser
+            android.util.Log.d("CrashReport", "Firebase 인증 상태: ${if (currentUser != null) "인증됨 (${currentUser.uid})" else "인증되지 않음"}")
 
-        if (currentUser == null) {
-            android.util.Log.e("CrashReport", "Firebase 인증이 되어있지 않음! Firestore 쓰기 실패 예상")
-            crashlytics.log("Firebase user not authenticated - Firestore writes may fail")
-        } else {
-            android.util.Log.d("CrashReport", "Firebase 인증 완료 - Firestore 쓰기 가능")
-            crashlytics.log("Firebase user authenticated - Firestore writes should work")
-        }
+            if (currentUser == null) {
+                android.util.Log.e("CrashReport", "Firebase 인증이 되어있지 않음! Firestore 쓰기 실패 예상")
+                crashlytics.log("Firebase user not authenticated - Firestore writes may fail")
+            } else {
+                android.util.Log.d("CrashReport", "Firebase 인증 완료 - Firestore 쓰기 가능")
+                crashlytics.log("Firebase user authenticated - Firestore writes should work")
+            }
 
-        // 1. Firebase 인스턴스 상태 확인
-        try {
-            val firestoreSettings = firestore.firestoreSettings
-            android.util.Log.d("CrashReport", "Firestore Settings: ${firestoreSettings}")
-            crashlytics.log("Firestore settings loaded successfully")
-        } catch (e: Exception) {
-            android.util.Log.e("CrashReport", "Firestore 설정 확인 실패: ${e.message}", e)
-            crashlytics.log("Firestore settings check failed: ${e.message}")
-        }
+            // 1. Firebase 인스턴스 상태 확인
+            try {
+                val firestoreSettings = firestore.firestoreSettings
+                android.util.Log.d("CrashReport", "Firestore Settings: ${firestoreSettings}")
+                crashlytics.log("Firestore settings loaded successfully")
+            } catch (e: Exception) {
+                android.util.Log.e("CrashReport", "Firestore 설정 확인 실패: ${e.message}", e)
+                crashlytics.log("Firestore settings check failed: ${e.message}")
+            }
 
-        // 2. 연결 테스트 데이터 준비
-        val testData = hashMapOf(
-            "deviceId" to deviceId,
-            "provinceId" to provinceId,
-            "cityId" to cityId,
-            "officeId" to officeId,
-            "type" to "CONNECTION_TEST",
-            "timestamp" to FieldValue.serverTimestamp(),
-            "message" to "Firebase 연결 테스트",
-            "testTime" to System.currentTimeMillis(),
-            "initializationCheck" to true
-        )
-
-        val docId = "test_${deviceId}_${System.currentTimeMillis()}"
-        android.util.Log.d("CrashReport", "문서 ID: $docId")
-        android.util.Log.d("CrashReport", "전송 데이터: $testData")
-
-        // 3. 동기적 테스트 (초기화 시점에서 확실히 확인)
-        try {
-            val testTask = firestore.collection("device_alerts")
-                .document(docId)
-                .set(testData)
-
-            // 3초 내에 완료되어야 함
-            com.google.android.gms.tasks.Tasks.await(testTask, 3, java.util.concurrent.TimeUnit.SECONDS)
-            android.util.Log.d("CrashReport", "Firebase 동기 연결 테스트 성공!")
-            crashlytics.log("Firebase sync connection test successful")
-
-            // 테스트 문서 즉시 삭제
-            firestore.collection("device_alerts").document(docId).delete()
-
-        } catch (syncException: Exception) {
-            android.util.Log.e("CrashReport", "Firebase 동기 연결 테스트 실패: ${syncException.message}", syncException)
-            crashlytics.log("Firebase sync connection test failed: ${syncException.message}")
-        }
-
-        // 4. device_status 컬렉션 접근 테스트
-        try {
-            val statusTestData = hashMapOf(
+            // 2. 연결 테스트 데이터 준비
+            val testData = hashMapOf(
                 "deviceId" to deviceId,
-                "type" to "INITIALIZATION_TEST",
+                "provinceId" to provinceId,
+                "cityId" to cityId,
+                "officeId" to officeId,
+                "type" to "CONNECTION_TEST",
                 "timestamp" to FieldValue.serverTimestamp(),
-                "status" to "TESTING_CONNECTION"
+                "message" to "Firebase 연결 테스트",
+                "testTime" to System.currentTimeMillis(),
+                "initializationCheck" to true
             )
 
-            val statusTask = firestore.collection("device_status")
-                .document(deviceId)
-                .set(statusTestData)
+            val docId = "test_${deviceId}_${System.currentTimeMillis()}"
+            android.util.Log.d("CrashReport", "문서 ID: $docId")
+            android.util.Log.d("CrashReport", "전송 데이터: $testData")
 
-            com.google.android.gms.tasks.Tasks.await(statusTask, 3, java.util.concurrent.TimeUnit.SECONDS)
-            android.util.Log.d("CrashReport", "device_status 컬렉션 접근 테스트 성공!")
-            crashlytics.log("device_status collection access test successful")
+            // 3. 비동기 테스트 (콜백 방식으로 변경)
+            try {
+                firestore.collection("device_alerts")
+                    .document(docId)
+                    .set(testData)
+                    .addOnSuccessListener {
+                        android.util.Log.d("CrashReport", "Firebase 연결 테스트 성공!")
+                        crashlytics.log("Firebase connection test successful")
 
-        } catch (statusException: Exception) {
-            android.util.Log.e("CrashReport", "device_status 접근 테스트 실패: ${statusException.message}", statusException)
-            crashlytics.log("device_status access test failed: ${statusException.message}")
+                        // 테스트 문서 삭제
+                        firestore.collection("device_alerts").document(docId).delete()
+                    }
+                    .addOnFailureListener { e ->
+                        android.util.Log.e("CrashReport", "Firebase 연결 테스트 실패: ${e.message}", e)
+                        crashlytics.log("Firebase connection test failed: ${e.message}")
+                    }
+            } catch (e: Exception) {
+                android.util.Log.e("CrashReport", "Firebase 연결 테스트 예외: ${e.message}", e)
+                crashlytics.log("Firebase connection test exception: ${e.message}")
+            }
+
+            // 4. device_status 컬렉션 접근 테스트 (비동기)
+            try {
+                val statusTestData = hashMapOf(
+                    "deviceId" to deviceId,
+                    "type" to "INITIALIZATION_TEST",
+                    "timestamp" to FieldValue.serverTimestamp(),
+                    "status" to "TESTING_CONNECTION"
+                )
+
+                firestore.collection("device_status")
+                    .document(deviceId)
+                    .set(statusTestData)
+                    .addOnSuccessListener {
+                        android.util.Log.d("CrashReport", "device_status 컬렉션 접근 테스트 성공!")
+                        crashlytics.log("device_status collection access test successful")
+                    }
+                    .addOnFailureListener { e ->
+                        android.util.Log.e("CrashReport", "device_status 접근 테스트 실패: ${e.message}", e)
+                        crashlytics.log("device_status access test failed: ${e.message}")
+                    }
+            } catch (statusException: Exception) {
+                android.util.Log.e("CrashReport", "device_status 접근 테스트 예외: ${statusException.message}", statusException)
+                crashlytics.log("device_status access test exception: ${statusException.message}")
+            }
         }
     }
 

@@ -37,6 +37,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.Timestamp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.cancel
@@ -54,7 +55,7 @@ class CallDetectorService : Service() {
     // private lateinit var callLogObserver: CallLogObserver
     private val db = FirebaseFirestore.getInstance()
     private lateinit var sharedPreferences: SharedPreferences
-    private val serviceScope = CoroutineScope(Dispatchers.IO)
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
     // 서비스 시작 시간을 기록하여 이후 통화만 처리
     private var serviceStartTime: Long = 0
@@ -943,7 +944,13 @@ class CallDetectorService : Service() {
         super.onDestroy()
         // CallLogObserver 비활성화
         // contentResolver.unregisterContentObserver(callLogObserver)
-        serviceScope.cancel() // 코루틴 스코프 해제 (메모리 누수 방지)
+
+        // 코루틴 스코프 안전하게 해제 (경합 조건 방지)
+        try {
+            serviceScope.cancel()
+        } catch (e: Exception) {
+            Log.w(TAG, "Error cancelling serviceScope: ${e.message}")
+        }
         Log.i(TAG, "Service destroyed.")
     }
     

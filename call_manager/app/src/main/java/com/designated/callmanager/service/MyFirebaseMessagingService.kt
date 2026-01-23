@@ -984,7 +984,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 Log.d(TAG, "🔔 [BUILDER] 채널 ID: $channelId")
 
                 notificationBuilder.setSound(alarmSoundUri)
-                notificationBuilder.setVibrate(longArrayOf(0, 1000, 500, 1000, 500, 1000))
+                notificationBuilder.setVibrate(longArrayOf(0, 1000))  // 1회 진동으로 변경
                 notificationBuilder.setPriority(NotificationCompat.PRIORITY_MAX)
                 notificationBuilder.setDefaults(0)
 

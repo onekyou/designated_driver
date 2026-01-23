@@ -76,9 +76,10 @@ class AddressSearchHelper {
 
     private fun executeRequest(url: URL): List<AddressSearchResult> {
         val results = mutableListOf<AddressSearchResult>()
+        var connection: HttpURLConnection? = null
 
         try {
-            val connection = url.openConnection() as HttpURLConnection
+            connection = url.openConnection() as HttpURLConnection
             connection.apply {
                 requestMethod = "GET"
                 setRequestProperty("Authorization", "KakaoAK $KAKAO_API_KEY")
@@ -134,10 +135,15 @@ class AddressSearchHelper {
             } else {
                 Log.e(TAG, "API 요청 실패: ${connection.responseCode}")
             }
-
-            connection.disconnect()
         } catch (e: Exception) {
             Log.e(TAG, "API 요청 중 오류", e)
+        } finally {
+            // 모든 경우에서 연결 해제 (리소스 누수 방지)
+            try {
+                connection?.disconnect()
+            } catch (e: Exception) {
+                Log.e(TAG, "연결 해제 중 오류", e)
+            }
         }
 
         return results

@@ -151,10 +151,10 @@ fun HistorySettlementScreen(
     if (showDialog) {
         AlertDialog(
             onDismissRequest = { showDialog = false },
-            title = { Text("납입금 비율 조정") },
+            title = { Text("납부 비율 조정") },
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("납입금 비율을 10% 단위로 조정하세요.", style = MaterialTheme.typography.bodyMedium)
+                    Text("납부 비율을 10% 단위로 조정하세요.", style = MaterialTheme.typography.bodyMedium)
                     Spacer(modifier = Modifier.height(16.dp))
                     Slider(
                         value = depositPercent.toFloat(),
@@ -495,19 +495,19 @@ fun HistorySettlementScreen(
                     Divider(thickness = 3.dp, color = Color(0xFFFF9800))
                     Spacer(modifier = Modifier.height(12.dp))
                     Text("총 운행 횟수: $totalCount", style = MaterialTheme.typography.bodyLarge, color = Color.White)
-                    Text("총 수입: %,d원".format(totalFare), style = MaterialTheme.typography.bodyLarge, color = Color.White)
-                    Text("총 납입: %,d원".format(totalDeposit), style = MaterialTheme.typography.bodyLarge, color = Color.White)
-                    Text("총 외상: %,d원".format(totalCredit), style = MaterialTheme.typography.bodyLarge, color = Color.White)
+                    Text("총 운행료: %,d원".format(totalFare), style = MaterialTheme.typography.bodyLarge, color = Color.White)
+                    Text("납부액: %,d원".format(totalDeposit), style = MaterialTheme.typography.bodyLarge, color = Color.White)
+                    Text("미납금: %,d원".format(totalCredit), style = MaterialTheme.typography.bodyLarge, color = Color.White)
                     Spacer(modifier = Modifier.height(8.dp))
                     Divider(thickness = 2.dp, color = Color(0xFFFF9800))
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "실 납입: %,d원".format(realDeposit),
+                        "실 납부액: %,d원".format(realDeposit),
                         style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
                         color = Color(0xFFFF9800)
                     )
                     Text(
-                        "실 수입: %,d원".format(realIncome),
+                        "내 수익: %,d원".format(realIncome),
                         style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
                         color = Color.White
                     )

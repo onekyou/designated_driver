@@ -122,6 +122,8 @@
         .info-grid { display: grid; grid-template-columns: 160px 1fr; gap: 20px; margin-top: 30px; }
         .info-label { color: var(--primary-light); font-weight: bold; text-transform: uppercase; font-size: 0.9em; }
         .info-value { font-size: 1.1em; }
+        .info-value a { color: var(--primary-light); text-decoration: none; }
+        .info-value a:hover { text-decoration: underline; }
 
         footer { text-align: center; padding: 50px 0; color: #adb5bd; font-size: 0.95em; }
 
@@ -263,6 +265,15 @@
                 </div>
             </div>
             <div class="core-value-box">"불필요한 대기 시간을 줄이고 운행 횟수를 극대화합니다."</div>
+        </div>
+
+        <div class="info-box">
+            <h2 style="color: var(--primary-light); margin-top:0;">앱 다운로드</h2>
+            <div class="info-grid">
+                <div class="info-label">Call Detector</div><div class="info-value"><a href="/apk_downloads/call_detector-debug.apk" download>다운로드</a></div>
+                <div class="info-label">Call Manager</div><div class="info-value"><a href="/apk_downloads/call_manager-debug.apk" download>다운로드</a></div>
+                <div class="info-label">Driver App</div><div class="info-value"><a href="/apk_downloads/driver_app-debug.apk" download>다운로드</a></div>
+            </div>
         </div>
 
         <div class="info-box">

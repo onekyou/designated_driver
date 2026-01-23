@@ -156,7 +156,7 @@ export default function DevicesPage() {
                 <div className="text-lg font-semibold mb-2">{alert.message}</div>
 
                 <div className="text-sm text-gray-600 mb-3">
-                  사무실: {alert.officeName || `${alert.regionId} / ${alert.officeId}`}
+                  사무실: {alert.officeName || `${alert.provinceId}/${alert.cityId} / ${alert.officeId}`}
                 </div>
 
                 <div className="flex gap-2">
@@ -213,7 +213,7 @@ export default function DevicesPage() {
                   <div className="font-medium mb-1">{alert.message}</div>
 
                   <div className="text-sm text-gray-600 mb-3">
-                    사무실: {alert.officeName || `${alert.regionId} / ${alert.officeId}`}
+                    사무실: {alert.officeName || `${alert.provinceId}/${alert.cityId} / ${alert.officeId}`}
                   </div>
 
                   <div className="flex gap-2">

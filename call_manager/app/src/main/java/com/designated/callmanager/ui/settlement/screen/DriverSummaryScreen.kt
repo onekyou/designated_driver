@@ -102,11 +102,11 @@ private fun DriverDetailCard(stat: DriverStat, onClick: () -> Unit) {
             Text(stat.name, color = Color.White, style = MaterialTheme.typography.titleMedium)
             Divider(color = Color.DarkGray, thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
             Text("총 운행 횟수 :  ${stat.count} 회", color = Color.White)
-            Text("총 수입 : ${"%,d".format(stat.totalFare)}원", color = Color.White)
-            Text("총 납입 : ${"%,d".format(stat.deposit)}원", color = Color.White)
-            Text("총 외상 : ${"%,d".format(stat.totalCredit)}원", color = Color.White)
+            Text("총 운행료 : ${"%,d".format(stat.totalFare)}원", color = Color.White)
+            Text("수수료 : ${"%,d".format(stat.deposit)}원", color = Color.White)
+            Text("미수금 : ${"%,d".format(stat.totalCredit)}원", color = Color.White)
             Divider(color = Color.DarkGray, thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
-            Text("실납입 : ${"%,d".format(stat.realDeposit)}원", color = Color.Yellow, fontWeight = FontWeight.Bold)
+            Text("실 수령액 : ${"%,d".format(stat.realDeposit)}원", color = Color.Yellow, fontWeight = FontWeight.Bold)
         }
     }
 }

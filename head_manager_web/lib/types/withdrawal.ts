@@ -6,7 +6,8 @@ export interface BankInfo {
 
 export interface WithdrawalRequest {
   id: string;
-  regionId: string;
+  provinceId: string;
+  cityId: string;
   officeId: string;
   officeName: string;
   requestedBy: string; // admin uid

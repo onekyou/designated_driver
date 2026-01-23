@@ -2,12 +2,13 @@ import * as functions from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 
 export const finalizeWorkDay = functions.onCall({region: "asia-northeast3"}, async (req) => {
-  const { regionId, officeId } = req.data || {};
-  if (!regionId || !officeId) throw new functions.HttpsError("invalid-argument", "regionId and officeId required");
+  const { provinceId, cityId, officeId } = req.data || {};
+  if (!provinceId || !cityId || !officeId) throw new functions.HttpsError("invalid-argument", "provinceId, cityId and officeId required");
   if (!req.auth) throw new functions.HttpsError("unauthenticated", "Must be signed in");
 
   const db = admin.firestore();
-  const settlementsCol = db.collection("regions").doc(regionId)
+  const settlementsCol = db.collection("provinces").doc(provinceId)
+      .collection("cities").doc(cityId)
       .collection("offices").doc(officeId)
       .collection("settlements");
 
@@ -29,7 +30,8 @@ export const finalizeWorkDay = functions.onCall({region: "asia-northeast3"}, asy
   }
 
   const today = new Date().toISOString().substring(0,10);
-  await db.collection("regions").doc(regionId)
+  await db.collection("provinces").doc(provinceId)
+    .collection("cities").doc(cityId)
     .collection("offices").doc(officeId)
     .collection("dailySettlements").doc(today)
     .collection("sessions").add({

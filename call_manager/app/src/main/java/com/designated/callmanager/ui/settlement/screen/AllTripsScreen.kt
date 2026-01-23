@@ -41,7 +41,7 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
             Text("전체 운행 ${trips.size}건", style = MaterialTheme.typography.titleMedium, color = Color.White)
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("납입금 비율 조정", color=Color.White, style = MaterialTheme.typography.bodySmall)
+                Text("수수료 비율 조정", color=Color.White, style = MaterialTheme.typography.bodySmall)
                 IconButton(onClick = { showRatioDialog = true }) {
                     Icon(Icons.Filled.Settings, contentDescription = "비율 설정", tint = Color.White, modifier = Modifier.size(20.dp))
                 }
@@ -117,9 +117,9 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
                         style = MaterialTheme.typography.bodyMedium)
                 }
 
-                // 외상
+                // 미수금
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("외상", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                    Text("미수금", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
                     Text("${"%,d".format(creditSum)}원",
                         color = Color.White,
                         style = MaterialTheme.typography.bodyMedium)
@@ -198,11 +198,11 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
 
         AlertDialog(
             onDismissRequest = { showRatioDialog = false },
-            title = { Text("납입금 비율 설정") },
+            title = { Text("수수료 비율 설정") },
             text = {
                 Column {
                     Text(
-                        text = "기사 납입금 비율을 입력하세요 (10-90%)",
+                        text = "사무실 수수료 비율을 입력하세요 (10-90%)",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.8f),
                         modifier = Modifier.padding(bottom = 8.dp)

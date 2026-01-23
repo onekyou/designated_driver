@@ -26,6 +26,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import android.util.Log
+import com.designated.callmanager.data.settlement.SettlementSession
+import com.designated.callmanager.data.settlement.CallSettlement
+import com.designated.callmanager.data.settlement.SettlementMetadata
+import com.designated.callmanager.data.settlement.SettlementTotals
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.FieldValue
 
 class SettlementViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -723,5 +729,323 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
             // 버전 정보 업데이트
             prefs.edit().putInt("last_version", currentVersion).apply()
         }
+    }
+
+    // ====== 공유 정산 문서 동기화 기능 (기사앱과 연동) ======
+
+    private val _sharedSessionVersion = MutableStateFlow(0L)
+    val sharedSessionVersion: StateFlow<Long> = _sharedSessionVersion.asStateFlow()
+
+    private val _syncState = MutableStateFlow<SyncState>(SyncState.Idle)
+    val syncState: StateFlow<SyncState> = _syncState.asStateFlow()
+
+    sealed class SyncState {
+        object Idle : SyncState()
+        object Syncing : SyncState()
+        data class Success(val message: String) : SyncState()
+        data class Error(val error: String) : SyncState()
+    }
+
+    /**
+     * 공유 정산 문서 경로 생성
+     */
+    private fun getSharedSessionPath(provinceId: String, cityId: String, officeId: String, sessionDate: String): String {
+        return "provinces/$provinceId/cities/$cityId/offices/$officeId/settlementSessions/$sessionDate"
+    }
+
+    /**
+     * 오늘 날짜의 세션 ID 생성 (근무일 기준)
+     */
+    private fun getTodaySessionDate(): String {
+        val calendar = Calendar.getInstance()
+        // 새벽 6시 이전이면 전날로 처리
+        if (calendar.get(Calendar.HOUR_OF_DAY) < 6) {
+            calendar.add(Calendar.DAY_OF_MONTH, -1)
+        }
+        return SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.time)
+    }
+
+    /**
+     * 공유 정산 문서에서 데이터 동기화 (기사앱이 업로드한 데이터 확인)
+     * 버전 기반 동기화 - 변경이 있을 때만 가져옴
+     */
+    fun checkAndSyncFromSharedSession() {
+        val provinceId = currentProvinceId
+        val cityId = currentCityId
+        val officeId = currentOfficeId
+
+        if (provinceId == null || cityId == null || officeId == null) {
+            Log.w("SettlementViewModel", "Office info not set, skipping sync")
+            return
+        }
+
+        val sessionDate = getTodaySessionDate()
+        val sessionRef = firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
+            .collection("offices").document(officeId)
+            .collection("settlementSessions").document(sessionDate)
+
+        viewModelScope.launch {
+            _syncState.value = SyncState.Syncing
+
+            sessionRef.get()
+                .addOnSuccessListener { doc ->
+                    if (doc.exists()) {
+                        val serverVersion = doc.getLong("metadata.version") ?: 0L
+                        val localVersion = _sharedSessionVersion.value
+
+                        if (serverVersion > localVersion) {
+                            // 새 버전이 있음 - 동기화 필요
+                            val session = SettlementSession.fromDocument(doc)
+                            if (session != null) {
+                                processSharedSession(session, sessionDate)
+                                _sharedSessionVersion.value = serverVersion
+                                _syncState.value = SyncState.Success("동기화 완료: ${session.calls.size}건")
+                                Log.d("SettlementViewModel", "Synced from shared session v$serverVersion: ${session.calls.size} calls")
+                            } else {
+                                _syncState.value = SyncState.Error("세션 파싱 실패")
+                            }
+                        } else {
+                            _syncState.value = SyncState.Idle
+                            Log.d("SettlementViewModel", "Already up to date (v$localVersion)")
+                        }
+                    } else {
+                        _syncState.value = SyncState.Idle
+                        Log.d("SettlementViewModel", "No shared session for $sessionDate")
+                    }
+                }
+                .addOnFailureListener { e ->
+                    _syncState.value = SyncState.Error("동기화 실패: ${e.message}")
+                    Log.e("SettlementViewModel", "Sync failed", e)
+                }
+        }
+    }
+
+    /**
+     * 공유 세션의 콜 데이터를 로컬에 반영
+     */
+    private fun processSharedSession(session: SettlementSession, sessionDate: String) {
+        viewModelScope.launch {
+            session.calls.forEach { call ->
+                // 이미 존재하는 콜인지 확인
+                if (repository.dao.existsById(call.callId) == 0) {
+                    // 새 콜 추가
+                    val entity = SettlementEntity(
+                        callId = call.callId,
+                        driverName = call.driverName,
+                        customerName = call.customerName,
+                        departure = call.departure,
+                        destination = call.destination,
+                        waypoints = "",
+                        fare = call.fare.toInt(),
+                        paymentMethod = call.paymentMethod,
+                        cardAmount = null,
+                        cashAmount = if (call.cashReceived > 0) call.cashReceived.toInt() else null,
+                        creditAmount = call.creditAmount.toInt(),
+                        completedAt = call.completedAt?.toDate()?.time ?: System.currentTimeMillis(),
+                        driverId = call.driverId,
+                        regionId = currentProvinceId ?: "",
+                        officeId = currentOfficeId ?: "",
+                        workDate = sessionDate
+                    )
+                    repository.addTrip(entity)
+                    Log.d("SettlementViewModel", "Added call from shared session: ${call.callId}")
+                }
+            }
+        }
+    }
+
+    /**
+     * 콜 정산 확인 처리 (사무실에서 확인)
+     * Firestore 트랜잭션을 사용하여 원자적으로 처리
+     */
+    fun confirmSettlement(callId: String, onResult: (Boolean, String) -> Unit) {
+        val provinceId = currentProvinceId
+        val cityId = currentCityId
+        val officeId = currentOfficeId
+
+        if (provinceId == null || cityId == null || officeId == null) {
+            onResult(false, "사무실 정보가 설정되지 않았습니다")
+            return
+        }
+
+        val sessionDate = getTodaySessionDate()
+        val sessionRef = firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
+            .collection("offices").document(officeId)
+            .collection("settlementSessions").document(sessionDate)
+
+        viewModelScope.launch {
+            firestore.runTransaction { transaction ->
+                val doc = transaction.get(sessionRef)
+
+                if (!doc.exists()) {
+                    throw Exception("정산 세션이 존재하지 않습니다")
+                }
+
+                val session = SettlementSession.fromDocument(doc)
+                    ?: throw Exception("세션 파싱 실패")
+
+                // 해당 콜 찾기
+                val callIndex = session.calls.indexOfFirst { it.callId == callId }
+                if (callIndex == -1) {
+                    throw Exception("해당 콜을 찾을 수 없습니다")
+                }
+
+                // 콜 리스트 업데이트 (확인 처리)
+                val updatedCalls = session.calls.toMutableList()
+                val confirmedCall = updatedCalls[callIndex].copy(
+                    confirmedByOffice = true,
+                    syncedAt = Timestamp.now()
+                )
+                updatedCalls[callIndex] = confirmedCall
+
+                // 메타데이터 업데이트 (버전 증가)
+                val updatedMetadata = session.metadata.copy(
+                    version = session.metadata.version + 1,
+                    lastUpdatedAt = Timestamp.now(),
+                    lastUpdatedBy = "call_manager"
+                )
+
+                // 트랜잭션 업데이트
+                transaction.update(sessionRef, mapOf(
+                    "calls" to updatedCalls.map { it.toMap() },
+                    "metadata" to updatedMetadata.toMap()
+                ))
+
+                // 로컬 버전 업데이트
+                _sharedSessionVersion.value = updatedMetadata.version
+
+                callId // 성공 시 반환값
+            }.addOnSuccessListener {
+                Log.d("SettlementViewModel", "Call $callId confirmed successfully")
+                onResult(true, "확인 완료")
+            }.addOnFailureListener { e ->
+                Log.e("SettlementViewModel", "Failed to confirm call $callId", e)
+                onResult(false, e.message ?: "확인 실패")
+            }
+        }
+    }
+
+    /**
+     * 전체 정산 세션 마감 처리
+     * 사무실에서 일일 정산 마감 시 호출
+     */
+    fun finalizeSettlementSession(onResult: (Boolean, String) -> Unit) {
+        val provinceId = currentProvinceId
+        val cityId = currentCityId
+        val officeId = currentOfficeId
+
+        if (provinceId == null || cityId == null || officeId == null) {
+            onResult(false, "사무실 정보가 설정되지 않았습니다")
+            return
+        }
+
+        val sessionDate = getTodaySessionDate()
+        val sessionRef = firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
+            .collection("offices").document(officeId)
+            .collection("settlementSessions").document(sessionDate)
+
+        viewModelScope.launch {
+            firestore.runTransaction { transaction ->
+                val doc = transaction.get(sessionRef)
+
+                if (!doc.exists()) {
+                    // 세션이 없으면 새로 생성
+                    val newSession = createSettlementSessionFromLocalData(sessionDate)
+                    transaction.set(sessionRef, newSession.toMap())
+                    return@runTransaction "created"
+                }
+
+                val session = SettlementSession.fromDocument(doc)
+                    ?: throw Exception("세션 파싱 실패")
+
+                // 메타데이터 업데이트 (마감 처리)
+                val updatedMetadata = session.metadata.copy(
+                    version = session.metadata.version + 1,
+                    lastUpdatedAt = Timestamp.now(),
+                    lastUpdatedBy = "call_manager",
+                    isFinalized = true
+                )
+
+                transaction.update(sessionRef, mapOf(
+                    "metadata" to updatedMetadata.toMap()
+                ))
+
+                _sharedSessionVersion.value = updatedMetadata.version
+                "finalized"
+            }.addOnSuccessListener { result ->
+                Log.d("SettlementViewModel", "Session $result for $sessionDate")
+                onResult(true, if (result == "created") "정산 세션 생성 및 마감 완료" else "정산 마감 완료")
+            }.addOnFailureListener { e ->
+                Log.e("SettlementViewModel", "Failed to finalize session", e)
+                onResult(false, e.message ?: "마감 실패")
+            }
+        }
+    }
+
+    /**
+     * 로컬 데이터로 정산 세션 생성
+     */
+    private fun createSettlementSessionFromLocalData(sessionDate: String): SettlementSession {
+        val trips = _settlementList.value.filter { it.workDate == sessionDate }
+        val ratio = _officeShareRatio.value
+
+        val totalFare = trips.sumOf { it.fare.toLong() }
+        val totalDeposit = (totalFare * ratio / 100)
+        val totalDriverShare = totalFare - totalDeposit
+        val totalCash = trips.filter { it.paymentMethod == "현금" }.sumOf { it.fare.toLong() }
+        val totalCard = trips.filter { it.paymentMethod == "이체" || it.paymentMethod == "카드" }.sumOf { it.fare.toLong() }
+        val totalCredit = trips.sumOf { it.creditAmount.toLong() }
+
+        val calls = trips.map { trip ->
+            CallSettlement(
+                callId = trip.callId,
+                driverId = trip.driverId,
+                driverName = trip.driverName,
+                customerName = trip.customerName,
+                customerPhone = "",
+                departure = trip.departure,
+                destination = trip.destination,
+                fare = trip.fare.toLong(),
+                paymentMethod = trip.paymentMethod,
+                cashReceived = trip.cashAmount?.toLong() ?: 0L,
+                creditAmount = trip.creditAmount.toLong(),
+                pointsUsed = 0L,
+                completedAt = Timestamp(Date(trip.completedAt)),
+                confirmedByOffice = true,
+                syncedAt = Timestamp.now()
+            )
+        }
+
+        return SettlementSession(
+            metadata = SettlementMetadata(
+                version = 1,
+                lastUpdatedAt = Timestamp.now(),
+                lastUpdatedBy = "call_manager",
+                depositRatio = ratio,
+                createdAt = Timestamp.now(),
+                isFinalized = true
+            ),
+            totals = SettlementTotals(
+                totalFare = totalFare,
+                totalDeposit = totalDeposit,
+                totalDriverShare = totalDriverShare,
+                totalCash = totalCash,
+                totalCard = totalCard,
+                totalCredit = totalCredit,
+                totalPoints = 0L,
+                callCount = trips.size
+            ),
+            calls = calls
+        )
+    }
+
+    /**
+     * 동기화 상태 초기화
+     */
+    fun clearSyncState() {
+        _syncState.value = SyncState.Idle
     }
 }

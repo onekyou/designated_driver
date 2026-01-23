@@ -10,7 +10,7 @@ import { collectionGroup, getDocs } from 'firebase/firestore';
 export default function MonthlyReportPage() {
   const [loading, setLoading] = useState(false);
   const [offices, setOffices] = useState<any[]>([]);
-  const [selectedOffice, setSelectedOffice] = useState({ regionId: '', officeId: '' });
+  const [selectedOffice, setSelectedOffice] = useState({ provinceId: '', cityId: '', officeId: '' });
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [report, setReport] = useState<any>(null);
@@ -22,9 +22,14 @@ export default function MonthlyReportPage() {
         const officesSnapshot = await getDocs(collectionGroup(db, 'offices'));
         const officesList = officesSnapshot.docs.map(doc => {
           const data = doc.data();
+          // provinces/{provinceId}/cities/{cityId}/offices/{officeId}
+          const pathParts = doc.ref.path.split('/');
+          const provinceId = pathParts[pathParts.indexOf('provinces') + 1] || '';
+          const cityId = pathParts[pathParts.indexOf('cities') + 1] || '';
           return {
             id: doc.id,
-            regionId: doc.ref.parent.parent?.id || '',
+            provinceId,
+            cityId,
             officeName: data.officeName || data.name || doc.id,
             address: data.address || '',
             phoneNumber: data.phoneNumber || '',
@@ -32,8 +37,10 @@ export default function MonthlyReportPage() {
           };
         }).sort((a, b) => {
           // 지역명 > 사무실명 순으로 정렬
-          if (a.regionId !== b.regionId) {
-            return a.regionId.localeCompare(b.regionId);
+          const aLocation = `${a.provinceId}/${a.cityId}`;
+          const bLocation = `${b.provinceId}/${b.cityId}`;
+          if (aLocation !== bLocation) {
+            return aLocation.localeCompare(bLocation);
           }
           return a.officeName.localeCompare(b.officeName);
         });
@@ -46,7 +53,7 @@ export default function MonthlyReportPage() {
   }, []);
 
   const handleGenerateReport = async () => {
-    if (!selectedOffice.regionId || !selectedOffice.officeId) {
+    if (!selectedOffice.provinceId || !selectedOffice.cityId || !selectedOffice.officeId) {
       setError('사무실을 선택해주세요.');
       return;
     }
@@ -56,7 +63,8 @@ export default function MonthlyReportPage() {
 
     try {
       const result = await getOfficeReport({
-        regionId: selectedOffice.regionId,
+        provinceId: selectedOffice.provinceId,
+        cityId: selectedOffice.cityId,
         officeId: selectedOffice.officeId,
         year,
         month
@@ -169,23 +177,23 @@ export default function MonthlyReportPage() {
                 사무실
               </label>
               <select
-                value={`${selectedOffice.regionId}/${selectedOffice.officeId}`}
+                value={`${selectedOffice.provinceId}/${selectedOffice.cityId}/${selectedOffice.officeId}`}
                 onChange={(e) => {
-                  const [regionId, officeId] = e.target.value.split('/');
-                  setSelectedOffice({ regionId, officeId });
+                  const [provinceId, cityId, officeId] = e.target.value.split('/');
+                  setSelectedOffice({ provinceId, cityId, officeId });
                 }}
                 className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
               >
-                <option value="/">사무실 선택</option>
+                <option value="//">사무실 선택</option>
                 {offices.map(office => (
-                  <option key={office.id} value={`${office.regionId}/${office.id}`}>
-                    [{office.regionId}] {office.officeName}
+                  <option key={office.id} value={`${office.provinceId}/${office.cityId}/${office.id}`}>
+                    [{office.provinceId}/{office.cityId}] {office.officeName}
                     {office.address && ` - ${office.address}`}
                     {office.phoneNumber && ` (${office.phoneNumber})`}
                   </option>
                 ))}
               </select>
-              {selectedOffice.regionId && selectedOffice.officeId && (
+              {selectedOffice.provinceId && selectedOffice.cityId && selectedOffice.officeId && (
                 <p className="mt-2 text-sm text-gray-500">
                   선택된 사무실: {offices.find(o => o.id === selectedOffice.officeId)?.officeName}
                 </p>

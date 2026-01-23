@@ -7,7 +7,8 @@ import { functions } from '../firebase';
 export async function getArchivedStats(params: {
   startDate: string;
   endDate: string;
-  regionId?: string;
+  provinceId?: string;
+  cityId?: string;
   officeId?: string;
 }) {
   const getArchivedStatsFunc = httpsCallable(functions, 'getArchivedStats');
@@ -45,7 +46,8 @@ export async function searchArchivedCalls(params: {
   driverName?: string;
   startDate: string;
   endDate: string;
-  regionId?: string;
+  provinceId?: string;
+  cityId?: string;
   officeId?: string;
 }) {
   const searchArchivedCallsFunc = httpsCallable(functions, 'searchArchivedCalls');
@@ -61,7 +63,8 @@ export async function searchArchivedCalls(params: {
  * 사무실별 리포트 생성
  */
 export async function getOfficeReport(params: {
-  regionId: string;
+  provinceId: string;
+  cityId: string;
   officeId: string;
   year: number;
   month: number;
@@ -72,7 +75,8 @@ export async function getOfficeReport(params: {
     success: boolean;
     report: {
       office: {
-        regionId: string;
+        provinceId: string;
+        cityId: string;
         officeId: string;
         officeName: string;
         address: string;

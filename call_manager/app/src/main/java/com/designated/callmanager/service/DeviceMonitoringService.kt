@@ -19,7 +19,9 @@ import com.google.firebase.firestore.Query
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import android.util.Log
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -95,11 +97,12 @@ class DeviceMonitoringService(private val context: Context) {
     /**
      * 모니터링 시작 (강화된 실시간 리스너)
      */
-    fun startMonitoring(regionId: String, officeId: String) {
+    fun startMonitoring(provinceId: String, cityId: String, officeId: String) {
         stopMonitoring()
 
         emergencyAlertsListener = firestore.collection("emergency_alerts")
-            .whereEqualTo("regionId", regionId)
+            .whereEqualTo("provinceId", provinceId)
+            .whereEqualTo("cityId", cityId)
             .whereEqualTo("officeId", officeId)
             .addSnapshotListener { snapshots, error ->
                 if (error != null) {
@@ -274,10 +277,10 @@ class DeviceMonitoringService(private val context: Context) {
     /**
      * 디바이스 상태 주기적 모니터링
      */
-    private fun startDeviceStatusMonitoring(regionId: String, officeId: String) {
+    private fun startDeviceStatusMonitoring(provinceId: String, cityId: String, officeId: String) {
         scope.launch {
             while (true) {
-                checkDeviceHealth(regionId, officeId)
+                checkDeviceHealth(provinceId, cityId, officeId)
                 kotlinx.coroutines.delay(60000)
             }
         }
@@ -286,11 +289,12 @@ class DeviceMonitoringService(private val context: Context) {
     /**
      * 디바이스 건강 상태 체크
      */
-    private fun checkDeviceHealth(regionId: String, officeId: String) {
+    private fun checkDeviceHealth(provinceId: String, cityId: String, officeId: String) {
         val cutoffTime = System.currentTimeMillis() - (5 * 60 * 1000)
 
         firestore.collection("device_status")
-            .whereEqualTo("regionId", regionId)
+            .whereEqualTo("provinceId", provinceId)
+            .whereEqualTo("cityId", cityId)
             .whereEqualTo("officeId", officeId)
             .get()
             .addOnSuccessListener { documents ->
@@ -332,6 +336,13 @@ class DeviceMonitoringService(private val context: Context) {
         emergencyAlertsListener?.remove()
         deviceAlertsListener?.remove()
         deviceStatusListener?.remove()
+
+        // 코루틴 스코프 안전하게 해제
+        try {
+            scope.cancel()
+        } catch (e: Exception) {
+            Log.w("DeviceMonitoringService", "Error cancelling scope: ${e.message}")
+        }
 
         processedCrashes.clear()
     }

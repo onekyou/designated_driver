@@ -37,13 +37,14 @@ exports.finalizeWorkDay = void 0;
 const functions = __importStar(require("firebase-functions/v2/https"));
 const admin = __importStar(require("firebase-admin"));
 exports.finalizeWorkDay = functions.onCall({ region: "asia-northeast3" }, async (req) => {
-    const { regionId, officeId } = req.data || {};
-    if (!regionId || !officeId)
-        throw new functions.HttpsError("invalid-argument", "regionId and officeId required");
+    const { provinceId, cityId, officeId } = req.data || {};
+    if (!provinceId || !cityId || !officeId)
+        throw new functions.HttpsError("invalid-argument", "provinceId, cityId and officeId required");
     if (!req.auth)
         throw new functions.HttpsError("unauthenticated", "Must be signed in");
     const db = admin.firestore();
-    const settlementsCol = db.collection("regions").doc(regionId)
+    const settlementsCol = db.collection("provinces").doc(provinceId)
+        .collection("cities").doc(cityId)
         .collection("offices").doc(officeId)
         .collection("settlements");
     const snap = await settlementsCol.where("isFinalized", "==", false).get();
@@ -60,7 +61,8 @@ exports.finalizeWorkDay = functions.onCall({ region: "asia-northeast3" }, async 
         await batch.commit();
     }
     const today = new Date().toISOString().substring(0, 10);
-    await db.collection("regions").doc(regionId)
+    await db.collection("provinces").doc(provinceId)
+        .collection("cities").doc(cityId)
         .collection("offices").doc(officeId)
         .collection("dailySettlements").doc(today)
         .collection("sessions").add({

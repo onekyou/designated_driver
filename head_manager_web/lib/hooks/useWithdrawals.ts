@@ -21,7 +21,7 @@ export function useWithdrawals() {
       setLoading(true);
       setError(null);
 
-      // collectionGroup으로 모든 region의 withdrawalRequests 조회
+      // collectionGroup으로 모든 provinces/cities의 withdrawalRequests 조회
       const withdrawalsQuery = collectionGroup(db, 'withdrawalRequests');
       const snapshot = await getDocs(withdrawalsQuery);
 
@@ -30,11 +30,14 @@ export function useWithdrawals() {
       snapshot.forEach((docSnap) => {
         const data = docSnap.data();
         const pathParts = docSnap.ref.path.split('/');
-        const regionId = pathParts[pathParts.indexOf('regions') + 1];
+        // provinces/{provinceId}/cities/{cityId}/offices/{officeId}/withdrawalRequests/{requestId}
+        const provinceId = pathParts[pathParts.indexOf('provinces') + 1] || '';
+        const cityId = pathParts[pathParts.indexOf('cities') + 1] || '';
 
         withdrawalsList.push({
           id: docSnap.id,
-          regionId,
+          provinceId,
+          cityId,
           officeId: data.officeId,
           officeName: data.officeName,
           requestedBy: data.requestedBy,
@@ -67,11 +70,11 @@ export function useWithdrawals() {
   };
 
   // 환전 승인
-  const approveWithdrawal = async (requestId: string, regionId: string) => {
+  const approveWithdrawal = async (requestId: string, provinceId: string, cityId: string, officeId: string) => {
     if (!user) return;
 
     try {
-      const requestRef = doc(db, `regions/${regionId}/withdrawalRequests/${requestId}`);
+      const requestRef = doc(db, `provinces/${provinceId}/cities/${cityId}/offices/${officeId}/withdrawalRequests/${requestId}`);
       await updateDoc(requestRef, {
         status: 'approved',
         reviewedBy: user.uid,
@@ -87,11 +90,11 @@ export function useWithdrawals() {
   };
 
   // 환전 거부
-  const rejectWithdrawal = async (requestId: string, regionId: string, reason: string) => {
+  const rejectWithdrawal = async (requestId: string, provinceId: string, cityId: string, officeId: string, reason: string) => {
     if (!user) return;
 
     try {
-      const requestRef = doc(db, `regions/${regionId}/withdrawalRequests/${requestId}`);
+      const requestRef = doc(db, `provinces/${provinceId}/cities/${cityId}/offices/${officeId}/withdrawalRequests/${requestId}`);
       await updateDoc(requestRef, {
         status: 'rejected',
         reviewedBy: user.uid,
@@ -108,11 +111,11 @@ export function useWithdrawals() {
   };
 
   // 송금 완료 처리
-  const completeTransfer = async (requestId: string, regionId: string, transferNote?: string) => {
+  const completeTransfer = async (requestId: string, provinceId: string, cityId: string, officeId: string, transferNote?: string) => {
     if (!user) return;
 
     try {
-      const requestRef = doc(db, `regions/${regionId}/withdrawalRequests/${requestId}`);
+      const requestRef = doc(db, `provinces/${provinceId}/cities/${cityId}/offices/${officeId}/withdrawalRequests/${requestId}`);
       await updateDoc(requestRef, {
         status: 'completed',
         transferredBy: user.uid,

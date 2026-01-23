@@ -7,13 +7,17 @@ import java.text.SimpleDateFormat
 import java.util.*
 import org.json.JSONObject
 import org.json.JSONArray
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * 개인번호(제외번호) 관리 클래스
  * SharedPreferences를 사용하여 로컬에 저장
  */
 class ExcludeNumberManager(private val context: Context) {
-    
+
     companion object {
         private const val PREFS_NAME = "exclude_numbers"
         private const val KEY_NUMBERS = "numbers"
@@ -22,8 +26,11 @@ class ExcludeNumberManager(private val context: Context) {
         private const val BACKUP_FILE_NAME = "exclude_numbers_backup.txt"
         private const val TAG = "ExcludeNumberManager"
     }
-    
+
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    // 코루틴 스코프 (Thread 대신 사용 - 메모리 누수 방지)
+    private val backupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
     /**
      * 제외 번호 추가 (이름 없이)
@@ -287,16 +294,17 @@ class ExcludeNumberManager(private val context: Context) {
     
     /**
      * 자동 백업 수행 (데이터 변경시 호출)
-     * 백업은 비동기로 수행하여 UI를 블록하지 않음
+     * 백업은 코루틴으로 비동기 수행하여 UI를 블록하지 않음
+     * Thread 대신 코루틴 사용 (메모리 누수 방지)
      */
     fun performAutoBackup() {
-        Thread {
+        backupScope.launch {
             try {
                 backupToFile()
             } catch (e: Exception) {
                 Log.e(TAG, "자동 백업 실패", e)
             }
-        }.start()
+        }
     }
     
     /**

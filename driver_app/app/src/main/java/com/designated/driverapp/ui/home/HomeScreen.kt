@@ -309,12 +309,13 @@ fun SettlementSummaryPopup(
     var rewardPointsToUse by remember { mutableStateOf("") }
     var customerPointInfo by remember { mutableStateOf<Map<String, Any>?>(null) }
     var isLoadingPoints by remember { mutableStateOf(false) }
+    var isActuallyAppCustomer by remember { mutableStateOf(callInfo.isAppCustomer) }  // 실제 앱회원 여부
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    // ✅ 추가: 앱 회원이면 포인트 정보 로드
-    LaunchedEffect(callInfo.isAppCustomer, callInfo.phoneNumber) {
-        if (callInfo.isAppCustomer && callInfo.phoneNumber.isNotBlank()) {
+    // ✅ 수정: 전화번호가 있으면 항상 customerPoints 확인 (isAppCustomer에 의존하지 않음)
+    LaunchedEffect(callInfo.phoneNumber) {
+        if (callInfo.phoneNumber.isNotBlank()) {
             isLoadingPoints = true
             try {
                 val prefs = context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
@@ -334,11 +335,16 @@ fun SettlementSummaryPopup(
                         .await()
 
                     if (doc.exists()) {
+                        isActuallyAppCustomer = true  // customerPoints 문서가 있으면 앱회원
                         customerPointInfo = mapOf(
                             "currentPoints" to (doc.getLong("currentPoints")?.toInt() ?: 0),
                             "grade" to (doc.getString("grade") ?: "BRONZE"),
                             "totalCalls" to (doc.getLong("totalCalls")?.toInt() ?: 0)
                         )
+                        Log.d(TAG, "앱회원 확인됨 - phoneNumber: ${callInfo.phoneNumber}, points: ${customerPointInfo}")
+                    } else {
+                        isActuallyAppCustomer = false
+                        Log.d(TAG, "비앱회원 - phoneNumber: ${callInfo.phoneNumber}")
                     }
                 }
             } catch (e: Exception) {
@@ -461,8 +467,8 @@ fun SettlementSummaryPopup(
                     }
                 }
 
-                // ✅ 추가: 앱 회원 포인트 정보 카드
-                if (callInfo.isAppCustomer && customerPointInfo != null) {
+                // ✅ 추가: 앱 회원 포인트 정보 카드 (실제 앱회원 여부 확인)
+                if (isActuallyAppCustomer && customerPointInfo != null) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF2A4A2A))
@@ -530,7 +536,7 @@ fun SettlementSummaryPopup(
                             }
                         }
                     }
-                } else if (callInfo.isAppCustomer && isLoadingPoints) {
+                } else if (isLoadingPoints) {
                     // 로딩 중
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -686,7 +692,79 @@ fun SettlementSummaryPopup(
                     }
                 }
 
-                val confirmEnabled = paymentMethod != "현금+포인트" || cashAmount.isNotBlank()
+                // 포인트 잔액 검증
+                val pointInfo = customerPointInfo
+                val currentPoints = pointInfo?.get("currentPoints") as? Int ?: 0
+                val totalFare = editableFare.toIntOrNull() ?: 0
+
+                val requiredPoints = when (paymentMethod) {
+                    "포인트" -> totalFare
+                    "현금+포인트" -> {
+                        val cash = cashAmount.toIntOrNull() ?: 0
+                        totalFare - cash
+                    }
+                    else -> 0
+                }
+
+                val isPointPayment = paymentMethod == "포인트" || paymentMethod == "현금+포인트"
+                val hasEnoughPoints = !isPointPayment || currentPoints >= requiredPoints
+
+                // 포인트 부족 경고 메시지 (실제 앱회원 여부로 판단)
+                if (isPointPayment && !hasEnoughPoints && isActuallyAppCustomer) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF4A2A2A))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                "⚠️ 포인트 부족",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFFF5252)
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                "보유: ${String.format("%,d", currentPoints)}P / 필요: ${String.format("%,d", requiredPoints)}P",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White
+                            )
+                            Text(
+                                "부족: ${String.format("%,d", requiredPoints - currentPoints)}P",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color(0xFFFF5252)
+                            )
+                        }
+                    }
+                }
+
+                // 비앱 회원이 포인트 결제 시도 시 경고 (실제 앱회원 여부로 판단)
+                if (isPointPayment && !isActuallyAppCustomer) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF4A2A2A))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                "⚠️ 앱 회원만 포인트 결제 가능",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFFF5252)
+                            )
+                            Text(
+                                "이 고객은 앱 회원이 아닙니다.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+
+                val confirmEnabled = when {
+                    paymentMethod == "현금+포인트" && cashAmount.isBlank() -> false
+                    isPointPayment && !isActuallyAppCustomer -> false  // 비앱 회원 포인트 결제 차단
+                    isPointPayment && !hasEnoughPoints -> false  // 포인트 부족 시 차단
+                    else -> true
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),

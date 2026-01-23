@@ -73,13 +73,19 @@ fun TripPreparationScreen(
 
     var departure by remember(callInfo.id) {
         mutableStateOf(
-            callInfo.departure_set?.takeIf { it.isNotBlank() } ?: ""
+            // departure_set → customerAddress 순서로 확인 (앱호출 시 customerAddress에 출발지 저장됨)
+            callInfo.departure_set?.takeIf { it.isNotBlank() }
+                ?: callInfo.customerAddress?.takeIf { it.isNotBlank() }
+                ?: ""
         )
     }
 
     var destination by remember(callInfo.id) {
         mutableStateOf(
-            callInfo.destination_set?.takeIf { it.isNotBlank() } ?: callInfo.destination ?: ""
+            // destination_set → destination 순서로 확인
+            callInfo.destination_set?.takeIf { it.isNotBlank() }
+                ?: callInfo.destination?.takeIf { it.isNotBlank() }
+                ?: ""
         )
     }
 

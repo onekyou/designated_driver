@@ -10,6 +10,7 @@ plugins {
 android {
     namespace 'com.designated.driverapp'
     compileSdk 36
+    buildToolsVersion "36.0.0"
 
     // 키스토어 정보 로드
     def keystorePropertiesFile = rootProject.file("keystore/keystore.properties")
@@ -121,6 +122,9 @@ dependencies {
     // QR Code Generation (ZXing)
     implementation 'com.google.zxing:core:3.5.2'
 
+    // Gson (JSON 직렬화)
+    implementation 'com.google.code.gson:gson:2.10.1'
+
     // Google Play Services Location
     implementation libs.play.services.location
 
@@ -130,6 +134,16 @@ dependencies {
 
     // Security - Encrypted SharedPreferences (비밀번호 암호화)
     implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+
+    // Room Database
+    implementation libs.room.runtime
+    implementation libs.room.ktx
+    kapt libs.room.compiler
+
+    // WorkManager (오프라인 동기화)
+    implementation libs.work.runtime.ktx
+    implementation libs.hilt.work
+    kapt libs.hilt.work.compiler
 
     // Testing
     testImplementation libs.junit

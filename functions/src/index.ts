@@ -12,7 +12,8 @@ import {onRequest, onCall} from "firebase-functions/v2/https";
 import {onSchedule} from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
-import { processSharedCallPoints } from "./handlers/points";
+import { processSharedCallPoints, processCustomerPointsOnComplete } from "./handlers/points";
+import { addCallToSettlementSession, autoFinalizeSettlementSessions, checkSettlementDiscrepancies, notifySettlementDiscrepancy } from "./handlers/settlement";
 
 // Firebase Admin SDK 초기화
 admin.initializeApp();
@@ -1181,7 +1182,7 @@ export const notifyCustomerOnPhoneCall = onDocumentCreated(
 );
 
 // =============================
-// 운행 완료 시 고객에게 FCM 알림 전송
+// 운행 완료 시 고객에게 FCM 알림 전송 + 포인트 적립
 // =============================
 export const notifyCustomerOnComplete = onDocumentUpdated(
   {
@@ -1210,11 +1211,20 @@ export const notifyCustomerOnComplete = onDocumentUpdated(
 
       const phoneNumber = afterData.phoneNumber;
       const isAppCustomer = afterData.isAppCustomer || false;
+      const customerName = afterData.customerName || "";
 
       if (!isAppCustomer) {
-        logger.info(`[notifyCustomerOnComplete:${callId}] 앱 고객이 아님 - 알림 스킵`);
+        logger.info(`[notifyCustomerOnComplete:${callId}] 앱 고객이 아님 - 알림 및 포인트 적립 스킵`);
         return;
       }
+
+      if (!phoneNumber) {
+        logger.warn(`[notifyCustomerOnComplete:${callId}] 전화번호 없음 - 스킵`);
+        return;
+      }
+
+      const fare = afterData.fare_set || afterData.finalFare || afterData.fare || 0;
+      const pointsUsed = afterData.pointsUsed || 0;
 
       try {
         // 고객 FCM 토큰 조회
@@ -1227,33 +1237,76 @@ export const notifyCustomerOnComplete = onDocumentUpdated(
           .get();
 
         const fcmToken = customerDoc.data()?.fcmToken;
-        if (!fcmToken) {
+
+        // 1) 운행 완료 FCM 알림 전송
+        if (fcmToken) {
+          await admin.messaging().send({
+            data: {
+              type: "RIDE_COMPLETED",
+              callId: callId,
+              fare: fare.toString(),
+              pointsUsed: pointsUsed.toString()
+            },
+            android: {
+              priority: "high",
+              ttl: 60000
+            },
+            token: fcmToken
+          });
+          logger.info(`[notifyCustomerOnComplete:${callId}] 운행 완료 알림 전송 완료: ${phoneNumber}`);
+        } else {
           logger.warn(`[notifyCustomerOnComplete:${callId}] FCM 토큰 없음: ${phoneNumber}`);
-          return;
         }
 
-        const fare = afterData.fare_set || afterData.finalFare || afterData.fare || 0;
-        const pointsUsed = afterData.pointsUsed || 0;
+        // 2) 고객 포인트 적립 처리
+        logger.info(`[notifyCustomerOnComplete:${callId}] 포인트 적립 시작. Fare: ${fare}`);
 
-        // FCM 알림 전송
-        await admin.messaging().send({
-          data: {
-            type: "RIDE_COMPLETED",
-            callId: callId,
-            fare: fare.toString(),
-            pointsUsed: pointsUsed.toString()
-          },
-          android: {
-            priority: "high",
-            ttl: 60000
-          },
-          token: fcmToken
-        });
+        const pointsResult = await processCustomerPointsOnComplete(
+          provinceId,
+          cityId,
+          officeId,
+          callId,
+          phoneNumber,
+          fare,
+          customerName
+        );
 
-        logger.info(`[notifyCustomerOnComplete:${callId}] 고객에게 완료 알림 전송 완료: ${phoneNumber}`);
+        if (pointsResult.success && pointsResult.pointsEarned > 0 && fcmToken) {
+          // 3) 포인트 적립 완료 FCM 알림 전송
+          let pointsMessage = `${pointsResult.pointsEarned}P 적립! (잔액: ${pointsResult.newBalance}P)`;
+
+          // 등급 업그레이드 시 추가 메시지
+          if (pointsResult.gradeUpgraded) {
+            pointsMessage = `${pointsResult.pointsEarned}P 적립! 축하합니다! ${pointsResult.previousGrade} → ${pointsResult.grade} 등급 승급! (잔액: ${pointsResult.newBalance}P)`;
+          }
+
+          await admin.messaging().send({
+            data: {
+              type: "POINTS_EARNED",
+              callId: callId,
+              pointsEarned: pointsResult.pointsEarned.toString(),
+              newBalance: pointsResult.newBalance.toString(),
+              grade: pointsResult.grade,
+              gradeUpgraded: pointsResult.gradeUpgraded.toString()
+            },
+            notification: {
+              title: "포인트 적립 완료",
+              body: pointsMessage
+            },
+            android: {
+              priority: "high",
+              ttl: 60000
+            },
+            token: fcmToken
+          });
+
+          logger.info(`[notifyCustomerOnComplete:${callId}] 포인트 적립 알림 전송 완료. Earned: ${pointsResult.pointsEarned}P, Balance: ${pointsResult.newBalance}P, Grade: ${pointsResult.grade}`);
+        } else if (!pointsResult.success) {
+          logger.warn(`[notifyCustomerOnComplete:${callId}] 포인트 적립 실패: ${pointsResult.error}`);
+        }
 
       } catch (error) {
-        logger.error(`[notifyCustomerOnComplete:${callId}] 알림 전송 오류:`, error);
+        logger.error(`[notifyCustomerOnComplete:${callId}] 처리 오류:`, error);
       }
     }
   }
@@ -1733,12 +1786,6 @@ export const onSharedCallCompleted = onDocumentUpdated(
 );
 
 export { finalizeWorkDay } from "./finalizeWorkDay";
-
-// Agora PTT 토큰 관련 함수 추가
-export { generateAgoraToken, refreshAgoraToken } from "./agoraToken";
-
-// PTT 자동 채널 참여 함수들
-export { onPickupDriverStatusChange, onDesignatedDriverStatusChange } from "./pttSignaling";
 
 // 픽업 기사 데이터 마이그레이션 함수 (한 번만 실행)
 
@@ -3864,5 +3911,160 @@ export const onDriverStatusChange = onDocumentUpdated(
   }
 );
 
-const _forceDeploy = Date.now() + 1000006; // 배포 강제용 더미 변수
+// =============================
+// 정산 세션 자동 업데이트: 콜 완료 시 정산 세션에 추가
+// =============================
+export const onCallCompletedUpdateSettlement = onDocumentUpdated(
+  {
+    region: "asia-northeast3",
+    document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/calls/{callId}"
+  },
+  async (event: any) => {
+    const { provinceId, cityId, officeId, callId } = event.params;
+
+    if (!event.data || !event.data.before || !event.data.after) {
+      return;
+    }
+
+    const beforeData = event.data.before.data();
+    const afterData = event.data.after.data();
+
+    if (!beforeData || !afterData) {
+      return;
+    }
+
+    // 운행 완료 감지 (다른 상태 → COMPLETED)
+    if (beforeData.status !== "COMPLETED" && afterData.status === "COMPLETED") {
+      logger.info(`[Settlement:${callId}] 운행 완료 감지 - 정산 세션 업데이트 시작`);
+
+      try {
+        await addCallToSettlementSession(provinceId, cityId, officeId, afterData, callId);
+        logger.info(`[Settlement:${callId}] 정산 세션 업데이트 완료`);
+      } catch (error) {
+        logger.error(`[Settlement:${callId}] 정산 세션 업데이트 실패:`, error);
+      }
+    }
+  }
+);
+
+// =============================
+// 일일 정산 자동 마감: 매일 새벽 6시 10분 실행
+// - 전날 정산 세션을 자동으로 마감 처리
+// =============================
+export const autoFinalizeSettlements = onSchedule(
+  {
+    schedule: "10 6 * * *", // 매일 새벽 6시 10분 (한국 시간)
+    timeZone: "Asia/Seoul",
+    region: "asia-northeast3",
+    memory: "512MiB",
+    timeoutSeconds: 300
+  },
+  async () => {
+    logger.info("[Settlement] Starting scheduled auto-finalization");
+
+    try {
+      const result = await autoFinalizeSettlementSessions();
+      logger.info(`[Settlement] Auto-finalization completed. Processed: ${result.processed}, Errors: ${result.errors.length}`);
+
+      if (result.errors.length > 0) {
+        logger.warn("[Settlement] Auto-finalization errors:", result.errors);
+      }
+    } catch (error) {
+      logger.error("[Settlement] Auto-finalization failed:", error);
+    }
+  }
+);
+
+// =============================
+// 정산 불일치 검사: 매일 오전 7시 실행
+// - 전날 정산 데이터 불일치 확인 및 알림
+// =============================
+export const checkSettlementDiscrepanciesScheduled = onSchedule(
+  {
+    schedule: "0 7 * * *", // 매일 오전 7시 (한국 시간)
+    timeZone: "Asia/Seoul",
+    region: "asia-northeast3",
+    memory: "512MiB",
+    timeoutSeconds: 540
+  },
+  async () => {
+    const db = admin.firestore();
+    logger.info("[Settlement] Starting scheduled discrepancy check");
+
+    // 어제 근무일 계산
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayDate = yesterday.toISOString().substring(0, 10);
+
+    try {
+      const provincesSnap = await db.collection("provinces").get();
+
+      for (const provinceDoc of provincesSnap.docs) {
+        const citiesSnap = await provinceDoc.ref.collection("cities").get();
+
+        for (const cityDoc of citiesSnap.docs) {
+          const officesSnap = await cityDoc.ref.collection("offices").get();
+
+          for (const officeDoc of officesSnap.docs) {
+            try {
+              const result = await checkSettlementDiscrepancies(
+                provinceDoc.id,
+                cityDoc.id,
+                officeDoc.id,
+                yesterdayDate
+              );
+
+              if (result.hasDiscrepancy) {
+                logger.warn(`[Settlement] Discrepancies found for ${provinceDoc.id}/${cityDoc.id}/${officeDoc.id}:`, result.details);
+
+                // 불일치 발견 시 관리자에게 알림
+                await notifySettlementDiscrepancy(
+                  provinceDoc.id,
+                  cityDoc.id,
+                  officeDoc.id,
+                  yesterdayDate,
+                  result.details
+                );
+              }
+            } catch (officeError) {
+              logger.error(`[Settlement] Discrepancy check failed for ${provinceDoc.id}/${cityDoc.id}/${officeDoc.id}:`, officeError);
+            }
+          }
+        }
+      }
+
+      logger.info("[Settlement] Discrepancy check completed");
+    } catch (error) {
+      logger.error("[Settlement] Discrepancy check failed:", error);
+    }
+  }
+);
+
+// =============================
+// 수동 정산 불일치 검사 (HTTP Callable)
+// =============================
+export const manualCheckSettlementDiscrepancy = onCall(
+  {
+    region: "asia-northeast3"
+  },
+  async (req) => {
+    const { provinceId, cityId, officeId, sessionDate } = req.data || {};
+
+    if (!provinceId || !cityId || !officeId || !sessionDate) {
+      throw new Error("provinceId, cityId, officeId, sessionDate are required");
+    }
+
+    if (!req.auth) {
+      throw new Error("Must be authenticated");
+    }
+
+    logger.info(`[Settlement] Manual discrepancy check: ${provinceId}/${cityId}/${officeId}/${sessionDate}`);
+
+    const result = await checkSettlementDiscrepancies(provinceId, cityId, officeId, sessionDate);
+
+    return result;
+  }
+);
+
+const _forceDeploy = Date.now() + 1000007; // 배포 강제용 더미 변수
 void _forceDeploy;                 // 사용해서 컴파일 경고 해소

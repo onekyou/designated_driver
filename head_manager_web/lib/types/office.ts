@@ -2,7 +2,8 @@ export interface Office {
   id: string;
   name: string;
   region: string;
-  regionId: string;
+  provinceId: string;
+  cityId: string;
   phoneNumber?: string;
   address?: string;
   qrCode?: string;

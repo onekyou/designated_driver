@@ -131,6 +131,7 @@ class PendingDriversViewModel(
                 // 추천 QR URL 생성
                 val referralQrUrl = buildReferralUrl(
                     driverInfo.targetProvinceId,
+                    driverInfo.targetCityId,
                     driverInfo.targetOfficeId,
                     driverUid,
                     driverInfo.name ?: ""
@@ -151,6 +152,7 @@ class PendingDriversViewModel(
                     "approvalStatus" to Constants.APPROVAL_STATUS_APPROVED,
 
                     "provinceId" to driverInfo.targetProvinceId,
+                    "cityId" to driverInfo.targetCityId,
                     "officeId" to driverInfo.targetOfficeId,
 
                     "associatedOfficeId" to driverInfo.targetOfficeId,
@@ -175,6 +177,7 @@ class PendingDriversViewModel(
                     }
                 }
                 val finalDriverDocRef = firestore.collection("provinces").document(driverInfo.targetProvinceId)
+                    .collection("cities").document(driverInfo.targetCityId)
                     .collection("offices").document(driverInfo.targetOfficeId)
                     .collection(driverCollection).document(driverUid)
                 val pendingDriverDocRef = firestore.collection("pending_drivers").document(driverUid)
@@ -239,6 +242,7 @@ class PendingDriversViewModel(
                     }
 
                     val driverDocRef = firestore.collection("provinces").document(driverInfo.targetProvinceId)
+                        .collection("cities").document(driverInfo.targetCityId)
                         .collection("offices").document(driverInfo.targetOfficeId)
                         .collection(driverCollection).document(driverUid)
 
@@ -291,6 +295,7 @@ class PendingDriversViewModel(
                 // 대리기사 조회
                 val designatedSnapshot = firestore
                     .collection("provinces").document(provinceId)
+                    .collection("cities").document(cityId)
                     .collection("offices").document(officeId)
                     .collection("designated_drivers")
                     .whereEqualTo("approvalStatus", Constants.APPROVAL_STATUS_APPROVED)
@@ -312,6 +317,7 @@ class PendingDriversViewModel(
                 // 픽업기사 조회
                 val pickupSnapshot = firestore
                     .collection("provinces").document(provinceId)
+                    .collection("cities").document(cityId)
                     .collection("offices").document(officeId)
                     .collection("pickup_drivers")
                     .whereEqualTo("approvalStatus", Constants.APPROVAL_STATUS_APPROVED)
@@ -366,6 +372,7 @@ class PendingDriversViewModel(
                 // 기사 문서 삭제
                 val driverDocRef = firestore
                     .collection("provinces").document(provinceId)
+                    .collection("cities").document(cityId)
                     .collection("offices").document(officeId)
                     .collection(driverCollection).document(driverUid)
 
@@ -401,6 +408,7 @@ class PendingDriversViewModel(
      */
     private suspend fun buildReferralUrl(
         provinceId: String,
+        cityId: String,
         officeId: String,
         driverId: String,
         driverName: String
@@ -408,6 +416,7 @@ class PendingDriversViewModel(
         // 1. 사무실 정보 가져오기
         val officeDoc = firestore
             .collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
             .collection("offices").document(officeId)
             .get()
             .await()

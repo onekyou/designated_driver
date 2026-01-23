@@ -41,13 +41,14 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onDriverStatusChange = exports.getOfficeReport = exports.searchArchivedCalls = exports.getArchivedStats = exports.archiveOldCalls = exports.scheduledDataCleanup = exports.onCallDetectorCrash = exports.onCustomerCountChange = exports.onDriverCountChange = exports.onNewCustomerRegistered = exports.onCallCancelledByDriver = exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.onDesignatedDriverStatusChange = exports.onPickupDriverStatusChange = exports.refreshAgoraToken = exports.generateAgoraToken = exports.finalizeWorkDay = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.notifyCustomerOnComplete = exports.notifyCustomerOnPhoneCall = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.notifyCustomerOnOfficeClosed = exports.onSharedCallCreated = exports.sendNewCallNotification = exports.oncallassigned = void 0;
+exports.manualCheckSettlementDiscrepancy = exports.checkSettlementDiscrepanciesScheduled = exports.autoFinalizeSettlements = exports.onCallCompletedUpdateSettlement = exports.onDriverStatusChange = exports.getOfficeReport = exports.searchArchivedCalls = exports.getArchivedStats = exports.archiveOldCalls = exports.scheduledDataCleanup = exports.onCallDetectorCrash = exports.onCustomerCountChange = exports.onDriverCountChange = exports.onNewCustomerRegistered = exports.onCallCancelledByDriver = exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.finalizeWorkDay = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.notifyCustomerOnComplete = exports.notifyCustomerOnPhoneCall = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.notifyCustomerOnOfficeClosed = exports.onSharedCallCreated = exports.sendNewCallNotification = exports.oncallassigned = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = __importStar(require("firebase-admin"));
 const logger = __importStar(require("firebase-functions/logger"));
 const points_1 = require("./handlers/points");
+const settlement_1 = require("./handlers/settlement");
 // Firebase Admin SDK 초기화
 admin.initializeApp();
 const DRIVER_COLLECTION_NAME = "designated_drivers";
@@ -1005,7 +1006,7 @@ exports.notifyCustomerOnPhoneCall = (0, firestore_1.onDocumentCreated)({
     }
 });
 // =============================
-// 운행 완료 시 고객에게 FCM 알림 전송
+// 운행 완료 시 고객에게 FCM 알림 전송 + 포인트 적립
 // =============================
 exports.notifyCustomerOnComplete = (0, firestore_1.onDocumentUpdated)({
     region: "asia-northeast3",
@@ -1028,10 +1029,17 @@ exports.notifyCustomerOnComplete = (0, firestore_1.onDocumentUpdated)({
         logger.info(`[notifyCustomerOnComplete:${callId}] 운행 완료 감지`);
         const phoneNumber = afterData.phoneNumber;
         const isAppCustomer = afterData.isAppCustomer || false;
+        const customerName = afterData.customerName || "";
         if (!isAppCustomer) {
-            logger.info(`[notifyCustomerOnComplete:${callId}] 앱 고객이 아님 - 알림 스킵`);
+            logger.info(`[notifyCustomerOnComplete:${callId}] 앱 고객이 아님 - 알림 및 포인트 적립 스킵`);
             return;
         }
+        if (!phoneNumber) {
+            logger.warn(`[notifyCustomerOnComplete:${callId}] 전화번호 없음 - 스킵`);
+            return;
+        }
+        const fare = afterData.fare_set || afterData.finalFare || afterData.fare || 0;
+        const pointsUsed = afterData.pointsUsed || 0;
         try {
             // 고객 FCM 토큰 조회
             const customerDoc = await admin.firestore()
@@ -1042,30 +1050,63 @@ exports.notifyCustomerOnComplete = (0, firestore_1.onDocumentUpdated)({
                 .doc(phoneNumber)
                 .get();
             const fcmToken = (_a = customerDoc.data()) === null || _a === void 0 ? void 0 : _a.fcmToken;
-            if (!fcmToken) {
-                logger.warn(`[notifyCustomerOnComplete:${callId}] FCM 토큰 없음: ${phoneNumber}`);
-                return;
+            // 1) 운행 완료 FCM 알림 전송
+            if (fcmToken) {
+                await admin.messaging().send({
+                    data: {
+                        type: "RIDE_COMPLETED",
+                        callId: callId,
+                        fare: fare.toString(),
+                        pointsUsed: pointsUsed.toString()
+                    },
+                    android: {
+                        priority: "high",
+                        ttl: 60000
+                    },
+                    token: fcmToken
+                });
+                logger.info(`[notifyCustomerOnComplete:${callId}] 운행 완료 알림 전송 완료: ${phoneNumber}`);
             }
-            const fare = afterData.fare_set || afterData.finalFare || afterData.fare || 0;
-            const pointsUsed = afterData.pointsUsed || 0;
-            // FCM 알림 전송
-            await admin.messaging().send({
-                data: {
-                    type: "RIDE_COMPLETED",
-                    callId: callId,
-                    fare: fare.toString(),
-                    pointsUsed: pointsUsed.toString()
-                },
-                android: {
-                    priority: "high",
-                    ttl: 60000
-                },
-                token: fcmToken
-            });
-            logger.info(`[notifyCustomerOnComplete:${callId}] 고객에게 완료 알림 전송 완료: ${phoneNumber}`);
+            else {
+                logger.warn(`[notifyCustomerOnComplete:${callId}] FCM 토큰 없음: ${phoneNumber}`);
+            }
+            // 2) 고객 포인트 적립 처리
+            logger.info(`[notifyCustomerOnComplete:${callId}] 포인트 적립 시작. Fare: ${fare}`);
+            const pointsResult = await (0, points_1.processCustomerPointsOnComplete)(provinceId, cityId, officeId, callId, phoneNumber, fare, customerName);
+            if (pointsResult.success && pointsResult.pointsEarned > 0 && fcmToken) {
+                // 3) 포인트 적립 완료 FCM 알림 전송
+                let pointsMessage = `${pointsResult.pointsEarned}P 적립! (잔액: ${pointsResult.newBalance}P)`;
+                // 등급 업그레이드 시 추가 메시지
+                if (pointsResult.gradeUpgraded) {
+                    pointsMessage = `${pointsResult.pointsEarned}P 적립! 축하합니다! ${pointsResult.previousGrade} → ${pointsResult.grade} 등급 승급! (잔액: ${pointsResult.newBalance}P)`;
+                }
+                await admin.messaging().send({
+                    data: {
+                        type: "POINTS_EARNED",
+                        callId: callId,
+                        pointsEarned: pointsResult.pointsEarned.toString(),
+                        newBalance: pointsResult.newBalance.toString(),
+                        grade: pointsResult.grade,
+                        gradeUpgraded: pointsResult.gradeUpgraded.toString()
+                    },
+                    notification: {
+                        title: "포인트 적립 완료",
+                        body: pointsMessage
+                    },
+                    android: {
+                        priority: "high",
+                        ttl: 60000
+                    },
+                    token: fcmToken
+                });
+                logger.info(`[notifyCustomerOnComplete:${callId}] 포인트 적립 알림 전송 완료. Earned: ${pointsResult.pointsEarned}P, Balance: ${pointsResult.newBalance}P, Grade: ${pointsResult.grade}`);
+            }
+            else if (!pointsResult.success) {
+                logger.warn(`[notifyCustomerOnComplete:${callId}] 포인트 적립 실패: ${pointsResult.error}`);
+            }
         }
         catch (error) {
-            logger.error(`[notifyCustomerOnComplete:${callId}] 알림 전송 오류:`, error);
+            logger.error(`[notifyCustomerOnComplete:${callId}] 처리 오류:`, error);
         }
     }
 });
@@ -1473,14 +1514,6 @@ exports.onSharedCallCompleted = (0, firestore_1.onDocumentUpdated)({
 });
 var finalizeWorkDay_1 = require("./finalizeWorkDay");
 Object.defineProperty(exports, "finalizeWorkDay", { enumerable: true, get: function () { return finalizeWorkDay_1.finalizeWorkDay; } });
-// Agora PTT 토큰 관련 함수 추가
-var agoraToken_1 = require("./agoraToken");
-Object.defineProperty(exports, "generateAgoraToken", { enumerable: true, get: function () { return agoraToken_1.generateAgoraToken; } });
-Object.defineProperty(exports, "refreshAgoraToken", { enumerable: true, get: function () { return agoraToken_1.refreshAgoraToken; } });
-// PTT 자동 채널 참여 함수들
-var pttSignaling_1 = require("./pttSignaling");
-Object.defineProperty(exports, "onPickupDriverStatusChange", { enumerable: true, get: function () { return pttSignaling_1.onPickupDriverStatusChange; } });
-Object.defineProperty(exports, "onDesignatedDriverStatusChange", { enumerable: true, get: function () { return pttSignaling_1.onDesignatedDriverStatusChange; } });
 // 픽업 기사 데이터 마이그레이션 함수 (한 번만 실행)
 exports.migratePickupDrivers = (0, https_1.onCall)({
     region: "asia-northeast3",
@@ -3201,6 +3234,118 @@ exports.onDriverStatusChange = (0, firestore_1.onDocumentUpdated)({
         logger.error(`[기사상태] ${driverId}: FCM 전송 오류`, error);
     }
 });
-const _forceDeploy = Date.now() + 1000006; // 배포 강제용 더미 변수
+// =============================
+// 정산 세션 자동 업데이트: 콜 완료 시 정산 세션에 추가
+// =============================
+exports.onCallCompletedUpdateSettlement = (0, firestore_1.onDocumentUpdated)({
+    region: "asia-northeast3",
+    document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/calls/{callId}"
+}, async (event) => {
+    const { provinceId, cityId, officeId, callId } = event.params;
+    if (!event.data || !event.data.before || !event.data.after) {
+        return;
+    }
+    const beforeData = event.data.before.data();
+    const afterData = event.data.after.data();
+    if (!beforeData || !afterData) {
+        return;
+    }
+    // 운행 완료 감지 (다른 상태 → COMPLETED)
+    if (beforeData.status !== "COMPLETED" && afterData.status === "COMPLETED") {
+        logger.info(`[Settlement:${callId}] 운행 완료 감지 - 정산 세션 업데이트 시작`);
+        try {
+            await (0, settlement_1.addCallToSettlementSession)(provinceId, cityId, officeId, afterData, callId);
+            logger.info(`[Settlement:${callId}] 정산 세션 업데이트 완료`);
+        }
+        catch (error) {
+            logger.error(`[Settlement:${callId}] 정산 세션 업데이트 실패:`, error);
+        }
+    }
+});
+// =============================
+// 일일 정산 자동 마감: 매일 새벽 6시 10분 실행
+// - 전날 정산 세션을 자동으로 마감 처리
+// =============================
+exports.autoFinalizeSettlements = (0, scheduler_1.onSchedule)({
+    schedule: "10 6 * * *", // 매일 새벽 6시 10분 (한국 시간)
+    timeZone: "Asia/Seoul",
+    region: "asia-northeast3",
+    memory: "512MiB",
+    timeoutSeconds: 300
+}, async () => {
+    logger.info("[Settlement] Starting scheduled auto-finalization");
+    try {
+        const result = await (0, settlement_1.autoFinalizeSettlementSessions)();
+        logger.info(`[Settlement] Auto-finalization completed. Processed: ${result.processed}, Errors: ${result.errors.length}`);
+        if (result.errors.length > 0) {
+            logger.warn("[Settlement] Auto-finalization errors:", result.errors);
+        }
+    }
+    catch (error) {
+        logger.error("[Settlement] Auto-finalization failed:", error);
+    }
+});
+// =============================
+// 정산 불일치 검사: 매일 오전 7시 실행
+// - 전날 정산 데이터 불일치 확인 및 알림
+// =============================
+exports.checkSettlementDiscrepanciesScheduled = (0, scheduler_1.onSchedule)({
+    schedule: "0 7 * * *", // 매일 오전 7시 (한국 시간)
+    timeZone: "Asia/Seoul",
+    region: "asia-northeast3",
+    memory: "512MiB",
+    timeoutSeconds: 540
+}, async () => {
+    const db = admin.firestore();
+    logger.info("[Settlement] Starting scheduled discrepancy check");
+    // 어제 근무일 계산
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayDate = yesterday.toISOString().substring(0, 10);
+    try {
+        const provincesSnap = await db.collection("provinces").get();
+        for (const provinceDoc of provincesSnap.docs) {
+            const citiesSnap = await provinceDoc.ref.collection("cities").get();
+            for (const cityDoc of citiesSnap.docs) {
+                const officesSnap = await cityDoc.ref.collection("offices").get();
+                for (const officeDoc of officesSnap.docs) {
+                    try {
+                        const result = await (0, settlement_1.checkSettlementDiscrepancies)(provinceDoc.id, cityDoc.id, officeDoc.id, yesterdayDate);
+                        if (result.hasDiscrepancy) {
+                            logger.warn(`[Settlement] Discrepancies found for ${provinceDoc.id}/${cityDoc.id}/${officeDoc.id}:`, result.details);
+                            // 불일치 발견 시 관리자에게 알림
+                            await (0, settlement_1.notifySettlementDiscrepancy)(provinceDoc.id, cityDoc.id, officeDoc.id, yesterdayDate, result.details);
+                        }
+                    }
+                    catch (officeError) {
+                        logger.error(`[Settlement] Discrepancy check failed for ${provinceDoc.id}/${cityDoc.id}/${officeDoc.id}:`, officeError);
+                    }
+                }
+            }
+        }
+        logger.info("[Settlement] Discrepancy check completed");
+    }
+    catch (error) {
+        logger.error("[Settlement] Discrepancy check failed:", error);
+    }
+});
+// =============================
+// 수동 정산 불일치 검사 (HTTP Callable)
+// =============================
+exports.manualCheckSettlementDiscrepancy = (0, https_1.onCall)({
+    region: "asia-northeast3"
+}, async (req) => {
+    const { provinceId, cityId, officeId, sessionDate } = req.data || {};
+    if (!provinceId || !cityId || !officeId || !sessionDate) {
+        throw new Error("provinceId, cityId, officeId, sessionDate are required");
+    }
+    if (!req.auth) {
+        throw new Error("Must be authenticated");
+    }
+    logger.info(`[Settlement] Manual discrepancy check: ${provinceId}/${cityId}/${officeId}/${sessionDate}`);
+    const result = await (0, settlement_1.checkSettlementDiscrepancies)(provinceId, cityId, officeId, sessionDate);
+    return result;
+});
+const _forceDeploy = Date.now() + 1000007; // 배포 강제용 더미 변수
 void _forceDeploy; // 사용해서 컴파일 경고 해소
 //# sourceMappingURL=index.js.map

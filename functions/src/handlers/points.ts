@@ -146,3 +146,262 @@ export async function getPointBalance(provinceId: string, cityId: string, office
   const snapshot = await pointsRef.get();
   return snapshot.data()?.balance || 0;
 }
+
+// ============================================================
+// 고객 포인트 적립 관련 함수
+// ============================================================
+
+/**
+ * 고객 등급별 포인트 적립률
+ */
+const GRADE_POINT_RATES: { [key: string]: number } = {
+  "BRONZE": 0.03,  // 3%
+  "SILVER": 0.05,  // 5%
+  "GOLD": 0.07,    // 7%
+  "VIP": 0.09,     // 9%
+};
+
+/**
+ * 등급 승급 기준 (총 이용 횟수)
+ */
+const GRADE_THRESHOLDS: { [key: string]: number } = {
+  "BRONZE": 0,
+  "SILVER": 10,
+  "GOLD": 30,
+  "VIP": 50,
+};
+
+/**
+ * 총 이용 횟수에 따른 등급 결정
+ */
+function calculateGrade(totalCalls: number): string {
+  if (totalCalls >= GRADE_THRESHOLDS.VIP) return "VIP";
+  if (totalCalls >= GRADE_THRESHOLDS.GOLD) return "GOLD";
+  if (totalCalls >= GRADE_THRESHOLDS.SILVER) return "SILVER";
+  return "BRONZE";
+}
+
+/**
+ * 등급에 따른 포인트 적립률 반환
+ */
+function getPointRate(grade: string): number {
+  return GRADE_POINT_RATES[grade.toUpperCase()] || GRADE_POINT_RATES.BRONZE;
+}
+
+/**
+ * 고객 포인트 적립 결과 인터페이스
+ */
+export interface CustomerPointsResult {
+  success: boolean;
+  pointsEarned: number;
+  newBalance: number;
+  grade: string;
+  gradeUpgraded: boolean;
+  previousGrade?: string;
+  error?: string;
+}
+
+/**
+ * 운행 완료 시 고객 포인트 적립 처리
+ *
+ * @param provinceId 사무실 도/광역시 ID
+ * @param cityId 사무실 시/군/구 ID
+ * @param officeId 사무실 ID
+ * @param callId 콜 ID
+ * @param phoneNumber 고객 전화번호
+ * @param fare 운행 요금
+ * @param customerName 고객 이름 (옵션)
+ * @returns 포인트 적립 결과
+ */
+export async function processCustomerPointsOnComplete(
+  provinceId: string,
+  cityId: string,
+  officeId: string,
+  callId: string,
+  phoneNumber: string,
+  fare: number,
+  customerName?: string
+): Promise<CustomerPointsResult> {
+
+  logger.info(`[customerPoints] 고객 포인트 적립 시작. Phone: ${phoneNumber}, Fare: ${fare}, CallId: ${callId}`);
+
+  // 요금이 0 이하면 적립하지 않음
+  if (!fare || fare <= 0) {
+    logger.warn(`[customerPoints] 요금이 0 이하입니다. 포인트 적립 스킵. Fare: ${fare}`);
+    return {
+      success: false,
+      pointsEarned: 0,
+      newBalance: 0,
+      grade: "BRONZE",
+      gradeUpgraded: false,
+      error: "요금이 0 이하입니다."
+    };
+  }
+
+  // 전화번호 정규화 (하이픈 제거)
+  const normalizedPhone = phoneNumber.replace(/-/g, "");
+
+  try {
+    const result = await admin.firestore().runTransaction(async (tx) => {
+      const officeRef = admin.firestore()
+        .collection("provinces").doc(provinceId)
+        .collection("cities").doc(cityId)
+        .collection("offices").doc(officeId);
+
+      // 고객 포인트 문서 참조
+      const customerPointsRef = officeRef.collection("customerPoints").doc(normalizedPhone);
+
+      // 기존 고객 포인트 데이터 조회
+      const customerPointsSnap = await tx.get(customerPointsRef);
+      const existingData = customerPointsSnap.data();
+
+      // 중복 처리 방지: 이 콜에 대한 포인트가 이미 적립되었는지 확인
+      const existingTxQuery = officeRef
+        .collection("customerPointTransactions")
+        .where("phoneNumber", "==", normalizedPhone)
+        .where("callId", "==", callId)
+        .where("type", "==", "EARN")
+        .limit(1);
+
+      const existingTxSnap = await tx.get(existingTxQuery);
+      if (!existingTxSnap.empty) {
+        logger.warn(`[customerPoints] 이미 적립된 콜입니다. CallId: ${callId}, Phone: ${normalizedPhone}`);
+        return {
+          success: false,
+          pointsEarned: 0,
+          newBalance: existingData?.currentPoints || 0,
+          grade: existingData?.grade || "BRONZE",
+          gradeUpgraded: false,
+          error: "이미 적립된 콜입니다."
+        };
+      }
+
+      // 현재 데이터 가져오기
+      const currentPoints = existingData?.currentPoints || 0;
+      const totalEarned = existingData?.totalEarned || 0;
+      const totalUsed = existingData?.totalUsed || 0;
+      const totalCalls = existingData?.totalCalls || 0;
+      const previousGrade = existingData?.grade || "BRONZE";
+
+      // 새로운 총 이용 횟수 (이번 콜 포함)
+      const newTotalCalls = totalCalls + 1;
+
+      // 새 등급 계산
+      const newGrade = calculateGrade(newTotalCalls);
+      const gradeUpgraded = newGrade !== previousGrade;
+
+      // 포인트 적립률 (새 등급 기준)
+      const pointRate = getPointRate(newGrade);
+      const pointsEarned = Math.floor(fare * pointRate);
+
+      // 새 잔액 계산
+      const newBalance = currentPoints + pointsEarned;
+      const newTotalEarned = totalEarned + pointsEarned;
+
+      logger.info(`[customerPoints] 계산 완료. 등급: ${previousGrade} → ${newGrade}, 적립률: ${pointRate * 100}%, 적립: ${pointsEarned}P, 잔액: ${newBalance}P`);
+
+      // 1) 고객 포인트 문서 업데이트
+      const timestamp = admin.firestore.FieldValue.serverTimestamp();
+
+      tx.set(customerPointsRef, {
+        phoneNumber: normalizedPhone,
+        customerName: customerName || existingData?.customerName || "",
+        currentPoints: newBalance,
+        totalEarned: newTotalEarned,
+        totalUsed: totalUsed,
+        totalCalls: newTotalCalls,
+        grade: newGrade,
+        lastUpdated: timestamp,
+        createdAt: existingData?.createdAt || timestamp,
+      }, { merge: true });
+
+      // 2) 포인트 거래 내역 저장
+      const transactionRef = officeRef.collection("customerPointTransactions").doc();
+
+      tx.set(transactionRef, {
+        phoneNumber: normalizedPhone,
+        customerName: customerName || "",
+        type: "EARN",
+        amount: pointsEarned,
+        balance: newBalance,
+        description: `운행 완료 포인트 적립 (${newGrade} ${pointRate * 100}%)`,
+        callId: callId,
+        fare: fare,
+        grade: newGrade,
+        timestamp: timestamp,
+        createdBy: "system"
+      });
+
+      // 3) 등급 업그레이드 시 별도 기록
+      if (gradeUpgraded) {
+        const gradeUpgradeRef = officeRef.collection("customerPointTransactions").doc();
+        tx.set(gradeUpgradeRef, {
+          phoneNumber: normalizedPhone,
+          customerName: customerName || "",
+          type: "GRADE_UPGRADE",
+          amount: 0,
+          balance: newBalance,
+          description: `등급 승급: ${previousGrade} → ${newGrade}`,
+          callId: callId,
+          previousGrade: previousGrade,
+          newGrade: newGrade,
+          totalCalls: newTotalCalls,
+          timestamp: timestamp,
+          createdBy: "system"
+        });
+
+        logger.info(`[customerPoints] 등급 승급! ${previousGrade} → ${newGrade}, 총 이용: ${newTotalCalls}회`);
+      }
+
+      return {
+        success: true,
+        pointsEarned: pointsEarned,
+        newBalance: newBalance,
+        grade: newGrade,
+        gradeUpgraded: gradeUpgraded,
+        previousGrade: gradeUpgraded ? previousGrade : undefined,
+      };
+    });
+
+    logger.info(`[customerPoints] 포인트 적립 완료. Phone: ${normalizedPhone}, Earned: ${result.pointsEarned}P, Balance: ${result.newBalance}P`);
+    return result;
+
+  } catch (error: any) {
+    logger.error(`[customerPoints] 포인트 적립 실패. Phone: ${phoneNumber}, Error: ${error.message}`);
+    return {
+      success: false,
+      pointsEarned: 0,
+      newBalance: 0,
+      grade: "BRONZE",
+      gradeUpgraded: false,
+      error: error.message
+    };
+  }
+}
+
+/**
+ * 고객 포인트 잔액 조회
+ */
+export async function getCustomerPointBalance(
+  provinceId: string,
+  cityId: string,
+  officeId: string,
+  phoneNumber: string
+): Promise<{ balance: number; grade: string; totalCalls: number }> {
+  const normalizedPhone = phoneNumber.replace(/-/g, "");
+
+  const customerPointsRef = admin.firestore()
+    .collection("provinces").doc(provinceId)
+    .collection("cities").doc(cityId)
+    .collection("offices").doc(officeId)
+    .collection("customerPoints").doc(normalizedPhone);
+
+  const snapshot = await customerPointsRef.get();
+  const data = snapshot.data();
+
+  return {
+    balance: data?.currentPoints || 0,
+    grade: data?.grade || "BRONZE",
+    totalCalls: data?.totalCalls || 0,
+  };
+}

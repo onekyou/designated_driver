@@ -48,12 +48,12 @@ export default function WithdrawalsPage() {
     );
   }
 
-  const handleApprove = async (requestId: string, regionId: string) => {
+  const handleApprove = async (request: WithdrawalRequest) => {
     if (!confirm('이 환전 요청을 승인하시겠습니까?')) return;
 
     try {
       setProcessing(true);
-      await approveWithdrawal(requestId, regionId);
+      await approveWithdrawal(request.id, request.provinceId, request.cityId, request.officeId);
       alert('환전 요청이 승인되었습니다.');
     } catch (error) {
       alert('승인 처리 중 오류가 발생했습니다.');
@@ -63,7 +63,7 @@ export default function WithdrawalsPage() {
     }
   };
 
-  const handleReject = async (requestId: string, regionId: string) => {
+  const handleReject = async (request: WithdrawalRequest) => {
     if (!rejectReason.trim()) {
       alert('거부 사유를 입력해주세요.');
       return;
@@ -71,7 +71,7 @@ export default function WithdrawalsPage() {
 
     try {
       setProcessing(true);
-      await rejectWithdrawal(requestId, regionId, rejectReason);
+      await rejectWithdrawal(request.id, request.provinceId, request.cityId, request.officeId, rejectReason);
       alert('환전 요청이 거부되었습니다.');
       setRejectingId(null);
       setRejectReason('');
@@ -83,12 +83,12 @@ export default function WithdrawalsPage() {
     }
   };
 
-  const handleComplete = async (requestId: string, regionId: string) => {
+  const handleComplete = async (request: WithdrawalRequest) => {
     if (!confirm('송금을 완료하셨습니까? 이 작업은 되돌릴 수 없습니다.')) return;
 
     try {
       setProcessing(true);
-      await completeTransfer(requestId, regionId, transferNote.trim() || undefined);
+      await completeTransfer(request.id, request.provinceId, request.cityId, request.officeId, transferNote.trim() || undefined);
       alert('송금 완료 처리되었습니다.');
       setCompletingId(null);
       setTransferNote('');
@@ -218,7 +218,7 @@ export default function WithdrawalsPage() {
                             {request.officeName}
                           </h3>
                           <span className="px-2 py-1 bg-yellow-200 text-yellow-800 rounded text-xs font-medium">
-                            {request.regionId}
+                            {request.provinceId}/{request.cityId}
                           </span>
                         </div>
 
@@ -282,7 +282,7 @@ export default function WithdrawalsPage() {
                             />
                             <div className="mt-2 flex space-x-2">
                               <button
-                                onClick={() => handleReject(request.id, request.regionId)}
+                                onClick={() => handleReject(request)}
                                 disabled={processing}
                                 className="flex-1 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium disabled:opacity-50"
                               >
@@ -303,7 +303,7 @@ export default function WithdrawalsPage() {
                         ) : (
                           <>
                             <button
-                              onClick={() => handleApprove(request.id, request.regionId)}
+                              onClick={() => handleApprove(request)}
                               disabled={processing}
                               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium disabled:opacity-50 whitespace-nowrap"
                             >
@@ -358,7 +358,7 @@ export default function WithdrawalsPage() {
                             {request.officeName}
                           </h3>
                           <span className="px-2 py-1 bg-blue-200 text-blue-800 rounded text-xs font-medium">
-                            {request.regionId}
+                            {request.provinceId}/{request.cityId}
                           </span>
                         </div>
 
@@ -414,7 +414,7 @@ export default function WithdrawalsPage() {
                             />
                             <div className="mt-2 flex space-x-2">
                               <button
-                                onClick={() => handleComplete(request.id, request.regionId)}
+                                onClick={() => handleComplete(request)}
                                 disabled={processing}
                                 className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium disabled:opacity-50"
                               >
@@ -488,7 +488,7 @@ export default function WithdrawalsPage() {
                           <div className="text-sm font-medium text-gray-900">
                             {request.officeName}
                           </div>
-                          <div className="text-sm text-gray-500">{request.regionId}</div>
+                          <div className="text-sm text-gray-500">{request.provinceId}/{request.cityId}</div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

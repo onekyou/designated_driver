@@ -31,15 +31,18 @@ export default function OfficesPage() {
       snapshot.forEach((doc) => {
         const data = doc.data();
 
-        // document 경로에서 regionId 추출
+        // document 경로에서 provinceId, cityId 추출
+        // provinces/{provinceId}/cities/{cityId}/offices/{officeId}
         const pathParts = doc.ref.path.split('/');
-        const regionId = pathParts[pathParts.indexOf('regions') + 1];
+        const provinceId = pathParts[pathParts.indexOf('provinces') + 1] || '';
+        const cityId = pathParts[pathParts.indexOf('cities') + 1] || '';
 
         officesList.push({
           id: doc.id,
-          regionId: regionId,
+          provinceId: provinceId,
+          cityId: cityId,
           name: data.name || '이름 없음',
-          region: data.region || regionId,
+          region: data.region || `${provinceId}/${cityId}`,
           phoneNumber: data.phone || data.phoneNumber, // 실제 필드명은 'phone'
           address: data.address,
           qrCode: data.qrCode,
@@ -226,7 +229,7 @@ export default function OfficesPage() {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {filteredOffices.map((office) => (
-                    <tr key={`${office.regionId}-${office.id}`} className="hover:bg-gray-50">
+                    <tr key={`${office.provinceId}-${office.cityId}-${office.id}`} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <div className="flex-shrink-0 h-10 w-10 bg-indigo-100 rounded-full flex items-center justify-center">
@@ -261,7 +264,7 @@ export default function OfficesPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <Link
-                          href={`/offices/${office.regionId}/${office.id}`}
+                          href={`/offices/${office.provinceId}/${office.cityId}/${office.id}`}
                           className="text-indigo-600 hover:text-indigo-900"
                         >
                           상세보기

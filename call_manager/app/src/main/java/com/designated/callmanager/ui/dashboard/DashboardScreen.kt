@@ -774,16 +774,38 @@ fun CallCard(call: CallInfo, onCallClick: (CallInfo) -> Unit) {
             )
             }
 
-            // 출발지-목적지를 Card 중앙에 오버레이로 배치
+            // 출발지-경유지-목적지-요금을 Card 중앙에 오버레이로 배치
             val departure = call.departure_set
+            val waypoints = call.waypoints_set
             val destination = call.destination_set
-            if (!departure.isNullOrBlank() || !destination.isNullOrBlank()) {
-                Text(
-                    text = "${departure ?: "출발지 미설정"} → ${destination ?: "목적지 미설정"}",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Color(0xFF03DAC6),
-                    modifier = Modifier.align(Alignment.Center)
-                )
+            val fare = call.fare_set
+            if (!departure.isNullOrBlank() || !destination.isNullOrBlank() || !waypoints.isNullOrBlank() || fare != null) {
+                Column(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // 출발 → 경유(선택) → 도착
+                    val routeText = buildString {
+                        append(departure ?: "출발지 미설정")
+                        if (!waypoints.isNullOrBlank()) {
+                            append(" → $waypoints")
+                        }
+                        append(" → ${destination ?: "목적지 미설정"}")
+                    }
+                    Text(
+                        text = routeText,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Color(0xFF03DAC6)
+                    )
+                    // 요금 표시
+                    if (fare != null && fare > 0) {
+                        Text(
+                            text = "요금: ${String.format("%,d", fare)}원",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFFFFB000)
+                        )
+                    }
+                }
             }
         }
     }

@@ -32,6 +32,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.navigation.compose.rememberNavController
 import com.google.firebase.messaging.FirebaseMessaging
+import com.designated.driverapp.worker.SettlementSyncWorker
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -65,6 +66,12 @@ class MainActivity : ComponentActivity() {
         // 최소한의 권한 요청 로직 - 로그인 상태만 확인
         if (currentUser != null && !areAllRequiredPermissionsGranted()) {
             requestAllPermissions()
+        }
+
+        // 정산 동기화 WorkManager 초기화
+        if (currentUser != null) {
+            SettlementSyncWorker.enqueuePeriodicSync(this)
+            SettlementSyncWorker.enqueueOnNetworkAvailable(this)
         }
 
         setContent {

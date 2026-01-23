@@ -21,6 +21,7 @@ import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.*
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.*
 import com.designated.driverapp.model.CallInfo
 import com.designated.driverapp.model.CallStatus
@@ -41,12 +42,13 @@ private const val PARSE_DEBUG_TAG = "*** PARSE DEBUG ***"
 
 class DriverForegroundService : Service() {
 
-    private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private lateinit var auth: FirebaseAuth
     private lateinit var firestore: FirebaseFirestore
     private var driverStatusListener: ListenerRegistration? = null
     private var assignedCallsListener: ListenerRegistration? = null
+    private var authStateListener: FirebaseAuth.AuthStateListener? = null  // auth 리스너 참조 저장
 
     private val _driverStatus = MutableStateFlow<DriverStatus>(DriverStatus.OFFLINE)
     private val _assignedCall = MutableStateFlow<CallInfo?>(null)
@@ -64,7 +66,11 @@ class DriverForegroundService : Service() {
     }
 
     private fun startListeningForAuthState() {
-        auth.addAuthStateListener { firebaseAuth ->
+        // 기존 리스너 제거 (중복 등록 방지)
+        authStateListener?.let { auth.removeAuthStateListener(it) }
+
+        // 새 리스너 생성 및 등록
+        authStateListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
             val user = firebaseAuth.currentUser
             if (user != null) {
                 startFirestoreListeners(user.uid)
@@ -73,6 +79,7 @@ class DriverForegroundService : Service() {
                 stopSelf()
             }
         }
+        auth.addAuthStateListener(authStateListener!!)
     }
 
     private fun startFirestoreListeners(driverId: String) {
@@ -116,7 +123,7 @@ class DriverForegroundService : Service() {
                 Constants.STATUS_ACCEPTED,
                 Constants.STATUS_IN_PROGRESS
             ))
-            .orderBy("assignedTimestamp", Query.Direction.DESCENDING)
+            .orderBy("timestamp", Query.Direction.DESCENDING)
             .limit(1)
             .addSnapshotListener { snapshot, e ->
 
@@ -240,7 +247,16 @@ class DriverForegroundService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         stopFirestoreListeners()
-        serviceScope.cancel()
+        // auth 리스너 제거 (메모리 누수 방지)
+        authStateListener?.let { auth.removeAuthStateListener(it) }
+        authStateListener = null
+
+        // 코루틴 스코프 안전하게 해제 (경합 조건 방지)
+        try {
+            serviceScope.cancel()
+        } catch (e: Exception) {
+            Log.w(TAG, "Error cancelling serviceScope: ${e.message}")
+        }
     }
 
     private val binder = LocalBinder()

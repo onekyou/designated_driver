@@ -32,6 +32,8 @@ import androidx.core.content.ContextCompat
 import android.content.pm.ServiceInfo
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import android.util.Log
 import android.media.RingtoneManager
 import com.google.firebase.auth.FirebaseAuth
 
@@ -106,6 +108,14 @@ class CallManagerService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+
+        // 코루틴 스코프 안전하게 해제 (경합 조건 방지)
+        try {
+            serviceScope.cancel()
+        } catch (e: Exception) {
+            Log.w(TAG, "Error cancelling serviceScope: ${e.message}")
+        }
+
         isServiceRunning = false
     }
 

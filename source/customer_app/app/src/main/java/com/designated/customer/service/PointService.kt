@@ -14,10 +14,16 @@ import java.util.UUID
  * 포인트 관련 서비스
  */
 class PointService(
-    private val regionId: String = "seoul",
+    private val provinceId: String,
+    private val cityId: String,
     private val officeId: String
 ) {
     private val firestore = FirebaseFirestore.getInstance()
+
+    private fun getOfficeRef() = firestore
+        .collection("provinces").document(provinceId)
+        .collection("cities").document(cityId)
+        .collection("offices").document(officeId)
 
     /**
      * 고객 포인트 정보 조회
@@ -25,9 +31,7 @@ class PointService(
     suspend fun getCustomerPoints(phoneNumber: String): CustomerPoints? {
         return try {
             android.util.Log.d("PointService", "getCustomerPoints 시작: phoneNumber=$phoneNumber")
-            val doc = firestore
-                .collection("regions").document(regionId)
-                .collection("offices").document(officeId)
+            val doc = getOfficeRef()
                 .collection("customerPoints")
                 .document(phoneNumber)
                 .get()
@@ -65,9 +69,7 @@ class PointService(
      * 고객 포인트 정보 실시간 모니터링
      */
     fun observeCustomerPoints(phoneNumber: String): Flow<CustomerPoints?> = callbackFlow {
-        val listener = firestore
-            .collection("regions").document(regionId)
-            .collection("offices").document(officeId)
+        val listener = getOfficeRef()
             .collection("customerPoints")
             .document(phoneNumber)
             .addSnapshotListener { snapshot, error ->
@@ -91,9 +93,7 @@ class PointService(
      * 고객 포인트 정보 생성
      */
     private suspend fun createCustomerPoints(points: CustomerPoints) {
-        firestore
-            .collection("regions").document(regionId)
-            .collection("offices").document(officeId)
+        getOfficeRef()
             .collection("customerPoints")
             .document(points.phoneNumber)
             .set(points.toMap())
@@ -153,18 +153,14 @@ class PointService(
             // Firestore 업데이트 (트랜잭션)
             firestore.runTransaction { transaction ->
                 // 포인트 정보 업데이트
-                val pointsRef = firestore
-                    .collection("regions").document(regionId)
-                    .collection("offices").document(officeId)
+                val pointsRef = getOfficeRef()
                     .collection("customerPoints")
                     .document(phoneNumber)
 
                 transaction.set(pointsRef, updatedPoints.toMap())
 
                 // 거래 내역 추가
-                val transactionRef = firestore
-                    .collection("regions").document(regionId)
-                    .collection("offices").document(officeId)
+                val transactionRef = getOfficeRef()
                     .collection("pointTransactions")
                     .document()
 
@@ -219,18 +215,14 @@ class PointService(
             // Firestore 업데이트
             firestore.runTransaction { transaction ->
                 // 포인트 정보 업데이트
-                val pointsRef = firestore
-                    .collection("regions").document(regionId)
-                    .collection("offices").document(officeId)
+                val pointsRef = getOfficeRef()
                     .collection("customerPoints")
                     .document(phoneNumber)
 
                 transaction.set(pointsRef, updatedPoints.toMap())
 
                 // 거래 내역 추가
-                val transactionRef = firestore
-                    .collection("regions").document(regionId)
-                    .collection("offices").document(officeId)
+                val transactionRef = getOfficeRef()
                     .collection("pointTransactions")
                     .document()
 
@@ -250,11 +242,9 @@ class PointService(
         phoneNumber: String,
         limit: Long = 20
     ): List<PointTransaction> {
-        android.util.Log.d("PointService", "getPointTransactions 시작: phoneNumber=$phoneNumber, regionId=$regionId, officeId=$officeId")
+        android.util.Log.d("PointService", "getPointTransactions 시작: phoneNumber=$phoneNumber, provinceId=$provinceId, cityId=$cityId, officeId=$officeId")
         return try {
-            val snapshot = firestore
-                .collection("regions").document(regionId)
-                .collection("offices").document(officeId)
+            val snapshot = getOfficeRef()
                 .collection("pointTransactions")
                 .whereEqualTo("customerId", phoneNumber)
                 .orderBy("timestamp", Query.Direction.DESCENDING)
@@ -277,9 +267,7 @@ class PointService(
      * 포인트 거래 내역 실시간 모니터링
      */
     fun observePointTransactions(phoneNumber: String): Flow<List<PointTransaction>> = callbackFlow {
-        val listener = firestore
-            .collection("regions").document(regionId)
-            .collection("offices").document(officeId)
+        val listener = getOfficeRef()
             .collection("pointTransactions")
             .whereEqualTo("customerId", phoneNumber)
             .orderBy("timestamp", Query.Direction.DESCENDING)
