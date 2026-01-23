@@ -435,9 +435,19 @@ fun CustomerApp(
 
     // 초기화: SharedPreferences에서 값 로드 + 익명 인증 확인
     LaunchedEffect(Unit) {
-        val prefsOfficeId = preferencesManager.getOfficeId()
-        val prefsProvinceId = preferencesManager.getProvinceId()
-        val prefsCityId = preferencesManager.getCityId()
+        var prefsOfficeId = preferencesManager.getOfficeId()
+        var prefsProvinceId = preferencesManager.getProvinceId()
+        var prefsCityId = preferencesManager.getCityId()
+
+        // TODO: 테스트용 하드코딩 - 나중에 제거할 것
+        // 사무실 정보가 없으면 VIP 사무실(경기도 양평군)로 자동 설정
+        if (prefsOfficeId == null || prefsProvinceId == null || prefsCityId == null) {
+            android.util.Log.d("TestMode", "⚠️ 테스트 모드: VIP 사무실(양평군) 자동 설정")
+            prefsProvinceId = "gyeonggi"
+            prefsCityId = "yangpyeong"
+            prefsOfficeId = "UoLbMg6QhUQoc8Bz73sC"
+            preferencesManager.saveOfficeInfo(prefsOfficeId, prefsProvinceId, prefsCityId)
+        }
 
         currentOfficeId = prefsOfficeId
         currentProvinceId = prefsProvinceId
