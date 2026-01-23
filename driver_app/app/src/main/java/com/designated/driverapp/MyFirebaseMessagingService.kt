@@ -53,16 +53,20 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         Log.d(TAG, "FCM 메시지 수신: ${remoteMessage.data}")
 
         // ✅ 로그인 체크: SharedPreferences로 확인 (백그라운드에서도 안정적)
-        // 참고: Hilt 모듈에서 "driver_prefs"로 생성됨
-        val prefs = getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
         val officeId = prefs.getString(Constants.PREF_KEY_OFFICE_ID, null)
         if (officeId.isNullOrBlank()) {
             Log.d(TAG, "로그인하지 않은 상태 (officeId 없음) - FCM 메시지 무시")
             return
         }
 
-        val title = remoteMessage.notification?.title ?: "콜 배정 알림"
-        val body = remoteMessage.notification?.body ?: "새로운 콜이 배정되었습니다."
+        // data 페이로드에서 먼저 확인, 없으면 notification에서, 그래도 없으면 기본값
+        val title = remoteMessage.data["title"]
+            ?: remoteMessage.notification?.title
+            ?: "콜 배정 알림"
+        val body = remoteMessage.data["body"]
+            ?: remoteMessage.notification?.body
+            ?: "새로운 콜이 배정되었습니다."
         val callId = remoteMessage.data["callId"]
 
         Log.d(TAG, "callId: $callId, title: $title, officeId: $officeId")
