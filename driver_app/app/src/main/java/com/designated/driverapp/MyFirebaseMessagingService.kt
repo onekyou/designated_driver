@@ -10,6 +10,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.designated.driverapp.data.Constants
+import com.designated.driverapp.service.DriverForegroundService
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
@@ -73,10 +74,21 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         Log.d(TAG, "callId: $callId, title: $title, officeId: $officeId")
 
-        // 앱이 포그라운드에 있으면 LocalBroadcast로 알림, 백그라운드면 알림만 표시
-        if (!callId.isNullOrBlank()) {
+        // 메시지 타입 확인
+        val messageType = remoteMessage.data["type"] ?: ""
+
+        if (!callId.isNullOrBlank() && messageType == "call_assigned") {
+            // DriverForegroundService에 콜 정보 전달
+            Log.d(TAG, "DriverForegroundService에 콜 정보 전달: $callId")
+            val serviceIntent = DriverForegroundService.newCallAssignedIntent(this, callId, title, body)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+
+            // 포그라운드일 때 추가로 LocalBroadcast (UI 즉시 업데이트용)
             if (isAppInForeground()) {
-                // 포그라운드: LocalBroadcast로 Activity에 알림 (팝업 표시)
                 Log.d(TAG, "앱이 포그라운드 - LocalBroadcast로 callId 전달: $callId")
                 val broadcastIntent = Intent(Constants.ACTION_SHOW_CALL_DIALOG).apply {
                     putExtra("callId", callId)
@@ -84,8 +96,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     putExtra("body", body)
                 }
                 LocalBroadcastManager.getInstance(this).sendBroadcast(broadcastIntent)
-            } else {
-                Log.d(TAG, "앱이 백그라운드 - 알림만 표시: $callId")
             }
         }
 
