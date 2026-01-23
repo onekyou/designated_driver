@@ -1,5 +1,6 @@
 package com.designated.driverapp
 
+import android.app.ActivityManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -7,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.designated.driverapp.data.Constants
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
@@ -71,30 +73,55 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         Log.d(TAG, "callId: $callId, title: $title, officeId: $officeId")
 
-        // 앱이 포그라운드에 있을 때도 MainActivity로 callId 전달하여 팝업 표시
+        // 앱이 포그라운드에 있으면 LocalBroadcast로 알림, 백그라운드면 알림만 표시
         if (!callId.isNullOrBlank()) {
-            Log.d(TAG, "MainActivity로 callId 전달: $callId")
-            val intent = Intent(this, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
-                putExtra("callId", callId)
+            if (isAppInForeground()) {
+                // 포그라운드: LocalBroadcast로 Activity에 알림 (팝업 표시)
+                Log.d(TAG, "앱이 포그라운드 - LocalBroadcast로 callId 전달: $callId")
+                val broadcastIntent = Intent(Constants.ACTION_SHOW_CALL_DIALOG).apply {
+                    putExtra("callId", callId)
+                    putExtra("title", title)
+                    putExtra("body", body)
+                }
+                LocalBroadcastManager.getInstance(this).sendBroadcast(broadcastIntent)
+            } else {
+                Log.d(TAG, "앱이 백그라운드 - 알림만 표시: $callId")
             }
-            startActivity(intent)
         }
 
+        // 알림은 항상 표시 (백그라운드에서 사용자가 알림 클릭으로 앱 진입)
         showNotification(title, body, callId)
     }
 
+    private fun isAppInForeground(): Boolean {
+        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val appProcesses = activityManager.runningAppProcesses ?: return false
+        val packageName = packageName
+        for (appProcess in appProcesses) {
+            if (appProcess.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+                && appProcess.processName == packageName) {
+                return true
+            }
+        }
+        return false
+    }
+
     private fun showNotification(title: String, body: String, callId: String?) {
-        val channelId = "DriverServiceChannel"
-        val notificationId = System.currentTimeMillis().toInt()
+        val channelId = "call_assignment_channel"
+        val notificationId = if (callId != null) callId.hashCode() else System.currentTimeMillis().toInt()
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,
-                "콜 알림",
+                "콜 배정 알림",
                 NotificationManager.IMPORTANCE_HIGH
-            )
+            ).apply {
+                description = "새로운 콜이 배정되었을 때 알림"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 500, 200, 500)
+                setShowBadge(true)
+            }
             notificationManager.createNotificationChannel(channel)
         }
 
@@ -104,8 +131,19 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 putExtra("callId", callId)
             }
         }
+
         val pendingIntent = PendingIntent.getActivity(
-            this, 0, intent,
+            this,
+            notificationId,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        // Full-screen intent용 PendingIntent (백그라운드에서 화면 띄우기)
+        val fullScreenIntent = PendingIntent.getActivity(
+            this,
+            notificationId + 1,
+            intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
@@ -116,6 +154,10 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setVibrate(longArrayOf(0, 500, 200, 500))
+            .setFullScreenIntent(fullScreenIntent, true) // 백그라운드에서 화면 띄우기
 
         notificationManager.notify(notificationId, builder.build())
     }
