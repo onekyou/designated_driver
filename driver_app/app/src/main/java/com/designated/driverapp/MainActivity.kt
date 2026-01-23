@@ -28,10 +28,14 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import dagger.hilt.android.AndroidEntryPoint
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.navigation.compose.rememberNavController
 import com.google.firebase.messaging.FirebaseMessaging
+import com.designated.driverapp.data.Constants
 import com.designated.driverapp.worker.SettlementSyncWorker
 
 @AndroidEntryPoint
@@ -41,6 +45,17 @@ class MainActivity : ComponentActivity() {
 
     private val TAG = "MainActivity"
     private lateinit var auth: FirebaseAuth
+
+    // FCM LocalBroadcast 수신용 BroadcastReceiver
+    private val fcmBroadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val callId = intent?.getStringExtra("callId")
+            Log.d(TAG, "LocalBroadcast 수신: callId=$callId")
+            if (!callId.isNullOrBlank() && auth.currentUser != null) {
+                driverViewModel.setNotificationCallId(callId)
+            }
+        }
+    }
 
     // 권한 요청 결과를 처리하는 런처
     private val permissionLauncher = registerForActivityResult(
@@ -127,6 +142,23 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // FCM LocalBroadcast 수신 등록
+        LocalBroadcastManager.getInstance(this).registerReceiver(
+            fcmBroadcastReceiver,
+            IntentFilter(Constants.ACTION_SHOW_CALL_DIALOG)
+        )
+        Log.d(TAG, "LocalBroadcast 리시버 등록됨")
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // FCM LocalBroadcast 수신 해제
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(fcmBroadcastReceiver)
+        Log.d(TAG, "LocalBroadcast 리시버 해제됨")
     }
 
     override fun onNewIntent(intent: Intent) {
