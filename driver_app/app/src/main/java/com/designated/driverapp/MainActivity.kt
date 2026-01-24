@@ -2,22 +2,30 @@ package com.designated.driverapp
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.activity.viewModels
@@ -46,6 +54,11 @@ class MainActivity : ComponentActivity() {
     private val TAG = "MainActivity"
     private lateinit var auth: FirebaseAuth
 
+    // 알림 권한 관련 상태
+    private var showNotificationPermissionDialog = mutableStateOf(false)
+    private var showNotificationSettingsDialog = mutableStateOf(false)
+    private var hasShownNotificationDialog = false  // 세션 중 다이얼로그 표시 여부
+
     // FCM LocalBroadcast 수신용 BroadcastReceiver
     private val fcmBroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -64,6 +77,11 @@ class MainActivity : ComponentActivity() {
         val deniedPermissions = permissions.filter { !it.value }.keys
         if (deniedPermissions.isNotEmpty()) {
             Log.w(TAG, "거부된 권한: $deniedPermissions")
+            // 알림 권한이 거부된 경우 설정 화면 안내
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                deniedPermissions.contains(Manifest.permission.POST_NOTIFICATIONS)) {
+                showNotificationSettingsDialog.value = true
+            }
         } else {
             Log.d(TAG, "모든 권한이 허용되었습니다")
             updateFcmToken()
@@ -78,15 +96,28 @@ class MainActivity : ComponentActivity() {
 
         val currentUser = auth.currentUser
 
-        // 최소한의 권한 요청 로직 - 로그인 상태만 확인
+        // 권한 요청 로직 - 로그인 상태 확인 후 안내 다이얼로그 표시
         if (currentUser != null && !areAllRequiredPermissionsGranted()) {
-            requestAllPermissions()
+            // 알림 권한이 없으면 안내 다이얼로그 먼저 표시
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+                showNotificationPermissionDialog.value = true
+                hasShownNotificationDialog = true
+            } else {
+                requestAllPermissions()
+            }
         }
 
         // 정산 동기화 WorkManager 초기화
         if (currentUser != null) {
             SettlementSyncWorker.enqueuePeriodicSync(this)
             SettlementSyncWorker.enqueueOnNetworkAvailable(this)
+        }
+
+        // 알림 클릭으로 앱이 시작된 경우 해당 알림 취소
+        intent.getStringExtra("callId")?.let { callId ->
+            cancelNotification(callId)
         }
 
         setContent {
@@ -140,6 +171,85 @@ class MainActivity : ComponentActivity() {
                         driverViewModel.setNotificationCallId(initialCallId)
                     }
                 }
+
+                // 알림 권한 요청 전 안내 다이얼로그
+                if (showNotificationPermissionDialog.value) {
+                    AlertDialog(
+                        onDismissRequest = { },
+                        title = { Text("알림 권한 필요") },
+                        text = {
+                            Column {
+                                Text("콜 배정 알림을 받으려면 알림 권한이 필요합니다.")
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("알림을 허용하지 않으면 새로운 콜 배정을 놓칠 수 있습니다.")
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    showNotificationPermissionDialog.value = false
+                                    requestAllPermissions()
+                                }
+                            ) {
+                                Text("권한 허용하기")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = {
+                                    showNotificationPermissionDialog.value = false
+                                    // 알림 권한 없이 다른 권한만 요청
+                                    val otherPermissions = arrayOf(
+                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                                        Manifest.permission.RECORD_AUDIO
+                                    )
+                                    permissionLauncher.launch(otherPermissions)
+                                }
+                            ) {
+                                Text("나중에")
+                            }
+                        }
+                    )
+                }
+
+                // 알림 설정 비활성화 시 설정 화면 안내 다이얼로그
+                if (showNotificationSettingsDialog.value) {
+                    AlertDialog(
+                        onDismissRequest = { showNotificationSettingsDialog.value = false },
+                        title = { Text("알림이 꺼져 있습니다") },
+                        text = {
+                            Column {
+                                Text("콜 배정 알림을 받으려면 설정에서 알림을 켜주세요.")
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("알림이 꺼져 있으면 새로운 콜 배정을 놓칠 수 있습니다.")
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    showNotificationSettingsDialog.value = false
+                                    // 앱 알림 설정 화면으로 이동
+                                    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                        putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                                    }
+                                    startActivity(intent)
+                                }
+                            ) {
+                                Text("설정으로 이동")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = {
+                                    showNotificationSettingsDialog.value = false
+                                }
+                            ) {
+                                Text("나중에")
+                            }
+                        }
+                    )
+                }
             }
         }
     }
@@ -152,6 +262,14 @@ class MainActivity : ComponentActivity() {
             IntentFilter(Constants.ACTION_SHOW_CALL_DIALOG)
         )
         Log.d(TAG, "LocalBroadcast 리시버 등록됨")
+
+        // 알림 설정이 꺼져있는지 확인 (로그인 상태 + 이번 세션에서 아직 안 물어봤을 때만)
+        if (auth.currentUser != null &&
+            !hasShownNotificationDialog &&
+            !NotificationManagerCompat.from(this).areNotificationsEnabled()) {
+            showNotificationSettingsDialog.value = true
+            hasShownNotificationDialog = true
+        }
     }
 
     override fun onPause() {
@@ -170,7 +288,18 @@ class MainActivity : ComponentActivity() {
         if (!callId.isNullOrBlank() && auth.currentUser != null) {
             Log.d(TAG, "onNewIntent: callId received = $callId")
             driverViewModel.setNotificationCallId(callId)
+
+            // 해당 알림 취소 (notificationId = callId.hashCode())
+            cancelNotification(callId)
         }
+    }
+
+    private fun cancelNotification(callId: String) {
+        val notificationManager = NotificationManagerCompat.from(this)
+        val notificationId = callId.hashCode()
+        notificationManager.cancel(notificationId)
+        notificationManager.cancel(notificationId + 1)  // 헤드업 알림용
+        Log.d(TAG, "알림 취소됨: notificationId=$notificationId")
     }
 
     private fun updateFcmToken() {
