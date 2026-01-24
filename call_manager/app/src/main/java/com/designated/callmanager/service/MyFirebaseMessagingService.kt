@@ -619,18 +619,23 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             }
         }
 
-        showNotification(
-            channelId = NEW_CALL_CHANNEL_ID,
-            notificationId = "new_call_$callId".hashCode(),
-            title = "🚨 새로운 콜!",
-            content = "$customerName ($customerPhone)",
-            bigText = "고객: $customerName\n전화: $customerPhone\n위치: $pickupLocation",
-            callId = callId,
-            color = ContextCompat.getColor(this, android.R.color.holo_red_dark),
-            autoCancel = true,
-            isNewCall = true,
-            timeoutAfter = 60000
-        )
+        // 앱이 포그라운드일 때는 알림 생성하지 않음 (UI가 실시간 업데이트됨)
+        if (!isAppInForeground()) {
+            showNotification(
+                channelId = NEW_CALL_CHANNEL_ID,
+                notificationId = "new_call_$callId".hashCode(),
+                title = "🚨 새로운 콜!",
+                content = "$customerName ($customerPhone)",
+                bigText = "고객: $customerName\n전화: $customerPhone\n위치: $pickupLocation",
+                callId = callId,
+                color = ContextCompat.getColor(this, android.R.color.holo_red_dark),
+                autoCancel = true,
+                isNewCall = true,
+                timeoutAfter = 60000
+            )
+        } else {
+            Log.d(TAG, "[handleNewCall] 앱 포그라운드 - 알림 생략")
+        }
     }
 
     private fun handleNewSharedCall(remoteMessage: RemoteMessage, sharedCallId: String) {
