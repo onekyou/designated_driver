@@ -64,15 +64,8 @@ class DriverForegroundService : Service() {
         when (intent.action) {
             ACTION_NEW_CALL_ASSIGNED -> {
                 val callId = intent.getStringExtra(EXTRA_CALL_ID)
-                val title = intent.getStringExtra(EXTRA_TITLE) ?: "새로운 콜 배정"
-                val body = intent.getStringExtra(EXTRA_BODY) ?: "새로운 콜이 배정되었습니다."
-
                 Log.d(TAG, "새 콜 배정: callId=$callId")
-
-                if (!callId.isNullOrBlank()) {
-                    // 콜 알림 업데이트
-                    updateCallNotification(callId, title, body)
-                }
+                // 알림은 MyFirebaseMessagingService에서 생성하므로 여기서는 처리하지 않음
             }
             ACTION_CLEAR_CALL -> {
                 Log.d(TAG, "콜 상태 클리어")
@@ -88,36 +81,6 @@ class DriverForegroundService : Service() {
                 _driverStatus.value = DriverStatus.fromString(status)
             }
         }
-    }
-
-    private fun updateCallNotification(callId: String, title: String, body: String) {
-        val fullScreenIntent = Intent(this, MainActivity::class.java).apply {
-            action = Constants.ACTION_SHOW_CALL_DIALOG
-            putExtra("callId", callId)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-
-        val fullScreenPendingIntent = PendingIntent.getActivity(
-            this,
-            callId.hashCode(),
-            fullScreenIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val notification = NotificationCompat.Builder(this, CALL_CHANNEL_ID)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentIntent(fullScreenPendingIntent)
-            .setFullScreenIntent(fullScreenPendingIntent, true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setVibrate(longArrayOf(0, 500, 200, 500))
-            .setAutoCancel(false)
-            .setOngoing(true)
-            .build()
-
-        startForeground(NOTIFICATION_ID, notification)
     }
 
     fun clearAssignedCallState() {
