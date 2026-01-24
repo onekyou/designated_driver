@@ -4068,3 +4068,71 @@ export const manualCheckSettlementDiscrepancy = onCall(
 
 const _forceDeploy = Date.now() + 1000007; // 배포 강제용 더미 변수
 void _forceDeploy;                 // 사용해서 컴파일 경고 해소
+
+// =============================
+// 기사 배차 알림 (Callable Function)
+// 콜매니저에서 배차 시 직접 호출
+// =============================
+export const notifyDriverAssignment = onCall(
+  {
+    region: "asia-northeast3",
+  },
+  async (request) => {
+    const { callId, driverAuthUid, provinceId, cityId, officeId, customerName, departure } = request.data;
+
+    logger.info(`[notifyDriverAssignment] 호출됨 - callId: ${callId}, driverAuthUid: ${driverAuthUid}`);
+
+    if (!callId || !driverAuthUid || !provinceId || !cityId || !officeId) {
+      logger.error("[notifyDriverAssignment] 필수 파라미터 누락");
+      return { success: false, error: "Missing required parameters" };
+    }
+
+    try {
+      // 기사 문서 직접 조회 (문서 ID = authUid)
+      const driverDocRef = admin.firestore()
+        .doc(`provinces/${provinceId}/cities/${cityId}/offices/${officeId}/${DRIVER_COLLECTION_NAME}/${driverAuthUid}`);
+
+      const driverDoc = await driverDocRef.get();
+
+      if (!driverDoc.exists) {
+        logger.error(`[notifyDriverAssignment] 기사 문서 없음 - docId: ${driverAuthUid}`);
+        return { success: false, error: "Driver not found" };
+      }
+
+      const driverData = driverDoc.data();
+      const fcmToken = driverData?.fcmToken;
+      const driverName = driverData?.name || "기사";
+
+      logger.info(`[notifyDriverAssignment] 기사 정보 - name: ${driverName}, token: ${fcmToken ? "exists" : "NONE"}`);
+
+      if (!fcmToken) {
+        logger.warn(`[notifyDriverAssignment] FCM 토큰 없음 - ${driverName}`);
+        return { success: false, error: "No FCM token" };
+      }
+
+      // FCM 전송
+      const payload = {
+        data: {
+          callId: callId,
+          type: "call_assigned",
+          title: "새로운 콜 배정",
+          body: customerName ? `${customerName}님 콜이 배정되었습니다.` : "새로운 콜이 배정되었습니다.",
+          departure: departure || "",
+        },
+        android: {
+          priority: "high" as const,
+        },
+        token: fcmToken,
+      };
+
+      await admin.messaging().send(payload);
+      logger.info(`[notifyDriverAssignment] FCM 전송 성공 - ${driverName}`);
+
+      return { success: true, driverName: driverName };
+
+    } catch (error) {
+      logger.error("[notifyDriverAssignment] 오류:", error);
+      return { success: false, error: String(error) };
+    }
+  }
+);

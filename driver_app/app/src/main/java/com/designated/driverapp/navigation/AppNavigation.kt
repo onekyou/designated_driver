@@ -16,6 +16,7 @@ import com.designated.driverapp.viewmodel.DriverViewModel
 import com.designated.driverapp.ui.home.HistorySettlementScreen
 import com.designated.driverapp.ui.details.CallDetailsScreen
 import com.designated.driverapp.ui.screens.home.ReferralQRScreen
+import com.designated.driverapp.data.Constants
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -126,11 +127,11 @@ fun AppNavigation(
 
         composable(AppDestinations.REFERRAL_QR_ROUTE) {
             val context = androidx.compose.ui.platform.LocalContext.current
-            val prefs = context.getSharedPreferences("driver_prefs", android.content.Context.MODE_PRIVATE)
-            val provinceId = prefs.getString("provinceId", "") ?: ""
-            val cityId = prefs.getString("cityId", "") ?: ""
-            val officeId = prefs.getString("officeId", "") ?: ""
-            val driverId = prefs.getString("driverId", "") ?: ""
+            val prefs = context.getSharedPreferences(Constants.PREFS_NAME, android.content.Context.MODE_PRIVATE)
+            val provinceId = prefs.getString(Constants.PREF_KEY_PROVINCE_ID, "") ?: ""
+            val cityId = prefs.getString(Constants.PREF_KEY_CITY_ID, "") ?: ""
+            val officeId = prefs.getString(Constants.PREF_KEY_OFFICE_ID, "") ?: ""
+            val driverId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
             ReferralQRScreen(
                 driverId = driverId,

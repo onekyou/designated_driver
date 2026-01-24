@@ -41,7 +41,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.manualCheckSettlementDiscrepancy = exports.checkSettlementDiscrepanciesScheduled = exports.autoFinalizeSettlements = exports.onCallCompletedUpdateSettlement = exports.onDriverStatusChange = exports.getOfficeReport = exports.searchArchivedCalls = exports.getArchivedStats = exports.archiveOldCalls = exports.scheduledDataCleanup = exports.onCallDetectorCrash = exports.onCustomerCountChange = exports.onDriverCountChange = exports.onNewCustomerRegistered = exports.onCallCancelledByDriver = exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.finalizeWorkDay = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.notifyCustomerOnComplete = exports.notifyCustomerOnPhoneCall = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.notifyCustomerOnOfficeClosed = exports.onSharedCallCreated = exports.sendNewCallNotification = exports.oncallassigned = void 0;
+exports.notifyDriverAssignment = exports.manualCheckSettlementDiscrepancy = exports.checkSettlementDiscrepanciesScheduled = exports.autoFinalizeSettlements = exports.onCallCompletedUpdateSettlement = exports.onDriverStatusChange = exports.getOfficeReport = exports.searchArchivedCalls = exports.getArchivedStats = exports.archiveOldCalls = exports.scheduledDataCleanup = exports.onCallDetectorCrash = exports.onCustomerCountChange = exports.onDriverCountChange = exports.onNewCustomerRegistered = exports.onCallCancelledByDriver = exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.finalizeWorkDay = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.notifyCustomerOnComplete = exports.notifyCustomerOnPhoneCall = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.notifyCustomerOnOfficeClosed = exports.onSharedCallCreated = exports.sendNewCallNotification = exports.oncallassigned = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -3348,4 +3348,57 @@ exports.manualCheckSettlementDiscrepancy = (0, https_1.onCall)({
 });
 const _forceDeploy = Date.now() + 1000007; // 배포 강제용 더미 변수
 void _forceDeploy; // 사용해서 컴파일 경고 해소
+// =============================
+// 기사 배차 알림 (Callable Function)
+// 콜매니저에서 배차 시 직접 호출
+// =============================
+exports.notifyDriverAssignment = (0, https_1.onCall)({
+    region: "asia-northeast3",
+}, async (request) => {
+    const { callId, driverAuthUid, provinceId, cityId, officeId, customerName, departure } = request.data;
+    logger.info(`[notifyDriverAssignment] 호출됨 - callId: ${callId}, driverAuthUid: ${driverAuthUid}`);
+    if (!callId || !driverAuthUid || !provinceId || !cityId || !officeId) {
+        logger.error("[notifyDriverAssignment] 필수 파라미터 누락");
+        return { success: false, error: "Missing required parameters" };
+    }
+    try {
+        // 기사 문서 직접 조회 (문서 ID = authUid)
+        const driverDocRef = admin.firestore()
+            .doc(`provinces/${provinceId}/cities/${cityId}/offices/${officeId}/${DRIVER_COLLECTION_NAME}/${driverAuthUid}`);
+        const driverDoc = await driverDocRef.get();
+        if (!driverDoc.exists) {
+            logger.error(`[notifyDriverAssignment] 기사 문서 없음 - docId: ${driverAuthUid}`);
+            return { success: false, error: "Driver not found" };
+        }
+        const driverData = driverDoc.data();
+        const fcmToken = driverData === null || driverData === void 0 ? void 0 : driverData.fcmToken;
+        const driverName = (driverData === null || driverData === void 0 ? void 0 : driverData.name) || "기사";
+        logger.info(`[notifyDriverAssignment] 기사 정보 - name: ${driverName}, token: ${fcmToken ? "exists" : "NONE"}`);
+        if (!fcmToken) {
+            logger.warn(`[notifyDriverAssignment] FCM 토큰 없음 - ${driverName}`);
+            return { success: false, error: "No FCM token" };
+        }
+        // FCM 전송
+        const payload = {
+            data: {
+                callId: callId,
+                type: "call_assigned",
+                title: "새로운 콜 배정",
+                body: customerName ? `${customerName}님 콜이 배정되었습니다.` : "새로운 콜이 배정되었습니다.",
+                departure: departure || "",
+            },
+            android: {
+                priority: "high",
+            },
+            token: fcmToken,
+        };
+        await admin.messaging().send(payload);
+        logger.info(`[notifyDriverAssignment] FCM 전송 성공 - ${driverName}`);
+        return { success: true, driverName: driverName };
+    }
+    catch (error) {
+        logger.error("[notifyDriverAssignment] 오류:", error);
+        return { success: false, error: String(error) };
+    }
+});
 //# sourceMappingURL=index.js.map

@@ -97,9 +97,9 @@ class MainActivity : ComponentActivity() {
 
                 val startDest = if (currentUser != null) {
                     // SharedPreferences에서 로그인 정보 확인
-                    val prefs = getSharedPreferences("driver_app_prefs", Context.MODE_PRIVATE)
-                    val hasLoginInfo = !prefs.getString("pref_region_id", "").isNullOrBlank() &&
-                                      !prefs.getString("pref_office_id", "").isNullOrBlank()
+                    val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+                    val hasLoginInfo = !prefs.getString(Constants.PREF_KEY_PROVINCE_ID, "").isNullOrBlank() &&
+                                      !prefs.getString(Constants.PREF_KEY_OFFICE_ID, "").isNullOrBlank()
 
                     if (hasLoginInfo) {
                         if (!initialCallId.value.isNullOrBlank()) {

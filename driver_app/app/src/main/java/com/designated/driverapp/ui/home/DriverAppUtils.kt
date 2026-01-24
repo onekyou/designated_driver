@@ -26,10 +26,10 @@ fun logoutUserAndExitApp(context: Context, scope: CoroutineScope, viewModel: Dri
     viewModel.stopDriverService()
 
     if (userId != null) {
-        val prefs = context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
-        val provinceId = prefs.getString("provinceId", null)
-        val cityId = prefs.getString("cityId", null)
-        val officeId = prefs.getString("officeId", null)
+        val prefs = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+        val provinceId = prefs.getString(Constants.PREF_KEY_PROVINCE_ID, null)
+        val cityId = prefs.getString(Constants.PREF_KEY_CITY_ID, null)
+        val officeId = prefs.getString(Constants.PREF_KEY_OFFICE_ID, null)
 
         if (provinceId != null && cityId != null && officeId != null) {
             val correctPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/designated_drivers/$userId"

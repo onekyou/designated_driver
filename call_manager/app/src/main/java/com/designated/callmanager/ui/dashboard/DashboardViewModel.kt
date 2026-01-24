@@ -31,6 +31,8 @@ import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.google.firebase.ktx.Firebase
+import com.google.firebase.functions.FirebaseFunctions
+import com.google.firebase.functions.ktx.functions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -560,7 +562,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun assignCallToDriver(callInfo: CallInfo, driverId: String) {
+        Log.d(TAG, "🚀🚀🚀 assignCallToDriver 호출됨! callId=${callInfo.id}, driverId=$driverId")
         if (_provinceId.value == null || _cityId.value == null || _officeId.value == null) {
+            Log.e(TAG, "❌ provinceId/cityId/officeId가 null")
             return
         }
         val officePath = firestore.collection("provinces").document(_provinceId.value!!)
@@ -593,6 +597,35 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
                 val driverRef = officePath.collection("designated_drivers").document(driverId)
                 driverRef.update("status", DriverStatus.ASSIGNED.value).await()
+
+                // 기사에게 FCM 알림 전송 (Cloud Function 호출)
+                Log.d(TAG, "========== 기사 알림 함수 호출 시작 ==========")
+                Log.d(TAG, "callId: ${callInfo.id}, driverAuthUid: $driverAuthUid")
+                Log.d(TAG, "provinceId: ${_provinceId.value}, cityId: ${_cityId.value}, officeId: ${_officeId.value}")
+                try {
+                    val functions = Firebase.functions("asia-northeast3")
+                    val data = hashMapOf(
+                        "callId" to callInfo.id,
+                        "driverAuthUid" to driverAuthUid,
+                        "provinceId" to _provinceId.value,
+                        "cityId" to _cityId.value,
+                        "officeId" to _officeId.value,
+                        "customerName" to (callInfo.customerName ?: ""),
+                        "departure" to (callInfo.departure ?: "")
+                    )
+                    Log.d(TAG, "Cloud Function 호출 전: $data")
+                    functions.getHttpsCallable("notifyDriverAssignment")
+                        .call(data)
+                        .addOnSuccessListener { result ->
+                            Log.d(TAG, "✅ 기사 알림 전송 성공: ${result.getData()}")
+                        }
+                        .addOnFailureListener { e ->
+                            Log.e(TAG, "❌ 기사 알림 전송 실패: ${e.message}", e)
+                        }
+                    Log.d(TAG, "Cloud Function 호출 완료 (비동기)")
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌❌ 기사 알림 함수 호출 예외: ${e.message}", e)
+                }
 
             } catch (e: Exception) {
                 // TODO: Add user-facing error message

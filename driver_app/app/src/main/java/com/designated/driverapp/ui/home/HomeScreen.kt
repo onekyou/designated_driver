@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.History
 import com.designated.driverapp.navigation.AppDestinations
+import com.designated.driverapp.data.Constants
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.CoroutineScope
 import com.designated.driverapp.ui.home.logoutUserAndExitApp
@@ -54,10 +55,10 @@ fun HomeScreen(
     var officeName by remember { mutableStateOf("사무실") }
 
     LaunchedEffect(Unit) {
-        val prefs = context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
-        val provinceId = prefs.getString("provinceId", null)
-        val cityId = prefs.getString("cityId", null)
-        val officeId = prefs.getString("officeId", null)
+        val prefs = context.getSharedPreferences(Constants.PREFS_NAME, android.content.Context.MODE_PRIVATE)
+        val provinceId = prefs.getString(Constants.PREF_KEY_PROVINCE_ID, null)
+        val cityId = prefs.getString(Constants.PREF_KEY_CITY_ID, null)
+        val officeId = prefs.getString(Constants.PREF_KEY_OFFICE_ID, null)
 
         if (provinceId != null && cityId != null && officeId != null) {
             try {
@@ -318,10 +319,10 @@ fun SettlementSummaryPopup(
         if (callInfo.phoneNumber.isNotBlank()) {
             isLoadingPoints = true
             try {
-                val prefs = context.getSharedPreferences("driver_prefs", Context.MODE_PRIVATE)
-                val provinceId = prefs.getString("provinceId", "") ?: ""
-                val cityId = prefs.getString("cityId", "") ?: ""
-                val officeId = prefs.getString("officeId", "") ?: ""
+                val prefs = context.getSharedPreferences(Constants.PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                val provinceId = prefs.getString(Constants.PREF_KEY_PROVINCE_ID, "") ?: ""
+                val cityId = prefs.getString(Constants.PREF_KEY_CITY_ID, "") ?: ""
+                val officeId = prefs.getString(Constants.PREF_KEY_OFFICE_ID, "") ?: ""
 
                 if (provinceId.isNotEmpty() && cityId.isNotEmpty() && officeId.isNotEmpty()) {
                     val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
