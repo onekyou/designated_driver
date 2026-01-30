@@ -19,6 +19,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.designated.callmanager.data.SettlementData
 import com.designated.callmanager.ui.settlement.SettlementViewModel
 import com.designated.callmanager.ui.settlement.screen.CreditDialog
+import android.app.Activity
+import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
@@ -30,6 +32,12 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
     val ratio by vm.officeShareRatio.collectAsState()
 
     var paymentDialog by remember { mutableStateOf<Pair<String, List<SettlementData>>?>(null) }
+
+    // 업무 마감 확인 다이얼로그 상태
+    var showFinalizeDialog by remember { mutableStateOf(false) }
+    var isFinalizingInProgress by remember { mutableStateOf(false) }
+    var finalizeResultMessage by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
 
 
     Column(Modifier.fillMaxSize().padding(vertical = 16.dp)) {
@@ -165,11 +173,67 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
         }
         Spacer(Modifier.height(8.dp))
         Button(
-            onClick = { vm.clearAllTrips() },
+            onClick = { showFinalizeDialog = true },
             enabled = trips.isNotEmpty(),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF4444))
         ) { Text("업무 마감", color = Color.White) }
+    }
+
+    // 업무 마감 확인 다이얼로그
+    if (showFinalizeDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!isFinalizingInProgress) showFinalizeDialog = false },
+            title = { Text("업무 마감", color = Color.White) },
+            text = {
+                if (isFinalizingInProgress) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
+                        Text("마감 처리 중...", color = Color.White)
+                    }
+                } else if (finalizeResultMessage != null) {
+                    Text(finalizeResultMessage!!, color = Color.White)
+                } else {
+                    Text("업무를 마감하고 로그아웃 하시겠습니까?", color = Color.White)
+                }
+            },
+            confirmButton = {
+                if (!isFinalizingInProgress && finalizeResultMessage == null) {
+                    Button(
+                        onClick = {
+                            isFinalizingInProgress = true
+                            vm.finalizeSettlementSession { success, message ->
+                                isFinalizingInProgress = false
+                                if (success) {
+                                    vm.clearAllTrips()
+                                    finalizeResultMessage = message
+                                    // 잠시 후 앱 종료
+                                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                        (context as? Activity)?.finishAffinity()
+                                    }, 1500)
+                                } else {
+                                    finalizeResultMessage = "마감 실패: $message"
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF4444))
+                    ) {
+                        Text("확인")
+                    }
+                }
+            },
+            dismissButton = {
+                if (!isFinalizingInProgress && finalizeResultMessage == null) {
+                    TextButton(onClick = { showFinalizeDialog = false }) {
+                        Text("취소", color = Color.White)
+                    }
+                }
+            },
+            containerColor = Color(0xFF2A2A2A)
+        )
     }
 
 

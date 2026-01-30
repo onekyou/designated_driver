@@ -611,8 +611,9 @@ fun SettlementSummaryPopup(
                     }
                 }
 
-                // ✅ 추가: 앱 회원 포인트 정보 카드 (실제 앱회원 여부 확인)
-                if (isActuallyAppCustomer && customerPointInfo != null) {
+                // ✅ 수정: 앱 회원 포인트 정보 카드 - 현금+포인트 또는 포인트 결제 선택 시에만 활성화
+                val isPointPaymentSelected = paymentMethod == "현금+포인트" || paymentMethod == "포인트"
+                if (isActuallyAppCustomer && customerPointInfo != null && isPointPaymentSelected) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF2A4A2A))

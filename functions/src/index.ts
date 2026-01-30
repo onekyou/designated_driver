@@ -27,12 +27,17 @@ interface CallData {
     isAppCustomer?: boolean;
     phoneNumber?: string;
     customerName?: string;
+    customerPhone?: string;
     departure?: string;
-    departure_set?: boolean;
+    departure_set?: string;
     destination?: string;
-    destination_set?: boolean;
+    destination_set?: string;
+    waypoints_set?: string;
     fare?: number;
-    fare_set?: boolean;
+    fare_set?: number;
+    assignedDriverName?: string;
+    assignedDriverPhone?: string;
+    sourceOfficeId?: string;
     // 여기에 필요한 다른 필드들을 추가할 수 있습니다.
 }
 
