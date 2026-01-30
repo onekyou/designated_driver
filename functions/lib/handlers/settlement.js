@@ -41,6 +41,7 @@ exports.getTodayWorkDate = getTodayWorkDate;
 exports.addCallToSettlementSession = addCallToSettlementSession;
 exports.autoFinalizeSettlementSessions = autoFinalizeSettlementSessions;
 exports.checkSettlementDiscrepancies = checkSettlementDiscrepancies;
+exports.notifyDriversSettlementFinalized = notifyDriversSettlementFinalized;
 exports.notifySettlementDiscrepancy = notifySettlementDiscrepancy;
 const admin = __importStar(require("firebase-admin"));
 const logger = __importStar(require("firebase-functions/logger"));
@@ -310,6 +311,70 @@ async function checkSettlementDiscrepancies(provinceId, cityId, officeId, sessio
     }
     catch (error) {
         logger.error(`[Settlement] Discrepancy check failed:`, error);
+        throw error;
+    }
+}
+/**
+ * 로그인 상태의 기사들에게 업무 마감 알림 전송
+ * Call Manager에서 마감 시 호출
+ */
+async function notifyDriversSettlementFinalized(provinceId, cityId, officeId, sessionDate, totals) {
+    const db = admin.firestore();
+    try {
+        // 해당 사무실의 기사 목록 조회 (로그인 상태만)
+        const driversSnap = await db.collection("provinces").doc(provinceId)
+            .collection("cities").doc(cityId)
+            .collection("offices").doc(officeId)
+            .collection("designated_drivers")
+            .where("status", "not-in", ["OFFLINE", "offline"])
+            .get();
+        if (driversSnap.empty) {
+            logger.info(`[Settlement] No online drivers found for ${provinceId}/${cityId}/${officeId}`);
+            return { sent: 0, skipped: 0 };
+        }
+        const tokens = [];
+        let skippedCount = 0;
+        driversSnap.forEach(doc => {
+            const data = doc.data();
+            const token = data.fcmToken;
+            const status = data.status;
+            // OFFLINE이 아닌 기사만 알림 전송
+            if (token && status !== "OFFLINE" && status !== "offline") {
+                tokens.push(token);
+                logger.info(`[Settlement] Will notify driver: ${doc.id}, status: ${status}`);
+            }
+            else {
+                skippedCount++;
+                logger.info(`[Settlement] Skipping driver: ${doc.id}, status: ${status}, hasToken: ${!!token}`);
+            }
+        });
+        if (tokens.length === 0) {
+            logger.info(`[Settlement] No valid tokens for online drivers`);
+            return { sent: 0, skipped: skippedCount };
+        }
+        // FCM 알림 전송
+        const payload = {
+            notification: {
+                title: "업무 마감 안내",
+                body: `오늘 업무가 마감되었습니다. 총 ${totals.callCount}건, ${totals.totalFare.toLocaleString()}원`
+            },
+            data: {
+                type: "SETTLEMENT_FINALIZED",
+                sessionDate: sessionDate,
+                totalCount: String(totals.callCount),
+                totalFare: String(totals.totalFare),
+                totalDeposit: String(totals.totalDeposit)
+            },
+            android: {
+                priority: "high"
+            }
+        };
+        const response = await admin.messaging().sendEachForMulticast(Object.assign({ tokens: tokens }, payload));
+        logger.info(`[Settlement] Finalization notification sent. Success: ${response.successCount}, Failure: ${response.failureCount}`);
+        return { sent: response.successCount, skipped: skippedCount };
+    }
+    catch (error) {
+        logger.error(`[Settlement] Failed to notify drivers:`, error);
         throw error;
     }
 }

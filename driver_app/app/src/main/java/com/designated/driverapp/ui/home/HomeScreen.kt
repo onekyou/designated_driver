@@ -34,10 +34,18 @@ import com.designated.driverapp.data.Constants
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.CoroutineScope
 import com.designated.driverapp.ui.home.logoutUserAndExitApp
+import com.designated.driverapp.ui.home.hasUnsavedTripHistory
+import com.designated.driverapp.ui.home.getUnsavedTripCount
+import com.designated.driverapp.ui.home.saveAndClearSettlement
 import androidx.compose.runtime.rememberCoroutineScope
 import android.content.Context
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.DisposableEffect
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import kotlinx.coroutines.tasks.await
 
 private const val TAG = "HomeScreen"
@@ -53,6 +61,40 @@ fun HomeScreen(
     val scope = rememberCoroutineScope()
 
     var officeName by remember { mutableStateOf("사무실") }
+
+    // 로그아웃 확인 다이얼로그 상태
+    var showLogoutDialog by remember { mutableStateOf(false) }
+    var unsavedTripCount by remember { mutableStateOf(0) }
+
+    // 업무 마감 다이얼로그 상태
+    var showSettlementFinalizedDialog by remember { mutableStateOf(false) }
+    var settlementSessionDate by remember { mutableStateOf("") }
+
+    // 업무 마감 FCM 브로드캐스트 수신
+    DisposableEffect(Unit) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                Log.d(TAG, "업무 마감 브로드캐스트 수신")
+                val sessionDate = intent?.getStringExtra("sessionDate") ?: ""
+                settlementSessionDate = sessionDate
+
+                // 미저장 운행 내역 있으면 다이얼로그 표시
+                if (hasUnsavedTripHistory(context ?: return)) {
+                    unsavedTripCount = getUnsavedTripCount(context)
+                    showSettlementFinalizedDialog = true
+                }
+            }
+        }
+
+        LocalBroadcastManager.getInstance(context).registerReceiver(
+            receiver,
+            IntentFilter(Constants.ACTION_SETTLEMENT_FINALIZED)
+        )
+
+        onDispose {
+            LocalBroadcastManager.getInstance(context).unregisterReceiver(receiver)
+        }
+    }
 
     LaunchedEffect(Unit) {
         val prefs = context.getSharedPreferences(Constants.PREFS_NAME, android.content.Context.MODE_PRIVATE)
@@ -103,10 +145,17 @@ fun HomeScreen(
                 ) {
                     IconButton(
                         onClick = {
-                            logoutUserAndExitApp(context, scope, viewModel)
-                            navController.navigate(AppDestinations.LOGIN_ROUTE) {
-                                popUpTo(0) { inclusive = true }
-                                launchSingleTop = true
+                            // 미저장 운행 내역 확인
+                            if (hasUnsavedTripHistory(context)) {
+                                unsavedTripCount = getUnsavedTripCount(context)
+                                showLogoutDialog = true
+                            } else {
+                                // 미저장 데이터 없으면 바로 로그아웃
+                                logoutUserAndExitApp(context, scope, viewModel)
+                                navController.navigate(AppDestinations.LOGIN_ROUTE) {
+                                    popUpTo(0) { inclusive = true }
+                                    launchSingleTop = true
+                                }
                             }
                         },
                         modifier = Modifier.size(48.dp)
@@ -274,6 +323,100 @@ fun HomeScreen(
                 )
             }
         }
+    }
+
+    // 로그아웃 확인 다이얼로그 (미저장 정산 데이터 있을 때)
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = { Text("저장되지 않은 운행 내역") },
+            text = {
+                Text("저장되지 않은 운행 내역이 ${unsavedTripCount}건 있습니다.\n정산 내역을 저장하시겠습니까?")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        // 저장 후 로그아웃
+                        saveAndClearSettlement(context)
+                        showLogoutDialog = false
+                        logoutUserAndExitApp(context, scope, viewModel)
+                        navController.navigate(AppDestinations.LOGIN_ROUTE) {
+                            popUpTo(0) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
+                ) {
+                    Text("저장 후 로그아웃")
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(
+                        onClick = {
+                            // 저장 없이 로그아웃
+                            showLogoutDialog = false
+                            logoutUserAndExitApp(context, scope, viewModel)
+                            navController.navigate(AppDestinations.LOGIN_ROUTE) {
+                                popUpTo(0) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        }
+                    ) {
+                        Text("그냥 로그아웃", color = Color.Red)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    TextButton(onClick = { showLogoutDialog = false }) {
+                        Text("취소")
+                    }
+                }
+            }
+        )
+    }
+
+    // 업무 마감 알림 다이얼로그 (FCM 수신 시)
+    if (showSettlementFinalizedDialog) {
+        AlertDialog(
+            onDismissRequest = { showSettlementFinalizedDialog = false },
+            title = { Text("업무 마감 안내") },
+            text = {
+                Text("사무실에서 업무를 마감했습니다.\n\n저장되지 않은 운행 내역이 ${unsavedTripCount}건 있습니다.\n정산 내역을 저장하시겠습니까?")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        // 저장 후 로그아웃
+                        saveAndClearSettlement(context)
+                        showSettlementFinalizedDialog = false
+                        logoutUserAndExitApp(context, scope, viewModel)
+                        navController.navigate(AppDestinations.LOGIN_ROUTE) {
+                            popUpTo(0) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
+                ) {
+                    Text("저장 후 로그아웃")
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(
+                        onClick = {
+                            // 저장만 하고 계속 대기
+                            saveAndClearSettlement(context)
+                            showSettlementFinalizedDialog = false
+                        }
+                    ) {
+                        Text("저장만 하기")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    TextButton(
+                        onClick = { showSettlementFinalizedDialog = false }
+                    ) {
+                        Text("나중에")
+                    }
+                }
+            }
+        )
     }
 }
 

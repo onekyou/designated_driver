@@ -13,7 +13,7 @@ import {onSchedule} from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
 import { processSharedCallPoints, processCustomerPointsOnComplete } from "./handlers/points";
-import { addCallToSettlementSession, autoFinalizeSettlementSessions, checkSettlementDiscrepancies, notifySettlementDiscrepancy } from "./handlers/settlement";
+import { addCallToSettlementSession, autoFinalizeSettlementSessions, checkSettlementDiscrepancies, notifySettlementDiscrepancy, notifyDriversSettlementFinalized, getTodayWorkDate } from "./handlers/settlement";
 
 // Firebase Admin SDK 초기화
 admin.initializeApp();
@@ -4136,6 +4136,96 @@ export const notifyDriverAssignment = onCall(
 
     } catch (error) {
       logger.error("[notifyDriverAssignment] 오류:", error);
+      return { success: false, error: String(error) };
+    }
+  }
+);
+
+/**
+ * 업무 마감 및 로그인 상태 기사에게 알림 전송
+ * Call Manager에서 업무 마감 시 호출
+ */
+export const finalizeSettlementAndNotifyDrivers = onCall(
+  {
+    region: "asia-northeast3",
+  },
+  async (request) => {
+    const { provinceId, cityId, officeId, sessionDate } = request.data;
+
+    logger.info(`[finalizeSettlement] 호출됨 - ${provinceId}/${cityId}/${officeId}, date: ${sessionDate}`);
+
+    if (!provinceId || !cityId || !officeId) {
+      logger.error("[finalizeSettlement] 필수 파라미터 누락");
+      return { success: false, error: "Missing required parameters" };
+    }
+
+    // 세션 날짜가 없으면 오늘 근무일 사용
+    const targetDate = sessionDate || getTodayWorkDate();
+
+    try {
+      const db = admin.firestore();
+      const sessionRef = db.collection("provinces").doc(provinceId)
+        .collection("cities").doc(cityId)
+        .collection("offices").doc(officeId)
+        .collection("settlementSessions").doc(targetDate);
+
+      const sessionDoc = await sessionRef.get();
+
+      if (!sessionDoc.exists) {
+        logger.warn(`[finalizeSettlement] 세션 없음 - ${targetDate}`);
+        return { success: false, error: "Settlement session not found" };
+      }
+
+      const session = sessionDoc.data();
+
+      // 이미 마감된 세션인지 확인
+      if (session?.metadata?.isFinalized) {
+        logger.info(`[finalizeSettlement] 이미 마감된 세션 - ${targetDate}`);
+        return { success: true, alreadyFinalized: true, sent: 0, skipped: 0 };
+      }
+
+      // 세션 마감 처리
+      await sessionRef.update({
+        "metadata.isFinalized": true,
+        "metadata.version": (session?.metadata?.version || 0) + 1,
+        "metadata.lastUpdatedAt": admin.firestore.Timestamp.now(),
+        "metadata.lastUpdatedBy": "call_manager_finalize"
+      });
+
+      logger.info(`[finalizeSettlement] 세션 마감 완료 - ${targetDate}`);
+
+      // 로그인 상태 기사에게만 알림 전송
+      const totals = session?.totals || {
+        callCount: 0,
+        totalFare: 0,
+        totalDeposit: 0,
+        totalDriverShare: 0,
+        totalCash: 0,
+        totalCard: 0,
+        totalCredit: 0,
+        totalPoints: 0
+      };
+
+      const notifyResult = await notifyDriversSettlementFinalized(
+        provinceId,
+        cityId,
+        officeId,
+        targetDate,
+        totals
+      );
+
+      logger.info(`[finalizeSettlement] 알림 전송 완료 - sent: ${notifyResult.sent}, skipped: ${notifyResult.skipped}`);
+
+      return {
+        success: true,
+        sessionDate: targetDate,
+        sent: notifyResult.sent,
+        skipped: notifyResult.skipped,
+        totals: totals
+      };
+
+    } catch (error) {
+      logger.error("[finalizeSettlement] 오류:", error);
       return { success: false, error: String(error) };
     }
   }

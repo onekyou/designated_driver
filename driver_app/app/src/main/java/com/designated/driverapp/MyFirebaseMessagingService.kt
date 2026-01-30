@@ -97,10 +97,31 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 }
                 LocalBroadcastManager.getInstance(this).sendBroadcast(broadcastIntent)
             }
-        }
 
-        // 알림은 항상 표시 (백그라운드에서 사용자가 알림 클릭으로 앱 진입)
-        showNotification(title, body, callId)
+            // 알림은 항상 표시 (백그라운드에서 사용자가 알림 클릭으로 앱 진입)
+            showNotification(title, body, callId)
+        } else if (messageType == "SETTLEMENT_FINALIZED") {
+            // 업무 마감 알림 처리
+            val sessionDate = remoteMessage.data["sessionDate"] ?: ""
+            val totalCount = remoteMessage.data["totalCount"] ?: "0"
+            val totalFare = remoteMessage.data["totalFare"] ?: "0"
+
+            Log.d(TAG, "업무 마감 FCM 수신 - sessionDate: $sessionDate, totalCount: $totalCount, totalFare: $totalFare")
+
+            // LocalBroadcast로 UI에 알림 (포그라운드/백그라운드 모두)
+            val broadcastIntent = Intent(Constants.ACTION_SETTLEMENT_FINALIZED).apply {
+                putExtra("sessionDate", sessionDate)
+                putExtra("totalCount", totalCount)
+                putExtra("totalFare", totalFare)
+            }
+            LocalBroadcastManager.getInstance(this).sendBroadcast(broadcastIntent)
+
+            // 알림 표시
+            showSettlementNotification(title, body, sessionDate)
+        } else {
+            // 기타 알림
+            showNotification(title, body, callId)
+        }
     }
 
     private fun isAppInForeground(): Boolean {
@@ -168,6 +189,52 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setVibrate(longArrayOf(0, 500, 200, 500))
             .setFullScreenIntent(fullScreenIntent, true) // 백그라운드에서 화면 띄우기
+
+        notificationManager.notify(notificationId, builder.build())
+    }
+
+    private fun showSettlementNotification(title: String, body: String, sessionDate: String) {
+        val channelId = "settlement_channel"
+        val notificationId = "settlement_$sessionDate".hashCode()
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                channelId,
+                "업무 마감 알림",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "업무 마감 및 정산 안내"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 300, 200, 300)
+                setShowBadge(true)
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra("settlementFinalized", true)
+            putExtra("sessionDate", sessionDate)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            notificationId,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val builder = NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setVibrate(longArrayOf(0, 300, 200, 300))
 
         notificationManager.notify(notificationId, builder.build())
     }

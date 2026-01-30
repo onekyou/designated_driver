@@ -14,6 +14,10 @@ import kotlinx.coroutines.delay
 import android.util.Log
 import com.designated.driverapp.viewmodel.DriverViewModel
 import com.designated.driverapp.data.Constants
+import org.json.JSONArray
+import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
 
 fun logoutUserAndExitApp(context: Context, scope: CoroutineScope, viewModel: DriverViewModel) {
     Log.d("DriverAppUtils", "🔴 [LOGOUT] logoutUserAndExitApp 호출됨")
@@ -83,4 +87,111 @@ fun performSignOut(context: Context, scope: CoroutineScope) {
             }
         }
     }
+}
+
+/**
+ * 저장되지 않은 운행 내역이 있는지 확인
+ */
+fun hasUnsavedTripHistory(context: Context): Boolean {
+    val prefs = context.getSharedPreferences("trip_history", Context.MODE_PRIVATE)
+    val historyJson = prefs.getString("history_list", "[]")
+    val historyList = JSONArray(historyJson)
+    return historyList.length() > 0
+}
+
+/**
+ * 현재 운행 내역 개수 반환
+ */
+fun getUnsavedTripCount(context: Context): Int {
+    val prefs = context.getSharedPreferences("trip_history", Context.MODE_PRIVATE)
+    val historyJson = prefs.getString("history_list", "[]")
+    val historyList = JSONArray(historyJson)
+    return historyList.length()
+}
+
+/**
+ * 정산 데이터를 저장하고 초기화
+ */
+fun saveAndClearSettlement(context: Context) {
+    Log.d("DriverAppUtils", "📊 [SETTLEMENT] 정산 저장 및 초기화 시작")
+
+    // 현재 운행 내역 로드
+    val tripPrefs = context.getSharedPreferences("trip_history", Context.MODE_PRIVATE)
+    val historyJson = tripPrefs.getString("history_list", "[]")
+    val historyList = JSONArray(historyJson)
+
+    if (historyList.length() == 0) {
+        Log.d("DriverAppUtils", "📊 [SETTLEMENT] 저장할 운행 내역 없음")
+        return
+    }
+
+    // 정산 계산
+    val settlementPrefs = context.getSharedPreferences("settlement_prefs", Context.MODE_PRIVATE)
+    val depositPercent = settlementPrefs.getInt("deposit_percent", 60)
+
+    var totalCount = 0
+    var totalFare = 0L
+    var totalDeposit = 0L
+    var totalCredit = 0L
+
+    for (i in 0 until historyList.length()) {
+        val item = historyList.getString(i)
+        // 요금 파싱: "...요금: 30,000원..." 형식
+        val fareMatch = Regex("요금:\\s*([\\d,]+)원").find(item)
+        val fare = fareMatch?.groupValues?.get(1)?.replace(",", "")?.toLongOrNull() ?: 0L
+
+        // 납입 여부 파싱: "(납입)" 또는 "(미납)"
+        val isDeposited = item.contains("(납입)")
+
+        totalCount++
+        totalFare += fare
+        if (isDeposited) {
+            totalDeposit += (fare * depositPercent / 100)
+        } else {
+            totalCredit += (fare * depositPercent / 100)
+        }
+    }
+
+    val realDeposit = totalDeposit
+    val realIncome = totalFare - totalDeposit - totalCredit
+
+    // 세션 저장
+    val sessionPrefs = context.getSharedPreferences("trip_sessions", Context.MODE_PRIVATE)
+    val sessionsJson = sessionPrefs.getString("sessions", "[]")
+    val sessionsArr = JSONArray(sessionsJson)
+
+    val now = SimpleDateFormat("yyyy-MM-dd HH:mm").format(Date())
+    val historyArr = JSONArray()
+    for (i in 0 until historyList.length()) {
+        historyArr.put(historyList.getString(i))
+    }
+
+    val summaryObj = JSONObject().apply {
+        put("totalCount", totalCount)
+        put("totalFare", totalFare)
+        put("totalDeposit", totalDeposit)
+        put("totalCredit", totalCredit)
+        put("realDeposit", realDeposit)
+        put("realIncome", realIncome)
+    }
+
+    val newSession = JSONObject().apply {
+        put("date", now)
+        put("history", historyArr)
+        put("summary", summaryObj)
+    }
+
+    sessionsArr.put(newSession)
+
+    // 최대 5개만 유지
+    while (sessionsArr.length() > 5) {
+        sessionsArr.remove(0)
+    }
+
+    sessionPrefs.edit().putString("sessions", sessionsArr.toString()).apply()
+
+    // 현재 운행 내역 초기화
+    tripPrefs.edit().putString("history_list", "[]").apply()
+
+    Log.d("DriverAppUtils", "[SETTLEMENT] Settlement saved: " + totalCount + " trips, total " + totalFare + " won")
 }

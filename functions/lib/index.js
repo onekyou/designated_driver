@@ -41,7 +41,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notifyDriverAssignment = exports.manualCheckSettlementDiscrepancy = exports.checkSettlementDiscrepanciesScheduled = exports.autoFinalizeSettlements = exports.onCallCompletedUpdateSettlement = exports.onDriverStatusChange = exports.getOfficeReport = exports.searchArchivedCalls = exports.getArchivedStats = exports.archiveOldCalls = exports.scheduledDataCleanup = exports.onCallDetectorCrash = exports.onCustomerCountChange = exports.onDriverCountChange = exports.onNewCustomerRegistered = exports.onCallCancelledByDriver = exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.finalizeWorkDay = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.notifyCustomerOnComplete = exports.notifyCustomerOnPhoneCall = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.notifyCustomerOnOfficeClosed = exports.onSharedCallCreated = exports.sendNewCallNotification = exports.oncallassigned = void 0;
+exports.finalizeSettlementAndNotifyDrivers = exports.notifyDriverAssignment = exports.manualCheckSettlementDiscrepancy = exports.checkSettlementDiscrepanciesScheduled = exports.autoFinalizeSettlements = exports.onCallCompletedUpdateSettlement = exports.onDriverStatusChange = exports.getOfficeReport = exports.searchArchivedCalls = exports.getArchivedStats = exports.archiveOldCalls = exports.scheduledDataCleanup = exports.onCallDetectorCrash = exports.onCustomerCountChange = exports.onDriverCountChange = exports.onNewCustomerRegistered = exports.onCallCancelledByDriver = exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.finalizeWorkDay = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.notifyCustomerOnComplete = exports.notifyCustomerOnPhoneCall = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.notifyCustomerOnOfficeClosed = exports.onSharedCallCreated = exports.sendNewCallNotification = exports.oncallassigned = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -3402,6 +3402,73 @@ exports.notifyDriverAssignment = (0, https_1.onCall)({
     }
     catch (error) {
         logger.error("[notifyDriverAssignment] 오류:", error);
+        return { success: false, error: String(error) };
+    }
+});
+/**
+ * 업무 마감 및 로그인 상태 기사에게 알림 전송
+ * Call Manager에서 업무 마감 시 호출
+ */
+exports.finalizeSettlementAndNotifyDrivers = (0, https_1.onCall)({
+    region: "asia-northeast3",
+}, async (request) => {
+    var _a, _b;
+    const { provinceId, cityId, officeId, sessionDate } = request.data;
+    logger.info(`[finalizeSettlement] 호출됨 - ${provinceId}/${cityId}/${officeId}, date: ${sessionDate}`);
+    if (!provinceId || !cityId || !officeId) {
+        logger.error("[finalizeSettlement] 필수 파라미터 누락");
+        return { success: false, error: "Missing required parameters" };
+    }
+    // 세션 날짜가 없으면 오늘 근무일 사용
+    const targetDate = sessionDate || (0, settlement_1.getTodayWorkDate)();
+    try {
+        const db = admin.firestore();
+        const sessionRef = db.collection("provinces").doc(provinceId)
+            .collection("cities").doc(cityId)
+            .collection("offices").doc(officeId)
+            .collection("settlementSessions").doc(targetDate);
+        const sessionDoc = await sessionRef.get();
+        if (!sessionDoc.exists) {
+            logger.warn(`[finalizeSettlement] 세션 없음 - ${targetDate}`);
+            return { success: false, error: "Settlement session not found" };
+        }
+        const session = sessionDoc.data();
+        // 이미 마감된 세션인지 확인
+        if ((_a = session === null || session === void 0 ? void 0 : session.metadata) === null || _a === void 0 ? void 0 : _a.isFinalized) {
+            logger.info(`[finalizeSettlement] 이미 마감된 세션 - ${targetDate}`);
+            return { success: true, alreadyFinalized: true, sent: 0, skipped: 0 };
+        }
+        // 세션 마감 처리
+        await sessionRef.update({
+            "metadata.isFinalized": true,
+            "metadata.version": (((_b = session === null || session === void 0 ? void 0 : session.metadata) === null || _b === void 0 ? void 0 : _b.version) || 0) + 1,
+            "metadata.lastUpdatedAt": admin.firestore.Timestamp.now(),
+            "metadata.lastUpdatedBy": "call_manager_finalize"
+        });
+        logger.info(`[finalizeSettlement] 세션 마감 완료 - ${targetDate}`);
+        // 로그인 상태 기사에게만 알림 전송
+        const totals = (session === null || session === void 0 ? void 0 : session.totals) || {
+            callCount: 0,
+            totalFare: 0,
+            totalDeposit: 0,
+            totalDriverShare: 0,
+            totalCash: 0,
+            totalCard: 0,
+            totalCredit: 0,
+            totalPoints: 0
+        };
+        const notifyResult = await (0, settlement_1.notifyDriversSettlementFinalized)(provinceId, cityId, officeId, targetDate, totals);
+        logger.info(`[finalizeSettlement] 알림 전송 완료 - sent: ${notifyResult.sent}, skipped: ${notifyResult.skipped}`);
+        return {
+            success: true,
+            sessionDate: targetDate,
+            sent: notifyResult.sent,
+            skipped: notifyResult.skipped,
+            totals: totals
+        };
+    }
+    catch (error) {
+        logger.error("[finalizeSettlement] 오류:", error);
         return { success: false, error: String(error) };
     }
 });

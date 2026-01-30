@@ -32,6 +32,9 @@ import com.designated.callmanager.data.settlement.SettlementMetadata
 import com.designated.callmanager.data.settlement.SettlementTotals
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldValue
+import com.google.firebase.functions.FirebaseFunctions
+import com.google.firebase.functions.ktx.functions
+import com.google.firebase.ktx.Firebase
 
 class SettlementViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -928,8 +931,9 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     /**
-     * 전체 정산 세션 마감 처리
+     * 전체 정산 세션 마감 처리 및 기사 알림
      * 사무실에서 일일 정산 마감 시 호출
+     * Cloud Function을 통해 마감 처리하고 로그인 상태의 기사에게만 알림 전송
      */
     fun finalizeSettlementSession(onResult: (Boolean, String) -> Unit) {
         val provinceId = currentProvinceId
@@ -942,47 +946,88 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
         }
 
         val sessionDate = getTodaySessionDate()
+
+        // 세션이 없는 경우 먼저 생성
         val sessionRef = firestore.collection("provinces").document(provinceId)
             .collection("cities").document(cityId)
             .collection("offices").document(officeId)
             .collection("settlementSessions").document(sessionDate)
 
         viewModelScope.launch {
-            firestore.runTransaction { transaction ->
-                val doc = transaction.get(sessionRef)
-
+            sessionRef.get().addOnSuccessListener { doc ->
                 if (!doc.exists()) {
-                    // 세션이 없으면 새로 생성
+                    // 세션이 없으면 로컬 데이터로 먼저 생성
                     val newSession = createSettlementSessionFromLocalData(sessionDate)
-                    transaction.set(sessionRef, newSession.toMap())
-                    return@runTransaction "created"
+                    sessionRef.set(newSession.toMap())
+                        .addOnSuccessListener {
+                            // 세션 생성 후 Cloud Function 호출
+                            callFinalizeFunction(provinceId, cityId, officeId, sessionDate, onResult)
+                        }
+                        .addOnFailureListener { e ->
+                            Log.e("SettlementViewModel", "Failed to create session", e)
+                            onResult(false, "세션 생성 실패: ${e.message}")
+                        }
+                } else {
+                    // 세션이 있으면 바로 Cloud Function 호출
+                    callFinalizeFunction(provinceId, cityId, officeId, sessionDate, onResult)
                 }
-
-                val session = SettlementSession.fromDocument(doc)
-                    ?: throw Exception("세션 파싱 실패")
-
-                // 메타데이터 업데이트 (마감 처리)
-                val updatedMetadata = session.metadata.copy(
-                    version = session.metadata.version + 1,
-                    lastUpdatedAt = Timestamp.now(),
-                    lastUpdatedBy = "call_manager",
-                    isFinalized = true
-                )
-
-                transaction.update(sessionRef, mapOf(
-                    "metadata" to updatedMetadata.toMap()
-                ))
-
-                _sharedSessionVersion.value = updatedMetadata.version
-                "finalized"
-            }.addOnSuccessListener { result ->
-                Log.d("SettlementViewModel", "Session $result for $sessionDate")
-                onResult(true, if (result == "created") "정산 세션 생성 및 마감 완료" else "정산 마감 완료")
             }.addOnFailureListener { e ->
-                Log.e("SettlementViewModel", "Failed to finalize session", e)
-                onResult(false, e.message ?: "마감 실패")
+                Log.e("SettlementViewModel", "Failed to check session", e)
+                onResult(false, "세션 확인 실패: ${e.message}")
             }
         }
+    }
+
+    /**
+     * Cloud Function 호출하여 마감 처리 및 기사 알림
+     */
+    private fun callFinalizeFunction(
+        provinceId: String,
+        cityId: String,
+        officeId: String,
+        sessionDate: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        val functions = Firebase.functions("asia-northeast3")
+
+        val data = hashMapOf(
+            "provinceId" to provinceId,
+            "cityId" to cityId,
+            "officeId" to officeId,
+            "sessionDate" to sessionDate
+        )
+
+        functions.getHttpsCallable("finalizeSettlementAndNotifyDrivers")
+            .call(data)
+            .addOnSuccessListener { result ->
+                val response = result.getData() as? Map<*, *>
+                val success = response?.get("success") as? Boolean ?: false
+
+                if (success) {
+                    val sent = (response?.get("sent") as? Number)?.toInt() ?: 0
+                    val skipped = (response?.get("skipped") as? Number)?.toInt() ?: 0
+                    val alreadyFinalized = response?.get("alreadyFinalized") as? Boolean ?: false
+
+                    val message = if (alreadyFinalized) {
+                        "이미 마감된 세션입니다"
+                    } else if (sent > 0) {
+                        "마감 완료! ${sent}명의 기사에게 알림 전송됨"
+                    } else {
+                        "마감 완료 (로그인 중인 기사 없음)"
+                    }
+
+                    Log.d("SettlementViewModel", "Finalize success: sent=$sent, skipped=$skipped")
+                    onResult(true, message)
+                } else {
+                    val error = response?.get("error") as? String ?: "알 수 없는 오류"
+                    Log.e("SettlementViewModel", "Finalize failed: $error")
+                    onResult(false, error)
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.e("SettlementViewModel", "Cloud Function call failed", e)
+                onResult(false, "서버 오류: ${e.message}")
+            }
     }
 
     /**
