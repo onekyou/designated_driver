@@ -802,13 +802,14 @@ fun SettlementSummaryPopup(
                     }
                 }
 
-                if (paymentMethod == "현금+포인트") {
+                // 현금+포인트 선택 시 받은 현금 입력 (앱회원 리워드 포인트 사용 시에는 표시 안함)
+                if (paymentMethod == "현금+포인트" && !(isActuallyAppCustomer && customerPointInfo != null)) {
                     OutlinedTextField(
                         value = cashAmount,
                         onValueChange = { cashAmount = it.filter { c -> c.isDigit() } },
                         label = {
                             Text(
-                                "받은 현금 (원) - 나머지는 포인트",
+                                "받은 현금 (원) - 나머지는 외상",
                                 color = Color.Gray
                             )
                         },
@@ -829,7 +830,7 @@ fun SettlementSummaryPopup(
                         val pointAmount = totalFare - cash
                         if (pointAmount > 0) {
                             Text(
-                                "포인트: ${String.format("%,d", pointAmount)}원 (외상)",
+                                "외상: ${String.format("%,d", pointAmount)}원",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color(0xFFFFB000)
                             )
