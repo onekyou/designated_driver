@@ -61,7 +61,7 @@ class CallManagerApplication : Application() {
      * CallRepository 인스턴스
      */
     val callRepository: CallRepository by lazy {
-        CallRepository(database, firestore, applicationScope)
+        CallRepository(applicationContext, database, firestore, applicationScope)
     }
 
     /**

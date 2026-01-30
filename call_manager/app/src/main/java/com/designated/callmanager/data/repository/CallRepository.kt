@@ -1,5 +1,7 @@
 package com.designated.callmanager.data.repository
 
+import android.content.Context
+import android.content.SharedPreferences
 import android.util.Log
 import com.designated.callmanager.data.CallInfo
 import com.designated.callmanager.data.CallStatus
@@ -28,14 +30,48 @@ import kotlinx.coroutines.withContext
  * - 낙관적 업데이트로 즉각적인 UI 반응
  */
 class CallRepository(
+    private val context: Context,
     private val database: AppDatabase,
     private val firestore: FirebaseFirestore,
     private val scope: CoroutineScope
 ) {
     private val callDao = database.callDao()
+    private val deletedCallsPrefs: SharedPreferences =
+        context.getSharedPreferences("deleted_calls", Context.MODE_PRIVATE)
 
     companion object {
         private const val TAG = "CallRepository"
+        private const val DELETED_CALLS_KEY = "deleted_call_ids"
+    }
+
+    /**
+     * 삭제된 콜 ID 목록 가져오기
+     */
+    private fun getDeletedCallIds(): Set<String> {
+        return deletedCallsPrefs.getStringSet(DELETED_CALLS_KEY, emptySet()) ?: emptySet()
+    }
+
+    /**
+     * 콜 ID를 삭제 목록에 추가
+     */
+    private fun addDeletedCallId(callId: String) {
+        val currentSet = getDeletedCallIds().toMutableSet()
+        currentSet.add(callId)
+        deletedCallsPrefs.edit().putStringSet(DELETED_CALLS_KEY, currentSet).apply()
+        Log.d(TAG, "[삭제] 삭제 목록에 추가: $callId (총 ${currentSet.size}개)")
+    }
+
+    /**
+     * 오래된 삭제 기록 정리 (24시간 이상 된 것은 제거)
+     * 메모리 관리를 위해 주기적으로 호출
+     */
+    fun cleanupOldDeletedCalls() {
+        // 삭제 목록이 100개 이상이면 전체 초기화
+        val currentSet = getDeletedCallIds()
+        if (currentSet.size > 100) {
+            deletedCallsPrefs.edit().putStringSet(DELETED_CALLS_KEY, emptySet()).apply()
+            Log.d(TAG, "[정리] 삭제 목록 초기화 (${currentSet.size}개 → 0개)")
+        }
     }
 
     // ========================================
@@ -76,10 +112,15 @@ class CallRepository(
     /**
      * Firestore에서 최근 콜 100개를 가져와 로컬 DB에 저장
      * 앱 시작 시 1회 실행
+     * 삭제된 콜 ID는 필터링하여 제외
      */
     suspend fun refreshData(provinceId: String, cityId: String, officeId: String) = withContext(Dispatchers.IO) {
         try {
             Log.d(TAG, "[refreshData] 시작: $provinceId/$cityId/$officeId")
+
+            // 삭제된 콜 ID 목록 가져오기
+            val deletedCallIds = getDeletedCallIds()
+            Log.d(TAG, "[refreshData] 삭제된 콜 ${deletedCallIds.size}개 필터링 예정")
 
             // 기존 데이터 삭제 (regionId는 내부적으로 provinceId로 사용)
             callDao.deleteAll(provinceId, officeId)
@@ -95,8 +136,14 @@ class CallRepository(
                 .get()
                 .await()
 
-            // Room DB에 저장
+            // Room DB에 저장 (삭제된 콜 제외)
             val localCalls = snapshot.documents.mapNotNull { doc ->
+                // 삭제된 콜은 건너뛰기
+                if (deletedCallIds.contains(doc.id)) {
+                    Log.d(TAG, "[refreshData] 삭제된 콜 건너뛰기: ${doc.id}")
+                    return@mapNotNull null
+                }
+
                 try {
                     val data = doc.data ?: return@mapNotNull null
 
@@ -127,7 +174,10 @@ class CallRepository(
 
             callDao.upsertCalls(localCalls)
 
-            Log.d(TAG, "[refreshData] 완료: ${localCalls.size}개 로드")
+            Log.d(TAG, "[refreshData] 완료: ${localCalls.size}개 로드 (삭제 필터링 후)")
+
+            // 오래된 삭제 기록 정리
+            cleanupOldDeletedCalls()
         } catch (e: Exception) {
             Log.e(TAG, "[refreshData] 실패", e)
         }
@@ -266,11 +316,15 @@ class CallRepository(
     }
 
     /**
-     * 콜 삭제 (로컬 DB에서만 삭제)
-     * Firestore에는 남아있지만, 콜 목록은 로컬 DB에서 가져오므로 UI에서 사라짐
+     * 콜 삭제 (로컬 DB에서 삭제 + 삭제 목록에 추가)
+     * Firestore에는 남아있지만, 삭제 목록에 추가되어 refreshData 시에도 복구되지 않음
      */
     suspend fun deleteCall(callId: String) = withContext(Dispatchers.IO) {
         try {
+            // 삭제 목록에 추가 (refreshData 시 필터링용)
+            addDeletedCallId(callId)
+
+            // 로컬 DB에서 삭제
             callDao.deleteCall(callId)
             Log.d(TAG, "[삭제] 로컬 DB에서 콜 삭제 완료: $callId")
         } catch (e: Exception) {

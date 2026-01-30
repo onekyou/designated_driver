@@ -79,8 +79,6 @@ import com.designated.callmanager.util.VoiceInputHelper
 import com.designated.callmanager.util.AddressSearchHelper
 import com.designated.callmanager.data.AddressSearchResult
 import android.speech.SpeechRecognizer
-import android.content.ClipboardManager
-import androidx.compose.material.icons.filled.ContentPaste
 
 private const val TAG = "DashboardScreen"
 
@@ -2280,7 +2278,7 @@ fun CustomerGradeBadge(grade: String) {
 
 /**
  * 새 호출 입력 다이얼로그
- * 전화번호는 클립보드에서 붙여넣기, 출발지/도착지/요금은 음성 입력 가능
+ * 출발지/도착지/요금은 음성 입력 가능
  */
 @Composable
 fun NewCallInputDialog(
@@ -2288,7 +2286,6 @@ fun NewCallInputDialog(
     onConfirm: (phoneNumber: String, departure: String, destination: String, fare: Long) -> Unit
 ) {
     val context = LocalContext.current
-    val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 
     var phoneNumber by remember { mutableStateOf("") }
     var departure by remember { mutableStateOf("") }
@@ -2335,7 +2332,7 @@ fun NewCallInputDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.verticalScroll(rememberScrollState())
             ) {
-                // 전화번호 입력 (클립보드 붙여넣기)
+                // 전화번호 입력
                 OutlinedTextField(
                     value = phoneNumber,
                     onValueChange = { phoneNumber = it },
@@ -2352,42 +2349,9 @@ fun NewCallInputDialog(
                         onNext = { departureFocusRequester.requestFocus() }
                     ),
                     trailingIcon = {
-                        Row {
-                            // 클립보드 붙여넣기 버튼
-                            IconButton(onClick = {
-                                val clipData = clipboardManager.primaryClip
-                                if (clipData != null && clipData.itemCount > 0) {
-                                    val pastedText = clipData.getItemAt(0).text?.toString() ?: ""
-                                    // 전화번호 추출 및 포맷팅
-                                    val extractedPhone = voiceHelper.extractPhoneNumber(pastedText)
-                                    if (extractedPhone != null) {
-                                        phoneNumber = extractedPhone
-                                        Toast.makeText(context, "전화번호 붙여넣기 완료", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        // 전화번호 패턴이 없으면 숫자만 추출하여 포맷팅
-                                        val digitsOnly = pastedText.filter { it.isDigit() }
-                                        if (digitsOnly.length >= 10) {
-                                            phoneNumber = voiceHelper.formatPhoneNumber(digitsOnly)
-                                            Toast.makeText(context, "전화번호 붙여넣기 완료", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            Toast.makeText(context, "클립보드에 전화번호가 없습니다", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                } else {
-                                    Toast.makeText(context, "클립보드가 비어있습니다", Toast.LENGTH_SHORT).show()
-                                }
-                            }) {
-                                Icon(
-                                    Icons.Default.ContentPaste,
-                                    contentDescription = "붙여넣기",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            // 지우기 버튼
-                            if (phoneNumber.isNotEmpty()) {
-                                IconButton(onClick = { phoneNumber = "" }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "지우기")
-                                }
+                        if (phoneNumber.isNotEmpty()) {
+                            IconButton(onClick = { phoneNumber = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "지우기")
                             }
                         }
                     },
