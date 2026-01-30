@@ -2293,6 +2293,7 @@ fun NewCallInputDialog(
     var fareText by remember { mutableStateOf("") }
 
     // 음성 인식 상태
+    var isRecordingPhone by remember { mutableStateOf(false) }
     var isRecordingDeparture by remember { mutableStateOf(false) }
     var isRecordingDestination by remember { mutableStateOf(false) }
     var isRecordingFare by remember { mutableStateOf(false) }
@@ -2332,7 +2333,7 @@ fun NewCallInputDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.verticalScroll(rememberScrollState())
             ) {
-                // 전화번호 입력
+                // 전화번호 입력 (음성: 010 제외 8자리만 말하면 됨)
                 OutlinedTextField(
                     value = phoneNumber,
                     onValueChange = { phoneNumber = it },
@@ -2349,9 +2350,40 @@ fun NewCallInputDialog(
                         onNext = { departureFocusRequester.requestFocus() }
                     ),
                     trailingIcon = {
-                        if (phoneNumber.isNotEmpty()) {
-                            IconButton(onClick = { phoneNumber = "" }) {
-                                Icon(Icons.Default.Clear, contentDescription = "지우기")
+                        Row {
+                            // 음성 입력 버튼
+                            IconButton(onClick = {
+                                if (!isRecordingPhone) {
+                                    isRecordingPhone = true
+                                    voiceHelper.startListening { result ->
+                                        // 숫자만 추출
+                                        val digits = result.filter { it.isDigit() }
+                                        // 8자리면 010 붙이기, 11자리면 그대로 사용
+                                        val formattedPhone = when {
+                                            digits.length == 8 -> "010-${digits.substring(0, 4)}-${digits.substring(4)}"
+                                            digits.length == 11 && digits.startsWith("010") ->
+                                                "${digits.substring(0, 3)}-${digits.substring(3, 7)}-${digits.substring(7)}"
+                                            digits.length >= 7 -> "010-${digits.take(8).chunked(4).joinToString("-")}"
+                                            else -> "010-$digits"
+                                        }
+                                        phoneNumber = formattedPhone
+                                        isRecordingPhone = false
+                                    }
+                                } else {
+                                    voiceHelper.stopListening()
+                                    isRecordingPhone = false
+                                }
+                            }) {
+                                Icon(
+                                    Icons.Default.Mic,
+                                    contentDescription = "음성 입력 (010 제외 8자리)",
+                                    tint = if (isRecordingPhone) Color.Red else MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            if (phoneNumber.isNotEmpty()) {
+                                IconButton(onClick = { phoneNumber = "" }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "지우기")
+                                }
                             }
                         }
                     },
