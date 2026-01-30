@@ -266,6 +266,19 @@ class CallRepository(
     }
 
     /**
+     * 콜 삭제 (로컬 DB에서만 삭제)
+     * Firestore에는 남아있지만, 콜 목록은 로컬 DB에서 가져오므로 UI에서 사라짐
+     */
+    suspend fun deleteCall(callId: String) = withContext(Dispatchers.IO) {
+        try {
+            callDao.deleteCall(callId)
+            Log.d(TAG, "[삭제] 로컬 DB에서 콜 삭제 완료: $callId")
+        } catch (e: Exception) {
+            Log.e(TAG, "[삭제] 로컬 DB 삭제 실패: $callId", e)
+        }
+    }
+
+    /**
      * 콜 생성 (낙관적 업데이트)
      */
     suspend fun createCall(callInfo: CallInfo, provinceId: String, cityId: String, officeId: String): String = withContext(Dispatchers.IO) {

@@ -223,14 +223,23 @@ class MainActivity : ComponentActivity() {
             if (intent?.action == "com.designated.callmanager.TRIP_STATUS_POPUP") {
                 val statusText = intent.getStringExtra("statusText") ?: return
                 val driverName = intent.getStringExtra("driverName") ?: "기사"
+                val driverPhone = intent.getStringExtra("driverPhone")
                 val customerName = intent.getStringExtra("customerName") ?: "고객"
                 val departure = intent.getStringExtra("departure") ?: "정보없음"
                 val destination = intent.getStringExtra("destination") ?: "정보없음"
+                val waypoints = intent.getStringExtra("waypoints") ?: ""
                 val fare = intent.getLongExtra("fare", 0L)
 
                 Log.d("MainActivity", "🚗 운행 상태 팝업 브로드캐스트 수신 - $statusText: $driverName")
 
-                val tripSummary = "출발: $departure\n도착: $destination\n요금: ${fare}원"
+                val tripSummary = buildString {
+                    append("출발: $departure")
+                    if (waypoints.isNotBlank()) {
+                        append("\n경유: $waypoints")
+                    }
+                    append("\n도착: $destination")
+                    append("\n요금: ${fare}원")
+                }
 
                 lifecycleScope.launch {
                     if (_screenState.value != Screen.Dashboard) {
@@ -238,7 +247,7 @@ class MainActivity : ComponentActivity() {
                         delay(300)
                     }
                     when (statusText) {
-                        "운행 시작" -> dashboardViewModel.showTripStartedPopup(driverName, null, tripSummary, customerName)
+                        "운행 시작" -> dashboardViewModel.showTripStartedPopup(driverName, driverPhone, tripSummary, customerName)
                         "운행 완료" -> dashboardViewModel.showTripCompletedPopup(driverName, customerName)
                     }
                 }

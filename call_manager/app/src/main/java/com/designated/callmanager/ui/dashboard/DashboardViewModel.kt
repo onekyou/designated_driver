@@ -201,6 +201,20 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _isFromFcmNotification = MutableStateFlow(false)
     val isFromFcmNotification: StateFlow<Boolean> = _isFromFcmNotification
 
+    // 새 호출 입력 다이얼로그 관련
+    private val _showNewCallInputDialog = MutableStateFlow(false)
+    val showNewCallInputDialog: StateFlow<Boolean> = _showNewCallInputDialog
+
+    // 새 호출 입력 다이얼로그에서 입력된 정보
+    data class NewCallInputData(
+        val phoneNumber: String = "",
+        val departure: String = "",
+        val destination: String = "",
+        val fare: Long = 0
+    )
+    private val _pendingNewCallData = MutableStateFlow<NewCallInputData?>(null)
+    val pendingNewCallData: StateFlow<NewCallInputData?> = _pendingNewCallData
+
     // 전날 마감내역 관련
     private val _showPreviousDayClosingDialog = MutableStateFlow(false)
     val showPreviousDayClosingDialog: StateFlow<Boolean> = _showPreviousDayClosingDialog.asStateFlow()
@@ -942,30 +956,115 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
-     * 콜을 Firebase와 로컬 캐시에서 삭제
+     * 콜을 로컬 DB에서 삭제 (Firestore는 유지 - 비용 절감)
+     * 콜 목록은 로컬 DB에서 가져오므로 UI에서 즉시 사라짐
      */
     fun deleteCall(callId: String) {
-        val province = _provinceId.value ?: return
-        val city = _cityId.value ?: return
-        val office = _officeId.value ?: return
-
         viewModelScope.launch {
             try {
-                firestore.collection("provinces").document(province)
-                    .collection("cities").document(city)
-                    .collection("offices").document(office)
-                    .collection("calls").document(callId)
-                    .delete()
-                    .await()
+                // 로컬 DB에서만 삭제
+                callRepository.deleteCall(callId)
 
+                // 캐시에서도 제거
                 callsCache.remove(callId)
                 previousStatusMap.remove(callId)
-                _calls.value = callsCache.values.toList()
 
                 if (_newCallInfo.value?.id == callId) {
                     dismissNewCallPopup()
                 }
             } catch (e: Exception) {
+                Log.e(TAG, "콜 삭제 실패: $callId", e)
+            }
+        }
+    }
+
+    /**
+     * 새 호출 입력 다이얼로그 표시
+     */
+    fun showNewCallInputDialog() {
+        _showNewCallInputDialog.value = true
+    }
+
+    /**
+     * 새 호출 입력 다이얼로그 닫기
+     */
+    fun dismissNewCallInputDialog() {
+        _showNewCallInputDialog.value = false
+        _pendingNewCallData.value = null
+    }
+
+    /**
+     * 입력된 정보로 새 콜 생성 후 배차 다이얼로그 표시
+     */
+    fun createCallWithInputData(phoneNumber: String, departure: String, destination: String, fare: Long) {
+        val province = _provinceId.value ?: return
+        val city = _cityId.value ?: return
+        val office = _officeId.value ?: return
+
+        val officeRef = firestore.collection("provinces").document(province)
+            .collection("cities").document(city)
+            .collection("offices").document(office)
+
+        viewModelScope.launch {
+            try {
+                val nowTs = Timestamp.now()
+                val timestampClient = System.currentTimeMillis()
+                val data = hashMapOf(
+                    "phoneNumber" to phoneNumber,
+                    "customerAddress" to departure.ifBlank { "" },
+                    "customerName" to "",
+                    "timestamp" to nowTs,
+                    "timestampClient" to timestampClient,
+                    "status" to CallStatus.WAITING.firestoreValue,
+                    "provinceId" to province,
+                    "cityId" to city,
+                    "officeId" to office,
+                    "createdBy" to (auth.currentUser?.uid ?: ""),
+                    "departure_set" to departure.ifBlank { null },
+                    "destination_set" to destination.ifBlank { null },
+                    "fare_set" to if (fare > 0) fare else null
+                )
+
+                val docRef = officeRef.collection("calls").add(data).await()
+
+                // 로컬 DB에도 저장하여 UI에 즉시 반영
+                callRepository.insertCallFromFCM(
+                    callId = docRef.id,
+                    phoneNumber = phoneNumber,
+                    customerName = "",
+                    customerAddress = departure.ifBlank { "" },
+                    status = CallStatus.WAITING.firestoreValue,
+                    provinceId = province,
+                    officeId = office,
+                    callType = null,
+                    fromCallDetector = false,
+                    assignedDriverId = null,
+                    assignedDriverName = null,
+                    assignedDriverPhone = null
+                )
+
+                Log.d(TAG, "새 콜 생성 완료 (입력정보 포함): ${docRef.id}")
+
+                // 다이얼로그 닫기
+                _showNewCallInputDialog.value = false
+
+                // 생성된 콜로 배차 다이얼로그 표시
+                val createdCall = CallInfo(
+                    id = docRef.id,
+                    phoneNumber = phoneNumber,
+                    customerName = "",
+                    customerAddress = departure.ifBlank { null },
+                    status = CallStatus.WAITING.firestoreValue,
+                    timestamp = nowTs,
+                    departure_set = departure.ifBlank { null },
+                    destination_set = destination.ifBlank { null },
+                    fare_set = if (fare > 0) fare else null
+                )
+                _newCallInfo.value = createdCall
+                _showNewCallPopup.value = true
+
+            } catch (e: Exception) {
+                Log.e(TAG, "새 콜 생성 실패 (입력정보 포함)", e)
             }
         }
     }

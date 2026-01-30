@@ -737,8 +737,10 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val customerName = data["customerName"] ?: "고객"
         val customerPhone = data["customerPhone"] ?: "-"
         val driverName = data["driverName"] ?: "기사"
+        val driverPhone = data["driverPhone"]
         val departure = data["departure"]
         val destination = data["destination"]
+        val waypoints = data["waypoints"]
         val fare = data["fare"]?.toLongOrNull()
 
         // statusText를 실제 status 값으로 변환
@@ -750,7 +752,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             else -> null
         }
 
-        Log.d(TAG, "[STATUS_CHANGE] callId=$callId, statusText=$statusText, status=$status")
+        Log.d(TAG, "[STATUS_CHANGE] callId=$callId, statusText=$statusText, status=$status, driverPhone=$driverPhone, waypoints=$waypoints")
 
         // 로컬 DB 업데이트
         if (status != null) {
@@ -786,9 +788,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             val popupIntent = Intent("com.designated.callmanager.TRIP_STATUS_POPUP")
             popupIntent.putExtra("statusText", statusText)
             popupIntent.putExtra("driverName", driverName)
+            popupIntent.putExtra("driverPhone", driverPhone ?: "")
             popupIntent.putExtra("customerName", customerName)
             popupIntent.putExtra("departure", departure ?: "정보없음")
             popupIntent.putExtra("destination", destination ?: "정보없음")
+            popupIntent.putExtra("waypoints", waypoints ?: "")
             popupIntent.putExtra("fare", fare ?: 0L)
             sendBroadcast(popupIntent)
             Log.d(TAG, "[STATUS_CHANGE] 팝업 브로드캐스트 전송: $statusText")

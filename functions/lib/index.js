@@ -1229,8 +1229,10 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
                     customerName: afterData.customerName || "고객",
                     customerPhone: afterData.customerPhone || "-",
                     driverName: driverDisplayName,
+                    driverPhone: afterData.assignedDriverPhone || "",
                     departure: afterData.departure_set || afterData.departure || "",
                     destination: afterData.destination_set || afterData.destination || "",
+                    waypoints: afterData.waypoints_set || "",
                     fare: ((_f = (_e = afterData.fare_set) !== null && _e !== void 0 ? _e : afterData.fare) !== null && _f !== void 0 ? _f : 0).toString()
                 },
                 android: {
@@ -1275,8 +1277,10 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
                     customerName: afterData.customerName || "고객",
                     customerPhone: afterData.customerPhone || "-",
                     driverName: driverName,
+                    driverPhone: afterData.assignedDriverPhone || "",
                     departure: afterData.departure_set || afterData.departure || "",
                     destination: afterData.destination_set || afterData.destination || "",
+                    waypoints: afterData.waypoints_set || "",
                     fare: ((_h = (_g = afterData.fare_set) !== null && _g !== void 0 ? _g : afterData.fare) !== null && _h !== void 0 ? _h : 0).toString()
                 },
                 android: {

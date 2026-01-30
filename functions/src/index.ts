@@ -1447,8 +1447,10 @@ export const onCallStatusChanged = onDocumentUpdated(
             customerName: afterData.customerName || "고객",
             customerPhone: afterData.customerPhone || "-",
             driverName: driverDisplayName,
+            driverPhone: afterData.assignedDriverPhone || "",
             departure: afterData.departure_set || afterData.departure || "",
             destination: afterData.destination_set || afterData.destination || "",
+            waypoints: afterData.waypoints_set || "",
             fare: (afterData.fare_set ?? afterData.fare ?? 0).toString()
           },
           android: {
@@ -1496,8 +1498,10 @@ export const onCallStatusChanged = onDocumentUpdated(
             customerName: afterData.customerName || "고객",
             customerPhone: afterData.customerPhone || "-",
             driverName: driverName,
+            driverPhone: afterData.assignedDriverPhone || "",
             departure: afterData.departure_set || afterData.departure || "",
             destination: afterData.destination_set || afterData.destination || "",
+            waypoints: afterData.waypoints_set || "",
             fare: (afterData.fare_set ?? afterData.fare ?? 0).toString()
           },
           android: {

@@ -184,4 +184,37 @@ class VoiceInputHelper(private val context: Context) {
         // 숫자만 남기기
         return result.filter { it.isDigit() }
     }
+
+    /**
+     * 전화번호 형식 정리
+     */
+    fun formatPhoneNumber(text: String): String {
+        // 숫자만 추출
+        val digits = text.filter { it.isDigit() }
+
+        // 010-xxxx-xxxx 형식으로 포맷
+        return when {
+            digits.length == 11 && digits.startsWith("010") -> {
+                "${digits.substring(0, 3)}-${digits.substring(3, 7)}-${digits.substring(7)}"
+            }
+            digits.length == 10 && digits.startsWith("01") -> {
+                "${digits.substring(0, 3)}-${digits.substring(3, 6)}-${digits.substring(6)}"
+            }
+            else -> digits
+        }
+    }
+
+    /**
+     * 텍스트에서 전화번호 추출
+     */
+    fun extractPhoneNumber(text: String): String? {
+        // 전화번호 패턴 매칭 (010-1234-5678, 01012345678, 010 1234 5678 등)
+        val phoneRegex = Regex("""(01[016789])[-.\s]?(\d{3,4})[-.\s]?(\d{4})""")
+        val match = phoneRegex.find(text)
+
+        return match?.let {
+            val digits = it.value.filter { c -> c.isDigit() }
+            formatPhoneNumber(digits)
+        }
+    }
 }
