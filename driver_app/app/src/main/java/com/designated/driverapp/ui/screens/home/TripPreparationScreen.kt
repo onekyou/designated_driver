@@ -170,11 +170,25 @@ fun TripPreparationScreen(
                             val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 1)
                             if (!addresses.isNullOrEmpty()) {
                                 val address = addresses[0]
+                                // 시/군/도 제외, 읍/면/동 + 도로명 + 번호만 표시
                                 val simpleAddress = buildString {
                                     address.subLocality?.let { append("$it ") }
                                     address.thoroughfare?.let { append("$it ") }
                                     address.subThoroughfare?.let { append(it) }
-                                }.trim().ifEmpty { "현재 위치" }
+                                }.trim().ifEmpty {
+                                    // 위 필드가 없으면 전체 주소에서 시/도, 시/군/구 제거
+                                    address.getAddressLine(0)?.let { fullAddress ->
+                                        var result = fullAddress
+                                            .removePrefix("대한민국 ")
+                                            .trim()
+                                        // 시/도 제거 (예: 경기도, 서울특별시 등)
+                                        address.adminArea?.let { result = result.removePrefix("$it ").trim() }
+                                        // 시/군/구 제거 (예: 양평군, 강남구 등)
+                                        address.locality?.let { result = result.removePrefix("$it ").trim() }
+                                        address.subAdminArea?.let { result = result.removePrefix("$it ").trim() }
+                                        result.ifEmpty { fullAddress }
+                                    } ?: "위치를 확인할 수 없음"
+                                }
                                 departure = simpleAddress
                             }
                         }

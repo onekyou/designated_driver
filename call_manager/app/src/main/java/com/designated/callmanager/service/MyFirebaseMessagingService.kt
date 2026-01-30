@@ -708,12 +708,14 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         // Repository를 통한 로컬 DB 업데이트
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // 출발지/목적지/요금 데이터 추출
+                // 출발지/목적지/요금/경유지/기사전화번호 데이터 추출
                 val departure = data["departure"]
                 val destination = data["destination"]
                 val fare = data["fare"]?.toLongOrNull()
+                val waypoints = data["waypoints"]
+                val driverPhone = data["assignedDriverPhone"]
 
-                Log.d(TAG, "[CALL_STATUS_UPDATE] 로컬 DB 업데이트: departure=$departure, destination=$destination, fare=$fare")
+                Log.d(TAG, "[CALL_STATUS_UPDATE] 로컬 DB 업데이트: departure=$departure, destination=$destination, fare=$fare, waypoints=$waypoints, driverPhone=$driverPhone")
 
                 // Repository를 통해 로컬 DB 업데이트
                 app.callRepository.updateCallStatusFromFCM(
@@ -721,7 +723,9 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     newStatus = status,
                     departure = departure,
                     destination = destination,
-                    fare = fare
+                    fare = fare,
+                    waypoints = waypoints,
+                    driverPhone = driverPhone
                 )
 
                 Log.d(TAG, "[CALL_STATUS_UPDATE] 로컬 DB 업데이트 완료: $callId")

@@ -196,21 +196,42 @@ class CallRepository(
         newStatus: String,
         departure: String? = null,
         destination: String? = null,
-        fare: Long? = null
+        fare: Long? = null,
+        waypoints: String? = null,
+        driverPhone: String? = null
     ) = withContext(Dispatchers.IO) {
         try {
             // 상태 업데이트
             callDao.updateCallStatus(callId, newStatus)
 
             // 운행 정보 업데이트
-            if (departure != null || destination != null || fare != null) {
-                callDao.updateTripInfo(callId, departure, destination, fare)
-                Log.d(TAG, "[FCM] 콜 업데이트 (운행정보 포함): $callId -> $newStatus")
+            if (departure != null || destination != null || fare != null || waypoints != null || driverPhone != null) {
+                callDao.updateTripInfo(callId, departure, destination, fare, waypoints, driverPhone)
+                Log.d(TAG, "[FCM] 콜 업데이트 (운행정보 포함): $callId -> $newStatus, waypoints=$waypoints, driverPhone=$driverPhone")
             } else {
                 Log.d(TAG, "[FCM] 콜 상태 업데이트: $callId -> $newStatus")
             }
         } catch (e: Exception) {
             Log.e(TAG, "[FCM] 콜 업데이트 실패: $callId", e)
+        }
+    }
+
+    /**
+     * 배차 정보 업데이트 (로컬 DB)
+     * Firestore 업데이트 후 로컬 DB도 즉시 업데이트
+     */
+    suspend fun updateAssignment(
+        callId: String,
+        driverId: String,
+        driverName: String,
+        driverPhone: String,
+        status: String
+    ) = withContext(Dispatchers.IO) {
+        try {
+            callDao.updateAssignment(callId, driverId, driverName, driverPhone, status)
+            Log.d(TAG, "[Local] 배차 정보 업데이트: $callId -> $driverName ($driverPhone)")
+        } catch (e: Exception) {
+            Log.e(TAG, "[Local] 배차 정보 업데이트 실패: $callId", e)
         }
     }
 

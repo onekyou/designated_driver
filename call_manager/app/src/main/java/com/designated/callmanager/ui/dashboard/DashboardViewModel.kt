@@ -609,6 +609,16 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 )
                 callRef.update(callUpdates).await()
 
+                // 로컬 Room DB에도 배차 정보 업데이트 (FCM 지연/누락 방지)
+                callRepository.updateAssignment(
+                    callId = callInfo.id,
+                    driverId = driverAuthUid,
+                    driverName = driverInfo.name ?: "",
+                    driverPhone = driverInfo.phoneNumber ?: "",
+                    status = CallStatus.ASSIGNED.firestoreValue
+                )
+                Log.d(TAG, "로컬 DB 배차 정보 업데이트 완료: ${callInfo.id}")
+
                 val driverRef = officePath.collection("designated_drivers").document(driverId)
                 driverRef.update("status", DriverStatus.ASSIGNED.value).await()
 

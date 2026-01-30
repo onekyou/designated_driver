@@ -86,13 +86,15 @@ interface CallDao {
 
     /**
      * 운행 정보 업데이트 (FCM용)
-     * 기사가 운행 시작 시 입력한 출발지/목적지/요금
+     * 기사가 운행 시작 시 입력한 출발지/목적지/요금/경유지/기사전화번호
      */
     @Query("""
         UPDATE calls
-        SET departure_set = :departure,
-            destination_set = :destination,
-            fare_set = :fare,
+        SET departure_set = COALESCE(:departure, departure_set),
+            destination_set = COALESCE(:destination, destination_set),
+            fare_set = COALESCE(:fare, fare_set),
+            waypoints_set = COALESCE(:waypoints, waypoints_set),
+            assignedDriverPhone = COALESCE(:driverPhone, assignedDriverPhone),
             lastUpdated = :now
         WHERE id = :callId
     """)
@@ -101,6 +103,8 @@ interface CallDao {
         departure: String?,
         destination: String?,
         fare: Long?,
+        waypoints: String? = null,
+        driverPhone: String? = null,
         now: Long = System.currentTimeMillis()
     )
 
