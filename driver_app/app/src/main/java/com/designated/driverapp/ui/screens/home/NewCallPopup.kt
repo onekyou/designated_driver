@@ -15,7 +15,7 @@ fun NewCallPopup(
     onAccept: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = { /* 바깥 클릭으로 닫히지 않음 */ }) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -39,16 +39,11 @@ fun NewCallPopup(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceAround
+                Button(
+                    onClick = onAccept,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Button(onClick = onDismiss) {
-                        Text("거절")
-                    }
-                    Button(onClick = onAccept) {
-                        Text("수락")
-                    }
+                    Text("수락")
                 }
             }
         }

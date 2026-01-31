@@ -24,6 +24,7 @@ import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 
 class MyFirebaseMessagingService : FirebaseMessagingService() {
 
@@ -705,16 +706,29 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
 
+        // 출발지/목적지/요금/경유지/기사전화번호 데이터 추출
+        val departure = data["departure"]
+        val destination = data["destination"]
+        val fare = data["fare"]?.toLongOrNull()
+        val waypoints = data["waypoints"]
+        val driverPhone = data["assignedDriverPhone"]
+        val driverName = data["assignedDriverName"] ?: "기사"
+        val customerName = data["customerName"] ?: "고객"
+
+        // COMPLETED 상태일 때 바로 팝업 표시 (Flow 필터링 전에)
+        if (status == "COMPLETED") {
+            Log.d(TAG, "[CALL_STATUS_UPDATE] 운행완료 - 팝업 브로드캐스트 전송: callId=$callId, driverName=$driverName, customerName=$customerName")
+            val broadcastIntent = Intent(com.designated.callmanager.data.Constants.ACTION_TRIP_COMPLETED).apply {
+                putExtra("callId", callId)
+                putExtra("driverName", driverName)
+                putExtra("customerName", customerName)
+            }
+            LocalBroadcastManager.getInstance(this).sendBroadcast(broadcastIntent)
+        }
+
         // Repository를 통한 로컬 DB 업데이트
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // 출발지/목적지/요금/경유지/기사전화번호 데이터 추출
-                val departure = data["departure"]
-                val destination = data["destination"]
-                val fare = data["fare"]?.toLongOrNull()
-                val waypoints = data["waypoints"]
-                val driverPhone = data["assignedDriverPhone"]
-
                 Log.d(TAG, "[CALL_STATUS_UPDATE] 로컬 DB 업데이트: departure=$departure, destination=$destination, fare=$fare, waypoints=$waypoints, driverPhone=$driverPhone")
 
                 // Repository를 통해 로컬 DB 업데이트

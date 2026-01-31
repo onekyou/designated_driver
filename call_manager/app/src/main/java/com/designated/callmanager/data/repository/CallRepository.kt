@@ -201,16 +201,17 @@ class CallRepository(
         driverPhone: String? = null
     ) = withContext(Dispatchers.IO) {
         try {
-            // 상태 업데이트
-            callDao.updateCallStatus(callId, newStatus)
-
-            // 운행 정보 업데이트
-            if (departure != null || destination != null || fare != null || waypoints != null || driverPhone != null) {
-                callDao.updateTripInfo(callId, departure, destination, fare, waypoints, driverPhone)
-                Log.d(TAG, "[FCM] 콜 업데이트 (운행정보 포함): $callId -> $newStatus, waypoints=$waypoints, driverPhone=$driverPhone")
-            } else {
-                Log.d(TAG, "[FCM] 콜 상태 업데이트: $callId -> $newStatus")
-            }
+            // 상태와 운행 정보를 한 번에 업데이트 (Flow 타이밍 이슈 방지)
+            callDao.updateStatusWithTripInfo(
+                callId = callId,
+                status = newStatus,
+                departure = departure,
+                destination = destination,
+                fare = fare,
+                waypoints = waypoints,
+                driverPhone = driverPhone
+            )
+            Log.d(TAG, "[FCM] 콜 업데이트: $callId -> $newStatus, departure=$departure, destination=$destination, fare=$fare, waypoints=$waypoints, driverPhone=$driverPhone")
         } catch (e: Exception) {
             Log.e(TAG, "[FCM] 콜 업데이트 실패: $callId", e)
         }

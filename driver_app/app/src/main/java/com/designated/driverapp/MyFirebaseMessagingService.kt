@@ -87,19 +87,20 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 startService(serviceIntent)
             }
 
-            // 포그라운드일 때 추가로 LocalBroadcast (UI 즉시 업데이트용)
             if (isAppInForeground()) {
-                Log.d(TAG, "앱이 포그라운드 - LocalBroadcast로 callId 전달: $callId")
+                // 포그라운드: LocalBroadcast로 앱 내 다이얼로그만 표시 (알림 X)
+                Log.d(TAG, "앱이 포그라운드 - LocalBroadcast로 callId 전달 (알림 없음): $callId")
                 val broadcastIntent = Intent(Constants.ACTION_SHOW_CALL_DIALOG).apply {
                     putExtra("callId", callId)
                     putExtra("title", title)
                     putExtra("body", body)
                 }
                 LocalBroadcastManager.getInstance(this).sendBroadcast(broadcastIntent)
+            } else {
+                // 백그라운드: 시스템 알림 표시
+                Log.d(TAG, "앱이 백그라운드 - 시스템 알림 표시: $callId")
+                showNotification(title, body, callId)
             }
-
-            // 알림은 항상 표시 (백그라운드에서 사용자가 알림 클릭으로 앱 진입)
-            showNotification(title, body, callId)
         } else if (messageType == "SETTLEMENT_FINALIZED") {
             // 업무 마감 알림 처리
             val sessionDate = remoteMessage.data["sessionDate"] ?: ""

@@ -37,5 +37,6 @@ object Constants {
     const val STATUS_LOADING = "loading"
 
     const val ACTION_SHOW_CALL_DIALOG = "com.designated.driverapp.ACTION_SHOW_CALL_DIALOG"
+    const val ACTION_TRIP_COMPLETED = "com.designated.callmanager.ACTION_TRIP_COMPLETED"
     const val EXTRA_CALL_INFO = "com.designated.driverapp.EXTRA_CALL_INFO"
 }

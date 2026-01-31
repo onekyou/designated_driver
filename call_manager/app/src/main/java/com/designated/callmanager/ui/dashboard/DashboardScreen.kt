@@ -79,6 +79,10 @@ import com.designated.callmanager.util.VoiceInputHelper
 import com.designated.callmanager.util.AddressSearchHelper
 import com.designated.callmanager.data.AddressSearchResult
 import android.speech.SpeechRecognizer
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.designated.callmanager.data.Constants
 
 private const val TAG = "DashboardScreen"
 
@@ -177,6 +181,25 @@ fun DashboardScreen(
     var showSharedAcceptDialog by remember { mutableStateOf(false) }
 
     var backgroundTime by remember { mutableStateOf(0L) }
+
+    // 운행완료 브로드캐스트 수신
+    DisposableEffect(Unit) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context?, intent: Intent?) {
+                val driverName = intent?.getStringExtra("driverName") ?: "기사"
+                val customerName = intent?.getStringExtra("customerName") ?: "고객"
+                Log.d(TAG, "운행완료 브로드캐스트 수신: driverName=$driverName, customerName=$customerName")
+                viewModel.showTripCompletedPopup(driverName, customerName)
+            }
+        }
+        LocalBroadcastManager.getInstance(context).registerReceiver(
+            receiver,
+            IntentFilter(Constants.ACTION_TRIP_COMPLETED)
+        )
+        onDispose {
+            LocalBroadcastManager.getInstance(context).unregisterReceiver(receiver)
+        }
+    }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {

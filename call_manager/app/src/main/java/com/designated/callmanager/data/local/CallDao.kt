@@ -85,6 +85,32 @@ interface CallDao {
     )
 
     /**
+     * 상태와 운행 정보를 한 번에 업데이트 (FCM용)
+     * Flow 타이밍 이슈 방지를 위해 단일 쿼리로 처리
+     */
+    @Query("""
+        UPDATE calls
+        SET status = :status,
+            departure_set = COALESCE(:departure, departure_set),
+            destination_set = COALESCE(:destination, destination_set),
+            fare_set = COALESCE(:fare, fare_set),
+            waypoints_set = COALESCE(:waypoints, waypoints_set),
+            assignedDriverPhone = COALESCE(:driverPhone, assignedDriverPhone),
+            lastUpdated = :now
+        WHERE id = :callId
+    """)
+    suspend fun updateStatusWithTripInfo(
+        callId: String,
+        status: String,
+        departure: String?,
+        destination: String?,
+        fare: Long?,
+        waypoints: String? = null,
+        driverPhone: String? = null,
+        now: Long = System.currentTimeMillis()
+    )
+
+    /**
      * 운행 정보 업데이트 (FCM용)
      * 기사가 운행 시작 시 입력한 출발지/목적지/요금/경유지/기사전화번호
      */

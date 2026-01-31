@@ -96,17 +96,10 @@ class MainActivity : ComponentActivity() {
 
         val currentUser = auth.currentUser
 
-        // 권한 요청 로직 - 로그인 상태 확인 후 안내 다이얼로그 표시
-        if (currentUser != null && !areAllRequiredPermissionsGranted()) {
-            // 알림 권한이 없으면 안내 다이얼로그 먼저 표시
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED) {
-                showNotificationPermissionDialog.value = true
-                hasShownNotificationDialog = true
-            } else {
-                requestAllPermissions()
-            }
+        // 권한 요청 로직 - 앱 시작 시 바로 시스템 권한 요청
+        if (!areAllRequiredPermissionsGranted()) {
+            requestAllPermissions()
+            hasShownNotificationDialog = true
         }
 
         // 정산 동기화 WorkManager 초기화
