@@ -102,6 +102,7 @@ class MainActivity : ComponentActivity() {
             hasShownNotificationDialog = true
         }
 
+
         // 정산 동기화 WorkManager 초기화
         if (currentUser != null) {
             SettlementSyncWorker.enqueuePeriodicSync(this)
@@ -334,4 +335,5 @@ class MainActivity : ComponentActivity() {
 
         permissionLauncher.launch(requiredPermissions)
     }
+
 }

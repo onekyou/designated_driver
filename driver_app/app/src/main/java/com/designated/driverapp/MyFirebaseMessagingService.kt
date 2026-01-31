@@ -6,6 +6,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
@@ -143,7 +145,18 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val notificationId = if (callId != null) callId.hashCode() else System.currentTimeMillis().toInt()
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
+        // 기본 알림 소리
+        val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // 기존 채널 삭제 후 재생성 (채널 설정은 최초 생성 시에만 적용되므로)
+            notificationManager.deleteNotificationChannel(channelId)
+
+            val audioAttributes = AudioAttributes.Builder()
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                .build()
+
             val channel = NotificationChannel(
                 channelId,
                 "콜 배정 알림",
@@ -153,6 +166,9 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 500, 200, 500)
                 setShowBadge(true)
+                setSound(defaultSoundUri, audioAttributes)  // 소리 설정 추가
+                enableLights(true)  // LED 알림 (지원 기기)
+                lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC  // 잠금화면 표시
             }
             notificationManager.createNotificationChannel(channel)
         }
@@ -185,13 +201,16 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             .setContentText(body)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_MAX)  // MAX로 상향
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setVibrate(longArrayOf(0, 500, 200, 500))
+            .setSound(defaultSoundUri)  // 소리 설정 추가
+            .setDefaults(NotificationCompat.DEFAULT_LIGHTS)  // 기본 LED
             .setFullScreenIntent(fullScreenIntent, true) // 백그라운드에서 화면 띄우기
 
         notificationManager.notify(notificationId, builder.build())
+        Log.d(TAG, "알림 표시 완료: notificationId=$notificationId, channelId=$channelId")
     }
 
     private fun showSettlementNotification(title: String, body: String, sessionDate: String) {
