@@ -1,18 +1,18 @@
-package com.designated.driverapp
+package com.designated.customer
 
 import android.app.Application
 import android.util.Log
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
-import com.designated.driverapp.service.PresenceManager
+import com.designated.customer.service.PresenceManager
 import com.google.firebase.auth.FirebaseAuth
-import dagger.hilt.android.HiltAndroidApp
 
-@HiltAndroidApp
-class DriverApplication : Application() {
+class CustomerApplication : Application() {
 
-    private val TAG = "DriverApplication"
+    companion object {
+        private const val TAG = "CustomerApplication"
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -44,13 +44,11 @@ class DriverApplication : Application() {
     inner class AppLifecycleObserver : DefaultLifecycleObserver {
 
         override fun onStart(owner: LifecycleOwner) {
-            // 앱이 포그라운드로 전환
             Log.d(TAG, "앱 포그라운드 전환")
             PresenceManager.onAppForeground()
         }
 
         override fun onStop(owner: LifecycleOwner) {
-            // 앱이 백그라운드로 전환
             Log.d(TAG, "앱 백그라운드 전환")
             PresenceManager.onAppBackground()
         }

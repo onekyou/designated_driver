@@ -86,6 +86,7 @@ dependencies {
     // Android 기본
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation("androidx.lifecycle:lifecycle-process:2.7.0") // ProcessLifecycleOwner
     implementation(libs.androidx.activity.compose)
 
     // Compose
@@ -104,6 +105,7 @@ dependencies {
     implementation("com.google.firebase:firebase-functions-ktx")
     implementation("com.google.firebase:firebase-messaging-ktx")
     implementation("com.google.firebase:firebase-config-ktx")
+    implementation("com.google.firebase:firebase-database-ktx") // Realtime Database (Presence)
 
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.7.5")

@@ -92,6 +92,7 @@ dependencies {
 
     implementation libs.core.ktx
     implementation libs.lifecycle.runtime.ktx
+    implementation 'androidx.lifecycle:lifecycle-process:2.7.0' // ProcessLifecycleOwner
     implementation libs.activity.compose
     
     // Material Components for Android (for XML themes, etc.)
@@ -118,6 +119,7 @@ dependencies {
     implementation libs.firebase.auth.ktx
     implementation libs.firebase.firestore.ktx
     implementation libs.firebase.messaging.ktx
+    implementation 'com.google.firebase:firebase-database-ktx' // Realtime Database (Presence)
 
     // QR Code Generation (ZXing)
     implementation 'com.google.zxing:core:3.5.2'
