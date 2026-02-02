@@ -12,15 +12,119 @@
 
 ---
 
-## 현재 상태
+## 현재 미해결 문제들 (다음 세션에서 해결 필요)
 
-### 복구 완료
-- 마지막 푸시 지점으로 코드 복구됨
-- carryOver UI, 이체/수령 기능 모두 정상
+### 문제 1: 기사앱 미수령금 음수 표시
+- **현상**: 기사앱에서 미수령금이 -8000원으로 표시됨
+- **의미**: 기사가 사무실에서 8000원을 받아야 함
+- **필요한 작업**: UI에서 음수를 "사무실에서 받을 금액: 8,000원"으로 표시해야 함
+- **관련 파일**: `driver_app/.../HistorySettlementScreen.kt`
 
-### 추가된 변경 (ratio Firestore 저장)
-- `SettlementViewModel.kt`: offices 문서에서 depositRatio 읽기
-- `SettlementViewModel.kt`: updateOfficeShareRatio()에서 Firestore에도 저장
+### 문제 2: 콜매니저 미수령금 UI 안 보임
+- **현상**: 업무마감 후 콜매니저에서 해당 기사의 미수령금 UI가 생성되지 않음
+- **원인 추정**: carryOver 업데이트가 제대로 안 되거나, UI 조건 문제
+- **관련 파일**:
+  - `call_manager/.../SettlementViewModel.kt` (processCarryOverOnFinalize)
+  - `call_manager/.../DriverSummaryScreen.kt` (carryOver UI 조건)
+
+### 문제 3: 콜매니저 로그아웃 후 자동 로그인
+- **현상**: 로그아웃 후 앱 아이콘 클릭 시 로그인 화면 없이 바로 대시보드로 이동
+- **수정 시도**: MainActivity에서 auto_login 플래그 확인 추가
+- **아직 테스트 필요**
+- **관련 파일**: `call_manager/.../MainActivity.kt`
+
+### 문제 4: 업무마감 시 기사 알림 안 감
+- **현상**: 업무마감 시 로그인 중인 기사에게 알림이 가지 않음
+- **원인**: 기능이 구현되지 않음
+- **필요한 작업**: clearAllTrips() 또는 별도 함수에서 FCM 알림 전송 구현
+
+---
+
+## 완료된 수정 사항
+
+### 1. 콜매니저 (SettlementViewModel.kt)
+
+**A. 누적 로직 수정** - 양수/음수 모두 처리
+```kotlin
+// 변경 전: 양수일 때만 누적
+if (todayUnpaid > 0) {
+    processCarryOverOnFinalize(driverId, todayUnpaid.toLong())
+}
+
+// 변경 후: 양수/음수 모두 처리
+val todayResult = cashReceived - driverShare
+processCarryOverOnFinalize(driverId, todayResult.toLong())
+```
+
+**B. processCarryOverOnFinalize 수정**
+- `transaction.update()` → `transaction.set()` + `SetOptions.merge()` 변경
+- carryOver 필드가 없어도 생성되도록
+
+**C. ratio Firestore 저장**
+- offices 문서에서 depositRatio 읽기
+- updateOfficeShareRatio()에서 Firestore에도 저장
+
+### 2. 콜매니저 (MainActivity.kt)
+
+**로그아웃 시 SharedPreferences 클리어**
+```kotlin
+onLogout = {
+    val loginPrefs = getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
+    loginPrefs.edit()
+        .putBoolean("auto_login", false)
+        .remove("email")
+        .remove("password")
+        .apply()
+    auth.signOut()
+    screenState = Screen.Login
+}
+```
+
+**앱 시작 시 auto_login 플래그 확인 추가**
+```kotlin
+val autoLoginEnabled = loginPrefs.getBoolean("auto_login", false)
+screenState = if (auth.currentUser == null || !autoLoginEnabled) {
+    if (auth.currentUser != null && !autoLoginEnabled) {
+        auth.signOut()
+    }
+    Screen.Login
+} else {
+    Screen.Dashboard
+}
+```
+
+### 3. 기사앱 (DriverViewModel.kt)
+
+**depositRatio StateFlow 추가**
+```kotlin
+private val _depositRatio = MutableStateFlow(60)
+val depositRatio: StateFlow<Int> = _depositRatio.asStateFlow()
+```
+
+**TodaySettlement 데이터 클래스 추가**
+```kotlin
+data class TodaySettlement(
+    val totalFare: Int = 0,
+    val driverShare: Int = 0,
+    val cashReceived: Int = 0,
+    val realDeposit: Int = 0,
+    val tripCount: Int = 0
+)
+```
+
+**loadSettlementData() 함수 추가**
+- offices에서 depositRatio + settlementLastCleared 읽기
+- calls에서 마감 이후 내 완료된 콜 조회 → 로컬 계산
+
+### 4. 기사앱 (HistorySettlementScreen.kt)
+
+**SharedPreferences → Firestore 기반으로 변경**
+```kotlin
+val depositRatio by viewModel.depositRatio.collectAsStateWithLifecycle()
+val todaySettlement by viewModel.todaySettlement.collectAsStateWithLifecycle()
+```
+
+**비율 조정 다이얼로그 → 비율 정보 다이얼로그 (읽기 전용)**
 
 ---
 
@@ -29,130 +133,82 @@
 ```kotlin
 val ratio = officeShareRatio  // 기본값 60%
 
-// 기사 입장
+// 계산
 기사몫 = 총운행금 × (100 - ratio)%  // 40%
 현금수령 = Σ cashReceived
 실납입금 = 현금수령 - 기사몫
 
+// 해석
 // 양수 → 기사가 사무실에 납부
-// 음수 → 사무실이 기사에게 지급 (미지급)
-```
-
-### 예시 (운행료 30,000원, ratio 60%)
-| 결제방식 | 기사몫 | 현금수령 | 실납입금 | 의미 |
-|---------|--------|----------|---------|------|
-| 이체 | 12,000 | 0 | -12,000 | 사무실→기사 지급 |
-| 현금 | 12,000 | 30,000 | +18,000 | 기사→사무실 납부 |
-
----
-
-## 데이터 구조
-
-### calls (팩트 데이터)
-```
-calls/{callId}
-  - fare: Int              // 운행료
-  - paymentMethod: String  // 현금, 이체, 포인트, 현금+포인트, 외상
-  - cashReceived: Int      // 현금 수령액
-  - driverId: String
-  - completedAt: Timestamp
-  - status: "COMPLETED"
-```
-
-### offices (설정)
-```
-offices/{officeId}
-  - depositRatio: Int      // 분배비율 (기본 60)
-  - settlementLastCleared: Timestamp
-```
-
-### drivers/carryOver (정산 상태)
-```
-drivers/{driverId}/carryOver
-  - balance: Long          // 누적 미지급금 ← 저장 필요!
-  - status: String         // PENDING | TRANSFERRED | SETTLED
-  - transferredAt: Timestamp?
-  - transferredBy: String?
-  - lastUpdatedAt: Timestamp
+// 음수 → 사무실이 기사에게 지급 (미지급/미수령)
 ```
 
 ---
 
-## 미해결 문제
+## 데이터 흐름
 
-### balance 저장 방식
-
-**현재 방식:**
-- 마감 시 `todayUnpaid`를 기존 `balance`에 누적 추가
-- 문제: 계산 로직이 콜매니저에만 있음, 기사앱은 다른 방식
-
-**변경 목표:**
-- 콜매니저/기사앱 모두 **같은 계산 로직** 사용
-- `balance`는 저장 (누적 관리 위해)
-- 계산 결과가 항상 동일 → 불일치 없음
-
-### 해결 방안 (검토 필요)
-
-**옵션 A: 마감 시 balance 저장 (현재 방식 개선)**
 ```
-마감 시:
-1. calls에서 오늘 미지급 계산
-2. 기존 balance + 오늘 미지급 = 새 balance
-3. carryOver.balance에 저장
-```
-- 장점: 구조 변경 최소화
-- 단점: 여전히 마감 시점에만 동기화
+[로그인 시]
+콜매니저: calls + ratio + carryOver 읽기 → 로컬 계산 → UI 표시
+기사앱:   calls + ratio + carryOver 읽기 → 로컬 계산 → UI 표시
 
-**옵션 B: calls에 settled 플래그 추가**
-```
-calls/{callId}
-  - settled: Boolean       // 정산 완료 여부
-  - settledAt: Timestamp?
+[마감 시]
+콜매니저: 미지급금 계산 → carryOver 업데이트 (쓰기)
+         → 기사에게 알림 전송 (미구현)
+기사앱:   쓰기 없음
 
-누적 계산 = 미정산 calls 전체에서 계산
+[다음 로그인]
+둘 다 같은 데이터로 시작
 ```
-- 장점: 실시간 누적 계산 가능
-- 단점: 구조 변경 큼
-
-**옵션 C: settlementSessions에 기사별 balance 저장**
-```
-settlementSessions/{date}
-  - driverBalances: {
-      driverId1: { balance: Long, status: String },
-      ...
-    }
-```
-- 장점: 날짜별 이력 관리
-- 단점: 조회 복잡
 
 ---
 
-## 다음 작업
+## 입장별 표현
 
-1. **balance 저장 방식 결정** (옵션 A/B/C 중 선택)
-2. **기사앱 calls 기반 계산 구현**
-   - 현재: SharedPreferences 기반
-   - 변경: Firestore calls 기반
-3. **테스트**
-
----
-
-## 파일 변경 내역
-
-### 변경됨 (ratio Firestore 저장)
-- `call_manager/.../SettlementViewModel.kt`
-  - loadSettlementData(): depositRatio 읽기 추가
-  - updateOfficeShareRatio(): Firestore 저장 추가
-
-### 복구됨 (마지막 푸시 상태)
-- `call_manager/.../SettlementViewModel.kt` - carryOver 함수들
-- `call_manager/.../DriverSummaryScreen.kt` - carryOver UI
-- `call_manager/.../AllTripsScreen.kt` - carryOver 테이블
-- `driver_app/.../DriverViewModel.kt` - carryOver 리스너/함수
-- `driver_app/.../HistorySettlementScreen.kt` - carryOver UI
+| 항목 | 콜매니저 (사무실 입장) | 기사앱 (기사 입장) |
+|------|----------------------|-------------------|
+| 사무실몫 60% | 수수료 | 납부액 |
+| 기사몫 40% | 기사몫 | 내 수익 |
+| 실납입금 + | 기사에게서 받을 돈 | 사무실에 낼 돈 |
+| 실납입금 - | 기사에게 줄 돈 (미지급) | 사무실에서 받을 돈 (미수령) |
 
 ---
 
-## 참고: 이전 세션 문서
+## 테스트 기기
+
+| 기기 | 모델 | 설치된 앱 |
+|------|------|----------|
+| RF9R5013HEK | SM_A325N (갤럭시 A32) | 콜매니저 |
+| R3CT80K78NP | SM_F721N (갤럭시 Z 플립4) | 기사앱 |
+
+---
+
+## 다음 세션 TODO
+
+1. **기사앱 음수 표시 문제 해결** - UI에서 음수를 올바르게 표현
+2. **콜매니저 carryOver UI 문제 해결** - 업데이트 및 표시 조건 확인
+3. **로그아웃 문제 테스트** - 수정된 코드가 작동하는지 확인
+4. **업무마감 시 기사 알림 구현** - FCM 알림 전송 기능 추가
+5. **전체 플로우 테스트**
+
+---
+
+## 빌드 상태
+
+- ✅ 콜매니저: BUILD SUCCESSFUL (설치됨)
+- ✅ 기사앱: BUILD SUCCESSFUL (설치됨)
+
+---
+
+## 참고 파일
+
+### 주요 수정 파일
+- `call_manager/app/src/main/java/com/designated/callmanager/ui/settlement/SettlementViewModel.kt`
+- `call_manager/app/src/main/java/com/designated/callmanager/MainActivity.kt`
+- `call_manager/app/src/main/java/com/designated/callmanager/ui/settlement/screen/DriverSummaryScreen.kt`
+- `driver_app/app/src/main/java/com/designated/driverapp/viewmodel/DriverViewModel.kt`
+- `driver_app/app/src/main/java/com/designated/driverapp/ui/home/HistorySettlementScreen.kt`
+
+### 이전 세션 문서
 - `docs/SESSION_WORK_2026-02-02_carryover.md`
 - `docs/CARRYOVER_SETTLEMENT_DESIGN.md`

@@ -103,45 +103,15 @@ fun HistorySettlementScreen(
     }
     var tripHistory by remember { mutableStateOf(loadTripHistory(context)) }
 
-    val prefs = context.getSharedPreferences("settlement_prefs", Context.MODE_PRIVATE)
-    var depositPercent by remember { mutableStateOf(prefs.getInt("deposit_percent", 60)) }
-    var showDialog by remember { mutableStateOf(false) }
+    // ✅ Firestore 기반 정산 데이터 (calls에서 계산)
+    val depositRatio by viewModel.depositRatio.collectAsStateWithLifecycle()
+    val todaySettlement by viewModel.todaySettlement.collectAsStateWithLifecycle()
 
-    data class TripSummary(
-        val fare: Int,
-        val payment: String,
-        val cashAmount: Int = 0
-    )
-    fun parseTripSummary(summary: String): TripSummary? {
-        // 먼저 timestamp 부분을 분리
-        val summaryWithoutTimestamp = summary.split("|timestamp=")[0]
-        val parts = summaryWithoutTimestamp.split(", ")
-        if (parts.size < 4) return null
-        val fare = parts[2].replace("원", "").replace(",", "").trim().toIntOrNull() ?: 0
-        val payment = parts[3].trim()  // trim 추가
-        return if (payment.startsWith("현금+포인트")) {
-            val cashRegex = Regex("\\(([\\d,]+)원 현금\\)")
-            val cashMatch = cashRegex.find(payment)
-            val cash = cashMatch?.groupValues?.getOrNull(1)?.replace(",", "")?.toIntOrNull() ?: 0
-            TripSummary(fare, payment, cash)
-        } else {
-            TripSummary(fare, payment)
-        }
-    }
-    val parsedList = tripHistory.mapNotNull { parseTripSummary(it) }
-    val totalCount = parsedList.size
-    val totalFare = parsedList.sumOf { it.fare }
-    val totalDeposit = (totalFare * depositPercent / 100.0).toInt()
-    val totalCredit = parsedList.sumOf {
-        val credit = when {
-            it.payment == "현금" -> 0
-            it.payment.startsWith("현금+포인트") -> it.fare - it.cashAmount
-            else -> it.fare
-        }
-        credit
-    }
-    val realDeposit = totalDeposit - totalCredit
-    val realIncome = totalFare - totalDeposit
+    // 정산 값 (Firestore calls 기반)
+    val totalCount = todaySettlement.tripCount
+    val totalFare = todaySettlement.totalFare
+    val realIncome = todaySettlement.driverShare      // 내 수익 (기사몫)
+    val realDeposit = todaySettlement.realDeposit     // 실 납부액
 
     LaunchedEffect(shouldNavigateToHistorySettlement) {
         if (shouldNavigateToHistorySettlement) {
@@ -154,31 +124,41 @@ fun HistorySettlementScreen(
         onNavigateBack()
     }
 
-    if (showDialog) {
+    // 비율 정보 다이얼로그 (읽기 전용 - 비율은 사무실에서 설정)
+    var showRatioDialog by remember { mutableStateOf(false) }
+    if (showRatioDialog) {
         AlertDialog(
-            onDismissRequest = { showDialog = false },
-            title = { Text("납부 비율 조정") },
+            onDismissRequest = { showRatioDialog = false },
+            title = { Text("납부 비율 정보", color = Color.White) },
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("납부 비율을 10% 단위로 조정하세요.", style = MaterialTheme.typography.bodyMedium)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Slider(
-                        value = depositPercent.toFloat(),
-                        onValueChange = { depositPercent = (it / 10).toInt() * 10 },
-                        valueRange = 10f..90f,
-                        steps = 7,
-                        onValueChangeFinished = {},
-                        modifier = Modifier.fillMaxWidth()
+                    Text(
+                        "현재 납부 비율: ${depositRatio}%",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
                     )
-                    Text("현재: $depositPercent%", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "내 수익: ${100 - depositRatio}%",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color(0xFFFFB000)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "※ 비율 변경은 사무실에서만 가능합니다.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
                 }
             },
             confirmButton = {
-                Button(onClick = {
-                    prefs.edit().putInt("deposit_percent", depositPercent).apply()
-                    showDialog = false
-                }) { Text("확인") }
-            }
+                Button(
+                    onClick = { showRatioDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFB000))
+                ) { Text("확인", color = Color.Black) }
+            },
+            containerColor = Color(0xFF2A2A2A)
         )
     }
 
@@ -612,8 +592,8 @@ fun HistorySettlementScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("총 정산 내역", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
                         Spacer(modifier = Modifier.weight(1f))
-                        IconButton(onClick = { showDialog = true }) {
-                            Icon(Icons.Filled.Settings, contentDescription = "설정", tint = Color.White)
+                        IconButton(onClick = { showRatioDialog = true }) {
+                            Icon(Icons.Filled.Settings, contentDescription = "비율 정보", tint = Color.White)
                         }
                     }
                     Spacer(modifier = Modifier.height(4.dp))
@@ -621,20 +601,26 @@ fun HistorySettlementScreen(
                     Spacer(modifier = Modifier.height(12.dp))
                     Text("총 운행 횟수: $totalCount", style = MaterialTheme.typography.bodyLarge, color = Color.White)
                     Text("총 운행료: %,d원".format(totalFare), style = MaterialTheme.typography.bodyLarge, color = Color.White)
-                    Text("납부액: %,d원".format(totalDeposit), style = MaterialTheme.typography.bodyLarge, color = Color.White)
-                    Text("미납금: %,d원".format(totalCredit), style = MaterialTheme.typography.bodyLarge, color = Color.White)
+                    Text("비율: ${depositRatio}% (사무실) / ${100 - depositRatio}% (내 몫)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                     Spacer(modifier = Modifier.height(8.dp))
                     Divider(thickness = 2.dp, color = Color(0xFFFF9800))
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "실 납부액: %,d원".format(realDeposit),
-                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                        color = Color(0xFFFF9800)
-                    )
-                    Text(
                         "내 수익: %,d원".format(realIncome),
                         style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                        color = Color.White
+                        color = Color(0xFFFFB000)
+                    )
+                    // 실 납부액 표시 (양수: 사무실에 낼 돈, 음수: 사무실에서 받을 돈)
+                    val depositText = if (realDeposit >= 0) {
+                        "사무실에 납부: %,d원".format(realDeposit)
+                    } else {
+                        "사무실에서 받을 금액: %,d원".format(-realDeposit)
+                    }
+                    val depositColor = if (realDeposit >= 0) Color.White else Color(0xFFFF6666)
+                    Text(
+                        depositText,
+                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                        color = depositColor
                     )
                 }
             }
@@ -650,8 +636,6 @@ fun HistorySettlementScreen(
                             val summaryMap = mapOf(
                                 "totalCount" to totalCount,
                                 "totalFare" to totalFare,
-                                "totalDeposit" to totalDeposit,
-                                "totalCredit" to totalCredit,
                                 "realDeposit" to realDeposit,
                                 "realIncome" to realIncome
                             )

@@ -332,9 +332,22 @@ class MainActivity : ComponentActivity() {
         }
         window.setBackgroundDrawableResource(android.R.color.transparent)
 
-        screenState = if (auth.currentUser == null) Screen.Login else Screen.Dashboard
+        // 자동 로그인 설정과 Firebase Auth 상태 모두 확인
+        val loginPrefs = getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
+        val autoLoginEnabled = loginPrefs.getBoolean("auto_login", false)
 
-        if (auth.currentUser != null) {
+        screenState = if (auth.currentUser == null || !autoLoginEnabled) {
+            // Firebase Auth 세션이 없거나 자동 로그인이 비활성화면 로그인 화면
+            if (auth.currentUser != null && !autoLoginEnabled) {
+                // 자동 로그인 비활성화 상태인데 세션이 있으면 로그아웃
+                auth.signOut()
+            }
+            Screen.Login
+        } else {
+            Screen.Dashboard
+        }
+
+        if (auth.currentUser != null && autoLoginEnabled) {
             syncCallDetectorSettingsOnStartup()
         }
 
@@ -426,7 +439,16 @@ class MainActivity : ComponentActivity() {
                             DashboardScreen(
                                 viewModel = dashboardViewModel,
                                 onLogout = {
+                                    // 자동 로그인 설정 및 저장된 정보 클리어
+                                    val loginPrefs = getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
+                                    loginPrefs.edit()
+                                        .putBoolean("auto_login", false)
+                                        .remove("email")
+                                        .remove("password")
+                                        .apply()
+
                                     auth.signOut()
+                                    screenState = Screen.Login
                                 },
                                 onNavigateToSettings = { screenState = Screen.Settings }
                             )

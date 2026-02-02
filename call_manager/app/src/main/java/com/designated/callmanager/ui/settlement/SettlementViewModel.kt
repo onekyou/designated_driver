@@ -557,14 +557,13 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                     }
                 }
 
-                // 미지급 = 기사 몫 - 현금 수령
-                val todayUnpaid = driverShare - cashReceived
+                // 실납입금 = 현금수령 - 기사몫
+                // 양수: 기사가 사무실에 납부 / 음수: 사무실이 기사에게 지급
+                val todayResult = cashReceived - driverShare
 
-                // 양수면 미지급 발생 (기사가 더 받아야 함)
-                if (todayUnpaid > 0) {
-                    Log.d("SettlementViewModel", "기사 $driverId 미지급 발생: $todayUnpaid 원")
-                    processCarryOverOnFinalize(driverId, todayUnpaid.toLong())
-                }
+                // 누적 미지급금에 반영 (양수면 감소, 음수면 증가)
+                Log.d("SettlementViewModel", "기사 $driverId 오늘 정산: $todayResult 원 (양수=납부, 음수=미지급)")
+                processCarryOverOnFinalize(driverId, todayResult.toLong())
             }
         }
 
@@ -1323,11 +1322,9 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
 
     /**
      * 마감 시 미지급금 누적 처리
-     * 오늘 미지급금을 누적 잔액에 추가
+     * todayResult: 양수 = 기사가 납부 (미지급 감소), 음수 = 사무실이 지급해야 함 (미지급 증가)
      */
-    fun processCarryOverOnFinalize(driverId: String, todayUnpaid: Long) {
-        if (todayUnpaid <= 0) return
-
+    fun processCarryOverOnFinalize(driverId: String, todayResult: Long) {
         val provinceId = currentProvinceId
         val cityId = currentCityId
         val officeId = currentOfficeId
@@ -1345,16 +1342,30 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                 val carryOverMap = doc.get("carryOver") as? Map<String, Any?>
                 val currentBalance = (carryOverMap?.get("balance") as? Long) ?: 0L
 
-                transaction.update(driverRef, mapOf(
-                    "carryOver.balance" to currentBalance + todayUnpaid,
-                    "carryOver.todayAmount" to 0L,
-                    "carryOver.lastUpdatedAt" to Timestamp.now(),
-                    "carryOver.status" to CarryOverStatus.PENDING.name
-                ))
+                // 새 잔액 = 기존 잔액 - 오늘 결과
+                // todayResult가 양수(납부)면 잔액 감소, 음수(미지급)면 잔액 증가
+                val newBalance = currentBalance - todayResult
+
+                Log.d("SettlementViewModel", "CarryOver 계산: 기존=$currentBalance, 오늘결과=$todayResult, 새잔액=$newBalance")
+
+                // 잔액이 0 이하면 정산 완료 (미지급 없음)
+                val newStatus = if (newBalance <= 0) CarryOverStatus.SETTLED.name else CarryOverStatus.PENDING.name
+                val finalBalance = maxOf(0L, newBalance)  // 음수면 0으로
+
+                // set + merge 사용 (carryOver 필드가 없어도 생성됨)
+                val carryOverData = mapOf(
+                    "carryOver" to mapOf(
+                        "balance" to finalBalance,
+                        "todayAmount" to 0L,
+                        "lastUpdatedAt" to Timestamp.now(),
+                        "status" to newStatus
+                    )
+                )
+                transaction.set(driverRef, carryOverData, com.google.firebase.firestore.SetOptions.merge())
             }.addOnSuccessListener {
-                Log.d("SettlementViewModel", "CarryOver accumulated for driver $driverId: +$todayUnpaid")
+                Log.d("SettlementViewModel", "CarryOver updated for driver $driverId: result=$todayResult")
             }.addOnFailureListener { e ->
-                Log.e("SettlementViewModel", "Failed to accumulate carryOver", e)
+                Log.e("SettlementViewModel", "Failed to update carryOver", e)
             }
         }
     }

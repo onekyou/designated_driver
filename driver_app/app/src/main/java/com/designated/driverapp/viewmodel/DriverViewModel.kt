@@ -78,6 +78,21 @@ class DriverViewModel @Inject constructor(
     private val _carryOver = MutableStateFlow<DriverCarryOver?>(null)
     val carryOver: StateFlow<DriverCarryOver?> = _carryOver.asStateFlow()
 
+    // 분배비율 (Firestore offices에서 읽기)
+    private val _depositRatio = MutableStateFlow(60)
+    val depositRatio: StateFlow<Int> = _depositRatio.asStateFlow()
+
+    // calls 기반 오늘 정산 데이터
+    data class TodaySettlement(
+        val totalFare: Int = 0,           // 총 운행료
+        val driverShare: Int = 0,         // 내 수익 (기사몫)
+        val cashReceived: Int = 0,        // 현금 수령액
+        val realDeposit: Int = 0,         // 실 납부액 (현금수령 - 기사몫)
+        val tripCount: Int = 0            // 운행 횟수
+    )
+    private val _todaySettlement = MutableStateFlow(TodaySettlement())
+    val todaySettlement: StateFlow<TodaySettlement> = _todaySettlement.asStateFlow()
+
     private var assignedCallsListener: ListenerRegistration? = null
     private var driverStatusListener: ListenerRegistration? = null
     private var completedCallsListener: ListenerRegistration? = null
@@ -159,6 +174,8 @@ class DriverViewModel @Inject constructor(
             loadCurrentActiveCall(provinceId, cityId, officeId, driverId)
             // ✅ 이월 정산 (미수령금) 리스너 시작
             startCarryOverListener(provinceId, cityId, officeId, driverId)
+            // ✅ 분배비율 + 오늘 정산 로드 (calls 기반)
+            loadSettlementData(provinceId, cityId, officeId, driverId)
         } else {
             _uiState.update { it.copy(errorMessage = "인증 정보가 일치하지 않습니다.") }
         }
@@ -622,6 +639,9 @@ class DriverViewModel @Inject constructor(
                 // ✅ settlementSessions 저장은 Cloud Function이 담당
                 // calls 컬렉션 업데이트 → Cloud Function 트리거 → settlementSessions 자동 생성
                 Log.d(TAG, "운행완료 저장 완료 - Cloud Function이 정산 세션 처리 예정: $callId")
+
+                // ✅ 정산 데이터 새로고침 (calls 기반)
+                refreshSettlementData()
 
                 _uiState.update { currentState ->
                     currentState.copy(
@@ -1173,6 +1193,122 @@ class DriverViewModel @Inject constructor(
                 Log.e(TAG, "Failed to confirm carryOver receive", e)
                 onResult(false, "수령 확인 실패: ${e.message}")
             }
+        }
+    }
+
+    // ====== calls 기반 정산 데이터 로드 ======
+
+    /**
+     * 분배비율 + 오늘 정산 데이터 로드 (1회 조회)
+     * - offices에서 depositRatio 읽기
+     * - calls에서 마감 이후 내 완료된 콜 조회 → 로컬 계산
+     */
+    private fun loadSettlementData(provinceId: String, cityId: String, officeId: String, driverId: String) {
+        viewModelScope.launch {
+            try {
+                // 1. offices에서 depositRatio + settlementLastCleared 읽기
+                val officeDoc = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                    .collection(Constants.COLLECTION_CITIES).document(cityId)
+                    .collection(Constants.COLLECTION_OFFICES).document(officeId)
+                    .get()
+                    .await()
+
+                val ratio = officeDoc.getLong("depositRatio")?.toInt() ?: 60
+                _depositRatio.value = ratio.coerceIn(30, 90)
+
+                val lastClearedMillis = officeDoc.getTimestamp("settlementLastCleared")?.toDate()?.time ?: 0L
+
+                Log.d(TAG, "Settlement data loaded: ratio=$ratio, lastCleared=$lastClearedMillis")
+
+                // 2. calls에서 마감 이후 내 완료된 콜 조회
+                loadTodaySettlement(provinceId, cityId, officeId, driverId, lastClearedMillis)
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load settlement data", e)
+            }
+        }
+    }
+
+    /**
+     * 오늘 정산 데이터 로드 (calls 기반)
+     * 콜매니저와 동일한 계산 공식 적용
+     */
+    private suspend fun loadTodaySettlement(
+        provinceId: String,
+        cityId: String,
+        officeId: String,
+        driverId: String,
+        lastClearedMillis: Long
+    ) {
+        try {
+            val callsSnapshot = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                .collection(Constants.COLLECTION_CITIES).document(cityId)
+                .collection(Constants.COLLECTION_OFFICES).document(officeId)
+                .collection(Constants.COLLECTION_CALLS)
+                .whereEqualTo("assignedDriverId", driverId)
+                .whereEqualTo("status", "COMPLETED")
+                .get()
+                .await()
+
+            val ratio = _depositRatio.value
+            var totalFare = 0
+            var totalCashReceived = 0
+            var tripCount = 0
+
+            for (doc in callsSnapshot.documents) {
+                val completedAt = doc.getTimestamp("completedAt")?.toDate()?.time
+                    ?: doc.getTimestamp("updatedAt")?.toDate()?.time
+                    ?: 0L
+
+                // 마감 이후 콜만 포함
+                if (completedAt <= lastClearedMillis) continue
+
+                val fare = doc.getLong("fareFinal")?.toInt()
+                    ?: doc.getLong("fare_set")?.toInt()
+                    ?: 0
+
+                val paymentMethod = doc.getString("paymentMethod") ?: ""
+                val cashReceived = when {
+                    paymentMethod == "현금" -> fare
+                    paymentMethod.startsWith("현금+") -> doc.getLong("cashReceived")?.toInt() ?: 0
+                    else -> 0
+                }
+
+                totalFare += fare
+                totalCashReceived += cashReceived
+                tripCount++
+            }
+
+            // 계산 (콜매니저와 동일한 공식)
+            val driverShare = (totalFare * (100 - ratio) / 100)  // 내 수익 (기사몫)
+            val realDeposit = totalCashReceived - driverShare     // 실 납부액
+
+            _todaySettlement.value = TodaySettlement(
+                totalFare = totalFare,
+                driverShare = driverShare,
+                cashReceived = totalCashReceived,
+                realDeposit = realDeposit,
+                tripCount = tripCount
+            )
+
+            Log.d(TAG, "Today settlement calculated: fare=$totalFare, share=$driverShare, cash=$totalCashReceived, deposit=$realDeposit, trips=$tripCount")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load today settlement", e)
+        }
+    }
+
+    /**
+     * 정산 데이터 새로고침 (운행 완료 후 호출)
+     */
+    fun refreshSettlementData() {
+        val provinceId = sharedPreferences.getString(Constants.PREF_KEY_PROVINCE_ID, null)
+        val cityId = sharedPreferences.getString(Constants.PREF_KEY_CITY_ID, null)
+        val officeId = sharedPreferences.getString(Constants.PREF_KEY_OFFICE_ID, null)
+        val driverId = auth.currentUser?.uid
+
+        if (!provinceId.isNullOrBlank() && !cityId.isNullOrBlank() && !officeId.isNullOrBlank() && driverId != null) {
+            loadSettlementData(provinceId, cityId, officeId, driverId)
         }
     }
 }
