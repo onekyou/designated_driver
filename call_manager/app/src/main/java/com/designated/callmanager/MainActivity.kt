@@ -98,6 +98,7 @@ import android.net.Uri
 import android.os.PowerManager
 import android.content.BroadcastReceiver
 import android.content.IntentFilter
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 
 enum class Screen {
     Login,
@@ -250,6 +251,35 @@ class MainActivity : ComponentActivity() {
                         "운행 시작" -> dashboardViewModel.showTripStartedPopup(driverName, driverPhone, tripSummary, customerName)
                         "운행 완료" -> dashboardViewModel.showTripCompletedPopup(driverName, customerName)
                     }
+                }
+            }
+        }
+    }
+
+    // 알림 전달 실패 브로드캐스트 리시버 (LocalBroadcast)
+    private val notificationFailureReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "com.designated.callmanager.NOTIFICATION_FAILURE") {
+                val callId = intent.getStringExtra("callId") ?: return
+                val driverName = intent.getStringExtra("driverName") ?: "기사"
+                val driverId = intent.getStringExtra("driverId") ?: ""
+                val presenceStatus = intent.getStringExtra("presenceStatus") ?: "unknown"
+                val message = intent.getStringExtra("message") ?: "알림 전달 실패"
+
+                Log.d("MainActivity", "⚠️ 알림 전달 실패 브로드캐스트 수신 - $driverName: $presenceStatus")
+
+                lifecycleScope.launch {
+                    if (_screenState.value != Screen.Dashboard) {
+                        _screenState.value = Screen.Dashboard
+                        delay(300)
+                    }
+                    dashboardViewModel.showNotificationFailurePopup(
+                        callId = callId,
+                        driverName = driverName,
+                        driverId = driverId,
+                        presenceStatus = presenceStatus,
+                        message = message
+                    )
                 }
             }
         }
@@ -697,6 +727,10 @@ class MainActivity : ComponentActivity() {
             registerReceiver(tripStatusPopupReceiver, tripStatusFilter)
         }
 
+        // 알림 전달 실패 리시버 등록 (LocalBroadcast)
+        val notificationFailureFilter = IntentFilter("com.designated.callmanager.NOTIFICATION_FAILURE")
+        LocalBroadcastManager.getInstance(this).registerReceiver(notificationFailureReceiver, notificationFailureFilter)
+
         checkAndShowPendingPopup()
         setupTokenRefreshListener()
     }
@@ -713,6 +747,10 @@ class MainActivity : ComponentActivity() {
         }
         try {
             unregisterReceiver(tripStatusPopupReceiver)
+        } catch (e: IllegalArgumentException) {
+        }
+        try {
+            LocalBroadcastManager.getInstance(this).unregisterReceiver(notificationFailureReceiver)
         } catch (e: IllegalArgumentException) {
         }
         tokenRefreshListener?.remove()

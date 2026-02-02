@@ -197,6 +197,19 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _newSharedCallInfo = MutableStateFlow<com.designated.callmanager.data.SharedCallInfo?>(null)
     val newSharedCallInfo: StateFlow<com.designated.callmanager.data.SharedCallInfo?> = _newSharedCallInfo
 
+    // 알림 전달 실패 팝업 관련
+    data class NotificationFailureInfo(
+        val callId: String,
+        val driverName: String,
+        val driverId: String,
+        val presenceStatus: String,
+        val message: String
+    )
+    private val _showNotificationFailurePopup = MutableStateFlow(false)
+    val showNotificationFailurePopup: StateFlow<Boolean> = _showNotificationFailurePopup
+    private val _notificationFailureInfo = MutableStateFlow<NotificationFailureInfo?>(null)
+    val notificationFailureInfo: StateFlow<NotificationFailureInfo?> = _notificationFailureInfo
+
     // FCM 알림 클릭으로 인한 팝업인지 구분하는 플래그
     private val _isFromFcmNotification = MutableStateFlow(false)
     val isFromFcmNotification: StateFlow<Boolean> = _isFromFcmNotification
@@ -1396,6 +1409,28 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun showCancelledCallPopup(driverName: String, customerName: String) {
         _canceledCallInfo.value = Pair(driverName, customerName)
         _showCanceledCallPopup.value = true
+    }
+
+    fun showNotificationFailurePopup(
+        callId: String,
+        driverName: String,
+        driverId: String,
+        presenceStatus: String,
+        message: String
+    ) {
+        _notificationFailureInfo.value = NotificationFailureInfo(
+            callId = callId,
+            driverName = driverName,
+            driverId = driverId,
+            presenceStatus = presenceStatus,
+            message = message
+        )
+        _showNotificationFailurePopup.value = true
+    }
+
+    fun dismissNotificationFailurePopup() {
+        _showNotificationFailurePopup.value = false
+        _notificationFailureInfo.value = null
     }
 
     fun syncCallDetectorSettings(provinceId: String, cityId: String, officeId: String) {

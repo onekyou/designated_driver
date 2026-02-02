@@ -155,6 +155,8 @@ fun DashboardScreen(
     val tripStartedInfo by viewModel.tripStartedInfo.collectAsStateWithLifecycle()
     val showTripCompletedPopup by viewModel.showTripCompletedPopup.collectAsStateWithLifecycle()
     val tripCompletedInfo by viewModel.tripCompletedInfo.collectAsStateWithLifecycle()
+    val showNotificationFailurePopup by viewModel.showNotificationFailurePopup.collectAsStateWithLifecycle()
+    val notificationFailureInfo by viewModel.notificationFailureInfo.collectAsStateWithLifecycle()
     val showCanceledCallPopup by viewModel.showCanceledCallPopup.collectAsStateWithLifecycle()
     val showSharedCallTakenDialog by viewModel.showSharedCallTakenDialog.collectAsState()
     val canceledCallInfo by viewModel.canceledCallInfo.collectAsStateWithLifecycle()
@@ -394,6 +396,18 @@ fun DashboardScreen(
             title = "호출 취소",
             content = "${canceledCallInfo!!.first}${if (canceledCallInfo!!.first.endsWith("님")) "" else " 기사님"}의 ${canceledCallInfo!!.second} 고객 호출이 취소되었습니다.",
             onDismiss = { viewModel.dismissCanceledCallPopup() }
+        )
+    }
+
+    // 알림 전달 실패 팝업
+    if (showNotificationFailurePopup && notificationFailureInfo != null) {
+        NotificationFailureDialog(
+            info = notificationFailureInfo!!,
+            onDismiss = { viewModel.dismissNotificationFailurePopup() },
+            onCallDriver = { driverPhone ->
+                val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$driverPhone"))
+                context.startActivity(intent)
+            }
         )
     }
 
@@ -2630,6 +2644,78 @@ fun NewCallInputDialog(
                 ) {
                     Text("확인")
                 }
+            }
+        }
+    )
+}
+
+/**
+ * 알림 전달 실패 경고 팝업
+ * 기사에게 알림이 전달되지 않았을 때 표시
+ */
+@Composable
+fun NotificationFailureDialog(
+    info: DashboardViewModel.NotificationFailureInfo,
+    onDismiss: () -> Unit,
+    onCallDriver: (String) -> Unit
+) {
+    val statusText = when (info.presenceStatus) {
+        "offline" -> "앱 꺼짐 또는 네트워크 연결 끊김"
+        "background" -> "앱이 백그라운드 상태"
+        else -> "알림 전달 실패"
+    }
+
+    val statusIcon = when (info.presenceStatus) {
+        "offline" -> Icons.Default.SignalWifiOff
+        "background" -> Icons.Default.PhonelinkOff
+        else -> Icons.Default.NotificationsOff
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = statusIcon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(48.dp)
+            )
+        },
+        title = {
+            Text(
+                "⚠️ ${info.driverName} 기사 알림 전달 실패",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.error
+            )
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    "상태: $statusText",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Text(
+                    "전화로 연락하거나 다른 기사를 배차해주세요.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Text("확인")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text("닫기")
             }
         }
     )
