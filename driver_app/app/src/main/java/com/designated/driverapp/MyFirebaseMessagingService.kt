@@ -15,6 +15,7 @@ import com.designated.driverapp.data.Constants
 import com.designated.driverapp.service.DriverForegroundService
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.functions.ktx.functions
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -78,8 +79,14 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         // 메시지 타입 확인
         val messageType = remoteMessage.data["type"] ?: ""
+        val notificationId = remoteMessage.data["notificationId"]
 
         if (!callId.isNullOrBlank() && messageType == "call_assigned") {
+            // 도착 ACK 전송 (알림 수신 확인)
+            if (!notificationId.isNullOrBlank()) {
+                sendDeliveryAck(notificationId)
+            }
+
             // DriverForegroundService에 콜 정보 전달
             Log.d(TAG, "DriverForegroundService에 콜 정보 전달: $callId")
             val serviceIntent = DriverForegroundService.newCallAssignedIntent(this, callId, title, body)
@@ -257,5 +264,22 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             .setVibrate(longArrayOf(0, 300, 200, 300))
 
         notificationManager.notify(notificationId, builder.build())
+    }
+
+    /**
+     * 도착 ACK 전송 (Cloud Functions 호출)
+     */
+    private fun sendDeliveryAck(notificationId: String) {
+        val functions = Firebase.functions("asia-northeast3")
+
+        functions
+            .getHttpsCallable("acknowledgeNotification")
+            .call(hashMapOf("notificationId" to notificationId))
+            .addOnSuccessListener {
+                Log.d(TAG, "도착 ACK 전송 성공: $notificationId")
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "도착 ACK 전송 실패: $notificationId", e)
+            }
     }
 }

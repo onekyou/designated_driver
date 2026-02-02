@@ -68,7 +68,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             "SHARED_CALL_CLAIMED",
             "DRIVER_STATUS_UPDATE",  // 기사 상태 변경은 항상 처리
             "CALL_STATUS_UPDATE",    // 콜 상태 업데이트는 항상 처리
-            "STATUS_CHANGE"          // 운행 시작/완료 알림은 항상 처리
+            "STATUS_CHANGE",         // 운행 시작/완료 알림은 항상 처리
+            "NOTIFICATION_FAILURE"   // 알림 전달 실패 경고는 항상 처리
         )
         val shouldProcessInForeground = alwaysProcessTypes.contains(messageType)
 
@@ -147,6 +148,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 Log.d(TAG, "🔔 [DEBUG] new_customer 처리 시작")
                 handleNewCustomer(remoteMessage)
                 Log.d(TAG, "🔔 [DEBUG] new_customer 처리 완료")
+            }
+            "NOTIFICATION_FAILURE" -> {
+                Log.d(TAG, "🔔 [DEBUG] NOTIFICATION_FAILURE 처리 시작")
+                handleNotificationFailure(remoteMessage)
+                Log.d(TAG, "🔔 [DEBUG] NOTIFICATION_FAILURE 처리 완료")
             }
             else -> {
                 Log.w(TAG, "⚠️ [DEBUG] 알 수 없는 메시지 타입: $messageType")
@@ -1154,5 +1160,50 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         notificationManager.notify(notificationId, notificationBuilder.build())
 
         Log.d(TAG, "🔔 [CUSTOM] 커스텀 공유콜 알림 생성 완료")
+    }
+
+    /**
+     * 알림 전달 실패 처리 (ACK 시스템)
+     * 기사에게 알림 전달이 2회 실패 시 콜매니저에 경고
+     */
+    private fun handleNotificationFailure(remoteMessage: RemoteMessage) {
+        val data = remoteMessage.data
+        val callId = data["callId"] ?: return
+        val driverName = data["driverName"] ?: "기사"
+        val driverId = data["driverId"] ?: ""
+        val presenceStatus = data["presenceStatus"] ?: "unknown"
+        val message = data["message"] ?: "알림 전달 실패"
+        val title = data["title"] ?: "⚠️ 알림 전달 실패"
+
+        Log.d(TAG, "[NOTIFICATION_FAILURE] callId=$callId, driverName=$driverName, presenceStatus=$presenceStatus")
+
+        // 브로드캐스트로 UI에 알림 (팝업 표시)
+        val broadcastIntent = Intent("com.designated.callmanager.NOTIFICATION_FAILURE").apply {
+            putExtra("callId", callId)
+            putExtra("driverName", driverName)
+            putExtra("driverId", driverId)
+            putExtra("presenceStatus", presenceStatus)
+            putExtra("message", message)
+        }
+        LocalBroadcastManager.getInstance(this).sendBroadcast(broadcastIntent)
+
+        // 시스템 알림도 표시
+        val statusText = when (presenceStatus) {
+            "offline" -> "앱 꺼짐 또는 네트워크 연결 끊김"
+            "background" -> "앱이 백그라운드 상태"
+            else -> "알림 전달 실패"
+        }
+
+        showNotification(
+            channelId = STATUS_CHANGE_CHANNEL_ID,
+            notificationId = "notification_failure_$callId".hashCode(),
+            title = title,
+            content = "$driverName 기사에게 알림 전달 실패",
+            bigText = "$driverName 기사에게 알림 전달 실패\n상태: $statusText\n\n전화로 연락하거나 다른 기사를 배차해주세요.",
+            callId = callId,
+            color = ContextCompat.getColor(this, android.R.color.holo_red_dark),
+            autoCancel = true,
+            timeoutAfter = 60000  // 1분 후 자동 사라짐
+        )
     }
 }

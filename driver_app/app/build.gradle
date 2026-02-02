@@ -120,6 +120,7 @@ dependencies {
     implementation libs.firebase.firestore.ktx
     implementation libs.firebase.messaging.ktx
     implementation 'com.google.firebase:firebase-database-ktx' // Realtime Database (Presence)
+    implementation 'com.google.firebase:firebase-functions-ktx' // Cloud Functions (ACK)
 
     // QR Code Generation (ZXing)
     implementation 'com.google.zxing:core:3.5.2'
