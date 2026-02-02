@@ -449,11 +449,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                             previousStatusMap[call.id] != CallStatus.IN_PROGRESS.firestoreValue) {
                             val tripSummary = buildString {
                                 append("출발: ${call.departure_set ?: call.customerAddress ?: "정보없음"}")
-                                append(", 도착: ${call.destination_set ?: "정보없음"}")
                                 if (!call.waypoints_set.isNullOrBlank()) {
-                                    append(", 경유: ${call.waypoints_set}")
+                                    append("\n경유: ${call.waypoints_set}")
                                 }
-                                append(", 요금: ${call.fare_set ?: call.fare ?: 0}원")
+                                append("\n도착: ${call.destination_set ?: "정보없음"}")
+                                append("\n요금: ${call.fare_set ?: call.fare ?: 0}원")
                             }
                             val driverDisplayName = if (call.callType == "SHARED") {
                                 "공유 기사님"

@@ -609,19 +609,9 @@ class DriverViewModel @Inject constructor(
 
                 saveTripToHistory(fareToSet, tripSummaryToSet, paymentMethod, cashAmount, latestCallInfo)
 
-                // 공유 정산 문서에 저장 (오프라인 지원)
-                saveToSettlementSession(
-                    callId = callId,
-                    driverId = driverId,
-                    provinceId = provinceId,
-                    cityId = cityId,
-                    officeId = officeId,
-                    fare = fareToSet,
-                    paymentMethod = paymentMethod,
-                    cashAmount = cashAmount,
-                    pointsUsed = pointsToUse,
-                    callInfo = latestCallInfo
-                )
+                // ✅ settlementSessions 저장은 Cloud Function이 담당
+                // calls 컬렉션 업데이트 → Cloud Function 트리거 → settlementSessions 자동 생성
+                Log.d(TAG, "운행완료 저장 완료 - Cloud Function이 정산 세션 처리 예정: $callId")
 
                 _uiState.update { currentState ->
                     currentState.copy(
@@ -671,78 +661,9 @@ class DriverViewModel @Inject constructor(
         }
     }
 
-    /**
-     * 공유 정산 문서에 콜 정산 데이터 저장
-     * - 오프라인 시 로컬에 저장하고 나중에 동기화
-     */
-    private fun saveToSettlementSession(
-        callId: String,
-        driverId: String,
-        provinceId: String,
-        cityId: String,
-        officeId: String,
-        fare: Int,
-        paymentMethod: String,
-        cashAmount: Int?,
-        pointsUsed: Int,
-        callInfo: CallInfo?
-    ) {
-        viewModelScope.launch {
-            try {
-                val driverName = sharedPreferences.getString("driver_name", "") ?: ""
-
-                // 외상 금액 계산
-                val creditAmount = when (paymentMethod) {
-                    "외상" -> fare.toLong()
-                    "현금+포인트" -> (fare - (cashAmount ?: 0)).toLong()
-                    else -> 0L
-                }
-
-                // 현금 수령액 계산
-                val cashReceived = when (paymentMethod) {
-                    "현금" -> fare.toLong()
-                    "현금+포인트" -> (cashAmount ?: 0).toLong()
-                    else -> 0L
-                }
-
-                val callSettlement = CallSettlement(
-                    callId = callId,
-                    driverId = driverId,
-                    driverName = driverName,
-                    customerName = callInfo?.customerName ?: "",
-                    customerPhone = callInfo?.phoneNumber ?: "",
-                    departure = callInfo?.departure_set ?: "",
-                    destination = callInfo?.destination_set ?: "",
-                    fare = fare.toLong(),
-                    paymentMethod = paymentMethod,
-                    cashReceived = cashReceived,
-                    creditAmount = creditAmount,
-                    pointsUsed = pointsUsed.toLong(),
-                    completedAt = Timestamp.now(),
-                    confirmedByOffice = false,
-                    syncedAt = null
-                )
-
-                val result = settlementRepository.saveCallSettlement(
-                    callSettlement = callSettlement,
-                    provinceId = provinceId,
-                    cityId = cityId,
-                    officeId = officeId
-                )
-
-                result.fold(
-                    onSuccess = {
-                        Log.d(TAG, "정산 데이터 저장 성공: $callId")
-                    },
-                    onFailure = { error ->
-                        Log.e(TAG, "정산 데이터 저장 실패 (나중에 동기화됨): ${error.message}")
-                    }
-                )
-            } catch (e: Exception) {
-                Log.e(TAG, "saveToSettlementSession 오류: ${e.message}", e)
-            }
-        }
-    }
+    // ✅ saveToSettlementSession 제거됨
+    // 정산 세션 저장은 Cloud Function (onCallCompletedUpdateSettlement)이 담당
+    // 기사앱은 calls 컬렉션만 업데이트하면 됨
 
     fun updateDriverStatus(newStatus: DriverStatus) = performFirestoreUpdate {
         Log.d(TAG, "🟡 [STATUS UPDATE] updateDriverStatus 호출됨 - 새 상태: ${newStatus.value}")
