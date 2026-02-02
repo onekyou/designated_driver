@@ -159,7 +159,25 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun updateOfficeShareRatio(newRatio: Int) {
-        _officeShareRatio.value = newRatio.coerceIn(30, 90)
+        val validRatio = newRatio.coerceIn(30, 90)
+        _officeShareRatio.value = validRatio
+
+        // Firestore에도 저장
+        val province = currentProvinceId
+        val city = currentCityId
+        val office = currentOfficeId
+        if (province != null && city != null && office != null) {
+            firestore.collection("provinces").document(province)
+                .collection("cities").document(city)
+                .collection("offices").document(office)
+                .update("depositRatio", validRatio)
+                .addOnSuccessListener {
+                    Log.d("SettlementViewModel", "depositRatio 저장 완료: $validRatio")
+                }
+                .addOnFailureListener { e ->
+                    Log.e("SettlementViewModel", "depositRatio 저장 실패", e)
+                }
+        }
     }
 
     data class CreditEntry(
@@ -239,6 +257,10 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
             .get()
             .addOnSuccessListener { officeDoc ->
                 val lastClearedMillis = officeDoc.getTimestamp("settlementLastCleared")?.toDate()?.time ?: 0L
+
+                // 분배비율 읽기 (기본값 60)
+                val savedRatio = officeDoc.getLong("depositRatio")?.toInt() ?: 60
+                _officeShareRatio.value = savedRatio.coerceIn(30, 90)
 
                 fetchCompletedCalls(provinceId, cityId, officeId, lastClearedMillis)
 
