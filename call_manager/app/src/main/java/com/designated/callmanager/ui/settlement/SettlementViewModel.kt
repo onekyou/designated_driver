@@ -30,6 +30,9 @@ import com.designated.callmanager.data.settlement.SettlementSession
 import com.designated.callmanager.data.settlement.CallSettlement
 import com.designated.callmanager.data.settlement.SettlementMetadata
 import com.designated.callmanager.data.settlement.SettlementTotals
+import com.designated.callmanager.data.settlement.CarryOverStatus
+import com.designated.callmanager.data.settlement.DriverCarryOver
+import com.designated.callmanager.data.settlement.DriverCarryOverSummary
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.functions.FirebaseFunctions
@@ -69,6 +72,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
 
     private var sessionsListener: ListenerRegistration? = null
     private var callsListener: ListenerRegistration? = null
+    private var carryOverListener: ListenerRegistration? = null
 
     private val database = CallManagerDatabase.getInstance(getApplication())
     private val repository = SettlementRepository(database)
@@ -93,6 +97,10 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
 
     private val _hasCloudBackups = MutableStateFlow(false)
     val hasCloudBackups: StateFlow<Boolean> = _hasCloudBackups.asStateFlow()
+
+    // 이월 정산 (기사별 미지급금) 관련 StateFlow
+    private val _carryOverList = MutableStateFlow<List<DriverCarryOverSummary>>(emptyList())
+    val carryOverList: StateFlow<List<DriverCarryOverSummary>> = _carryOverList.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -146,6 +154,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
         val office = loginPrefs.getString("officeId", null)
         if (!province.isNullOrBlank() && !city.isNullOrBlank() && !office.isNullOrBlank()) {
             loadSettlementData(province, city, office)
+            startCarryOverListener(province, city, office)
         }
     }
 
@@ -468,6 +477,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
         super.onCleared()
         sessionsListener?.remove()
         callsListener?.remove()
+        carryOverListener?.remove()
     }
 
     fun clearLocalSettlement() {
@@ -1092,5 +1102,161 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
      */
     fun clearSyncState() {
         _syncState.value = SyncState.Idle
+    }
+
+    // ====== 이월 정산 (기사별 미지급금) 관련 기능 ======
+
+    /**
+     * 기사별 이월 정산 데이터 실시간 리스너
+     * drivers 컬렉션에서 carryOver 필드가 있는 기사들을 감시
+     */
+    private fun startCarryOverListener(provinceId: String, cityId: String, officeId: String) {
+        carryOverListener?.remove()
+
+        // drivers 컬렉션에서 해당 사무실 소속 기사들 감시
+        carryOverListener = firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
+            .collection("offices").document(officeId)
+            .collection("drivers")
+            .addSnapshotListener { snapshots, e ->
+                if (e != null) {
+                    Log.e("SettlementViewModel", "CarryOver listener error", e)
+                    return@addSnapshotListener
+                }
+
+                val carryOvers = snapshots?.documents?.mapNotNull { doc ->
+                    val carryOverMap = doc.get("carryOver") as? Map<String, Any?>
+                    if (carryOverMap == null || (carryOverMap["balance"] as? Long ?: 0L) == 0L) {
+                        return@mapNotNull null
+                    }
+
+                    val carryOver = DriverCarryOver.fromMap(carryOverMap)
+                    DriverCarryOverSummary(
+                        driverId = doc.id,
+                        driverName = doc.getString("name") ?: "이름없음",
+                        balance = carryOver.balance,
+                        todayAmount = carryOver.todayAmount,
+                        status = carryOver.status,
+                        transferredAt = carryOver.transferredAt
+                    )
+                } ?: emptyList()
+
+                _carryOverList.value = carryOvers.sortedByDescending { it.balance }
+                Log.d("SettlementViewModel", "CarryOver list updated: ${carryOvers.size} drivers")
+            }
+    }
+
+    /**
+     * 이체하기 - 기사에게 미지급금 이체 처리
+     * 상태를 TRANSFERRED로 변경하고 이체 시간 기록
+     */
+    fun transferCarryOver(driverId: String, onResult: (Boolean, String) -> Unit) {
+        val provinceId = currentProvinceId
+        val cityId = currentCityId
+        val officeId = currentOfficeId
+
+        if (provinceId == null || cityId == null || officeId == null) {
+            onResult(false, "사무실 정보가 설정되지 않았습니다")
+            return
+        }
+
+        val loginPrefs = getApplication<Application>().getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
+        val adminId = loginPrefs.getString("adminId", null) ?: "unknown"
+
+        val driverRef = firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
+            .collection("offices").document(officeId)
+            .collection("drivers").document(driverId)
+
+        viewModelScope.launch {
+            driverRef.update(
+                mapOf(
+                    "carryOver.status" to CarryOverStatus.TRANSFERRED.name,
+                    "carryOver.transferredAt" to Timestamp.now(),
+                    "carryOver.transferredBy" to adminId,
+                    "carryOver.lastUpdatedAt" to Timestamp.now()
+                )
+            ).addOnSuccessListener {
+                Log.d("SettlementViewModel", "CarryOver transferred for driver: $driverId")
+                onResult(true, "이체 완료")
+            }.addOnFailureListener { e ->
+                Log.e("SettlementViewModel", "Failed to transfer carryOver", e)
+                onResult(false, "이체 실패: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * 이체취소 - 이체 처리를 취소하고 PENDING 상태로 되돌림
+     */
+    fun cancelTransfer(driverId: String, onResult: (Boolean, String) -> Unit) {
+        val provinceId = currentProvinceId
+        val cityId = currentCityId
+        val officeId = currentOfficeId
+
+        if (provinceId == null || cityId == null || officeId == null) {
+            onResult(false, "사무실 정보가 설정되지 않았습니다")
+            return
+        }
+
+        val driverRef = firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
+            .collection("offices").document(officeId)
+            .collection("drivers").document(driverId)
+
+        viewModelScope.launch {
+            driverRef.update(
+                mapOf(
+                    "carryOver.status" to CarryOverStatus.PENDING.name,
+                    "carryOver.transferredAt" to null,
+                    "carryOver.transferredBy" to null,
+                    "carryOver.lastUpdatedAt" to Timestamp.now()
+                )
+            ).addOnSuccessListener {
+                Log.d("SettlementViewModel", "CarryOver transfer cancelled for driver: $driverId")
+                onResult(true, "이체 취소됨")
+            }.addOnFailureListener { e ->
+                Log.e("SettlementViewModel", "Failed to cancel transfer", e)
+                onResult(false, "취소 실패: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * 마감 시 미지급금 누적 처리
+     * 오늘 미지급금을 누적 잔액에 추가
+     */
+    fun processCarryOverOnFinalize(driverId: String, todayUnpaid: Long) {
+        if (todayUnpaid <= 0) return
+
+        val provinceId = currentProvinceId
+        val cityId = currentCityId
+        val officeId = currentOfficeId
+
+        if (provinceId == null || cityId == null || officeId == null) return
+
+        val driverRef = firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
+            .collection("offices").document(officeId)
+            .collection("drivers").document(driverId)
+
+        viewModelScope.launch {
+            firestore.runTransaction { transaction ->
+                val doc = transaction.get(driverRef)
+                val carryOverMap = doc.get("carryOver") as? Map<String, Any?>
+                val currentBalance = (carryOverMap?.get("balance") as? Long) ?: 0L
+
+                transaction.update(driverRef, mapOf(
+                    "carryOver.balance" to currentBalance + todayUnpaid,
+                    "carryOver.todayAmount" to 0L,
+                    "carryOver.lastUpdatedAt" to Timestamp.now(),
+                    "carryOver.status" to CarryOverStatus.PENDING.name
+                ))
+            }.addOnSuccessListener {
+                Log.d("SettlementViewModel", "CarryOver accumulated for driver $driverId: +$todayUnpaid")
+            }.addOnFailureListener { e ->
+                Log.e("SettlementViewModel", "Failed to accumulate carryOver", e)
+            }
+        }
     }
 }

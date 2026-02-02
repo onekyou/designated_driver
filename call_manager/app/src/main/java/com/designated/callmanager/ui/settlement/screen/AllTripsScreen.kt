@@ -19,6 +19,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.designated.callmanager.data.SettlementData
 import com.designated.callmanager.ui.settlement.SettlementViewModel
 import com.designated.callmanager.ui.settlement.screen.CreditDialog
+import com.designated.callmanager.data.settlement.DriverCarryOverSummary
+import com.designated.callmanager.data.settlement.CarryOverStatus
 import android.app.Activity
 import androidx.compose.ui.platform.LocalContext
 
@@ -32,6 +34,9 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
     val ratio by vm.officeShareRatio.collectAsState()
 
     var paymentDialog by remember { mutableStateOf<Pair<String, List<SettlementData>>?>(null) }
+
+    // 이월 정산 (기사별 미지급금) 데이터
+    val carryOverList by vm.carryOverList.collectAsState()
 
     // 업무 마감 확인 다이얼로그 상태
     var showFinalizeDialog by remember { mutableStateOf(false) }
@@ -167,6 +172,98 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
         }
 
         Spacer(Modifier.height(12.dp))
+
+        // 기사별 미지급금 테이블 (미지급이 있는 경우에만 표시)
+        if (carryOverList.isNotEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF3A3A3A))
+            ) {
+                Column(Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "기사별 미지급 (누적)",
+                            color = Color(0xFFFFAA00),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "총 ${"%,d".format(carryOverList.sumOf { it.balance })}원",
+                            color = Color(0xFFFF6666),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+
+                    // 테이블 헤더
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("기사", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                        Text("누적", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                        Text("오늘", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                        Text("상태", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                    }
+                    HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f), modifier = Modifier.padding(vertical = 4.dp))
+
+                    // 기사별 행 (최대 5명까지만 표시)
+                    carryOverList.take(5).forEach { item ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                item.driverName.take(4),
+                                color = Color.White,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                "${"%,d".format(item.balance)}",
+                                color = Color.White,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                if (item.todayAmount > 0) "+${"%,d".format(item.todayAmount)}" else "-",
+                                color = if (item.todayAmount > 0) Color(0xFFFFAA00) else Color.Gray,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                when (item.status) {
+                                    CarryOverStatus.PENDING -> "미지급"
+                                    CarryOverStatus.TRANSFERRED -> "대기"
+                                    CarryOverStatus.SETTLED -> "완료"
+                                },
+                                color = when (item.status) {
+                                    CarryOverStatus.PENDING -> Color(0xFFFF6666)
+                                    CarryOverStatus.TRANSFERRED -> Color(0xFFFFCC00)
+                                    CarryOverStatus.SETTLED -> Color(0xFF66FF66)
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    if (carryOverList.size > 5) {
+                        Text(
+                            "외 ${carryOverList.size - 5}명 더보기 → 기사별 탭",
+                            color = Color.Gray,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
 
         Box(Modifier.weight(1f)) {
             TripListTable(tripList = trips)

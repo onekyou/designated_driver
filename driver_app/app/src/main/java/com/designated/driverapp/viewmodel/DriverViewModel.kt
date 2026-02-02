@@ -16,6 +16,8 @@ import com.designated.driverapp.data.Constants
 import com.designated.driverapp.data.repository.CustomerPointsRepository
 import com.designated.driverapp.data.repository.SettlementRepository
 import com.designated.driverapp.data.settlement.CallSettlement
+import com.designated.driverapp.data.settlement.CarryOverStatus
+import com.designated.driverapp.data.settlement.DriverCarryOver
 import com.google.firebase.Timestamp
 import com.designated.driverapp.model.CallInfo
 import com.designated.driverapp.model.CallStatus
@@ -72,9 +74,14 @@ class DriverViewModel @Inject constructor(
     private val _notificationCallId = MutableStateFlow<String?>(null)
     val notificationCallId: StateFlow<String?> = _notificationCallId.asStateFlow()
 
+    // 이월 정산 (미수령금) StateFlow
+    private val _carryOver = MutableStateFlow<DriverCarryOver?>(null)
+    val carryOver: StateFlow<DriverCarryOver?> = _carryOver.asStateFlow()
+
     private var assignedCallsListener: ListenerRegistration? = null
     private var driverStatusListener: ListenerRegistration? = null
     private var completedCallsListener: ListenerRegistration? = null
+    private var carryOverListener: ListenerRegistration? = null
 
     private val fusedLocationClient: FusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(appContext)
     private val geocoder: Geocoder = Geocoder(appContext, Locale.KOREA)
@@ -132,7 +139,8 @@ class DriverViewModel @Inject constructor(
         driverStatusListener = null
         completedCallsListener?.remove()
         completedCallsListener = null
-
+        carryOverListener?.remove()
+        carryOverListener = null
     }
 
     fun initializeListenersWithInfo(provinceId: String, cityId: String, officeId: String, driverId: String) {
@@ -149,6 +157,8 @@ class DriverViewModel @Inject constructor(
         if (auth.currentUser?.uid == driverId) {
             // ✅ 리스너 대신 1회 조회로 현재 운행 중인 콜 확인 (앱 재시작 시 복구)
             loadCurrentActiveCall(provinceId, cityId, officeId, driverId)
+            // ✅ 이월 정산 (미수령금) 리스너 시작
+            startCarryOverListener(provinceId, cityId, officeId, driverId)
         } else {
             _uiState.update { it.copy(errorMessage = "인증 정보가 일치하지 않습니다.") }
         }
@@ -1092,6 +1102,77 @@ class DriverViewModel @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "processCustomerPoints: 포인트 처리 실패", e)
             false
+        }
+    }
+
+    // ====== 이월 정산 (미수령금) 관련 기능 ======
+
+    /**
+     * 이월 정산 (미수령금) 실시간 리스너
+     * 내 기사 문서의 carryOver 필드를 실시간 감시
+     */
+    private fun startCarryOverListener(provinceId: String, cityId: String, officeId: String, driverId: String) {
+        carryOverListener?.remove()
+
+        val driverRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+            .collection(Constants.COLLECTION_CITIES).document(cityId)
+            .collection(Constants.COLLECTION_OFFICES).document(officeId)
+            .collection(Constants.COLLECTION_DRIVERS).document(driverId)
+
+        carryOverListener = driverRef.addSnapshotListener { snapshot, e ->
+            if (e != null) {
+                Log.e(TAG, "CarryOver listener error", e)
+                return@addSnapshotListener
+            }
+
+            if (snapshot != null && snapshot.exists()) {
+                val carryOverMap = snapshot.get("carryOver") as? Map<String, Any?>
+                val carryOver = DriverCarryOver.fromMap(carryOverMap)
+
+                // 미수령금이 있고, SETTLED가 아닌 경우에만 표시
+                if (carryOver.balance > 0 && carryOver.status != CarryOverStatus.SETTLED) {
+                    _carryOver.value = carryOver
+                    Log.d(TAG, "CarryOver updated: balance=${carryOver.balance}, status=${carryOver.status}")
+                } else {
+                    _carryOver.value = null
+                }
+            } else {
+                _carryOver.value = null
+            }
+        }
+    }
+
+    /**
+     * 수령완료 - 이체받은 미수령금 수령 확인
+     * 상태를 SETTLED로 변경하고 잔액을 0으로 리셋
+     */
+    fun confirmReceiveCarryOver(onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val (provinceId, cityId, officeId) = getDriverLocationInfo()
+                val driverId = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
+
+                val driverRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                    .collection(Constants.COLLECTION_CITIES).document(cityId)
+                    .collection(Constants.COLLECTION_OFFICES).document(officeId)
+                    .collection(Constants.COLLECTION_DRIVERS).document(driverId)
+
+                driverRef.update(
+                    mapOf(
+                        "carryOver.balance" to 0L,
+                        "carryOver.status" to CarryOverStatus.SETTLED.name,
+                        "carryOver.transferredAt" to null,
+                        "carryOver.transferredBy" to null,
+                        "carryOver.lastUpdatedAt" to Timestamp.now()
+                    )
+                ).await()
+
+                Log.d(TAG, "CarryOver received and settled")
+                onResult(true, "수령 완료")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to confirm carryOver receive", e)
+                onResult(false, "수령 확인 실패: ${e.message}")
+            }
         }
     }
 }

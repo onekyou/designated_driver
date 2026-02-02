@@ -19,6 +19,8 @@ import androidx.navigation.NavController
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.designated.driverapp.viewmodel.DriverViewModel
+import com.designated.driverapp.data.settlement.CarryOverStatus
+import com.designated.driverapp.data.settlement.DriverCarryOver
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
@@ -60,6 +62,10 @@ fun HistorySettlementScreen(
     val completedCalls = uiState.completedCalls
     val shouldNavigateToHistorySettlement = uiState.navigateToHistorySettlement
     var showLogoutConfirmDialog by remember { mutableStateOf(false) }
+
+    // 이월 정산 (미수령금) 데이터
+    val carryOver by viewModel.carryOver.collectAsStateWithLifecycle()
+    var showReceiveConfirmDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val systemUiController = rememberSystemUiController()
 
@@ -477,6 +483,125 @@ fun HistorySettlementScreen(
                 }
             }
             Spacer(modifier = Modifier.height(12.dp))
+
+            // 이월 정산 (미수령금) 카드 - 미수령금이 있을 때만 표시
+            if (carryOver != null && carryOver!!.balance > 0) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = when (carryOver!!.status) {
+                            CarryOverStatus.PENDING -> Color(0xFF3D2020)
+                            CarryOverStatus.TRANSFERRED -> Color(0xFF3D3D20)
+                            else -> Color(0xFF203D20)
+                        }
+                    ),
+                    elevation = CardDefaults.cardElevation(4.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "💰 누적 미수령금",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFFFAA00)
+                            )
+                            Text(
+                                when (carryOver!!.status) {
+                                    CarryOverStatus.PENDING -> "미수령"
+                                    CarryOverStatus.TRANSFERRED -> "이체됨"
+                                    else -> "수령완료"
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = when (carryOver!!.status) {
+                                    CarryOverStatus.PENDING -> Color(0xFFFF6666)
+                                    CarryOverStatus.TRANSFERRED -> Color(0xFFFFCC00)
+                                    else -> Color(0xFF66FF66)
+                                },
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "%,d원".format(carryOver!!.balance),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        if (carryOver!!.todayAmount > 0) {
+                            Text(
+                                "(오늘 +%,d원)".format(carryOver!!.todayAmount),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color(0xFFFFAA00)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // TRANSFERRED 상태일 때만 수령완료 버튼 표시
+                        if (carryOver!!.status == CarryOverStatus.TRANSFERRED) {
+                            Text(
+                                "📢 사무실에서 이체되었습니다!",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color(0xFFFFCC00),
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(
+                                onClick = { showReceiveConfirmDialog = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                            ) {
+                                Text("수령완료", fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            Text(
+                                "사무실에서 이체 후 수령 확인해주세요.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // 수령완료 확인 다이얼로그
+            if (showReceiveConfirmDialog) {
+                AlertDialog(
+                    onDismissRequest = { showReceiveConfirmDialog = false },
+                    title = { Text("수령 확인", color = Color.White) },
+                    text = {
+                        Text(
+                            "%,d원을 수령하셨습니까?".format(carryOver?.balance ?: 0),
+                            color = Color.White
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                viewModel.confirmReceiveCarryOver { success, message ->
+                                    if (success) {
+                                        showReceiveConfirmDialog = false
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                        ) {
+                            Text("예, 수령했습니다")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showReceiveConfirmDialog = false }) {
+                            Text("취소", color = Color.White)
+                        }
+                    },
+                    containerColor = Color(0xFF2A2A2A)
+                )
+            }
+
             Card(
                 modifier = Modifier
                     .fillMaxWidth(),

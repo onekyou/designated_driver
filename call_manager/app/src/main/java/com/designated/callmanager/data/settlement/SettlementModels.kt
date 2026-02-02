@@ -341,3 +341,64 @@ enum class PaymentFilter {
     CREDIT,      // 외상
     POINTS       // 포인트
 }
+
+/**
+ * 이월 정산 상태
+ */
+enum class CarryOverStatus {
+    PENDING,      // 미지급 상태
+    TRANSFERRED,  // 이체 완료 (기사 확인 대기)
+    SETTLED       // 정산 완료 (기사 수령 확인)
+}
+
+/**
+ * 기사별 이월 정산 데이터
+ * Firestore 경로: drivers/{driverId}/carryOver (필드)
+ */
+data class DriverCarryOver(
+    val balance: Long = 0,                    // 누적 미지급금 (양수 = 기사가 받아야 함)
+    val status: CarryOverStatus = CarryOverStatus.PENDING,
+    val lastUpdatedAt: Timestamp? = null,
+    val transferredAt: Timestamp? = null,     // 이체하기 클릭 시점
+    val transferredBy: String? = null,        // 이체 처리한 매니저 ID
+    val todayAmount: Long = 0                 // 오늘 발생한 미지급금
+) {
+    companion object {
+        fun fromMap(map: Map<String, Any?>?): DriverCarryOver {
+            if (map == null) return DriverCarryOver()
+            return DriverCarryOver(
+                balance = (map["balance"] as? Long) ?: 0,
+                status = try {
+                    CarryOverStatus.valueOf((map["status"] as? String) ?: "PENDING")
+                } catch (e: Exception) {
+                    CarryOverStatus.PENDING
+                },
+                lastUpdatedAt = map["lastUpdatedAt"] as? Timestamp,
+                transferredAt = map["transferredAt"] as? Timestamp,
+                transferredBy = map["transferredBy"] as? String,
+                todayAmount = (map["todayAmount"] as? Long) ?: 0
+            )
+        }
+    }
+
+    fun toMap(): Map<String, Any?> = mapOf(
+        "balance" to balance,
+        "status" to status.name,
+        "lastUpdatedAt" to lastUpdatedAt,
+        "transferredAt" to transferredAt,
+        "transferredBy" to transferredBy,
+        "todayAmount" to todayAmount
+    )
+}
+
+/**
+ * 콜매니저에서 표시할 기사별 이월 정산 요약
+ */
+data class DriverCarryOverSummary(
+    val driverId: String,
+    val driverName: String,
+    val balance: Long,             // 누적 미지급금
+    val todayAmount: Long,         // 오늘 발생 미지급금
+    val status: CarryOverStatus,
+    val transferredAt: Timestamp?
+)
