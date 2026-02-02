@@ -504,6 +504,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
         val totalFare  = trips.sumOf { it.fare }.toLong()
         val newSessionId = System.currentTimeMillis().toString()
         val closingTime = System.currentTimeMillis()
+        val ratio = _officeShareRatio.value
 
         viewModelScope.launch {
             repository.insertSession(
@@ -515,6 +516,34 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                 )
             )
             repository.markTripsFinalized(trips.map { it.callId }, newSessionId)
+
+            // ✅ 기사별 미지급금 계산 및 carryOver 저장
+            val driverTrips = trips.groupBy { it.driverId }
+            driverTrips.forEach { (driverId, driverTripList) ->
+                if (driverId.isBlank()) return@forEach
+
+                // 기사 몫 계산
+                val driverTotalFare = driverTripList.sumOf { it.fare }
+                val driverShare = (driverTotalFare * (100 - ratio) / 100)
+
+                // 현금 수령액 계산
+                val cashReceived = driverTripList.sumOf { trip ->
+                    when {
+                        trip.paymentMethod == "현금" -> trip.fare
+                        trip.paymentMethod.startsWith("현금+") -> trip.cashAmount ?: 0
+                        else -> 0
+                    }
+                }
+
+                // 미지급 = 기사 몫 - 현금 수령
+                val todayUnpaid = driverShare - cashReceived
+
+                // 양수면 미지급 발생 (기사가 더 받아야 함)
+                if (todayUnpaid > 0) {
+                    Log.d("SettlementViewModel", "기사 $driverId 미지급 발생: $todayUnpaid 원")
+                    processCarryOverOnFinalize(driverId, todayUnpaid.toLong())
+                }
+            }
         }
 
         // 마감 시간을 DashboardViewModel이 사용할 수 있도록 기록
@@ -1169,21 +1198,69 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
             .collection("drivers").document(driverId)
 
         viewModelScope.launch {
-            driverRef.update(
-                mapOf(
-                    "carryOver.status" to CarryOverStatus.TRANSFERRED.name,
-                    "carryOver.transferredAt" to Timestamp.now(),
-                    "carryOver.transferredBy" to adminId,
-                    "carryOver.lastUpdatedAt" to Timestamp.now()
-                )
-            ).addOnSuccessListener {
-                Log.d("SettlementViewModel", "CarryOver transferred for driver: $driverId")
-                onResult(true, "이체 완료")
+            // 먼저 기사 정보와 미지급금 조회
+            driverRef.get().addOnSuccessListener { driverDoc ->
+                val driverName = driverDoc.getString("name") ?: "기사"
+                val carryOverMap = driverDoc.get("carryOver") as? Map<String, Any?>
+                val balance = (carryOverMap?.get("balance") as? Long) ?: 0L
+
+                // Firestore 업데이트
+                driverRef.update(
+                    mapOf(
+                        "carryOver.status" to CarryOverStatus.TRANSFERRED.name,
+                        "carryOver.transferredAt" to Timestamp.now(),
+                        "carryOver.transferredBy" to adminId,
+                        "carryOver.lastUpdatedAt" to Timestamp.now()
+                    )
+                ).addOnSuccessListener {
+                    Log.d("SettlementViewModel", "CarryOver transferred for driver: $driverId")
+
+                    // FCM 알림 전송
+                    sendCarryOverNotification(provinceId, cityId, officeId, driverId, driverName, balance)
+
+                    onResult(true, "이체 완료")
+                }.addOnFailureListener { e ->
+                    Log.e("SettlementViewModel", "Failed to transfer carryOver", e)
+                    onResult(false, "이체 실패: ${e.message}")
+                }
             }.addOnFailureListener { e ->
-                Log.e("SettlementViewModel", "Failed to transfer carryOver", e)
-                onResult(false, "이체 실패: ${e.message}")
+                Log.e("SettlementViewModel", "Failed to get driver info", e)
+                onResult(false, "기사 정보 조회 실패: ${e.message}")
             }
         }
+    }
+
+    /**
+     * 미지급금 이체 FCM 알림 전송
+     */
+    private fun sendCarryOverNotification(
+        provinceId: String,
+        cityId: String,
+        officeId: String,
+        driverId: String,
+        driverName: String,
+        amount: Long
+    ) {
+        val functions = Firebase.functions("asia-northeast3")
+
+        val data = hashMapOf(
+            "provinceId" to provinceId,
+            "cityId" to cityId,
+            "officeId" to officeId,
+            "driverId" to driverId,
+            "type" to "CARRYOVER_TRANSFERRED",
+            "title" to "미수령금 이체 알림",
+            "body" to "${"%,d".format(amount)}원이 이체되었습니다. 확인 후 수령완료를 눌러주세요."
+        )
+
+        functions.getHttpsCallable("sendDriverNotification")
+            .call(data)
+            .addOnSuccessListener { result ->
+                Log.d("SettlementViewModel", "CarryOver notification sent to $driverName")
+            }
+            .addOnFailureListener { e ->
+                Log.e("SettlementViewModel", "Failed to send carryOver notification", e)
+            }
     }
 
     /**
