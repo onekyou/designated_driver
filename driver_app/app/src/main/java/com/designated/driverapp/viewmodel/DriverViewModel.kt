@@ -363,7 +363,7 @@ class DriverViewModel @Inject constructor(
             .collection(Constants.COLLECTION_CITIES).document(cityId)
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_DRIVERS).document(driverId)
-        Log.d(TAG, "🔵 Driver Ref 경로: provinces/$provinceId/cities/$cityId/offices/$officeId/drivers/$driverId")
+        Log.d(TAG, "🔵 Driver Ref 경로: provinces/$provinceId/cities/$cityId/offices/$officeId/designated_drivers/$driverId")
 
         Log.d(TAG, "🔵 Transaction 시작")
         firestore.runTransaction { transaction ->

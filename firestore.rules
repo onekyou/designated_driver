@@ -120,19 +120,6 @@ service cloud.firestore {
         allow write: if isOfficeAdmin(provinceId, cityId, officeId) || (isAuthenticated() && resource.data.authUid == request.auth.uid);
       }
 
-      // =============================
-      //  Drivers (기사 문서 - carryOver 포함)
-      //  • 관리자: 읽기/쓰기 가능
-      //  • 기사 본인: 읽기/쓰기 가능 (carryOver 상태 업데이트 등)
-      // =============================
-      match /drivers/{driverDocId} {
-        // 읽기(read): 관리자이거나, 기사 본인인 경우 허용
-        allow read: if isOfficeAdmin(provinceId, cityId, officeId) || (isAuthenticated() && resource.data.authUid == request.auth.uid);
-
-        // 쓰기(write): 관리자이거나, 기사 본인인 경우 허용
-        allow write: if isOfficeAdmin(provinceId, cityId, officeId) || (isAuthenticated() && resource.data.authUid == request.auth.uid);
-      }
-
       match /calls/{callId} {
         // 해당 사무실의 관리자 또는 배정된 기사(assignedDriverId 필드로 확인)는 특정 콜 정보를 가져오거나 쿼리할 수 있습니다.
         // get과 list 규칙을 read로 통합하여 권한 충돌 문제를 해결합니다.

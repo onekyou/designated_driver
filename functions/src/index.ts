@@ -4452,3 +4452,69 @@ export const finalizeSettlementAndNotifyDrivers = onCall(
     }
   }
 );
+
+/**
+ * 기사에게 알림 전송 (범용)
+ * Call Manager에서 CarryOver 이체 등 알림 시 호출
+ */
+export const sendDriverNotification = onCall(
+  {
+    region: "asia-northeast3",
+  },
+  async (request) => {
+    const { driverId, provinceId, cityId, officeId, type, title, body } = request.data;
+
+    logger.info(`[sendDriverNotification] 호출됨 - driverId: ${driverId}, type: ${type}`);
+
+    if (!driverId || !provinceId || !cityId || !officeId || !type || !title || !body) {
+      logger.error("[sendDriverNotification] 필수 파라미터 누락");
+      return { success: false, error: "Missing required parameters" };
+    }
+
+    try {
+      // 기사 문서 조회 (문서 ID = driverId = authUid)
+      const driverDocRef = admin.firestore()
+        .doc(`provinces/${provinceId}/cities/${cityId}/offices/${officeId}/${DRIVER_COLLECTION_NAME}/${driverId}`);
+
+      const driverDoc = await driverDocRef.get();
+
+      if (!driverDoc.exists) {
+        logger.error(`[sendDriverNotification] 기사 문서 없음 - docId: ${driverId}`);
+        return { success: false, error: "Driver not found" };
+      }
+
+      const driverData = driverDoc.data();
+      const fcmToken = driverData?.fcmToken;
+      const driverName = driverData?.name || "기사";
+
+      logger.info(`[sendDriverNotification] 기사 정보 - name: ${driverName}, token: ${fcmToken ? "exists" : "NONE"}`);
+
+      if (!fcmToken) {
+        logger.warn(`[sendDriverNotification] FCM 토큰 없음 - ${driverName}`);
+        return { success: false, error: "No FCM token" };
+      }
+
+      // FCM 전송
+      const payload = {
+        data: {
+          type: type,
+          title: title,
+          body: body,
+        },
+        android: {
+          priority: "high" as const,
+        },
+        token: fcmToken,
+      };
+
+      await admin.messaging().send(payload);
+      logger.info(`[sendDriverNotification] FCM 전송 성공 - ${driverName}, type: ${type}`);
+
+      return { success: true, driverName: driverName };
+
+    } catch (error) {
+      logger.error("[sendDriverNotification] 오류:", error);
+      return { success: false, error: String(error) };
+    }
+  }
+);
