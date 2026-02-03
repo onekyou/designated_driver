@@ -123,7 +123,7 @@ class DispatchActivity : ComponentActivity() {
                             id = doc.id,
                             name = name,
                             status = doc.getString("status") ?: "WAITING",
-                            phone = doc.getString("phone") ?: ""
+                            phone = doc.getString("phoneNumber") ?: ""
                         )
                     )
                 }
@@ -138,7 +138,7 @@ class DispatchActivity : ComponentActivity() {
                             id = doc.id,
                             name = name,
                             status = doc.getString("status") ?: "ONLINE",
-                            phone = doc.getString("phone") ?: ""
+                            phone = doc.getString("phoneNumber") ?: ""
                         )
                     )
                 }
@@ -168,6 +168,7 @@ class DispatchActivity : ComponentActivity() {
             "status" to "ASSIGNED",
             "assignedDriverId" to driver.id,
             "assignedDriverName" to driver.name,
+            "assignedDriverPhone" to driver.phone,
             "assignedTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
         )
 
@@ -216,6 +217,7 @@ class DispatchActivity : ComponentActivity() {
             "timestampClient" to System.currentTimeMillis(),
             "assignedDriverId" to driver.id,
             "assignedDriverName" to driver.name,
+            "assignedDriverPhone" to driver.phone,
             "assignedTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
         )
 
