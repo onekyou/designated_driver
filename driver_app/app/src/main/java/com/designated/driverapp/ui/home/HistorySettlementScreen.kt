@@ -468,13 +468,19 @@ fun HistorySettlementScreen(
 
             // 오늘 미지급금 계산 (콜매니저와 동일한 로직)
             val todayUnpaid = if (realDeposit < 0) -realDeposit else 0
-            // 누적 미수령금 = 이전 잔액 + 오늘 미지급금
-            val totalUnpaid = (carryOver?.balance?.toInt() ?: 0) + todayUnpaid
+            val carryOverStatus = carryOver?.status
+
+            // 누적 미수령금 계산
+            // TRANSFERRED 상태면 balance에 이미 오늘분 포함됨 → 더하지 않음
+            val totalUnpaid = if (carryOverStatus == CarryOverStatus.TRANSFERRED) {
+                carryOver?.balance?.toInt() ?: 0  // 이체된 금액만 표시
+            } else {
+                (carryOver?.balance?.toInt() ?: 0) + todayUnpaid  // 이월분 + 오늘분
+            }
 
             // 이월 정산 (미수령금) 카드 - 미수령금이 있을 때만 표시
             if (totalUnpaid > 0) {
                 // carryOver 상태 (null이면 오늘 미지급금만 있는 상태)
-                val carryOverStatus = carryOver?.status
                 val previousBalance = carryOver?.balance?.toInt() ?: 0
 
                 Card(
@@ -524,18 +530,44 @@ fun HistorySettlementScreen(
                             color = Color.White
                         )
                         // 내역 표시 (이전 잔액 + 오늘)
-                        if (previousBalance > 0 && todayUnpaid > 0) {
-                            Text(
-                                "(이전 %,d원 + 오늘 %,d원)".format(previousBalance, todayUnpaid),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFFFFAA00)
-                            )
-                        } else if (todayUnpaid > 0) {
-                            Text(
-                                "(오늘 +%,d원)".format(todayUnpaid),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFFFFAA00)
-                            )
+                        if (carryOverStatus == CarryOverStatus.TRANSFERRED) {
+                            // TRANSFERRED: 저장된 값 사용 (이미 이체된 금액)
+                            val transferredTodayAmount = carryOver?.todayAmount?.toInt() ?: 0
+                            val transferredPreviousAmount = previousBalance - transferredTodayAmount
+                            if (transferredPreviousAmount > 0 && transferredTodayAmount > 0) {
+                                Text(
+                                    "(이전 %,d원 + 오늘 %,d원)".format(transferredPreviousAmount, transferredTodayAmount),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFFFFAA00)
+                                )
+                            } else if (transferredTodayAmount > 0) {
+                                Text(
+                                    "(오늘 %,d원)".format(transferredTodayAmount),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFFFFAA00)
+                                )
+                            } else if (transferredPreviousAmount > 0) {
+                                Text(
+                                    "(이월 %,d원)".format(transferredPreviousAmount),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFFFFAA00)
+                                )
+                            }
+                        } else {
+                            // PENDING: 로컬 계산값 사용
+                            if (previousBalance > 0 && todayUnpaid > 0) {
+                                Text(
+                                    "(이전 %,d원 + 오늘 %,d원)".format(previousBalance, todayUnpaid),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFFFFAA00)
+                                )
+                            } else if (todayUnpaid > 0) {
+                                Text(
+                                    "(오늘 +%,d원)".format(todayUnpaid),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFFFFAA00)
+                                )
+                            }
                         }
                         Spacer(modifier = Modifier.height(12.dp))
 

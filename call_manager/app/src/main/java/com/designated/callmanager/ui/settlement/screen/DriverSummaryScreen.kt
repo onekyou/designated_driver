@@ -197,9 +197,16 @@ private fun DriverDetailCard(
     onCancelClick: (String) -> Unit = {},
     onClick: () -> Unit
 ) {
-    // 총 미지급금 = 이월분 + 오늘분
+    // 총 미지급금 계산
     val carryOverBalance = carryOver?.balance ?: 0L
-    val totalUnpaid = carryOverBalance + todayUnpaid
+    val status = carryOver?.status
+
+    // TRANSFERRED 상태면 balance에 이미 오늘분 포함됨 → 더하지 않음
+    val totalUnpaid = if (status == CarryOverStatus.TRANSFERRED) {
+        carryOverBalance  // 이체된 금액만 표시
+    } else {
+        carryOverBalance + todayUnpaid  // 이월분 + 오늘분
+    }
 
     Card(modifier = Modifier.fillMaxWidth().clickable { onClick() }, colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A))) {
         Column(Modifier.padding(12.dp)) {
@@ -228,21 +235,42 @@ private fun DriverDetailCard(
                         color = if (totalUnpaid > 0) Color(0xFFFF6666) else Color.Gray,
                         fontWeight = FontWeight.Bold
                     )
-                    // 이월분
-                    if (carryOverBalance > 0) {
-                        Text(
-                            "이월: ${"%,d".format(carryOverBalance)}원",
-                            color = Color.White,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    // 오늘분
-                    if (todayUnpaid > 0) {
-                        Text(
-                            "오늘: +${"%,d".format(todayUnpaid)}원",
-                            color = Color(0xFFFFAA00),
-                            style = MaterialTheme.typography.bodySmall
-                        )
+
+                    // 이월/오늘 분리 표시
+                    if (status == CarryOverStatus.TRANSFERRED) {
+                        // TRANSFERRED: 저장된 값 사용 (이미 이체된 금액)
+                        val transferredTodayAmount = carryOver?.todayAmount ?: 0L
+                        val transferredPreviousAmount = carryOverBalance - transferredTodayAmount
+                        if (transferredPreviousAmount > 0) {
+                            Text(
+                                "이월: ${"%,d".format(transferredPreviousAmount)}원",
+                                color = Color.White,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        if (transferredTodayAmount > 0) {
+                            Text(
+                                "오늘: +${"%,d".format(transferredTodayAmount)}원",
+                                color = Color(0xFFFFAA00),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    } else {
+                        // PENDING: 로컬 계산값 사용
+                        if (carryOverBalance > 0) {
+                            Text(
+                                "이월: ${"%,d".format(carryOverBalance)}원",
+                                color = Color.White,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        if (todayUnpaid > 0) {
+                            Text(
+                                "오늘: +${"%,d".format(todayUnpaid)}원",
+                                color = Color(0xFFFFAA00),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                     }
                     // 상태
                     if (carryOver != null && carryOverBalance > 0) {
