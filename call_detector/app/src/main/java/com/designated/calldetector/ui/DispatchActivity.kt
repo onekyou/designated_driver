@@ -1,18 +1,17 @@
 package com.designated.calldetector.ui
 
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.google.firebase.firestore.FirebaseFirestore
-import kotlinx.coroutines.tasks.await
+import com.google.firebase.firestore.ListenerRegistration
 
 class DispatchActivity : ComponentActivity() {
 
@@ -38,9 +37,46 @@ class DispatchActivity : ComponentActivity() {
                 var drivers by remember { mutableStateOf<List<DriverInfo>>(emptyList()) }
                 var isLoading by remember { mutableStateOf(true) }
 
-                LaunchedEffect(Unit) {
-                    drivers = loadAvailableDrivers(provinceId, cityId, officeId)
-                    isLoading = false
+                // Firestore 실시간 리스너로 기사 상태 구독
+                DisposableEffect(provinceId, cityId, officeId) {
+                    val db = FirebaseFirestore.getInstance()
+                    val driversPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/designated_drivers"
+
+                    // 모든 기사를 가져와서 클라이언트에서 필터링 (실시간 업데이트)
+                    val listenerRegistration: ListenerRegistration = db.collection(driversPath)
+                        .addSnapshotListener { snapshot, e ->
+                            if (e != null) {
+                                Log.e("DispatchActivity", "기사 목록 리스너 에러", e)
+                                isLoading = false
+                                return@addSnapshotListener
+                            }
+
+                            val allDrivers = mutableListOf<DriverInfo>()
+                            snapshot?.documents?.forEach { doc ->
+                                val name = doc.getString("name")
+                                val status = doc.getString("status") ?: ""
+                                // WAITING 또는 ONLINE 상태만 필터링
+                                if (name != null && (status == "WAITING" || status == "ONLINE")) {
+                                    allDrivers.add(
+                                        DriverInfo(
+                                            id = doc.id,
+                                            name = name,
+                                            status = status,
+                                            phone = doc.getString("phoneNumber") ?: ""
+                                        )
+                                    )
+                                }
+                            }
+
+                            drivers = allDrivers
+                            isLoading = false
+                            Log.d("DispatchActivity", "기사 목록 업데이트: ${allDrivers.size}명")
+                        }
+
+                    onDispose {
+                        listenerRegistration.remove()
+                        Log.d("DispatchActivity", "기사 목록 리스너 해제")
+                    }
                 }
 
                 if (isLoading) {
@@ -93,60 +129,6 @@ class DispatchActivity : ComponentActivity() {
                     )
                 }
             }
-        }
-    }
-
-    private suspend fun loadAvailableDrivers(provinceId: String, cityId: String, officeId: String): List<DriverInfo> {
-        return try {
-            val db = FirebaseFirestore.getInstance()
-            val driversPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/designated_drivers"
-
-            // WAITING 또는 ONLINE 상태의 기사들을 모두 가져오기
-            val waitingSnapshot = db.collection(driversPath)
-                .whereEqualTo("status", "WAITING")
-                .get()
-                .await()
-
-            val onlineSnapshot = db.collection(driversPath)
-                .whereEqualTo("status", "ONLINE")
-                .get()
-                .await()
-
-            val allDrivers = mutableListOf<DriverInfo>()
-
-            // WAITING 상태 기사들 추가
-            waitingSnapshot.documents.forEach { doc ->
-                val name = doc.getString("name")
-                if (name != null) {
-                    allDrivers.add(
-                        DriverInfo(
-                            id = doc.id,
-                            name = name,
-                            status = doc.getString("status") ?: "WAITING",
-                            phone = doc.getString("phoneNumber") ?: ""
-                        )
-                    )
-                }
-            }
-
-            // ONLINE 상태 기사들 추가
-            onlineSnapshot.documents.forEach { doc ->
-                val name = doc.getString("name")
-                if (name != null) {
-                    allDrivers.add(
-                        DriverInfo(
-                            id = doc.id,
-                            name = name,
-                            status = doc.getString("status") ?: "ONLINE",
-                            phone = doc.getString("phoneNumber") ?: ""
-                        )
-                    )
-                }
-            }
-
-            allDrivers
-        } catch (e: Exception) {
-            emptyList()
         }
     }
 
