@@ -92,7 +92,9 @@ class DriverViewModel @Inject constructor(
         val driverShare: Int = 0,         // 내 수익 (기사몫)
         val cashReceived: Int = 0,        // 현금 수령액
         val realDeposit: Int = 0,         // 실 납부액 (현금수령 - 기사몫)
-        val tripCount: Int = 0            // 운행 횟수
+        val tripCount: Int = 0,           // 운행 횟수
+        val totalCredit: Int = 0,         // 총 외상 (현금 제외 금액)
+        val officeDeposit: Int = 0        // 총 납입액 (사무실 몫)
     )
     private val _todaySettlement = MutableStateFlow(TodaySettlement())
     val todaySettlement: StateFlow<TodaySettlement> = _todaySettlement.asStateFlow()
@@ -1304,18 +1306,22 @@ class DriverViewModel @Inject constructor(
             }
 
             // 계산 (콜매니저와 동일한 공식 - Double 나눗셈)
+            val officeDeposit = (totalFare * ratio / 100.0).toInt()        // 총 납입액 (사무실 몫)
             val driverShare = (totalFare * (100 - ratio) / 100.0).toInt()  // 내 수익 (기사몫)
-            val realDeposit = totalCashReceived - driverShare     // 실 납부액
+            val realDeposit = totalCashReceived - driverShare              // 실 납부액
+            val totalCredit = totalFare - totalCashReceived                // 총 외상 (현금 제외 금액)
 
             _todaySettlement.value = TodaySettlement(
                 totalFare = totalFare,
                 driverShare = driverShare,
                 cashReceived = totalCashReceived,
                 realDeposit = realDeposit,
-                tripCount = tripCount
+                tripCount = tripCount,
+                totalCredit = totalCredit,
+                officeDeposit = officeDeposit
             )
 
-            Log.d(TAG, "Today settlement calculated: fare=$totalFare, share=$driverShare, cash=$totalCashReceived, deposit=$realDeposit, trips=$tripCount")
+            Log.d(TAG, "Today settlement calculated: fare=$totalFare, share=$driverShare, cash=$totalCashReceived, deposit=$realDeposit, trips=$tripCount, credit=$totalCredit")
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load today settlement", e)

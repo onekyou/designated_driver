@@ -112,6 +112,8 @@ fun HistorySettlementScreen(
     val totalFare = todaySettlement.totalFare
     val realIncome = todaySettlement.driverShare      // 내 수익 (기사몫)
     val realDeposit = todaySettlement.realDeposit     // 실 납부액
+    val totalCredit = todaySettlement.totalCredit     // 총 외상
+    val officeDeposit = todaySettlement.officeDeposit // 총 납입액 (사무실 몫)
 
     LaunchedEffect(shouldNavigateToHistorySettlement) {
         if (shouldNavigateToHistorySettlement) {
@@ -493,7 +495,7 @@ fun HistorySettlementScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                "💰 누적 미수령금",
+                                "누적 미수령금",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFFFFAA00)
@@ -623,29 +625,61 @@ fun HistorySettlementScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     Divider(thickness = 3.dp, color = Color(0xFFFF9800))
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text("총 운행 횟수: $totalCount", style = MaterialTheme.typography.bodyLarge, color = Color.White)
-                    Text("총 운행료: %,d원".format(totalFare), style = MaterialTheme.typography.bodyLarge, color = Color.White)
-                    Text("비율: ${depositRatio}% (사무실) / ${100 - depositRatio}% (내 몫)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Divider(thickness = 2.dp, color = Color(0xFFFF9800))
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "내 수익: %,d원".format(realIncome),
-                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                        color = Color(0xFFFFB000)
-                    )
-                    // 실 납부액 표시 (양수: 사무실에 낼 돈, 음수: 사무실에서 받을 돈)
-                    val depositText = if (realDeposit >= 0) {
-                        "사무실에 납부: %,d원".format(realDeposit)
-                    } else {
-                        "사무실에서 받을 금액: %,d원".format(-realDeposit)
+
+                    // 기본 정보
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("총 운행", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                        Text("${totalCount}건", color = Color.White, style = MaterialTheme.typography.bodyMedium)
                     }
-                    val depositColor = if (realDeposit >= 0) Color.White else Color(0xFFFF6666)
-                    Text(
-                        depositText,
-                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                        color = depositColor
-                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("총 금액", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                        Text("%,d원".format(totalFare), color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("총 납입액 (${depositRatio}%)", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                        Text("%,d원".format(officeDeposit), color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("총 외상", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            if (totalCredit > 0) "%,d원".format(totalCredit) else "-",
+                            color = if (totalCredit > 0) Color(0xFFFF6666) else Color.Gray,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Divider(thickness = 2.dp, color = Color(0xFFFF9800))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // 최종 정산
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("최종 납입액", color = Color.White, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                        val depositText = if (realDeposit >= 0) {
+                            "%,d원".format(realDeposit)
+                        } else {
+                            "-%,d원 (받을 금액)".format(-realDeposit)
+                        }
+                        Text(
+                            depositText,
+                            color = if (realDeposit >= 0) Color.White else Color(0xFFFF6666),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("최종 수입액", color = Color(0xFFFFB000), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                        Text(
+                            "%,d원".format(realIncome),
+                            color = Color(0xFFFFB000),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
             var showClearDialog by remember { mutableStateOf(false) }
