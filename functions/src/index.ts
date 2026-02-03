@@ -4403,6 +4403,19 @@ export const finalizeSettlementAndNotifyDrivers = onCall(
       // 이미 마감된 세션인지 확인
       if (session?.metadata?.isFinalized) {
         logger.info(`[finalizeSettlement] 이미 마감된 세션 - ${targetDate}`);
+
+        // settlementLastCleared가 없으면 설정 (이전 코드로 마감된 경우 보완)
+        const officeRef = db.collection("provinces").doc(provinceId)
+          .collection("cities").doc(cityId)
+          .collection("offices").doc(officeId);
+        const officeDoc = await officeRef.get();
+        if (!officeDoc.data()?.settlementLastCleared) {
+          await officeRef.update({
+            settlementLastCleared: admin.firestore.Timestamp.now()
+          });
+          logger.info(`[finalizeSettlement] settlementLastCleared 보완 설정됨`);
+        }
+
         return { success: true, alreadyFinalized: true, sent: 0, skipped: 0 };
       }
 
