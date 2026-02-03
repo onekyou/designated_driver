@@ -24,8 +24,6 @@
     <!-- 네트워크 관련 권한 -->
     <!-- 인터넷 권한: Firebase Firestore에 데이터를 보내기 위해 필요해요 -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- 네트워크 상태 확인 권한 -->
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- Android 13(API 33) 이상: 알림 권한 필요 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
