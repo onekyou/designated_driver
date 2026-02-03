@@ -38,6 +38,69 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
     // 이월 정산 (기사별 미지급금) 데이터
     val carryOverList by vm.carryOverList.collectAsState()
 
+    // 기사별 오늘 미지급금 계산 (로컬 trips 기반)
+    val todayUnpaidByDriver = remember(trips, ratio) {
+        trips.groupBy { it.driverId }
+            .filter { it.key.isNotBlank() }
+            .mapValues { (_, driverTrips) ->
+                val fareSum = driverTrips.sumOf { it.fare }
+                val cashReceived = driverTrips.sumOf { trip ->
+                    when {
+                        trip.paymentMethod == "현금" -> trip.fare
+                        trip.paymentMethod.startsWith("현금+") -> trip.cashAmount ?: 0
+                        else -> 0
+                    }
+                }
+                val driverShare = (fareSum * (100 - ratio) / 100.0).toInt()
+                val realDeposit = cashReceived - driverShare
+                // 음수면 미지급금 발생
+                if (realDeposit < 0) -realDeposit else 0
+            }
+    }
+
+    // 기사별 통합 미지급 현황 (이월분 + 오늘분)
+    data class DriverUnpaidSummary(
+        val driverId: String,
+        val driverName: String,
+        val carryOver: Long,      // 이월분 (Firestore)
+        val todayUnpaid: Int,     // 오늘분 (로컬 계산)
+        val total: Long,          // 합계
+        val status: CarryOverStatus
+    )
+
+    val driverUnpaidList = remember(carryOverList, todayUnpaidByDriver, trips) {
+        // 이월분이 있는 기사
+        val fromCarryOver = carryOverList.map { co ->
+            val todayAmount = todayUnpaidByDriver[co.driverId] ?: 0
+            DriverUnpaidSummary(
+                driverId = co.driverId,
+                driverName = co.driverName,
+                carryOver = co.balance,
+                todayUnpaid = todayAmount,
+                total = co.balance + todayAmount,
+                status = co.status
+            )
+        }
+
+        // 오늘 새로 미지급 발생한 기사 (이월분 없는)
+        val carryOverDriverIds = carryOverList.map { it.driverId }.toSet()
+        val fromToday = todayUnpaidByDriver
+            .filter { it.key !in carryOverDriverIds && it.value > 0 }
+            .map { (driverId, todayAmount) ->
+                val driverName = trips.find { it.driverId == driverId }?.driverName ?: "미지정"
+                DriverUnpaidSummary(
+                    driverId = driverId,
+                    driverName = driverName,
+                    carryOver = 0L,
+                    todayUnpaid = todayAmount,
+                    total = todayAmount.toLong(),
+                    status = CarryOverStatus.PENDING
+                )
+            }
+
+        (fromCarryOver + fromToday).sortedByDescending { it.total }
+    }
+
     // 업무 마감 확인 다이얼로그 상태
     var showFinalizeDialog by remember { mutableStateOf(false) }
     var isFinalizingInProgress by remember { mutableStateOf(false) }
@@ -173,46 +236,52 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
 
         Spacer(Modifier.height(12.dp))
 
-        // 기사별 미지급금 테이블 (미지급이 있는 경우에만 표시)
-        if (carryOverList.isNotEmpty()) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF3A3A3A))
-            ) {
-                Column(Modifier.padding(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "기사별 미지급 (누적)",
-                            color = Color(0xFFFFAA00),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            "총 ${"%,d".format(carryOverList.sumOf { it.balance })}원",
-                            color = Color(0xFFFF6666),
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    Spacer(Modifier.height(8.dp))
+        // 기사별 미지급금 테이블 (항상 표시)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF3A3A3A))
+        ) {
+            Column(Modifier.padding(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "기사별 미지급 현황",
+                        color = Color(0xFFFFAA00),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "총 ${"%,d".format(driverUnpaidList.sumOf { it.total })}원",
+                        color = if (driverUnpaidList.sumOf { it.total } > 0) Color(0xFFFF6666) else Color.Gray,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
 
+                if (driverUnpaidList.isEmpty()) {
+                    Text(
+                        "미지급금 없음",
+                        color = Color.Gray,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                } else {
                     // 테이블 헤더
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text("기사", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-                        Text("누적", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                        Text("이월", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
                         Text("오늘", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-                        Text("상태", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                        Text("합계", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
                     }
                     HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f), modifier = Modifier.padding(vertical = 4.dp))
 
                     // 기사별 행 (최대 5명까지만 표시)
-                    carryOverList.take(5).forEach { item ->
+                    driverUnpaidList.take(5).forEach { item ->
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
@@ -224,37 +293,30 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
                                 modifier = Modifier.weight(1f)
                             )
                             Text(
-                                "${"%,d".format(item.balance)}",
-                                color = Color.White,
+                                if (item.carryOver > 0) "${"%,d".format(item.carryOver)}" else "-",
+                                color = if (item.carryOver > 0) Color.White else Color.Gray,
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.weight(1f)
                             )
                             Text(
-                                if (item.todayAmount > 0) "+${"%,d".format(item.todayAmount)}" else "-",
-                                color = if (item.todayAmount > 0) Color(0xFFFFAA00) else Color.Gray,
+                                if (item.todayUnpaid > 0) "+${"%,d".format(item.todayUnpaid)}" else "-",
+                                color = if (item.todayUnpaid > 0) Color(0xFFFFAA00) else Color.Gray,
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.weight(1f)
                             )
                             Text(
-                                when (item.status) {
-                                    CarryOverStatus.PENDING -> "미지급"
-                                    CarryOverStatus.TRANSFERRED -> "대기"
-                                    CarryOverStatus.SETTLED -> "완료"
-                                },
-                                color = when (item.status) {
-                                    CarryOverStatus.PENDING -> Color(0xFFFF6666)
-                                    CarryOverStatus.TRANSFERRED -> Color(0xFFFFCC00)
-                                    CarryOverStatus.SETTLED -> Color(0xFF66FF66)
-                                },
+                                "${"%,d".format(item.total)}",
+                                color = Color(0xFFFF6666),
                                 style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
                                 modifier = Modifier.weight(1f)
                             )
                         }
                     }
 
-                    if (carryOverList.size > 5) {
+                    if (driverUnpaidList.size > 5) {
                         Text(
-                            "외 ${carryOverList.size - 5}명 더보기 → 기사별 탭",
+                            "외 ${driverUnpaidList.size - 5}명 더보기 → 기사별 탭",
                             color = Color.Gray,
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.padding(top = 4.dp)
@@ -262,8 +324,8 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
                     }
                 }
             }
-            Spacer(Modifier.height(8.dp))
         }
+        Spacer(Modifier.height(8.dp))
 
         Box(Modifier.weight(1f)) {
             TripListTable(tripList = trips)
