@@ -4407,14 +4407,23 @@ export const finalizeSettlementAndNotifyDrivers = onCall(
       }
 
       // 세션 마감 처리
+      const finalizeTimestamp = admin.firestore.Timestamp.now();
       await sessionRef.update({
         "metadata.isFinalized": true,
         "metadata.version": (session?.metadata?.version || 0) + 1,
-        "metadata.lastUpdatedAt": admin.firestore.Timestamp.now(),
+        "metadata.lastUpdatedAt": finalizeTimestamp,
         "metadata.lastUpdatedBy": "call_manager_finalize"
       });
 
-      logger.info(`[finalizeSettlement] 세션 마감 완료 - ${targetDate}`);
+      // offices 문서에 마감 시점 저장 (기사앱에서 당일 데이터 필터링용)
+      const officeRef = db.collection("provinces").doc(provinceId)
+        .collection("cities").doc(cityId)
+        .collection("offices").doc(officeId);
+      await officeRef.update({
+        settlementLastCleared: finalizeTimestamp
+      });
+
+      logger.info(`[finalizeSettlement] 세션 마감 완료 - ${targetDate}, settlementLastCleared 설정됨`);
 
       // 로그인 상태 기사에게만 알림 전송
       const totals = session?.totals || {

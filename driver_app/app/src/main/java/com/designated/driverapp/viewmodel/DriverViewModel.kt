@@ -82,6 +82,10 @@ class DriverViewModel @Inject constructor(
     private val _depositRatio = MutableStateFlow(60)
     val depositRatio: StateFlow<Int> = _depositRatio.asStateFlow()
 
+    // 마지막 마감 시점 (최초 1회 로드, tripHistory 필터링용)
+    private val _lastClearedMillis = MutableStateFlow(0L)
+    val lastClearedMillis: StateFlow<Long> = _lastClearedMillis.asStateFlow()
+
     // calls 기반 오늘 정산 데이터
     data class TodaySettlement(
         val totalFare: Int = 0,           // 총 운행료
@@ -640,8 +644,27 @@ class DriverViewModel @Inject constructor(
                 // calls 컬렉션 업데이트 → Cloud Function 트리거 → settlementSessions 자동 생성
                 Log.d(TAG, "운행완료 저장 완료 - Cloud Function이 정산 세션 처리 예정: $callId")
 
-                // ✅ 정산 데이터 새로고침 (calls 기반)
-                refreshSettlementData()
+                // ✅ 로컬 정산 데이터 즉시 업데이트 (콜매니저와 동일한 계산 로직)
+                val ratio = _depositRatio.value
+                val newCashReceived = when {
+                    paymentMethod == "현금" -> fareToSet
+                    paymentMethod.startsWith("현금+") -> cashAmount ?: 0
+                    else -> 0
+                }
+                val newDriverShare = (fareToSet * (100 - ratio) / 100.0).toInt()
+
+                _todaySettlement.update { current ->
+                    val updatedCashReceived = current.cashReceived + newCashReceived
+                    val updatedDriverShare = current.driverShare + newDriverShare
+                    current.copy(
+                        totalFare = current.totalFare + fareToSet,
+                        driverShare = updatedDriverShare,
+                        cashReceived = updatedCashReceived,
+                        realDeposit = updatedCashReceived - updatedDriverShare,
+                        tripCount = current.tripCount + 1
+                    )
+                }
+                Log.d(TAG, "로컬 정산 즉시 업데이트: fare=$fareToSet, cash=$newCashReceived, share=$newDriverShare")
 
                 _uiState.update { currentState ->
                     currentState.copy(
@@ -1217,6 +1240,7 @@ class DriverViewModel @Inject constructor(
                 _depositRatio.value = ratio.coerceIn(30, 90)
 
                 val lastClearedMillis = officeDoc.getTimestamp("settlementLastCleared")?.toDate()?.time ?: 0L
+                _lastClearedMillis.value = lastClearedMillis
 
                 Log.d(TAG, "Settlement data loaded: ratio=$ratio, lastCleared=$lastClearedMillis")
 
@@ -1279,8 +1303,8 @@ class DriverViewModel @Inject constructor(
                 tripCount++
             }
 
-            // 계산 (콜매니저와 동일한 공식)
-            val driverShare = (totalFare * (100 - ratio) / 100)  // 내 수익 (기사몫)
+            // 계산 (콜매니저와 동일한 공식 - Double 나눗셈)
+            val driverShare = (totalFare * (100 - ratio) / 100.0).toInt()  // 내 수익 (기사몫)
             val realDeposit = totalCashReceived - driverShare     // 실 납부액
 
             _todaySettlement.value = TodaySettlement(

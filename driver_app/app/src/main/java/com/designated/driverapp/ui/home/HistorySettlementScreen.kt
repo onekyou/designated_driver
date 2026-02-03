@@ -77,35 +77,35 @@ fun HistorySettlementScreen(
     }
     val sortedCalls = completedCalls.sortedByDescending { it.timestamp }
 
-    fun loadTripHistory(context: Context): List<String> {
+    // 마감 시점 기준으로 당일 운행내역만 필터링 (콜매니저와 동일)
+    fun loadTripHistory(context: Context, lastCleared: Long): List<String> {
         val prefs = context.getSharedPreferences("trip_history", Context.MODE_PRIVATE)
         val historyJson = prefs.getString("history_list", "[]")
         val historyList = JSONArray(historyJson)
-        val now = System.currentTimeMillis()
-        val fiveDaysMillis = 5 * 24 * 60 * 60 * 1000L
         val filtered = mutableListOf<String>()
-        val filteredJson = JSONArray()
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
         for (i in 0 until historyList.length()) {
             val item = historyList.getString(i)
             val parts = item.split("|timestamp=")
-            val summary = parts[0]
             val timestamp = if (parts.size > 1) parts[1].toLongOrNull() ?: 0L else 0L
-            if (timestamp > 0L && now - timestamp <= fiveDaysMillis) {
+            // 마감 시점 이후 데이터만 표시 (당일)
+            if (timestamp > lastCleared) {
                 filtered.add(item)
-                filteredJson.put(item)
             }
-        }
-        if (filtered.size != historyList.length()) {
-            prefs.edit().putString("history_list", filteredJson.toString()).apply()
         }
         return filtered
     }
-    var tripHistory by remember { mutableStateOf(loadTripHistory(context)) }
-
     // ✅ Firestore 기반 정산 데이터 (calls에서 계산)
     val depositRatio by viewModel.depositRatio.collectAsStateWithLifecycle()
     val todaySettlement by viewModel.todaySettlement.collectAsStateWithLifecycle()
+    val lastClearedMillis by viewModel.lastClearedMillis.collectAsStateWithLifecycle()
+
+    // tripHistory - 마감 시점 기준 당일 운행내역
+    var tripHistory by remember { mutableStateOf(loadTripHistory(context, lastClearedMillis)) }
+
+    // lastClearedMillis가 변경될 때 tripHistory 다시 로드
+    LaunchedEffect(lastClearedMillis) {
+        tripHistory = loadTripHistory(context, lastClearedMillis)
+    }
 
     // 정산 값 (Firestore calls 기반)
     val totalCount = todaySettlement.tripCount
@@ -464,15 +464,24 @@ fun HistorySettlementScreen(
             }
             Spacer(modifier = Modifier.height(12.dp))
 
+            // 오늘 미지급금 계산 (콜매니저와 동일한 로직)
+            val todayUnpaid = if (realDeposit < 0) -realDeposit else 0
+            // 누적 미수령금 = 이전 잔액 + 오늘 미지급금
+            val totalUnpaid = (carryOver?.balance?.toInt() ?: 0) + todayUnpaid
+
             // 이월 정산 (미수령금) 카드 - 미수령금이 있을 때만 표시
-            if (carryOver != null && carryOver!!.balance > 0) {
+            if (totalUnpaid > 0) {
+                // carryOver 상태 (null이면 오늘 미지급금만 있는 상태)
+                val carryOverStatus = carryOver?.status
+                val previousBalance = carryOver?.balance?.toInt() ?: 0
+
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
-                        containerColor = when (carryOver!!.status) {
-                            CarryOverStatus.PENDING -> Color(0xFF3D2020)
+                        containerColor = when (carryOverStatus) {
                             CarryOverStatus.TRANSFERRED -> Color(0xFF3D3D20)
-                            else -> Color(0xFF203D20)
+                            CarryOverStatus.PENDING -> Color(0xFF3D2020)
+                            else -> Color(0xFF3D2020)  // 오늘 미지급금만 있는 경우
                         }
                     ),
                     elevation = CardDefaults.cardElevation(4.dp)
@@ -490,30 +499,38 @@ fun HistorySettlementScreen(
                                 color = Color(0xFFFFAA00)
                             )
                             Text(
-                                when (carryOver!!.status) {
-                                    CarryOverStatus.PENDING -> "미수령"
+                                when (carryOverStatus) {
                                     CarryOverStatus.TRANSFERRED -> "이체됨"
-                                    else -> "수령완료"
+                                    CarryOverStatus.PENDING -> "미수령"
+                                    else -> "오늘 발생"
                                 },
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = when (carryOver!!.status) {
-                                    CarryOverStatus.PENDING -> Color(0xFFFF6666)
+                                color = when (carryOverStatus) {
                                     CarryOverStatus.TRANSFERRED -> Color(0xFFFFCC00)
-                                    else -> Color(0xFF66FF66)
+                                    CarryOverStatus.PENDING -> Color(0xFFFF6666)
+                                    else -> Color(0xFFFFAA00)
                                 },
                                 fontWeight = FontWeight.Bold
                             )
                         }
                         Spacer(modifier = Modifier.height(8.dp))
+                        // 누적 금액 표시 (이전 잔액 + 오늘 미지급금)
                         Text(
-                            "%,d원".format(carryOver!!.balance),
+                            "%,d원".format(totalUnpaid),
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
-                        if (carryOver!!.todayAmount > 0) {
+                        // 내역 표시 (이전 잔액 + 오늘)
+                        if (previousBalance > 0 && todayUnpaid > 0) {
                             Text(
-                                "(오늘 +%,d원)".format(carryOver!!.todayAmount),
+                                "(이전 %,d원 + 오늘 %,d원)".format(previousBalance, todayUnpaid),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color(0xFFFFAA00)
+                            )
+                        } else if (todayUnpaid > 0) {
+                            Text(
+                                "(오늘 +%,d원)".format(todayUnpaid),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Color(0xFFFFAA00)
                             )
@@ -521,7 +538,7 @@ fun HistorySettlementScreen(
                         Spacer(modifier = Modifier.height(12.dp))
 
                         // TRANSFERRED 상태일 때만 수령완료 버튼 표시
-                        if (carryOver!!.status == CarryOverStatus.TRANSFERRED) {
+                        if (carryOverStatus == CarryOverStatus.TRANSFERRED) {
                             Text(
                                 "📢 사무실에서 이체되었습니다!",
                                 style = MaterialTheme.typography.bodyMedium,
@@ -536,6 +553,13 @@ fun HistorySettlementScreen(
                             ) {
                                 Text("수령완료", fontWeight = FontWeight.Bold)
                             }
+                        } else if (todayUnpaid > 0 && previousBalance == 0) {
+                            // 오늘 미지급금만 있는 경우
+                            Text(
+                                "마감 시 사무실에서 정산됩니다.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
                         } else {
                             Text(
                                 "사무실에서 이체 후 수령 확인해주세요.",
