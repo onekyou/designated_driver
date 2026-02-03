@@ -23,9 +23,12 @@ import androidx.compose.foundation.layout.Arrangement
 import com.designated.callmanager.ui.settlement.screen.DateDetailDialog
 import java.text.SimpleDateFormat
 import java.util.Locale
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun DriverSummaryScreen(vm: SettlementViewModel = viewModel()) {
+    val context = LocalContext.current
     val trips by vm.settlementList.collectAsState()
     val ratio by vm.officeShareRatio.collectAsState()
 
@@ -121,7 +124,15 @@ fun DriverSummaryScreen(vm: SettlementViewModel = viewModel()) {
                     carryOver = carryOver,
                     todayUnpaid = todayUnpaid,
                     onTransferClick = { id ->
-                        vm.transferCarryOver(id) { _, _ -> }
+                        val carryOverBalance = carryOver?.balance ?: 0L
+                        vm.transferCarryOver(
+                            driverId = id,
+                            driverName = stat.name,
+                            carryOverBalance = carryOverBalance,
+                            todayUnpaid = todayUnpaid.toLong()
+                        ) { _, msg ->
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        }
                     },
                     onCancelClick = { id ->
                         vm.cancelTransfer(id) { _, _ -> }
@@ -143,10 +154,17 @@ fun DriverSummaryScreen(vm: SettlementViewModel = viewModel()) {
                     )
                     Spacer(Modifier.height(8.dp))
                 }
-                items(carryOverOnlyDrivers) { carryOver ->
+                items(carryOverOnlyDrivers) { carryOverItem ->
                     CarryOverOnlyCard(
-                        carryOver = carryOver,
-                        onTransferClick = { vm.transferCarryOver(it) { _, _ -> } },
+                        carryOver = carryOverItem,
+                        onTransferClick = {
+                            vm.transferCarryOver(
+                                driverId = carryOverItem.driverId,
+                                driverName = carryOverItem.driverName,
+                                carryOverBalance = carryOverItem.balance,
+                                todayUnpaid = 0L  // 오늘 운행 없음
+                            ) { _, _ -> }
+                        },
                         onCancelClick = { vm.cancelTransfer(it) { _, _ -> } }
                     )
                 }
