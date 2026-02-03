@@ -4399,27 +4399,13 @@ export const finalizeSettlementAndNotifyDrivers = onCall(
       }
 
       const session = sessionDoc.data();
+      const wasAlreadyFinalized = session?.metadata?.isFinalized === true;
 
-      // 이미 마감된 세션인지 확인
-      if (session?.metadata?.isFinalized) {
-        logger.info(`[finalizeSettlement] 이미 마감된 세션 - ${targetDate}`);
-
-        // settlementLastCleared가 없으면 설정 (이전 코드로 마감된 경우 보완)
-        const officeRef = db.collection("provinces").doc(provinceId)
-          .collection("cities").doc(cityId)
-          .collection("offices").doc(officeId);
-        const officeDoc = await officeRef.get();
-        if (!officeDoc.data()?.settlementLastCleared) {
-          await officeRef.update({
-            settlementLastCleared: admin.firestore.Timestamp.now()
-          });
-          logger.info(`[finalizeSettlement] settlementLastCleared 보완 설정됨`);
-        }
-
-        return { success: true, alreadyFinalized: true, sent: 0, skipped: 0 };
+      if (wasAlreadyFinalized) {
+        logger.info(`[finalizeSettlement] 재마감 요청 - ${targetDate}`);
       }
 
-      // 세션 마감 처리
+      // 세션 마감 처리 (재마감도 허용)
       const finalizeTimestamp = admin.firestore.Timestamp.now();
       await sessionRef.update({
         "metadata.isFinalized": true,
@@ -4465,7 +4451,8 @@ export const finalizeSettlementAndNotifyDrivers = onCall(
         sessionDate: targetDate,
         sent: notifyResult.sent,
         skipped: notifyResult.skipped,
-        totals: totals
+        totals: totals,
+        wasRefinalized: wasAlreadyFinalized
       };
 
     } catch (error) {

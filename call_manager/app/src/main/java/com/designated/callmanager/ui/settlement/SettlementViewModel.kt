@@ -1066,17 +1066,19 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                 if (success) {
                     val sent = (response?.get("sent") as? Number)?.toInt() ?: 0
                     val skipped = (response?.get("skipped") as? Number)?.toInt() ?: 0
-                    val alreadyFinalized = response?.get("alreadyFinalized") as? Boolean ?: false
+                    val wasRefinalized = response?.get("wasRefinalized") as? Boolean ?: false
 
-                    val message = if (alreadyFinalized) {
-                        "이미 마감된 세션입니다"
-                    } else if (sent > 0) {
-                        "마감 완료! ${sent}명의 기사에게 알림 전송됨"
+                    val message = if (sent > 0) {
+                        if (wasRefinalized) {
+                            "재마감 완료! ${sent}명의 기사에게 알림 전송됨"
+                        } else {
+                            "마감 완료! ${sent}명의 기사에게 알림 전송됨"
+                        }
                     } else {
                         "마감 완료 (로그인 중인 기사 없음)"
                     }
 
-                    Log.d("SettlementViewModel", "Finalize success: sent=$sent, skipped=$skipped")
+                    Log.d("SettlementViewModel", "Finalize success: sent=$sent, skipped=$skipped, wasRefinalized=$wasRefinalized")
                     onResult(true, message)
                 } else {
                     val error = response?.get("error") as? String ?: "알 수 없는 오류"
