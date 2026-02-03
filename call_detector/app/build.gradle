@@ -89,16 +89,11 @@ sentry {
     org = "designated-driver-platform"
     projectName = "android"
 
-    // 자동 ProGuard 매핑 업로드 활성화
-    includeProguardMapping = true
-
-    // 소스 컨텍스트 포함 (오류 발생 시 코드 라인 확인 가능)
-    includeSourceContext = true
-
-    // 디버그 빌드에서는 Sentry 업로드 비활성화 (빌드 속도 향상)
+    // 업로드 비활성화 (토큰 없이 빌드 속도 향상)
+    includeProguardMapping = false
+    includeSourceContext = false
     autoUploadProguardMapping = false
 
-    // 릴리스 빌드에만 ProGuard 매핑 업로드
     tracingInstrumentation {
         enabled = false
     }
