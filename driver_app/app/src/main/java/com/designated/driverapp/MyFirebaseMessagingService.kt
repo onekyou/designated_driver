@@ -156,28 +156,28 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // 기존 채널 삭제 후 재생성 (채널 설정은 최초 생성 시에만 적용되므로)
-            notificationManager.deleteNotificationChannel(channelId)
+            // 채널이 없을 때만 생성 (매번 삭제/재생성하면 사용자 설정 초기화되고 알림 차단될 수 있음)
+            if (notificationManager.getNotificationChannel(channelId) == null) {
+                val audioAttributes = AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .build()
 
-            val audioAttributes = AudioAttributes.Builder()
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                .build()
-
-            val channel = NotificationChannel(
-                channelId,
-                "콜 배정 알림",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "새로운 콜이 배정되었을 때 알림"
-                enableVibration(true)
-                vibrationPattern = longArrayOf(0, 500, 200, 500)
-                setShowBadge(true)
-                setSound(defaultSoundUri, audioAttributes)  // 소리 설정 추가
-                enableLights(true)  // LED 알림 (지원 기기)
-                lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC  // 잠금화면 표시
+                val channel = NotificationChannel(
+                    channelId,
+                    "콜 배정 알림",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "새로운 콜이 배정되었을 때 알림"
+                    enableVibration(true)
+                    vibrationPattern = longArrayOf(0, 500, 200, 500)
+                    setShowBadge(true)
+                    setSound(defaultSoundUri, audioAttributes)
+                    enableLights(true)
+                    lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+                }
+                notificationManager.createNotificationChannel(channel)
             }
-            notificationManager.createNotificationChannel(channel)
         }
 
         val intent = Intent(this, MainActivity::class.java).apply {

@@ -636,10 +636,10 @@ export const sendNewCallNotification = onDocumentCreated(
 
     const callData = event.data.data();
 
-    // fromCallDetector가 true인 경우 알림을 보내지 않음 (중복 방지)
+    // fromCallDetector가 true여도 FCM 알림 전송 (화면 꺼진 상태에서 콜매니저 알림 필요)
+    // 콜디텍터의 DispatchActivity와 중복되지만, Doze 모드에서 FCM만 도착하므로 필수
     if (callData.fromCallDetector === true) {
-      logger.info(`[new-call:${callId}] Call Detector에서 생성한 콜 - FCM 알림 스킵`);
-      return;
+      logger.info(`[new-call:${callId}] Call Detector에서 생성한 콜 - FCM 알림도 전송`);
     }
 
     // 공유콜은 별도 처리

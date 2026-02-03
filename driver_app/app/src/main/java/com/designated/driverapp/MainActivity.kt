@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
@@ -58,6 +59,10 @@ class MainActivity : ComponentActivity() {
     private var showNotificationPermissionDialog = mutableStateOf(false)
     private var showNotificationSettingsDialog = mutableStateOf(false)
     private var hasShownNotificationDialog = false  // 세션 중 다이얼로그 표시 여부
+
+    // 배터리 최적화 관련 상태
+    private var showBatteryOptimizationDialog = mutableStateOf(false)
+    private var hasShownBatteryDialog = false  // 세션 중 배터리 다이얼로그 표시 여부
 
     // FCM LocalBroadcast 수신용 BroadcastReceiver
     private val fcmBroadcastReceiver = object : BroadcastReceiver() {
@@ -244,6 +249,45 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 }
+
+                // 배터리 최적화 예외 요청 다이얼로그
+                if (showBatteryOptimizationDialog.value) {
+                    AlertDialog(
+                        onDismissRequest = { showBatteryOptimizationDialog.value = false },
+                        title = { Text("배터리 최적화 제외 필요") },
+                        text = {
+                            Column {
+                                Text("화면이 꺼진 상태에서도 콜 배정 알림을 받으려면 배터리 최적화에서 제외해야 합니다.")
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("이 설정이 없으면 중요한 콜 배정을 놓칠 수 있습니다.")
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    showBatteryOptimizationDialog.value = false
+                                    requestBatteryOptimizationExemption()
+                                }
+                            ) {
+                                Text("설정으로 이동")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = {
+                                    showBatteryOptimizationDialog.value = false
+                                    // SharedPreferences에 "나중에" 선택 기록
+                                    getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+                                        .edit()
+                                        .putBoolean("battery_optimization_asked", true)
+                                        .apply()
+                                }
+                            ) {
+                                Text("나중에")
+                            }
+                        }
+                    )
+                }
             }
         }
     }
@@ -263,6 +307,11 @@ class MainActivity : ComponentActivity() {
             !NotificationManagerCompat.from(this).areNotificationsEnabled()) {
             showNotificationSettingsDialog.value = true
             hasShownNotificationDialog = true
+        }
+
+        // 배터리 최적화 예외 체크 (로그인 상태 + 이번 세션에서 아직 안 물어봤을 때만)
+        if (auth.currentUser != null && !hasShownBatteryDialog) {
+            checkBatteryOptimization()
         }
     }
 
@@ -334,6 +383,42 @@ class MainActivity : ComponentActivity() {
         ).filterNotNull().toTypedArray()
 
         permissionLauncher.launch(requiredPermissions)
+    }
+
+    private fun checkBatteryOptimization() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+            val hasAskedBefore = prefs.getBoolean("battery_optimization_asked", false)
+
+            if (!powerManager.isIgnoringBatteryOptimizations(packageName) && !hasAskedBefore) {
+                showBatteryOptimizationDialog.value = true
+                hasShownBatteryDialog = true
+            }
+        }
+    }
+
+    private fun requestBatteryOptimizationExemption() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            try {
+                // 직접 앱의 배터리 최적화 설정 화면 열기
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                Log.e(TAG, "배터리 최적화 설정 화면 열기 실패", e)
+                try {
+                    // 배터리 최적화 설정 목록 화면 열기
+                    val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                    startActivity(intent)
+                    Toast.makeText(this, "앱 목록에서 '기사앱'을 찾아 '허용'으로 설정해주세요", Toast.LENGTH_LONG).show()
+                } catch (e2: Exception) {
+                    Log.e(TAG, "배터리 설정 화면 열기 실패", e2)
+                    Toast.makeText(this, "설정 > 앱 > 기사앱 > 배터리 에서 '제한 없음'을 선택해주세요", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
 }

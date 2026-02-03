@@ -476,10 +476,10 @@ exports.sendNewCallNotification = (0, firestore_1.onDocumentCreated)({
         return;
     }
     const callData = event.data.data();
-    // fromCallDetector가 true인 경우 알림을 보내지 않음 (중복 방지)
+    // fromCallDetector가 true여도 FCM 알림 전송 (화면 꺼진 상태에서 콜매니저 알림 필요)
+    // 콜디텍터의 DispatchActivity와 중복되지만, Doze 모드에서 FCM만 도착하므로 필수
     if (callData.fromCallDetector === true) {
-        logger.info(`[new-call:${callId}] Call Detector에서 생성한 콜 - FCM 알림 스킵`);
-        return;
+        logger.info(`[new-call:${callId}] Call Detector에서 생성한 콜 - FCM 알림도 전송`);
     }
     // 공유콜은 별도 처리
     if (callData.callType === "SHARED") {
@@ -3551,12 +3551,11 @@ exports.finalizeSettlementAndNotifyDrivers = (0, https_1.onCall)({
             return { success: false, error: "Settlement session not found" };
         }
         const session = sessionDoc.data();
-        // 이미 마감된 세션인지 확인
-        if ((_a = session === null || session === void 0 ? void 0 : session.metadata) === null || _a === void 0 ? void 0 : _a.isFinalized) {
-            logger.info(`[finalizeSettlement] 이미 마감된 세션 - ${targetDate}`);
-            return { success: true, alreadyFinalized: true, sent: 0, skipped: 0 };
+        const wasAlreadyFinalized = ((_a = session === null || session === void 0 ? void 0 : session.metadata) === null || _a === void 0 ? void 0 : _a.isFinalized) === true;
+        if (wasAlreadyFinalized) {
+            logger.info(`[finalizeSettlement] 재마감 요청 - ${targetDate}`);
         }
-        // 세션 마감 처리
+        // 세션 마감 처리 (재마감도 허용)
         const finalizeTimestamp = admin.firestore.Timestamp.now();
         await sessionRef.update({
             "metadata.isFinalized": true,
@@ -3590,7 +3589,8 @@ exports.finalizeSettlementAndNotifyDrivers = (0, https_1.onCall)({
             sessionDate: targetDate,
             sent: notifyResult.sent,
             skipped: notifyResult.skipped,
-            totals: totals
+            totals: totals,
+            wasRefinalized: wasAlreadyFinalized
         };
     }
     catch (error) {
