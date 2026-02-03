@@ -187,7 +187,9 @@
       "Bash(git pull:*)",
       "Bash(git stash:*)",
       "Bash(git config:*)",
-      "Bash(/opt/android/platform-tools/adb devices:*)"
+      "Bash(/opt/android/platform-tools/adb devices:*)",
+      "Bash(cmd //c \"gradlew.bat :call_manager:app:compileDebugKotlin :driver_app:app:compileDebugKotlin --no-daemon 2>&1\")",
+      "Bash(bash:*)"
     ],
     "deny": [],
     "ask": [],
