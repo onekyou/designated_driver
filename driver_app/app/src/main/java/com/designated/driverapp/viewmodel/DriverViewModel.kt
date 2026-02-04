@@ -409,8 +409,7 @@ class DriverViewModel @Inject constructor(
 
     /**
      * 운행 준비 단계에서 운행을 취소하는 함수
-     * - 내부콜: 콜 상태를 HOLD로 변경
-     * - 공유콜: 콜 상태를 HOLD로 변경 + 원본 shared_calls를 OPEN으로 되돌림
+     * - 콜 상태를 HOLD로 변경 (내부콜/공유콜 동일)
      * - 기사 상태를 WAITING으로 변경
      * - assignedDriverId를 null로 변경하여 다른 기사가 배정받을 수 있도록 함
      */
@@ -423,29 +422,17 @@ class DriverViewModel @Inject constructor(
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_CALLS).document(callId)
 
-        val callSnapshot = callRef.get().await()
-        val callInfo = callSnapshot.toObject<CallInfo>()
-
-        if (callInfo?.callType == "SHARED") {
-
-            callRef.update(mapOf(
-                Constants.FIELD_STATUS to "CANCELLED_BY_DRIVER",
-                "cancelReason" to cancelReason,
-                "cancelledAt" to FieldValue.serverTimestamp(),
-                "cancelledByDriver" to true
-            )).await()
-
-        } else {
-            val callUpdates = mapOf(
-                Constants.FIELD_STATUS to "HOLD",
-                "assignedDriverId" to null,
-                "assignedDriverName" to null,
-                "assignedDriverPhone" to null,
-                "cancelReason" to cancelReason,
-                Constants.FIELD_UPDATED_AT to FieldValue.serverTimestamp()
-            )
-            callRef.update(callUpdates).await()
-        }
+        // 내부콜/공유콜 모두 동일하게 HOLD로 처리 (다른 기사에게 재배차 가능)
+        val callUpdates = mapOf(
+            Constants.FIELD_STATUS to "HOLD",
+            "assignedDriverId" to null,
+            "assignedDriverName" to null,
+            "assignedDriverPhone" to null,
+            "cancelReason" to cancelReason,
+            "cancelledByDriver" to true,
+            Constants.FIELD_UPDATED_AT to FieldValue.serverTimestamp()
+        )
+        callRef.update(callUpdates).await()
 
         val driverRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
             .collection(Constants.COLLECTION_CITIES).document(cityId)
