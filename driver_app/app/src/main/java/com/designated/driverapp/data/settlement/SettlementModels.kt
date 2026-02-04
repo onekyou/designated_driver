@@ -283,6 +283,70 @@ enum class CarryOverStatus {
 }
 
 /**
+ * 일일 정산 확인 상태
+ */
+enum class DailySettlementStatus {
+    WORKING,          // 근무 중 (아직 마감 안 함)
+    PENDING_CONFIRM,  // 마감 완료, 매니저 확인 대기
+    CONFIRMED         // 매니저 확인 완료
+}
+
+/**
+ * 기사의 일일 정산 데이터 (업무마감 시 저장)
+ * Firestore 경로: drivers/{driverId} 문서의 dailySettlement 필드
+ */
+data class DriverDailySettlement(
+    val date: String = "",                 // YYYY-MM-DD
+    val finalDeposit: Long = 0,            // 최종 납입액 (사무실 몫 - 외상)
+    val realDeposit: Long = 0,             // 실납입 (기사가 실제로 낸 금액)
+    val settlementDiff: Long = 0,          // 정산 차액 (실납입 - 최종 납입액)
+    val totalFare: Long = 0,               // 총 운행료
+    val totalCredit: Long = 0,             // 총 외상
+    val tripCount: Int = 0,                // 운행 횟수
+    val status: DailySettlementStatus = DailySettlementStatus.WORKING,
+    val submittedAt: Timestamp? = null,    // 기사 마감 시간
+    val confirmedAt: Timestamp? = null,    // 매니저 확인 시간
+    val confirmedBy: String? = null        // 확인한 매니저 ID
+) {
+    companion object {
+        fun fromMap(map: Map<String, Any?>?): DriverDailySettlement {
+            if (map == null) return DriverDailySettlement()
+            return DriverDailySettlement(
+                date = (map["date"] as? String) ?: "",
+                finalDeposit = (map["finalDeposit"] as? Long) ?: 0,
+                realDeposit = (map["realDeposit"] as? Long) ?: 0,
+                settlementDiff = (map["settlementDiff"] as? Long) ?: 0,
+                totalFare = (map["totalFare"] as? Long) ?: 0,
+                totalCredit = (map["totalCredit"] as? Long) ?: 0,
+                tripCount = (map["tripCount"] as? Long)?.toInt() ?: 0,
+                status = try {
+                    DailySettlementStatus.valueOf((map["status"] as? String) ?: "WORKING")
+                } catch (e: Exception) {
+                    DailySettlementStatus.WORKING
+                },
+                submittedAt = map["submittedAt"] as? Timestamp,
+                confirmedAt = map["confirmedAt"] as? Timestamp,
+                confirmedBy = map["confirmedBy"] as? String
+            )
+        }
+    }
+
+    fun toMap(): Map<String, Any?> = mapOf(
+        "date" to date,
+        "finalDeposit" to finalDeposit,
+        "realDeposit" to realDeposit,
+        "settlementDiff" to settlementDiff,
+        "totalFare" to totalFare,
+        "totalCredit" to totalCredit,
+        "tripCount" to tripCount,
+        "status" to status.name,
+        "submittedAt" to submittedAt,
+        "confirmedAt" to confirmedAt,
+        "confirmedBy" to confirmedBy
+    )
+}
+
+/**
  * 기사의 이월 정산 (미수령금) 데이터
  * Firestore 경로: drivers/{driverId}/carryOver (필드)
  */

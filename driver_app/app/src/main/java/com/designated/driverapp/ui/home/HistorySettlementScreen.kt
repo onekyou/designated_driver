@@ -766,6 +766,59 @@ fun HistorySettlementScreen(
                     }
                 }
             }
+            // 업무마감 다이얼로그
+            var showEndWorkDialog by remember { mutableStateOf(false) }
+            var isSubmitting by remember { mutableStateOf(false) }
+
+            if (showEndWorkDialog) {
+                AlertDialog(
+                    onDismissRequest = { if (!isSubmitting) showEndWorkDialog = false },
+                    title = { Text("업무마감", color = Color.White) },
+                    text = {
+                        Column {
+                            Text("오늘의 정산을 마감하시겠습니까?", color = Color.White)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("실납입: %,d원".format(actualDeposit), color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
+                            if (totalSettlementDiff != 0) {
+                                Text(
+                                    if (totalSettlementDiff > 0) "총 환급금: %,d원".format(totalSettlementDiff)
+                                    else "총 미납금: %,d원".format(kotlin.math.abs(totalSettlementDiff)),
+                                    color = if (totalSettlementDiff > 0) Color(0xFF4CAF50) else Color(0xFFFF6666),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("매니저 확인 후 정산이 완료됩니다.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                isSubmitting = true
+                                viewModel.submitDailySettlement(actualDeposit) { success, message ->
+                                    isSubmitting = false
+                                    showEndWorkDialog = false
+                                    // TODO: 결과 메시지 표시
+                                }
+                            },
+                            enabled = !isSubmitting,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
+                        ) {
+                            Text(if (isSubmitting) "처리중..." else "마감하기")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = { showEndWorkDialog = false },
+                            enabled = !isSubmitting
+                        ) {
+                            Text("취소", color = Color.White)
+                        }
+                    },
+                    containerColor = Color(0xFF2A2A2A)
+                )
+            }
+
             var showClearDialog by remember { mutableStateOf(false) }
             if (showClearDialog) {
                 AlertDialog(
@@ -803,11 +856,30 @@ fun HistorySettlementScreen(
                 )
             }
             Column(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // 업무마감 버튼 (실납입 확인 완료 시에만 활성화)
+                Button(
+                    onClick = { showEndWorkDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = isDepositConfirmed && totalCount > 0,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFF9800),
+                        disabledContainerColor = Color(0xFF555555)
+                    )
+                ) {
+                    Text(
+                        "업무마감",
+                        fontWeight = FontWeight.Bold,
+                        color = if (isDepositConfirmed && totalCount > 0) Color.White else Color.Gray
+                    )
+                }
+
                 Button(
                     onClick = { showClearDialog = true },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF666666))
                 ) { Text("운행내역/정산내역 저장 및 초기화") }
             }
         }

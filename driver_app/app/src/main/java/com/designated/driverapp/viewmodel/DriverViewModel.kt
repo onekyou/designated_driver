@@ -17,7 +17,9 @@ import com.designated.driverapp.data.repository.CustomerPointsRepository
 import com.designated.driverapp.data.repository.SettlementRepository
 import com.designated.driverapp.data.settlement.CallSettlement
 import com.designated.driverapp.data.settlement.CarryOverStatus
+import com.designated.driverapp.data.settlement.DailySettlementStatus
 import com.designated.driverapp.data.settlement.DriverCarryOver
+import com.designated.driverapp.data.settlement.DriverDailySettlement
 import com.google.firebase.Timestamp
 import com.designated.driverapp.model.CallInfo
 import com.designated.driverapp.model.CallStatus
@@ -1256,6 +1258,59 @@ class DriverViewModel @Inject constructor(
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to confirm carryOver receive", e)
                 onResult(false, "수령 확인 실패: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * 업무마감 - 실납입 확인 후 정산 제출
+     * Firestore drivers/{driverId} 문서에 dailySettlement 필드 저장
+     */
+    fun submitDailySettlement(
+        realDeposit: Int,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val (provinceId, cityId, officeId) = getDriverLocationInfo()
+                val driverId = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
+
+                val settlement = _todaySettlement.value
+                val ratio = _depositRatio.value
+                val carryOverBalance = _carryOver.value?.balance?.toInt() ?: 0
+
+                // 최종 납입액 = 사무실 몫 - 외상
+                val finalDeposit = settlement.officeDeposit - settlement.totalCredit
+                // 총 정산 차액 = (실납입 - 최종 납입액) + 이월 환급금
+                val totalSettlementDiff = (realDeposit - finalDeposit) + carryOverBalance
+
+                val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                    .format(java.util.Date())
+
+                val dailySettlement = DriverDailySettlement(
+                    date = today,
+                    finalDeposit = finalDeposit.toLong(),
+                    realDeposit = realDeposit.toLong(),
+                    settlementDiff = totalSettlementDiff.toLong(),
+                    totalFare = settlement.totalFare.toLong(),
+                    totalCredit = settlement.totalCredit.toLong(),
+                    tripCount = settlement.tripCount,
+                    status = DailySettlementStatus.PENDING_CONFIRM,
+                    submittedAt = Timestamp.now()
+                )
+
+                val driverRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                    .collection(Constants.COLLECTION_CITIES).document(cityId)
+                    .collection(Constants.COLLECTION_OFFICES).document(officeId)
+                    .collection(Constants.COLLECTION_DRIVERS).document(driverId)
+
+                driverRef.update("dailySettlement", dailySettlement.toMap()).await()
+
+                Log.d(TAG, "Daily settlement submitted: realDeposit=$realDeposit, diff=$totalSettlementDiff")
+                onResult(true, "업무마감이 완료되었습니다. 매니저 확인을 기다려주세요.")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to submit daily settlement", e)
+                onResult(false, "업무마감 실패: ${e.message}")
             }
         }
     }
