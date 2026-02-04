@@ -63,7 +63,12 @@ data class CallInfo(
     var settlementId: String? = null,
 
     var claimedDriverId: String? = null,
-    var sourceSharedCallId: String? = null
+    var sourceSharedCallId: String? = null,
+
+    // 운행 완료 시 최종 정보 (Cloud Function에서 저장)
+    val tripSummaryFinal: String? = null,
+    val finalFare: Int? = null,
+    val fareFinal: Int? = null
 ) : Parcelable {
     @get:Exclude
     val statusEnum: CallStatus
