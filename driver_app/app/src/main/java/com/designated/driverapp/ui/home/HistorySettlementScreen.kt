@@ -787,8 +787,12 @@ fun HistorySettlementScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                             }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Divider(color = Color(0xFF666666))
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text("매니저 확인 후 정산이 완료됩니다.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                            Text("마감 시 처리 내용:", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                            Text("• 매니저에게 정산 확인 요청", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                            Text("• 운행/정산 내역 저장 및 초기화", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
                         }
                     },
                     confirmButton = {
@@ -796,9 +800,43 @@ fun HistorySettlementScreen(
                             onClick = {
                                 isSubmitting = true
                                 viewModel.submitDailySettlement(actualDeposit) { success, message ->
-                                    isSubmitting = false
-                                    showEndWorkDialog = false
-                                    // TODO: 결과 메시지 표시
+                                    if (success) {
+                                        // 1. Firestore에 dailySettlement 저장 성공 후, 로컬 아카이브 저장
+                                        val now = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+                                        val summaryMap = mapOf(
+                                            "totalCount" to totalCount,
+                                            "totalFare" to totalFare,
+                                            "totalDeposit" to officeDeposit,
+                                            "totalCredit" to totalCredit,
+                                            "realDeposit" to actualDeposit,
+                                            "realIncome" to realIncome
+                                        )
+                                        val newSession = SessionData(now, tripHistory, summaryMap)
+                                        val updatedSessions = (sessionList + newSession).takeLast(5).toMutableList()
+                                        saveSessions(context, updatedSessions)
+                                        sessionList = updatedSessions
+
+                                        // 2. 정산 상태 초기화
+                                        viewModel.clearSettlement(
+                                            onSuccess = {
+                                                isSubmitting = false
+                                                showEndWorkDialog = false
+                                                // 실납입 입력 상태도 초기화
+                                                actualDepositInput = ""
+                                                isDepositConfirmed = false
+                                            },
+                                            onError = { errorMsg ->
+                                                Log.e("HistorySettlement", "정산 초기화 실패: $errorMsg")
+                                                isSubmitting = false
+                                                showEndWorkDialog = false
+                                            }
+                                        )
+                                    } else {
+                                        Log.e("HistorySettlement", "업무마감 실패: $message")
+                                        isSubmitting = false
+                                        // 실패 시에도 다이얼로그 닫기
+                                        showEndWorkDialog = false
+                                    }
                                 }
                             },
                             enabled = !isSubmitting,
@@ -818,48 +856,12 @@ fun HistorySettlementScreen(
                     containerColor = Color(0xFF2A2A2A)
                 )
             }
-
-            var showClearDialog by remember { mutableStateOf(false) }
-            if (showClearDialog) {
-                AlertDialog(
-                    onDismissRequest = { showClearDialog = false },
-                    title = { Text("운행내역/정산내역 저장 및 초기화") },
-                    text = { Text("운행내역/정산내역을 저장하고 새로 시작합니다. 이전 기록은 최대 5개까지 보관됩니다. 진행할까요?") },
-                    confirmButton = {
-                        Button(onClick = {
-                            // 1. 현재 데이터를 SessionData로 저장 (아카이브)
-                            val now = SimpleDateFormat("yyyy-MM-dd HH:mm").format(Date())
-                            val summaryMap = mapOf(
-                                "totalCount" to totalCount,
-                                "totalFare" to totalFare,
-                                "realDeposit" to realDeposit,
-                                "realIncome" to realIncome
-                            )
-                            val newSession = SessionData(now, tripHistory, summaryMap)
-                            val updatedSessions = (sessionList + newSession).takeLast(5).toMutableList()
-                            saveSessions(context, updatedSessions)
-                            sessionList = updatedSessions
-
-                            // 2. ViewModel을 통해 Firestore + 로컬 상태 초기화
-                            viewModel.clearSettlement(
-                                onSuccess = {
-                                    showClearDialog = false
-                                },
-                                onError = { errorMsg ->
-                                    // 에러 시에도 다이얼로그 닫기 (이미 로컬 SessionData는 저장됨)
-                                    Log.e("HistorySettlement", "정산 초기화 실패: $errorMsg")
-                                    showClearDialog = false
-                                }
-                            )
-                        }) { Text("확인") }
-                    }
-                )
-            }
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // 업무마감 버튼 (실납입 확인 완료 시에만 활성화)
+                // 마감 시 정산 저장 + 초기화가 함께 수행됨
                 Button(
                     onClick = { showEndWorkDialog = true },
                     modifier = Modifier.fillMaxWidth(),
@@ -875,12 +877,6 @@ fun HistorySettlementScreen(
                         color = if (isDepositConfirmed && totalCount > 0) Color.White else Color.Gray
                     )
                 }
-
-                Button(
-                    onClick = { showClearDialog = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF666666))
-                ) { Text("운행내역/정산내역 저장 및 초기화") }
             }
         }
         if (showLogoutConfirmDialog) {
