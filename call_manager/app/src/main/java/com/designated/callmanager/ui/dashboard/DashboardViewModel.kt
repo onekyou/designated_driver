@@ -226,6 +226,10 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _showNewCallInputDialog = MutableStateFlow(false)
     val showNewCallInputDialog: StateFlow<Boolean> = _showNewCallInputDialog
 
+    // 새 호출 생성 중 로딩 상태 (중복 클릭 방지)
+    private val _isCreatingCall = MutableStateFlow(false)
+    val isCreatingCall: StateFlow<Boolean> = _isCreatingCall.asStateFlow()
+
     // 새 호출 입력 다이얼로그에서 입력된 정보
     data class NewCallInputData(
         val phoneNumber: String = "",
@@ -1039,15 +1043,31 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
      * 입력된 정보로 새 콜 생성 후 배차 다이얼로그 표시
      */
     fun createCallWithInputData(phoneNumber: String, departure: String, destination: String, fare: Long) {
+        // 중복 클릭 방지
+        if (_isCreatingCall.value) {
+            Log.d(TAG, "새 콜 생성 중 - 중복 클릭 무시")
+            return
+        }
+
         val province = _provinceId.value ?: return
         val city = _cityId.value ?: return
         val office = _officeId.value ?: return
+
+        // 네트워크 연결 확인
+        val connectivityManager = getApplication<Application>().getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val activeNetwork = connectivityManager.activeNetworkInfo
+        if (activeNetwork == null || !activeNetwork.isConnected) {
+            Log.e(TAG, "❌ 네트워크 연결 없음 - 새 콜 생성 불가")
+            _snackbarMessage.value = "호출 생성 실패 - 네트워크 연결을 확인 후 다시 시도하세요"
+            return
+        }
 
         val officeRef = firestore.collection("provinces").document(province)
             .collection("cities").document(city)
             .collection("offices").document(office)
 
         viewModelScope.launch {
+            _isCreatingCall.value = true
             try {
                 val nowTs = Timestamp.now()
                 val timestampClient = System.currentTimeMillis()
@@ -1107,6 +1127,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
             } catch (e: Exception) {
                 Log.e(TAG, "새 콜 생성 실패 (입력정보 포함)", e)
+                _snackbarMessage.value = "호출 생성 실패 - 네트워크 연결을 확인 후 다시 시도하세요"
+            } finally {
+                _isCreatingCall.value = false
             }
         }
     }

@@ -481,12 +481,14 @@ fun DashboardScreen(
     }
 
     // 새 호출 입력 다이얼로그
+    val isCreatingCall by viewModel.isCreatingCall.collectAsStateWithLifecycle()
     if (showNewCallInputDialog) {
         NewCallInputDialog(
             onDismiss = { viewModel.dismissNewCallInputDialog() },
             onConfirm = { phoneNumber, departure, destination, fare ->
                 viewModel.createCallWithInputData(phoneNumber, departure, destination, fare)
-            }
+            },
+            isLoading = isCreatingCall
         )
     }
 
@@ -2332,7 +2334,8 @@ fun CustomerGradeBadge(grade: String) {
 @Composable
 fun NewCallInputDialog(
     onDismiss: () -> Unit,
-    onConfirm: (phoneNumber: String, departure: String, destination: String, fare: Long) -> Unit
+    onConfirm: (phoneNumber: String, departure: String, destination: String, fare: Long) -> Unit,
+    isLoading: Boolean = false
 ) {
     val context = LocalContext.current
 
@@ -2645,16 +2648,28 @@ fun NewCallInputDialog(
         },
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onDismiss) {
+                TextButton(
+                    onClick = onDismiss,
+                    enabled = !isLoading
+                ) {
                     Text("취소")
                 }
                 Button(
                     onClick = {
                         val fare = fareText.toLongOrNull() ?: 0L
                         onConfirm(phoneNumber, departure, destination, fare)
-                    }
+                    },
+                    enabled = !isLoading && phoneNumber.isNotBlank()
                 ) {
-                    Text("확인")
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    } else {
+                        Text("확인")
+                    }
                 }
             }
         }
