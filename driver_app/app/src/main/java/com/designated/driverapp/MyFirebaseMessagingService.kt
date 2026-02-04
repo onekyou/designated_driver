@@ -9,6 +9,7 @@ import android.content.Intent
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.designated.driverapp.data.Constants
@@ -57,6 +58,9 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         Log.d(TAG, "FCM 메시지 수신: ${remoteMessage.data}")
+
+        // 🔔 화면 깨우기 (화면 꺼진 상태에서 알림 표시를 위해)
+        wakeUpScreen()
 
         // ✅ 로그인 체크: SharedPreferences로 확인 (백그라운드에서도 안정적)
         val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
@@ -145,6 +149,29 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             }
         }
         return false
+    }
+
+    /**
+     * 화면 깨우기 (FCM 알림 수신 시 화면이 꺼져있으면 깨움)
+     */
+    @Suppress("DEPRECATION")
+    private fun wakeUpScreen() {
+        try {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            if (!powerManager.isInteractive) {
+                // 화면이 꺼져있을 때만 wake lock 획득
+                val wakeLock = powerManager.newWakeLock(
+                    PowerManager.FULL_WAKE_LOCK or
+                    PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                    PowerManager.ON_AFTER_RELEASE,
+                    "driverapp:fcm_wakelock"
+                )
+                wakeLock.acquire(10_000L) // 10초간 화면 유지
+                Log.d(TAG, "🔔 화면 깨우기 - WakeLock 획득")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "화면 깨우기 실패", e)
+        }
     }
 
     private fun showNotification(title: String, body: String, callId: String?) {

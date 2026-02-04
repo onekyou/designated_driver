@@ -18,6 +18,8 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- 배터리 최적화 예외 요청 (Doze 모드에서 FCM 수신 필수) -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- 화면 깨우기 권한 (FCM 알림 수신 시) -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- 다른 앱 위에 표시 권한 추가 -->
     <!-- <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" /> -->
 
