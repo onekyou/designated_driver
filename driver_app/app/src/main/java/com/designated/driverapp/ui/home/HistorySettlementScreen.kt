@@ -81,35 +81,15 @@ fun HistorySettlementScreen(
     }
     val sortedCalls = completedCalls.sortedByDescending { it.timestamp }
 
-    // 마감 시점 기준으로 당일 운행내역만 필터링 (콜매니저와 동일)
-    fun loadTripHistory(context: Context, lastCleared: Long): List<String> {
-        val prefs = context.getSharedPreferences("trip_history", Context.MODE_PRIVATE)
-        val historyJson = prefs.getString("history_list", "[]")
-        val historyList = JSONArray(historyJson)
-        val filtered = mutableListOf<String>()
-        for (i in 0 until historyList.length()) {
-            val item = historyList.getString(i)
-            val parts = item.split("|timestamp=")
-            val timestamp = if (parts.size > 1) parts[1].toLongOrNull() ?: 0L else 0L
-            // 마감 시점 이후 데이터만 표시 (당일)
-            if (timestamp > lastCleared) {
-                filtered.add(item)
-            }
-        }
-        return filtered
-    }
     // ✅ Firestore 기반 정산 데이터 (calls에서 계산)
     val depositRatio by viewModel.depositRatio.collectAsStateWithLifecycle()
     val todaySettlement by viewModel.todaySettlement.collectAsStateWithLifecycle()
     val lastClearedMillis by viewModel.lastClearedMillis.collectAsStateWithLifecycle()
 
-    // tripHistory - 마감 시점 기준 당일 운행내역
-    var tripHistory by remember { mutableStateOf(loadTripHistory(context, lastClearedMillis)) }
-
-    // lastClearedMillis가 변경될 때 tripHistory 다시 로드
-    LaunchedEffect(lastClearedMillis) {
-        tripHistory = loadTripHistory(context, lastClearedMillis)
-    }
+    // ✅ 운행내역 - ViewModel에서 직접 가져옴 (Firestore 기반, 정산과 동일 데이터 소스)
+    val tripHistoryList by viewModel.tripHistoryList.collectAsStateWithLifecycle()
+    // 표시용 문자열 변환
+    val tripHistory = tripHistoryList.map { it.toDisplayString() }
 
     // 정산 값 (Firestore calls 기반)
     val totalCount = todaySettlement.tripCount
@@ -734,6 +714,7 @@ fun HistorySettlementScreen(
                     text = { Text("운행내역/정산내역을 저장하고 새로 시작합니다. 이전 기록은 최대 5개까지 보관됩니다. 진행할까요?") },
                     confirmButton = {
                         Button(onClick = {
+                            // 1. 현재 데이터를 SessionData로 저장 (아카이브)
                             val now = SimpleDateFormat("yyyy-MM-dd HH:mm").format(Date())
                             val summaryMap = mapOf(
                                 "totalCount" to totalCount,
@@ -745,10 +726,18 @@ fun HistorySettlementScreen(
                             val updatedSessions = (sessionList + newSession).takeLast(5).toMutableList()
                             saveSessions(context, updatedSessions)
                             sessionList = updatedSessions
-                            val prefs = context.getSharedPreferences("trip_history", Context.MODE_PRIVATE)
-                            prefs.edit().putString("history_list", "[]").apply()
-                            tripHistory = listOf()
-                            showClearDialog = false
+
+                            // 2. ViewModel을 통해 Firestore + 로컬 상태 초기화
+                            viewModel.clearSettlement(
+                                onSuccess = {
+                                    showClearDialog = false
+                                },
+                                onError = { errorMsg ->
+                                    // 에러 시에도 다이얼로그 닫기 (이미 로컬 SessionData는 저장됨)
+                                    Log.e("HistorySettlement", "정산 초기화 실패: $errorMsg")
+                                    showClearDialog = false
+                                }
+                            )
                         }) { Text("확인") }
                     }
                 )

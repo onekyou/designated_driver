@@ -99,6 +99,34 @@ class DriverViewModel @Inject constructor(
     private val _todaySettlement = MutableStateFlow(TodaySettlement())
     val todaySettlement: StateFlow<TodaySettlement> = _todaySettlement.asStateFlow()
 
+    // 운행내역 카드용 개별 콜 목록 (Firestore 기반)
+    data class TripHistoryItem(
+        val tripNumber: Int,
+        val customerName: String,
+        val departure: String,
+        val destination: String,
+        val fare: Int,
+        val paymentMethod: String,
+        val cashAmount: Int?,
+        val timestamp: Long
+    ) {
+        // 운행내역 카드 표시용 문자열 변환
+        fun toDisplayString(): String {
+            val paymentString = when {
+                paymentMethod == "현금" -> "현금"
+                paymentMethod == "외상" -> "외상"
+                paymentMethod == "이체" -> "이체"
+                paymentMethod.startsWith("현금+") && cashAmount != null ->
+                    "현금+포인트(${String.format("%,d", cashAmount)}원 현금)"
+                paymentMethod == "포인트" -> "포인트"
+                else -> paymentMethod
+            }
+            return "$tripNumber. $customerName, $departure→$destination, ${String.format("%,d", fare)}원, $paymentString"
+        }
+    }
+    private val _tripHistoryList = MutableStateFlow<List<TripHistoryItem>>(emptyList())
+    val tripHistoryList: StateFlow<List<TripHistoryItem>> = _tripHistoryList.asStateFlow()
+
     private var assignedCallsListener: ListenerRegistration? = null
     private var driverStatusListener: ListenerRegistration? = null
     private var completedCallsListener: ListenerRegistration? = null
@@ -627,8 +655,6 @@ class DriverViewModel @Inject constructor(
                 val latestCallSnapshot = callRef.get().await()
                 val latestCallInfo = latestCallSnapshot.toObject<CallInfo>()?.copy(id = latestCallSnapshot.id)
 
-                saveTripToHistory(fareToSet, tripSummaryToSet, paymentMethod, cashAmount, latestCallInfo)
-
                 // ✅ settlementSessions 저장은 Cloud Function이 담당
                 // calls 컬렉션 업데이트 → Cloud Function 트리거 → settlementSessions 자동 생성
                 Log.d(TAG, "운행완료 저장 완료 - Cloud Function이 정산 세션 처리 예정: $callId")
@@ -653,7 +679,26 @@ class DriverViewModel @Inject constructor(
                         tripCount = current.tripCount + 1
                     )
                 }
-                Log.d(TAG, "로컬 정산 즉시 업데이트: fare=$fareToSet, cash=$newCashReceived, share=$newDriverShare")
+
+                // ✅ 운행내역 목록에 즉시 추가 (SharedPreferences 대신 StateFlow 사용)
+                val customerName = latestCallInfo?.customerName ?: "고객"
+                val departure = latestCallInfo?.departure_set?.takeIf { it.isNotBlank() } ?: "출발지"
+                val destination = latestCallInfo?.destination_set?.takeIf { it.isNotBlank() } ?: "도착지"
+                val newTripNumber = _tripHistoryList.value.size + 1
+
+                val newTripItem = TripHistoryItem(
+                    tripNumber = newTripNumber,
+                    customerName = customerName,
+                    departure = departure,
+                    destination = destination,
+                    fare = fareToSet,
+                    paymentMethod = paymentMethod,
+                    cashAmount = cashAmount,
+                    timestamp = System.currentTimeMillis()
+                )
+                _tripHistoryList.update { current -> listOf(newTripItem) + current }
+
+                Log.d(TAG, "로컬 정산 즉시 업데이트: fare=$fareToSet, cash=$newCashReceived, share=$newDriverShare, tripHistorySize=${_tripHistoryList.value.size}")
 
                 _uiState.update { currentState ->
                     currentState.copy(
@@ -1218,7 +1263,7 @@ class DriverViewModel @Inject constructor(
     private fun loadSettlementData(provinceId: String, cityId: String, officeId: String, driverId: String) {
         viewModelScope.launch {
             try {
-                // 1. offices에서 depositRatio + settlementLastCleared 읽기
+                // 1. offices에서 depositRatio 읽기
                 val officeDoc = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
                     .collection(Constants.COLLECTION_CITIES).document(cityId)
                     .collection(Constants.COLLECTION_OFFICES).document(officeId)
@@ -1228,12 +1273,20 @@ class DriverViewModel @Inject constructor(
                 val ratio = officeDoc.getLong("depositRatio")?.toInt() ?: 60
                 _depositRatio.value = ratio.coerceIn(30, 90)
 
-                val lastClearedMillis = officeDoc.getTimestamp("settlementLastCleared")?.toDate()?.time ?: 0L
+                // 2. drivers에서 settlementLastCleared 읽기 (기사별 마감 시점)
+                val driverDoc = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                    .collection(Constants.COLLECTION_CITIES).document(cityId)
+                    .collection(Constants.COLLECTION_OFFICES).document(officeId)
+                    .collection(Constants.COLLECTION_DRIVERS).document(driverId)
+                    .get()
+                    .await()
+
+                val lastClearedMillis = driverDoc.getTimestamp("settlementLastCleared")?.toDate()?.time ?: 0L
                 _lastClearedMillis.value = lastClearedMillis
 
                 Log.d(TAG, "Settlement data loaded: ratio=$ratio, lastCleared=$lastClearedMillis")
 
-                // 2. calls에서 마감 이후 내 완료된 콜 조회
+                // 3. calls에서 마감 이후 내 완료된 콜 조회
                 loadTodaySettlement(provinceId, cityId, officeId, driverId, lastClearedMillis)
 
             } catch (e: Exception) {
@@ -1267,6 +1320,7 @@ class DriverViewModel @Inject constructor(
             var totalFare = 0
             var totalCashReceived = 0
             var tripCount = 0
+            val tripItems = mutableListOf<TripHistoryItem>()
 
             for (doc in callsSnapshot.documents) {
                 val completedAt = doc.getTimestamp("completedAt")?.toDate()?.time
@@ -1290,7 +1344,32 @@ class DriverViewModel @Inject constructor(
                 totalFare += fare
                 totalCashReceived += cashReceived
                 tripCount++
+
+                // 개별 운행내역 아이템 추가
+                val customerName = doc.getString("customerName") ?: "고객"
+                val departure = doc.getString("departure_set")?.takeIf { it.isNotBlank() } ?: "출발지"
+                val destination = doc.getString("destination_set")?.takeIf { it.isNotBlank() } ?: "도착지"
+                val cashAmount = doc.getLong("cashReceived")?.toInt()
+
+                tripItems.add(TripHistoryItem(
+                    tripNumber = tripCount,
+                    customerName = customerName,
+                    departure = departure,
+                    destination = destination,
+                    fare = fare,
+                    paymentMethod = paymentMethod,
+                    cashAmount = cashAmount,
+                    timestamp = completedAt
+                ))
             }
+
+            // 시간순 정렬 후 tripNumber 재정렬 (오래된 것이 1번, 최신이 위에 표시)
+            val sortedByTime = tripItems.sortedBy { it.timestamp }
+            val reNumberedItems = sortedByTime.mapIndexed { index, item ->
+                item.copy(tripNumber = index + 1)
+            }.reversed()  // 최신이 위로 표시
+
+            _tripHistoryList.value = reNumberedItems
 
             // 계산 (콜매니저와 동일한 공식 - Double 나눗셈)
             val officeDeposit = (totalFare * ratio / 100.0).toInt()        // 총 납입액 (사무실 몫)
@@ -1308,7 +1387,7 @@ class DriverViewModel @Inject constructor(
                 officeDeposit = officeDeposit
             )
 
-            Log.d(TAG, "Today settlement calculated: fare=$totalFare, share=$driverShare, cash=$totalCashReceived, deposit=$realDeposit, trips=$tripCount, credit=$totalCredit")
+            Log.d(TAG, "Today settlement calculated: fare=$totalFare, share=$driverShare, cash=$totalCashReceived, deposit=$realDeposit, trips=$tripCount, credit=$totalCredit, historyItems=${reNumberedItems.size}")
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load today settlement", e)
@@ -1326,6 +1405,49 @@ class DriverViewModel @Inject constructor(
 
         if (!provinceId.isNullOrBlank() && !cityId.isNullOrBlank() && !officeId.isNullOrBlank() && driverId != null) {
             loadSettlementData(provinceId, cityId, officeId, driverId)
+        }
+    }
+
+    /**
+     * 정산 초기화 (저장 및 초기화 버튼 클릭 시)
+     * - Firestore의 settlementLastCleared 업데이트
+     * - 로컬 상태 초기화
+     */
+    fun clearSettlement(onSuccess: () -> Unit, onError: (String) -> Unit) {
+        val provinceId = sharedPreferences.getString(Constants.PREF_KEY_PROVINCE_ID, null)
+        val cityId = sharedPreferences.getString(Constants.PREF_KEY_CITY_ID, null)
+        val officeId = sharedPreferences.getString(Constants.PREF_KEY_OFFICE_ID, null)
+        val driverId = auth.currentUser?.uid
+
+        if (provinceId.isNullOrBlank() || cityId.isNullOrBlank() || officeId.isNullOrBlank() || driverId == null) {
+            onError("로그인 정보가 없습니다")
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val nowMillis = System.currentTimeMillis()
+                val nowTimestamp = Timestamp.now()
+
+                // Firestore에 마지막 정산 시간 업데이트 (기사별로 저장)
+                val driverRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                    .collection(Constants.COLLECTION_CITIES).document(cityId)
+                    .collection(Constants.COLLECTION_OFFICES).document(officeId)
+                    .collection(Constants.COLLECTION_DRIVERS).document(driverId)
+
+                driverRef.update("settlementLastCleared", nowTimestamp).await()
+
+                // 로컬 상태 업데이트
+                _lastClearedMillis.value = nowMillis
+                _todaySettlement.value = TodaySettlement()  // 정산 합계 초기화
+                _tripHistoryList.value = emptyList()        // 운행내역 목록 초기화
+
+                Log.d(TAG, "Settlement cleared at $nowMillis")
+                onSuccess()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to clear settlement", e)
+                onError("정산 초기화 실패: ${e.message}")
+            }
         }
     }
 }
