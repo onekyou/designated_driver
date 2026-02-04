@@ -602,6 +602,16 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             Log.e(TAG, "❌ provinceId/cityId/officeId가 null")
             return
         }
+
+        // 네트워크 연결 확인
+        val connectivityManager = getApplication<Application>().getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val activeNetwork = connectivityManager.activeNetworkInfo
+        if (activeNetwork == null || !activeNetwork.isConnected) {
+            Log.e(TAG, "❌ 네트워크 연결 없음")
+            _snackbarMessage.value = "배차 실패 - 네트워크 연결을 확인 후 다시 시도하세요"
+            return
+        }
+
         val officePath = firestore.collection("provinces").document(_provinceId.value!!)
             .collection("cities").document(_cityId.value!!)
             .collection("offices").document(_officeId.value!!)
