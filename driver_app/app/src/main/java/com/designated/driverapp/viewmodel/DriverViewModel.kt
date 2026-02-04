@@ -669,14 +669,19 @@ class DriverViewModel @Inject constructor(
                 val newDriverShare = (fareToSet * (100 - ratio) / 100.0).toInt()
 
                 _todaySettlement.update { current ->
+                    val updatedTotalFare = current.totalFare + fareToSet
                     val updatedCashReceived = current.cashReceived + newCashReceived
                     val updatedDriverShare = current.driverShare + newDriverShare
+                    val updatedOfficeDeposit = (updatedTotalFare * ratio / 100.0).toInt()
+                    val updatedTotalCredit = updatedTotalFare - updatedCashReceived
                     current.copy(
-                        totalFare = current.totalFare + fareToSet,
+                        totalFare = updatedTotalFare,
                         driverShare = updatedDriverShare,
                         cashReceived = updatedCashReceived,
                         realDeposit = updatedCashReceived - updatedDriverShare,
-                        tripCount = current.tripCount + 1
+                        tripCount = current.tripCount + 1,
+                        totalCredit = updatedTotalCredit,
+                        officeDeposit = updatedOfficeDeposit
                     )
                 }
 

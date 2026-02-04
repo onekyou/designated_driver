@@ -459,6 +459,7 @@ fun HistorySettlementScreen(
 
             // 실납입 입력 상태
             var actualDepositInput by remember { mutableStateOf("") }
+            var isDepositConfirmed by remember { mutableStateOf(false) }
             val actualDeposit = actualDepositInput.toIntOrNull() ?: 0
 
             // 실수령액 = 현금 수령 - 실납입
@@ -609,50 +610,103 @@ fun HistorySettlementScreen(
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF333333)),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                                .padding(12.dp)
                         ) {
-                            Text("실납입", color = Color.White, style = MaterialTheme.typography.bodyMedium)
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                BasicTextField(
-                                    value = actualDepositInput,
-                                    onValueChange = { newValue ->
-                                        // 숫자만 입력 허용
-                                        if (newValue.all { it.isDigit() }) {
-                                            actualDepositInput = newValue
-                                        }
-                                    },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    singleLine = true,
-                                    textStyle = androidx.compose.ui.text.TextStyle(
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Bold,
-                                        textAlign = androidx.compose.ui.text.style.TextAlign.End
-                                    ),
-                                    modifier = Modifier
-                                        .width(120.dp)
-                                        .background(Color(0xFF222222), RoundedCornerShape(4.dp))
-                                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                                    decorationBox = { innerTextField ->
-                                        Box(contentAlignment = Alignment.CenterEnd) {
-                                            if (actualDepositInput.isEmpty()) {
-                                                Text(
-                                                    "0",
-                                                    color = Color.Gray,
-                                                    fontWeight = FontWeight.Bold,
-                                                    textAlign = androidx.compose.ui.text.style.TextAlign.End
-                                                )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("실납입", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (isDepositConfirmed) {
+                                        // 확인 완료 상태: 금액 표시만
+                                        Text(
+                                            "%,d".format(actualDeposit),
+                                            color = Color(0xFF4CAF50),
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                    } else {
+                                        // 입력 상태: 입력 필드
+                                        BasicTextField(
+                                            value = actualDepositInput,
+                                            onValueChange = { newValue ->
+                                                // 숫자만 입력 허용
+                                                if (newValue.all { it.isDigit() }) {
+                                                    actualDepositInput = newValue
+                                                }
+                                            },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                            singleLine = true,
+                                            textStyle = androidx.compose.ui.text.TextStyle(
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold,
+                                                textAlign = androidx.compose.ui.text.style.TextAlign.End
+                                            ),
+                                            modifier = Modifier
+                                                .width(100.dp)
+                                                .background(Color(0xFF222222), RoundedCornerShape(4.dp))
+                                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                            decorationBox = { innerTextField ->
+                                                Box(contentAlignment = Alignment.CenterEnd) {
+                                                    if (actualDepositInput.isEmpty()) {
+                                                        Text(
+                                                            "0",
+                                                            color = Color.Gray,
+                                                            fontWeight = FontWeight.Bold,
+                                                            textAlign = androidx.compose.ui.text.style.TextAlign.End
+                                                        )
+                                                    }
+                                                    innerTextField()
+                                                }
                                             }
-                                            innerTextField()
-                                        }
+                                        )
                                     }
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("원", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("원", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                                }
+                            }
+
+                            // 확인/정정 버튼
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                if (isDepositConfirmed) {
+                                    // 확인 완료 상태: 정정 버튼
+                                    Button(
+                                        onClick = { isDepositConfirmed = false },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = Color(0xFF666666)
+                                        ),
+                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                                        modifier = Modifier.height(32.dp)
+                                    ) {
+                                        Text("정정", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                } else {
+                                    // 입력 상태: 확인 버튼
+                                    Button(
+                                        onClick = {
+                                            if (actualDepositInput.isNotEmpty()) {
+                                                isDepositConfirmed = true
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = Color(0xFF4CAF50)
+                                        ),
+                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                                        modifier = Modifier.height(32.dp),
+                                        enabled = actualDepositInput.isNotEmpty()
+                                    ) {
+                                        Text("확인", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
                             }
                         }
                     }
