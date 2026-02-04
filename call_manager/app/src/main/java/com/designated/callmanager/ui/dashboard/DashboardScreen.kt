@@ -166,6 +166,18 @@ fun DashboardScreen(
     val showNewSharedCallPopup by viewModel.showNewSharedCallPopup.collectAsStateWithLifecycle()
     val newSharedCallInfo by viewModel.newSharedCallInfo.collectAsStateWithLifecycle()
     val isFromFcmNotification by viewModel.isFromFcmNotification.collectAsStateWithLifecycle()
+    val snackbarMessage by viewModel.snackbarMessage.collectAsStateWithLifecycle()
+
+    // 에러 메시지 스낵바 표시
+    LaunchedEffect(snackbarMessage) {
+        snackbarMessage?.let { message ->
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = SnackbarDuration.Long
+            )
+            viewModel.clearSnackbarMessage()
+        }
+    }
 
     val showSharedCallCancelledDialog by viewModel.showSharedCallCancelledDialog.collectAsStateWithLifecycle()
     val sharedCancelledCallInfo by viewModel.cancelledCallInfo.collectAsStateWithLifecycle()

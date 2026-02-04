@@ -197,6 +197,14 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _newSharedCallInfo = MutableStateFlow<com.designated.callmanager.data.SharedCallInfo?>(null)
     val newSharedCallInfo: StateFlow<com.designated.callmanager.data.SharedCallInfo?> = _newSharedCallInfo
 
+    // 스낵바 에러 메시지
+    private val _snackbarMessage = MutableStateFlow<String?>(null)
+    val snackbarMessage: StateFlow<String?> = _snackbarMessage.asStateFlow()
+
+    fun clearSnackbarMessage() {
+        _snackbarMessage.value = null
+    }
+
     // 알림 전달 실패 팝업 관련
     data class NotificationFailureInfo(
         val callId: String,
@@ -665,7 +673,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 }
 
             } catch (e: Exception) {
-                // TODO: Add user-facing error message
+                Log.e(TAG, "❌ 배차 실패: ${e.message}", e)
+                _snackbarMessage.value = "배차 실패 - 네트워크 연결을 확인 후 다시 시도하세요"
             }
         }
     }
