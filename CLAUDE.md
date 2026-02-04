@@ -8,15 +8,17 @@
 
 | 말하면 | 실행 내용 |
 |--------|----------|
-| **"시작해줘"** 또는 **"깃풀해줘"** | `git pull` + `bash git-check.sh` |
-| **"종료해줘"** 또는 **"깃체크해줘"** | `bash git-check.sh` + 필요시 커밋&푸시 |
+| **"시작해줘"** 또는 **"깃풀해줘"** | `git fetch` → `git reset --hard origin/<브랜치>` (전체 덮어쓰기) |
+| **"종료해줘"** 또는 **"깃체크해줘"** | `bash git-check.sh` → 상태 확인만 |
 
 ### Claude 실행 규칙
 
-**시작 시 (git pull + git-check.sh):**
-1. `git pull origin <현재브랜치>` 실행
-2. `bash git-check.sh` 실행
-3. [WARNING] 뜨면 사용자에게 알림
+**시작 시 (원격 기준 전체 덮어쓰기):**
+1. `git fetch origin` 실행
+2. `git reset --hard origin/<현재브랜치>` 실행
+3. `bash git-check.sh` 실행
+
+> **왜 reset --hard?**: 일반 pull은 변경된 파일만 업데이트. 하드 문제로 파일 소실 시 복구 안 됨. reset --hard는 전체 파일을 원격 기준으로 강제 재생성.
 
 **종료 시 (git-check.sh + 필요시 커밋&푸시):**
 1. `bash git-check.sh` 실행
