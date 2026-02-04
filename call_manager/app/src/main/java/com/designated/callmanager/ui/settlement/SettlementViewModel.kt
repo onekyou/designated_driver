@@ -31,8 +31,11 @@ import com.designated.callmanager.data.settlement.CallSettlement
 import com.designated.callmanager.data.settlement.SettlementMetadata
 import com.designated.callmanager.data.settlement.SettlementTotals
 import com.designated.callmanager.data.settlement.CarryOverStatus
+import com.designated.callmanager.data.settlement.DailySettlementStatus
 import com.designated.callmanager.data.settlement.DriverCarryOver
 import com.designated.callmanager.data.settlement.DriverCarryOverSummary
+import com.designated.callmanager.data.settlement.DriverDailySettlement
+import com.designated.callmanager.data.settlement.DriverDailySettlementSummary
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.functions.FirebaseFunctions
@@ -101,6 +104,10 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
     // 이월 정산 (기사별 미지급금) 관련 StateFlow
     private val _carryOverList = MutableStateFlow<List<DriverCarryOverSummary>>(emptyList())
     val carryOverList: StateFlow<List<DriverCarryOverSummary>> = _carryOverList.asStateFlow()
+
+    // 일일 정산 (기사별 업무마감) 관련 StateFlow
+    private val _dailySettlementList = MutableStateFlow<List<DriverDailySettlementSummary>>(emptyList())
+    val dailySettlementList: StateFlow<List<DriverDailySettlementSummary>> = _dailySettlementList.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -1159,11 +1166,13 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
     // ====== 이월 정산 (기사별 미지급금) 관련 기능 ======
 
     /**
-     * 기사별 이월 정산 데이터 실시간 리스너
-     * drivers 컬렉션에서 carryOver 필드가 있는 기사들을 감시
+     * 기사별 이월 정산 및 일일 정산 데이터 실시간 리스너
+     * drivers 컬렉션에서 carryOver, dailySettlement 필드를 감시
      */
     private fun startCarryOverListener(provinceId: String, cityId: String, officeId: String) {
         carryOverListener?.remove()
+
+        val today = getTodaySessionDate()
 
         // drivers 컬렉션에서 해당 사무실 소속 기사들 감시
         carryOverListener = firestore.collection("provinces").document(provinceId)
@@ -1176,25 +1185,57 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                     return@addSnapshotListener
                 }
 
-                val carryOvers = snapshots?.documents?.mapNotNull { doc ->
+                val carryOvers = mutableListOf<DriverCarryOverSummary>()
+                val dailySettlements = mutableListOf<DriverDailySettlementSummary>()
+
+                snapshots?.documents?.forEach { doc ->
+                    val driverId = doc.id
+                    val driverName = doc.getString("name") ?: "이름없음"
+
+                    // carryOver 파싱
                     val carryOverMap = doc.get("carryOver") as? Map<String, Any?>
-                    if (carryOverMap == null || (carryOverMap["balance"] as? Long ?: 0L) == 0L) {
-                        return@mapNotNull null
+                    val carryOver = DriverCarryOver.fromMap(carryOverMap)
+
+                    // dailySettlement 파싱
+                    @Suppress("UNCHECKED_CAST")
+                    val dailySettlementMap = doc.get("dailySettlement") as? Map<String, Any?>
+                    val dailySettlement = DriverDailySettlement.fromMap(dailySettlementMap)
+
+                    // carryOver가 있는 경우 리스트에 추가
+                    if (carryOver.balance != 0L) {
+                        carryOvers.add(
+                            DriverCarryOverSummary(
+                                driverId = driverId,
+                                driverName = driverName,
+                                balance = carryOver.balance,
+                                todayAmount = carryOver.todayAmount,
+                                status = carryOver.status,
+                                transferredAt = carryOver.transferredAt
+                            )
+                        )
                     }
 
-                    val carryOver = DriverCarryOver.fromMap(carryOverMap)
-                    DriverCarryOverSummary(
-                        driverId = doc.id,
-                        driverName = doc.getString("name") ?: "이름없음",
-                        balance = carryOver.balance,
-                        todayAmount = carryOver.todayAmount,
-                        status = carryOver.status,
-                        transferredAt = carryOver.transferredAt
-                    )
-                } ?: emptyList()
+                    // 오늘 날짜의 dailySettlement가 있고, 마감 상태인 경우 리스트에 추가
+                    if (dailySettlement.date == today &&
+                        (dailySettlement.status == DailySettlementStatus.PENDING_CONFIRM ||
+                         dailySettlement.status == DailySettlementStatus.CONFIRMED)) {
+                        dailySettlements.add(
+                            DriverDailySettlementSummary(
+                                driverId = driverId,
+                                driverName = driverName,
+                                dailySettlement = dailySettlement,
+                                carryOverBalance = carryOver.balance,
+                                carryOverStatus = carryOver.status
+                            )
+                        )
+                    }
+                }
 
                 _carryOverList.value = carryOvers.sortedByDescending { it.balance }
+                _dailySettlementList.value = dailySettlements.sortedByDescending { it.dailySettlement?.submittedAt }
+
                 Log.d("SettlementViewModel", "CarryOver list updated: ${carryOvers.size} drivers")
+                Log.d("SettlementViewModel", "DailySettlement list updated: ${dailySettlements.size} drivers")
             }
     }
 
@@ -1427,6 +1468,95 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                 Log.d("SettlementViewModel", "CarryOver updated for driver $driverId: result=$todayResult")
             }.addOnFailureListener { e ->
                 Log.e("SettlementViewModel", "Failed to update carryOver", e)
+            }
+        }
+    }
+
+    /**
+     * 기사 일일 정산 확인 처리
+     * 1. dailySettlement.status를 CONFIRMED로 변경
+     * 2. 정산 차액을 carryOver.balance에 반영
+     * @param driverId 기사 ID
+     * @param settlementDiff 정산 차액 (양수=환급금, 음수=미납금)
+     */
+    fun confirmDailySettlement(
+        driverId: String,
+        settlementDiff: Long,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        val provinceId = currentProvinceId
+        val cityId = currentCityId
+        val officeId = currentOfficeId
+
+        if (provinceId == null || cityId == null || officeId == null) {
+            onResult(false, "사무실 정보가 설정되지 않았습니다")
+            return
+        }
+
+        val loginPrefs = getApplication<Application>().getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
+        val adminId = loginPrefs.getString("adminId", null) ?: "unknown"
+
+        val driverRef = firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
+            .collection("offices").document(officeId)
+            .collection("designated_drivers").document(driverId)
+
+        viewModelScope.launch {
+            firestore.runTransaction { transaction ->
+                val doc = transaction.get(driverRef)
+
+                // 현재 carryOver 읽기
+                val carryOverMap = doc.get("carryOver") as? Map<String, Any?>
+                val currentBalance = (carryOverMap?.get("balance") as? Long) ?: 0L
+
+                // 새 잔액 = 기존 잔액 + 정산 차액
+                // settlementDiff가 양수(환급)면 잔액 증가, 음수(미납)면 잔액 감소
+                val newBalance = currentBalance + settlementDiff
+
+                // carryOver 상태 결정
+                val newCarryOverStatus = when {
+                    newBalance > 0 -> CarryOverStatus.PENDING.name  // 환급 대기
+                    newBalance < 0 -> CarryOverStatus.PENDING.name  // 미납 (실제로는 사무실이 기사에게 받아야 함)
+                    else -> CarryOverStatus.SETTLED.name            // 정산 완료
+                }
+
+                val updateData = mapOf(
+                    "dailySettlement.status" to DailySettlementStatus.CONFIRMED.name,
+                    "dailySettlement.confirmedAt" to Timestamp.now(),
+                    "dailySettlement.confirmedBy" to adminId,
+                    "carryOver.balance" to newBalance,
+                    "carryOver.status" to newCarryOverStatus,
+                    "carryOver.lastUpdatedAt" to Timestamp.now()
+                )
+
+                transaction.update(driverRef, updateData)
+
+                Log.d("SettlementViewModel", "Confirming daily settlement: driver=$driverId, diff=$settlementDiff, oldBalance=$currentBalance, newBalance=$newBalance")
+
+                newBalance // 반환값
+            }.addOnSuccessListener { newBalance ->
+                Log.d("SettlementViewModel", "Daily settlement confirmed for driver $driverId, new balance=$newBalance")
+
+                // 로컬 리스트 즉시 업데이트
+                val currentList = _dailySettlementList.value.toMutableList()
+                val index = currentList.indexOfFirst { it.driverId == driverId }
+                if (index >= 0) {
+                    val existing = currentList[index]
+                    currentList[index] = existing.copy(
+                        dailySettlement = existing.dailySettlement?.copy(
+                            status = DailySettlementStatus.CONFIRMED,
+                            confirmedAt = Timestamp.now(),
+                            confirmedBy = adminId
+                        ),
+                        carryOverBalance = newBalance as Long
+                    )
+                    _dailySettlementList.value = currentList
+                }
+
+                onResult(true, "확인 완료")
+            }.addOnFailureListener { e ->
+                Log.e("SettlementViewModel", "Failed to confirm daily settlement", e)
+                onResult(false, "확인 실패: ${e.message}")
             }
         }
     }

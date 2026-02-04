@@ -15,7 +15,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.designated.callmanager.data.SettlementData
 import com.designated.callmanager.ui.settlement.SettlementViewModel
 import com.designated.callmanager.data.settlement.CarryOverStatus
+import com.designated.callmanager.data.settlement.DailySettlementStatus
 import com.designated.callmanager.data.settlement.DriverCarryOverSummary
+import com.designated.callmanager.data.settlement.DriverDailySettlementSummary
 import kotlin.math.roundToInt
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.Icons
@@ -35,9 +37,17 @@ fun DriverSummaryScreen(vm: SettlementViewModel = viewModel()) {
     // 이월 정산 (기사별 미지급금) 데이터
     val carryOverList by vm.carryOverList.collectAsState()
 
+    // 일일 정산 (기사별 업무마감) 데이터
+    val dailySettlementList by vm.dailySettlementList.collectAsState()
+
     // 기사별 미지급금 맵 (driverId → DriverCarryOverSummary)
     val carryOverMap = remember(carryOverList) {
         carryOverList.associateBy { it.driverId }
+    }
+
+    // 기사별 일일 정산 맵 (driverId → DriverDailySettlementSummary)
+    val dailySettlementMap = remember(dailySettlementList) {
+        dailySettlementList.associateBy { it.driverId }
     }
 
     // 기사별 오늘 미지급금 계산 (로컬 trips 기반)
@@ -118,11 +128,13 @@ fun DriverSummaryScreen(vm: SettlementViewModel = viewModel()) {
                 val driverId = stat.driverId
                 val carryOver = carryOverMap[driverId]
                 val todayUnpaid = todayUnpaidByDriver[driverId] ?: 0
+                val dailySettlement = dailySettlementMap[driverId]
 
                 DriverDetailCard(
                     stat = stat,
                     carryOver = carryOver,
                     todayUnpaid = todayUnpaid,
+                    dailySettlement = dailySettlement,
                     onTransferClick = { id ->
                         val carryOverBalance = carryOver?.balance ?: 0L
                         vm.transferCarryOver(
@@ -136,6 +148,11 @@ fun DriverSummaryScreen(vm: SettlementViewModel = viewModel()) {
                     },
                     onCancelClick = { id ->
                         vm.cancelTransfer(id) { _, _ -> }
+                    },
+                    onConfirmSettlement = { id, diff ->
+                        vm.confirmDailySettlement(id, diff) { success, msg ->
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        }
                     }
                 ) {
                     val list = trips.filter { (it.driverName.ifBlank { "미지정" }) == stat.name }
@@ -193,8 +210,10 @@ private fun DriverDetailCard(
     stat: DriverStat,
     carryOver: DriverCarryOverSummary? = null,
     todayUnpaid: Int = 0,
+    dailySettlement: DriverDailySettlementSummary? = null,
     onTransferClick: (String) -> Unit = {},
     onCancelClick: (String) -> Unit = {},
+    onConfirmSettlement: (String, Long) -> Unit = { _, _ -> },
     onClick: () -> Unit
 ) {
     // 총 미지급금 계산
@@ -208,9 +227,35 @@ private fun DriverDetailCard(
         carryOverBalance + todayUnpaid  // 이월분 + 오늘분
     }
 
+    // 업무마감 정보
+    val hasSubmitted = dailySettlement?.hasSubmitted == true
+    val isConfirmed = dailySettlement?.isConfirmed == true
+    val settlement = dailySettlement?.dailySettlement
+
     Card(modifier = Modifier.fillMaxWidth().clickable { onClick() }, colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A))) {
         Column(Modifier.padding(12.dp)) {
-            Text(stat.name, color = Color.White, style = MaterialTheme.typography.titleMedium)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(stat.name, color = Color.White, style = MaterialTheme.typography.titleMedium)
+                // 업무마감 상태 표시
+                if (hasSubmitted) {
+                    Text(
+                        "🔔 마감대기",
+                        color = Color(0xFFFF9800),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                } else if (isConfirmed) {
+                    Text(
+                        "✓ 확인완료",
+                        color = Color(0xFF66FF66),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
             Divider(color = Color.DarkGray, thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
             Text("총 운행 횟수 :  ${stat.count} 회", color = Color.White)
             Text("총 운행료 : ${"%,d".format(stat.totalFare)}원", color = Color.White)
@@ -218,6 +263,63 @@ private fun DriverDetailCard(
             Text("미수금 : ${"%,d".format(stat.totalCredit)}원", color = Color.White)
             Divider(color = Color.DarkGray, thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
             Text("실 수령액 : ${"%,d".format(stat.realDeposit)}원", color = Color.Yellow, fontWeight = FontWeight.Bold)
+
+            // 업무마감 섹션 (마감 대기 상태인 경우)
+            if (hasSubmitted && settlement != null) {
+                Spacer(Modifier.height(8.dp))
+                Divider(color = Color(0xFFFF9800), thickness = 2.dp)
+                Spacer(Modifier.height(8.dp))
+
+                Text(
+                    "📋 업무마감 보고",
+                    color = Color(0xFFFF9800),
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Spacer(Modifier.height(4.dp))
+
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("최종 납입액: ${"%,d".format(settlement.finalDeposit)}원", color = Color.White, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            "실납입: ${"%,d".format(settlement.realDeposit)}원",
+                            color = Color(0xFF00BFFF),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        val diff = settlement.settlementDiff
+                        val diffColor = when {
+                            diff > 0 -> Color(0xFF66FF66)  // 환급금 (기사가 받아야 함)
+                            diff < 0 -> Color(0xFFFF6666)  // 미납금 (기사가 내야 함)
+                            else -> Color.Gray
+                        }
+                        val diffText = when {
+                            diff > 0 -> "환급금: +${"%,d".format(diff)}원"
+                            diff < 0 -> "미납금: ${"%,d".format(diff)}원"
+                            else -> "정산완료"
+                        }
+                        Text(diffText, color = diffColor, fontWeight = FontWeight.Bold)
+
+                        // 마감 시간
+                        settlement.submittedAt?.let {
+                            val timeText = SimpleDateFormat("HH:mm", Locale.getDefault()).format(it.toDate())
+                            Text("마감시간: $timeText", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // 확인 버튼
+                Button(
+                    onClick = { onConfirmSettlement(stat.driverId, settlement.settlementDiff) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                ) {
+                    Text("✓ 정산 확인", fontWeight = FontWeight.Bold)
+                }
+            }
 
             // 미지급금 섹션 (항상 표시)
             Spacer(Modifier.height(8.dp))

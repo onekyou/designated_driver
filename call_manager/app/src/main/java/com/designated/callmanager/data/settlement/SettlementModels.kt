@@ -466,3 +466,25 @@ data class DriverCarryOverSummary(
     val status: CarryOverStatus,
     val transferredAt: Timestamp?
 )
+
+/**
+ * 콜매니저에서 표시할 기사별 일일 정산 요약
+ * carryOver 정보와 dailySettlement 정보를 합친 것
+ */
+data class DriverDailySettlementSummary(
+    val driverId: String,
+    val driverName: String,
+    // dailySettlement 정보
+    val dailySettlement: DriverDailySettlement?,
+    // carryOver 정보
+    val carryOverBalance: Long,        // 이월 환급금
+    val carryOverStatus: CarryOverStatus
+) {
+    /** 업무마감 상태인지 */
+    val hasSubmitted: Boolean
+        get() = dailySettlement?.status == DailySettlementStatus.PENDING_CONFIRM
+
+    /** 확인 완료 상태인지 */
+    val isConfirmed: Boolean
+        get() = dailySettlement?.status == DailySettlementStatus.CONFIRMED
+}
