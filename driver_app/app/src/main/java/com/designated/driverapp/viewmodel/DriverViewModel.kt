@@ -924,6 +924,8 @@ class DriverViewModel @Inject constructor(
 
         if (!provinceId.isNullOrBlank() && !cityId.isNullOrBlank() && !officeId.isNullOrBlank()) {
             loadCurrentActiveCall(provinceId, cityId, officeId, driverId)
+            startCarryOverListener(provinceId, cityId, officeId, driverId)
+            loadSettlementData(provinceId, cityId, officeId, driverId)
         }
     }
 
