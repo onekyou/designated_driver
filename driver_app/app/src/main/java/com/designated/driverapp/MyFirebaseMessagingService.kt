@@ -9,7 +9,6 @@ import android.content.Intent
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
-import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.designated.driverapp.data.Constants
@@ -58,9 +57,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         Log.d(TAG, "FCM 메시지 수신: ${remoteMessage.data}")
-
-        // 🔔 화면 깨우기 (화면 꺼진 상태에서 알림 표시를 위해)
-        wakeUpScreen()
 
         // ✅ 로그인 체크: SharedPreferences로 확인 (백그라운드에서도 안정적)
         val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
@@ -151,29 +147,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         return false
     }
 
-    /**
-     * 화면 깨우기 (FCM 알림 수신 시 화면이 꺼져있으면 깨움)
-     */
-    @Suppress("DEPRECATION")
-    private fun wakeUpScreen() {
-        try {
-            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-            if (!powerManager.isInteractive) {
-                // 화면이 꺼져있을 때만 wake lock 획득
-                val wakeLock = powerManager.newWakeLock(
-                    PowerManager.FULL_WAKE_LOCK or
-                    PowerManager.ACQUIRE_CAUSES_WAKEUP or
-                    PowerManager.ON_AFTER_RELEASE,
-                    "driverapp:fcm_wakelock"
-                )
-                wakeLock.acquire(10_000L) // 10초간 화면 유지
-                Log.d(TAG, "🔔 화면 깨우기 - WakeLock 획득")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "화면 깨우기 실패", e)
-        }
-    }
-
     private fun showNotification(title: String, body: String, callId: String?) {
         val channelId = "call_assignment_channel"
         val notificationId = if (callId != null) callId.hashCode() else System.currentTimeMillis().toInt()
@@ -207,7 +180,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             }
         }
 
-        val intent = Intent(this, MainActivity::class.java).apply {
+        // 알림 클릭 시 MainActivity로 이동
+        val contentIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             if (callId != null) {
                 putExtra("callId", callId)
@@ -217,15 +191,23 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val pendingIntent = PendingIntent.getActivity(
             this,
             notificationId,
-            intent,
+            contentIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // Full-screen intent용 PendingIntent (백그라운드에서 화면 띄우기)
+        // Full-screen intent용: LockScreenActivity (잠금화면 위 전체화면 표시)
+        val lockScreenIntent = Intent(this, LockScreenActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(LockScreenActivity.EXTRA_CALL_ID, callId ?: "")
+            putExtra(LockScreenActivity.EXTRA_TITLE, title)
+            putExtra(LockScreenActivity.EXTRA_BODY, body)
+            putExtra(LockScreenActivity.EXTRA_NOTIFICATION_ID, notificationId)
+        }
+
         val fullScreenIntent = PendingIntent.getActivity(
             this,
             notificationId + 1,
-            intent,
+            lockScreenIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
