@@ -466,8 +466,8 @@ fun HistorySettlementScreen(
             val cashReceived = todaySettlement.cashReceived
             val actualReceived = cashReceived - actualDeposit
 
-            // 누적 미수령 = 실납입 - 최종 납입액 (양수면 기사가 돌려받을 돈)
-            val newUnpaid = actualDeposit - finalDeposit
+            // 정산 차액 = 실납입 - 최종 납입액 (양수: 환급금, 음수: 미납금)
+            val settlementDiff = actualDeposit - finalDeposit
 
             // 수령완료 확인 다이얼로그
             if (showReceiveConfirmDialog) {
@@ -726,14 +726,19 @@ fun HistorySettlementScreen(
                         )
                     }
 
-                    // 누적 미수령 (실납입 입력 시에만 표시)
-                    if (actualDepositInput.isNotEmpty() && newUnpaid != 0) {
+                    // 정산 차액 (실납입 입력 시에만 표시)
+                    if (actualDepositInput.isNotEmpty() && settlementDiff != 0) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("누적 미수령", color = Color(0xFFFFAA00), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
                             Text(
-                                "%,d원".format(newUnpaid),
-                                color = if (newUnpaid > 0) Color(0xFF4CAF50) else Color(0xFFFF6666),
+                                if (settlementDiff > 0) "환급금" else "미납금",
+                                color = if (settlementDiff > 0) Color(0xFF4CAF50) else Color(0xFFFF6666),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "%,d원".format(kotlin.math.abs(settlementDiff)),
+                                color = if (settlementDiff > 0) Color(0xFF4CAF50) else Color(0xFFFF6666),
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold
                             )
