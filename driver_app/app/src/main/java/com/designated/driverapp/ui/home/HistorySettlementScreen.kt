@@ -454,8 +454,8 @@ fun HistorySettlementScreen(
             val carryOverBalance = carryOver?.balance?.toInt() ?: 0
             val carryOverStatus = carryOver?.status
 
-            // 최종 납입액 계산 (사무실 몫 - 외상 - 이월 미수령)
-            val finalDeposit = officeDeposit - totalCredit - carryOverBalance
+            // 최종 납입액 계산 (사무실 몫 - 외상)
+            val finalDeposit = officeDeposit - totalCredit
 
             // 실납입 입력 상태
             var actualDepositInput by remember { mutableStateOf("") }
@@ -466,8 +466,9 @@ fun HistorySettlementScreen(
             val cashReceived = todaySettlement.cashReceived
             val actualReceived = cashReceived - actualDeposit
 
-            // 정산 차액 = 실납입 - 최종 납입액 (양수: 환급금, 음수: 미납금)
-            val settlementDiff = actualDeposit - finalDeposit
+            // 총 정산 차액 = (실납입 - 최종 납입액) + 이월 환급금
+            // 양수: 환급금 (기사가 받을 돈), 음수: 미납금 (기사가 더 낼 돈)
+            val totalSettlementDiff = (actualDeposit - finalDeposit) + carryOverBalance
 
             // 수령완료 확인 다이얼로그
             if (showReceiveConfirmDialog) {
@@ -562,12 +563,12 @@ fun HistorySettlementScreen(
                         )
                     }
 
-                    // 이월 미수령 (있을 때만 표시)
+                    // 이월 환급금 (있을 때만 표시)
                     if (carryOverBalance > 0) {
                         Spacer(modifier = Modifier.height(4.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("이월 미수령", color = Color(0xFFFFAA00), style = MaterialTheme.typography.bodyMedium)
+                                Text("이월 환급금", color = Color(0xFF4CAF50), style = MaterialTheme.typography.bodyMedium)
                                 if (carryOverStatus == CarryOverStatus.TRANSFERRED) {
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
@@ -579,8 +580,8 @@ fun HistorySettlementScreen(
                                 }
                             }
                             Text(
-                                "-%,d원".format(carryOverBalance),
-                                color = Color(0xFFFFAA00),
+                                "+%,d원".format(carryOverBalance),
+                                color = Color(0xFF4CAF50),
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
@@ -726,19 +727,19 @@ fun HistorySettlementScreen(
                         )
                     }
 
-                    // 정산 차액 (실납입 입력 시에만 표시)
-                    if (actualDepositInput.isNotEmpty() && settlementDiff != 0) {
+                    // 총 정산 차액 (실납입 입력 시에만 표시, 이월 환급금 포함)
+                    if (actualDepositInput.isNotEmpty() && totalSettlementDiff != 0) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(
-                                if (settlementDiff > 0) "환급금" else "미납금",
-                                color = if (settlementDiff > 0) Color(0xFF4CAF50) else Color(0xFFFF6666),
+                                if (totalSettlementDiff > 0) "총 환급금" else "총 미납금",
+                                color = if (totalSettlementDiff > 0) Color(0xFF4CAF50) else Color(0xFFFF6666),
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                "%,d원".format(kotlin.math.abs(settlementDiff)),
-                                color = if (settlementDiff > 0) Color(0xFF4CAF50) else Color(0xFFFF6666),
+                                "%,d원".format(kotlin.math.abs(totalSettlementDiff)),
+                                color = if (totalSettlementDiff > 0) Color(0xFF4CAF50) else Color(0xFFFF6666),
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold
                             )
