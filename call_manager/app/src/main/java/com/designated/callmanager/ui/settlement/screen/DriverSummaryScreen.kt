@@ -300,7 +300,7 @@ private fun DriverDetailCard(
                 stat.realDeposit  // 납입해야 할 금액 (예상)
             }
             Text(
-                "실 수령액 : ${"%,d".format(displayRealDeposit)}원",
+                "납입금 : ${"%,d".format(displayRealDeposit)}원",
                 color = Color.Yellow,
                 fontWeight = FontWeight.Bold
             )
@@ -443,6 +443,15 @@ private fun DriverDetailCard(
                     } else if (totalUnpaid == 0L) {
                         Text("미지급 없음", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
                     }
+
+                    // 예상 납입금 (미지급금 공제 후 실제 납입할 금액) - 기사앱 실납입과 동일
+                    val expectedDeposit = maxOf(0L, rawFinalDeposit - totalUnpaid)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "예상 납입금: ${"%,d".format(expectedDeposit)}원",
+                        color = Color(0xFF00BFFF),
+                        fontWeight = FontWeight.Bold
+                    )
                 }
 
                 // 이체하기 / 이체취소 버튼 (미지급금이 있을 때)
