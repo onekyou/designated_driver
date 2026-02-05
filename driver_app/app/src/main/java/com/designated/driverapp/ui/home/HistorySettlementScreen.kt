@@ -760,10 +760,6 @@ fun HistorySettlementScreen(
                             Text("미환급금 공제", color = Color(0xFF4CAF50), style = MaterialTheme.typography.bodyMedium)
                             Text("-%,d원".format(usedFromCarryOver), color = Color(0xFF4CAF50), style = MaterialTheme.typography.bodyMedium)
                         }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("실제 납입해야 할 금액", color = Color.White, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                            Text("%,d원".format(adjustedDeposit), color = Color(0xFFFFAA00), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                        }
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
