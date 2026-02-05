@@ -375,7 +375,9 @@ data class DriverDailySettlement(
     val status: DailySettlementStatus = DailySettlementStatus.WORKING,
     val submittedAt: Timestamp? = null,    // 기사 마감 시간
     val confirmedAt: Timestamp? = null,    // 매니저 확인 시간
-    val confirmedBy: String? = null        // 확인한 매니저 ID
+    val confirmedBy: String? = null,       // 확인한 매니저 ID
+    val calculatedCarryOver: Long = 0,     // 업무마감 시점 계산된 남은 미환급금
+    val originalCarryOver: Long = 0        // 업무마감 시점 이월 미환급금 (원본)
 ) {
     companion object {
         fun fromMap(map: Map<String, Any?>?): DriverDailySettlement {
@@ -395,7 +397,9 @@ data class DriverDailySettlement(
                 },
                 submittedAt = map["submittedAt"] as? Timestamp,
                 confirmedAt = map["confirmedAt"] as? Timestamp,
-                confirmedBy = map["confirmedBy"] as? String
+                confirmedBy = map["confirmedBy"] as? String,
+                calculatedCarryOver = (map["calculatedCarryOver"] as? Long) ?: 0,
+                originalCarryOver = (map["originalCarryOver"] as? Long) ?: 0
             )
         }
     }
@@ -411,7 +415,9 @@ data class DriverDailySettlement(
         "status" to status.name,
         "submittedAt" to submittedAt,
         "confirmedAt" to confirmedAt,
-        "confirmedBy" to confirmedBy
+        "confirmedBy" to confirmedBy,
+        "calculatedCarryOver" to calculatedCarryOver,
+        "originalCarryOver" to originalCarryOver
     )
 }
 

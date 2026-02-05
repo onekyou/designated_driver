@@ -1196,6 +1196,7 @@ class DriverViewModel @Inject constructor(
     /**
      * 이월 정산 (미수령금) 실시간 리스너
      * 내 기사 문서의 carryOver 필드를 실시간 감시
+     * PENDING_CONFIRM 상태의 dailySettlement가 있으면 calculatedCarryOver 사용
      */
     private fun startCarryOverListener(provinceId: String, cityId: String, officeId: String, driverId: String) {
         carryOverListener?.remove()
@@ -1215,10 +1216,24 @@ class DriverViewModel @Inject constructor(
                 val carryOverMap = snapshot.get("carryOver") as? Map<String, Any?>
                 val carryOver = DriverCarryOver.fromMap(carryOverMap)
 
+                // dailySettlement 확인 - PENDING_CONFIRM 상태면 calculatedCarryOver 사용
+                val dailySettlementMap = snapshot.get("dailySettlement") as? Map<String, Any?>
+                val dailySettlement = DriverDailySettlement.fromMap(dailySettlementMap)
+
+                val effectiveCarryOver = if (dailySettlement.status == DailySettlementStatus.PENDING_CONFIRM) {
+                    // 업무마감 후 매니저 확인 대기 중 - 계산된 carryOver 사용
+                    val calculatedBalance = dailySettlement.calculatedCarryOver
+                    Log.d(TAG, "Using calculatedCarryOver from dailySettlement: $calculatedBalance (original: ${carryOver.balance})")
+                    carryOver.copy(balance = calculatedBalance)
+                } else {
+                    // 일반 상태 - 원본 carryOver 사용
+                    carryOver
+                }
+
                 // 미수령금이 있고, SETTLED가 아닌 경우에만 표시
-                if (carryOver.balance > 0 && carryOver.status != CarryOverStatus.SETTLED) {
-                    _carryOver.value = carryOver
-                    Log.d(TAG, "CarryOver updated: balance=${carryOver.balance}, status=${carryOver.status}")
+                if (effectiveCarryOver.balance > 0 && effectiveCarryOver.status != CarryOverStatus.SETTLED) {
+                    _carryOver.value = effectiveCarryOver
+                    Log.d(TAG, "CarryOver updated: balance=${effectiveCarryOver.balance}, status=${effectiveCarryOver.status}")
                 } else {
                     _carryOver.value = null
                 }
@@ -1279,13 +1294,25 @@ class DriverViewModel @Inject constructor(
                 val ratio = _depositRatio.value
                 val carryOverBalance = _carryOver.value?.balance?.toInt() ?: 0
 
-                // 최종 납입액 = 사무실 몫 - 외상
+                // 최종 납입액 = 사무실 몫 - 외상 (= rawFinalDeposit)
                 val finalDeposit = settlement.officeDeposit - settlement.totalCredit
                 // 총 정산 차액 = (실납입 - 최종 납입액) + 이월 환급금
                 val totalSettlementDiff = (realDeposit - finalDeposit) + carryOverBalance
 
+                // 남은 미환급금 계산 (HistorySettlementScreen.kt와 동일한 로직)
+                val remainingCarryOver = if (finalDeposit > 0) {
+                    maxOf(0, carryOverBalance - finalDeposit)
+                } else {
+                    carryOverBalance + (-finalDeposit)
+                }
+
+                // 날짜 계산: 6시 이전이면 전날로 처리 (콜매니저와 동일한 로직)
+                val cal = java.util.Calendar.getInstance()
+                if (cal.get(java.util.Calendar.HOUR_OF_DAY) < 6) {
+                    cal.add(java.util.Calendar.DAY_OF_MONTH, -1)
+                }
                 val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-                    .format(java.util.Date())
+                    .format(cal.time)
 
                 val dailySettlement = DriverDailySettlement(
                     date = today,
@@ -1296,7 +1323,9 @@ class DriverViewModel @Inject constructor(
                     totalCredit = settlement.totalCredit.toLong(),
                     tripCount = settlement.tripCount,
                     status = DailySettlementStatus.PENDING_CONFIRM,
-                    submittedAt = Timestamp.now()
+                    submittedAt = Timestamp.now(),
+                    calculatedCarryOver = remainingCarryOver.toLong(),
+                    originalCarryOver = carryOverBalance.toLong()
                 )
 
                 val driverRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
