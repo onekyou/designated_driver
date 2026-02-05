@@ -1550,13 +1550,10 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
             firestore.runTransaction { transaction ->
                 val doc = transaction.get(driverRef)
 
-                // 현재 carryOver 읽기
-                val carryOverMap = doc.get("carryOver") as? Map<String, Any?>
-                val currentBalance = (carryOverMap?.get("balance") as? Long) ?: 0L
-
-                // 새 잔액 = 기존 잔액 + 정산 차액
-                // settlementDiff가 양수(환급)면 잔액 증가, 음수(미납)면 잔액 감소
-                val newBalance = currentBalance + settlementDiff
+                // 기사앱이 계산한 calculatedCarryOver를 직접 사용 (중복 계산 방지)
+                @Suppress("UNCHECKED_CAST")
+                val dailySettlementMap = doc.get("dailySettlement") as? Map<String, Any?>
+                val newBalance = (dailySettlementMap?.get("calculatedCarryOver") as? Long) ?: 0L
 
                 // carryOver 상태 결정
                 val newCarryOverStatus = when {
