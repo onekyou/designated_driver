@@ -584,27 +584,19 @@ class MainActivity : ComponentActivity() {
         when (intent?.action) {
             ACTION_SHOW_CALL_POPUP -> {
                 val callId = intent.getStringExtra(EXTRA_CALL_ID)
-                Log.d("MainActivity", "🔔🔔🔔 [CALL_FLOW] ACTION_SHOW_CALL_POPUP 수신 - callId=$callId")
                 if (callId != null) {
                     val popupId = "CALL_${callId}"
-                    val alreadyShown = isPopupAlreadyShown(popupId)
-                    Log.d("MainActivity", "🔔🔔🔔 [CALL_FLOW] popupId=$popupId, alreadyShown=$alreadyShown, currentScreen=${_screenState.value}")
-                    if (!alreadyShown) {
+                    if (!isPopupAlreadyShown(popupId)) {
                         lifecycleScope.launch {
                             markPopupAsShown(popupId)
                             if (_screenState.value == Screen.Dashboard) {
-                                Log.d("MainActivity", "🔔🔔🔔 [CALL_FLOW] Dashboard 화면에서 showCallDialog 호출 - callId=$callId")
                                 dashboardViewModel.showCallDialog(callId)
                             } else {
-                                Log.d("MainActivity", "🔔🔔🔔 [CALL_FLOW] Dashboard 아님 - _pendingCallDialogId에 저장 - callId=$callId")
                                 _pendingCallDialogId.value = callId
                             }
                         }
-                    } else {
-                        Log.d("MainActivity", "🔔🔔🔔 [CALL_FLOW] 이미 표시된 팝업 - 무시")
                     }
                 } else {
-                    Log.e("MainActivity", "❌ [CALL_FLOW] callId가 null")
                 }
             }
             ACTION_SHOW_SHARED_CALL -> {
