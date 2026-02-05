@@ -524,6 +524,8 @@ exports.sendNewCallNotification = (0, firestore_1.onDocumentCreated)({
                 provinceId: provinceId,
                 cityId: cityId,
                 officeId: officeId,
+                fromCallDetector: String(callData.fromCallDetector === true),
+                fromCallManager: String(callData.fromCallManager === true),
             },
             android: {
                 priority: "high",
