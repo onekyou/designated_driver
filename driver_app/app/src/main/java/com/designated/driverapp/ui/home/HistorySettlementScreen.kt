@@ -55,6 +55,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.background
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 
 @Composable
 fun HistorySettlementScreen(
@@ -461,10 +466,15 @@ fun HistorySettlementScreen(
             // 실납입 입력 상태
             var actualDepositInput by remember { mutableStateOf("") }
             var isDepositConfirmed by remember { mutableStateOf(false) }
+
+            // 정산 카드 접기/펼치기 상태
+            var isSettlementExpanded by remember { mutableStateOf(false) }
             val actualDeposit = actualDepositInput.toIntOrNull() ?: 0
 
-            // 실수령액 = 현금 수령 - 실납입
+            // 현금 수령액
             val cashReceived = todaySettlement.cashReceived
+
+            // 수입금 = 현금 수령 - 실납입
             val actualReceived = cashReceived - actualDeposit
 
             // 총 정산 차액 = (실납입 - 최종 납입액) + 이월 환급금
@@ -505,92 +515,91 @@ fun HistorySettlementScreen(
                 )
             }
 
-            // 통합 정산 카드
+            // 통합 정산 카드 (접기/펼치기)
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF424242)),
                 elevation = CardDefaults.cardElevation(0.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    // 제목
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    // 제목 (클릭하면 펼치기/접기)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isSettlementExpanded = !isSettlementExpanded },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text("오늘의 정산", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
                         Spacer(modifier = Modifier.weight(1f))
-                        IconButton(onClick = { showRatioDialog = true }) {
-                            Icon(Icons.Filled.Settings, contentDescription = "비율 정보", tint = Color.White)
+                        // 펼침 상태일 때만 설정 버튼 표시
+                        if (isSettlementExpanded) {
+                            IconButton(onClick = { showRatioDialog = true }) {
+                                Icon(Icons.Filled.Settings, contentDescription = "비율 정보", tint = Color.White)
+                            }
                         }
+                        Icon(
+                            imageVector = if (isSettlementExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                            contentDescription = if (isSettlementExpanded) "접기" else "펼치기",
+                            tint = Color.White
+                        )
                     }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Divider(thickness = 3.dp, color = Color(0xFFFF9800))
-                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // 운행 정보
+                    // 접힌 상태에서 요약 정보 표시
+                    if (!isSettlementExpanded) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "총 ${totalCount}건 · %,d원".format(totalFare),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                    }
+
+                    // 펼쳐진 내용
+                    AnimatedVisibility(
+                        visible = isSettlementExpanded,
+                        enter = expandVertically(),
+                        exit = shrinkVertically()
+                    ) {
+                        Column {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Divider(thickness = 3.dp, color = Color(0xFFFF9800))
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // 운행 정보
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("총 운행", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
                         Text("${totalCount}건", color = Color.White, style = MaterialTheme.typography.bodyMedium)
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("총 운행료", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                        Text("총 운임", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
                         Text("%,d원".format(totalFare), color = Color.White, style = MaterialTheme.typography.bodyMedium)
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("기사 수입 (${100 - depositRatio}%)", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
-                        Text("%,d원".format(realIncome), color = Color(0xFFFFB000), style = MaterialTheme.typography.bodyMedium)
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("사무실 몫 (${depositRatio}%)", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
-                        Text("%,d원".format(officeDeposit), color = Color.White, style = MaterialTheme.typography.bodyMedium)
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
                     Divider(thickness = 1.dp, color = Color(0xFF666666))
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // 현금/외상 정보
+                    // 현금/외상/납입금 정보
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("현금 수령", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                        Text("현금", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
                         Text("%,d원".format(cashReceived), color = Color.White, style = MaterialTheme.typography.bodyMedium)
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("외상 (이체/포인트)", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                        Text("외상(이체/포인트)", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
                         Text(
                             if (totalCredit > 0) "%,d원".format(totalCredit) else "-",
                             color = if (totalCredit > 0) Color(0xFFFF6666) else Color.Gray,
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
-
-                    // 이월 환급금 (있을 때만 표시)
-                    if (carryOverBalance > 0) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("이월 환급금", color = Color(0xFF4CAF50), style = MaterialTheme.typography.bodyMedium)
-                                if (carryOverStatus == CarryOverStatus.TRANSFERRED) {
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        "(이체됨)",
-                                        color = Color(0xFFFFCC00),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                            Text(
-                                "+%,d원".format(carryOverBalance),
-                                color = Color(0xFF4CAF50),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                    }
-
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("최종 납입액", color = Color.White, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                        Column {
+                            Text("최종납입금", color = Color.White, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                            Text("(납입금-외상)", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                        }
                         val depositText = if (finalDeposit >= 0) {
                             "%,d원".format(finalDeposit)
                         } else {
@@ -717,9 +726,9 @@ fun HistorySettlementScreen(
                     Divider(thickness = 2.dp, color = Color(0xFFFF9800))
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // 최종 결과
+                    // 수입금 (현금 수령 - 실납입)
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("실수령액", color = Color(0xFFFFB000), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                        Text("수입금", color = Color(0xFFFFB000), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
                         Text(
                             "%,d원".format(actualReceived),
                             color = Color(0xFFFFB000),
@@ -747,22 +756,24 @@ fun HistorySettlementScreen(
                         }
                     }
 
-                    // 이체된 미수령금 수령 버튼
-                    if (carryOverStatus == CarryOverStatus.TRANSFERRED) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            "사무실에서 이체되었습니다!",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFFFFCC00),
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Button(
-                            onClick = { showReceiveConfirmDialog = true },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
-                        ) {
-                            Text("수령완료", fontWeight = FontWeight.Bold)
+                            // 이체된 미수령금 수령 버튼
+                            if (carryOverStatus == CarryOverStatus.TRANSFERRED) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    "사무실에서 이체되었습니다!",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFFFFCC00),
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Button(
+                                    onClick = { showReceiveConfirmDialog = true },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                                ) {
+                                    Text("수령완료", fontWeight = FontWeight.Bold)
+                                }
+                            }
                         }
                     }
                 }
