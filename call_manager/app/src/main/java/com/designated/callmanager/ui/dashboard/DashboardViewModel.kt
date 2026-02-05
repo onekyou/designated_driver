@@ -190,6 +190,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     val canceledCallInfo: StateFlow<Pair<String, String>?> = _canceledCallInfo
     private val _showNewCallPopup = MutableStateFlow(false)
     val showNewCallPopup: StateFlow<Boolean> = _showNewCallPopup
+    private val _isUserClickedCall = MutableStateFlow(false)  // 사용자가 콜 리스트 클릭으로 열었는지 여부
+    val isUserClickedCall: StateFlow<Boolean> = _isUserClickedCall
     private val _newCallInfo = MutableStateFlow<CallInfo?>(null)
     val newCallInfo: StateFlow<CallInfo?> = _newCallInfo
     private val _showNewSharedCallPopup = MutableStateFlow(false)
@@ -445,7 +447,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
                         // 새로운 WAITING 콜 팝업
                         if (cachedCall == null && call.status == CallStatus.WAITING.firestoreValue) {
-                            if (call.fromCallDetector != true && call.callType != "SHARED") {
+                            if (call.fromCallDetector != true && call.fromCallManager != true && call.callType != "SHARED") {
                                 val prefs = appContext.getSharedPreferences("shown_popups", Context.MODE_PRIVATE)
                                 val popupId = "NEW_CALL_${call.id}"
                                 if (!prefs.getBoolean(popupId, false)) {
@@ -779,6 +781,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun showCallDialog(callId: String) {
         viewModelScope.launch {
             try {
+                _isUserClickedCall.value = true  // 사용자 클릭으로 열림 표시
                 val callFromCache = _calls.value.find { it.id == callId }
                 if (callFromCache != null) {
                     _newCallInfo.value = callFromCache
@@ -896,6 +899,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun dismissNewCallPopup() {
         _showNewCallPopup.value = false
         _newCallInfo.value = null
+        _isUserClickedCall.value = false  // 리셋
     }
 
     fun dismissNewSharedCallPopup() {
@@ -1120,7 +1124,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     timestamp = nowTs,
                     departure_set = departure.ifBlank { null },
                     destination_set = destination.ifBlank { null },
-                    fare_set = if (fare > 0) fare else null
+                    fare_set = if (fare > 0) fare else null,
+                    fromCallManager = true  // 내부 생성 콜 표시 (알림음 생략용)
                 )
                 _newCallInfo.value = createdCall
                 _showNewCallPopup.value = true

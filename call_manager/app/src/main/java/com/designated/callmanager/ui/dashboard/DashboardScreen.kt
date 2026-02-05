@@ -162,6 +162,7 @@ fun DashboardScreen(
     val canceledCallInfo by viewModel.canceledCallInfo.collectAsStateWithLifecycle()
 
     val showNewCallPopup by viewModel.showNewCallPopup.collectAsStateWithLifecycle()
+    val isUserClickedCall by viewModel.isUserClickedCall.collectAsStateWithLifecycle()
     val newCallInfo by viewModel.newCallInfo.collectAsStateWithLifecycle()
     val showNewSharedCallPopup by viewModel.showNewSharedCallPopup.collectAsStateWithLifecycle()
     val newSharedCallInfo by viewModel.newSharedCallInfo.collectAsStateWithLifecycle()
@@ -303,7 +304,9 @@ fun DashboardScreen(
         if (showNewCallPopup) {
             val prefs = context.getSharedPreferences("call_manager_settings", Context.MODE_PRIVATE)
             val newCallNotificationEnabled = prefs.getBoolean("new_call_notification", true)
-            if (newCallNotificationEnabled) {
+            // 콜디텍터/콜매니저에서 생성한 콜 또는 사용자가 콜 리스트 클릭으로 열었을 때는 무음
+            // 그 외 (외부에서 오는 새 콜)만 알림음
+            if (newCallNotificationEnabled && newCallInfo?.fromCallDetector != true && newCallInfo?.fromCallManager != true && !isUserClickedCall) {
                 playNotificationSound(context)
             }
         }
@@ -659,6 +662,22 @@ fun playNotificationSound(context: Context) {
             fallbackR?.play()
         } catch (e2: Exception) {
         }
+    }
+}
+
+fun playClickSound(context: Context) {
+    try {
+        val toneGenerator = android.media.ToneGenerator(
+            android.media.AudioManager.STREAM_SYSTEM,
+            80  // 볼륨 (0-100)
+        )
+        toneGenerator.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, 80)  // 시스템 비프음, 80ms
+        // 일정 시간 후 release
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            toneGenerator.release()
+        }, 150)
+    } catch (e: Exception) {
+        // 클릭음 재생 실패 시 무시
     }
 }
 
