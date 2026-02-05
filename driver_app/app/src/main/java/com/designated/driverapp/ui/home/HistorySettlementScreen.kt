@@ -462,8 +462,36 @@ fun HistorySettlementScreen(
             val carryOverBalance = carryOver?.balance?.toInt() ?: 0
             val carryOverStatus = carryOver?.status
 
-            // 최종 납입액 계산 (사무실 몫 - 외상)
-            val finalDeposit = officeDeposit - totalCredit
+            // 최종 납입액 계산 (사무실 몫 - 외상) - 미환급금 적용 전
+            val rawFinalDeposit = officeDeposit - totalCredit
+
+            // ========== 미환급금과 납입금 통합 계산 ==========
+            // carryOverBalance > 0 : 사무실이 기사에게 줄 돈 (미환급금)
+            // rawFinalDeposit > 0 : 기사가 사무실에 낼 돈
+            // rawFinalDeposit < 0 : 사무실이 기사에게 줄 돈 (오늘 발생)
+
+            // 미환급금에서 공제 후 실제 납입해야 할 금액
+            val adjustedDeposit = if (rawFinalDeposit > 0) {
+                maxOf(0, rawFinalDeposit - carryOverBalance)
+            } else {
+                0  // 낼 돈이 없으면 0
+            }
+
+            // 오늘 운행 후 남은 미환급금
+            val remainingCarryOver = if (rawFinalDeposit > 0) {
+                // 기사가 낼 돈으로 미환급금 일부 상쇄
+                maxOf(0, carryOverBalance - rawFinalDeposit)
+            } else {
+                // 사무실이 줄 돈이 더 생겼으면 추가
+                carryOverBalance + (-rawFinalDeposit)
+            }
+
+            // 미환급금에서 공제된 금액
+            val usedFromCarryOver = if (rawFinalDeposit > 0 && carryOverBalance > 0) {
+                minOf(carryOverBalance, rawFinalDeposit)
+            } else {
+                0
+            }
 
             // 실납입 상태 (입력 필드 없이 기본값 표시 + 확인/정정)
             var actualDeposit by remember { mutableStateOf(0) }
@@ -474,8 +502,8 @@ fun HistorySettlementScreen(
             // 정산 카드 접기/펼치기 상태
             var isSettlementExpanded by remember { mutableStateOf(false) }
 
-            // 표시 금액: 확인 전이면 finalDeposit 기본값, 확인 후면 actualDeposit
-            val displayDeposit = if (isDepositConfirmed) actualDeposit else (if (finalDeposit > 0) finalDeposit else 0)
+            // 표시 금액: 확인 전이면 adjustedDeposit (미환급금 공제 후), 확인 후면 actualDeposit
+            val displayDeposit = if (isDepositConfirmed) actualDeposit else adjustedDeposit
 
             // 현금 수령액
             val cashReceived = todaySettlement.cashReceived
@@ -483,9 +511,9 @@ fun HistorySettlementScreen(
             // 수입금 = 현금 수령 - 실납입 (확인 전이면 기본값 사용)
             val actualReceived = cashReceived - displayDeposit
 
-            // 총 정산 차액 = (실납입 - 최종 납입액) + 이월 환급금
+            // 총 정산 차액 = (실납입 - 조정된 납입액)
             // 양수: 환급금 (기사가 받을 돈), 음수: 미납금 (기사가 더 낼 돈)
-            val totalSettlementDiff = (displayDeposit - finalDeposit) + carryOverBalance
+            val totalSettlementDiff = displayDeposit - adjustedDeposit
 
             // 수령완료 확인 다이얼로그
             if (showReceiveConfirmDialog) {
@@ -521,13 +549,11 @@ fun HistorySettlementScreen(
                 )
             }
 
-            // 오늘 발생 미환급금 계산 (최종납입금이 음수인 경우 = 사무실이 기사에게 줄 돈)
-            val todayUnpaid = if (finalDeposit < 0) -finalDeposit else 0
-            // 누적 미환급금 합계
-            val totalUnpaid = carryOverBalance + todayUnpaid
+            // 오늘 발생 미환급금 (최종납입금이 음수인 경우 = 사무실이 기사에게 줄 돈)
+            val todayNewUnpaid = if (rawFinalDeposit < 0) -rawFinalDeposit else 0
 
-            // 누적 미환급금 카드 (미환급금이 있을 때만 표시)
-            if (totalUnpaid > 0 || carryOverStatus == CarryOverStatus.TRANSFERRED) {
+            // 누적 미환급금 카드 (미환급금이 있거나 공제 내역이 있을 때 표시)
+            if (remainingCarryOver > 0 || usedFromCarryOver > 0 || carryOverStatus == CarryOverStatus.TRANSFERRED) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
@@ -546,19 +572,19 @@ fun HistorySettlementScreen(
                                 "누적 미환급금",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFFFF6666)
+                                color = if (remainingCarryOver > 0) Color(0xFFFF6666) else Color(0xFF4CAF50)
                             )
                             Text(
-                                "%,d원".format(totalUnpaid),
+                                "%,d원".format(remainingCarryOver),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFFFF6666)
+                                color = if (remainingCarryOver > 0) Color(0xFFFF6666) else Color(0xFF4CAF50)
                             )
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // 이월 금액
+                        // 이월 금액 (원래 미환급금)
                         if (carryOverBalance > 0) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -569,14 +595,25 @@ fun HistorySettlementScreen(
                             }
                         }
 
-                        // 오늘 발생 금액
-                        if (todayUnpaid > 0) {
+                        // 오늘 납입으로 공제된 금액
+                        if (usedFromCarryOver > 0) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("오늘", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
-                                Text("+%,d원".format(todayUnpaid), color = Color(0xFFFFAA00), style = MaterialTheme.typography.bodyMedium)
+                                Text("오늘 공제", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                                Text("-%,d원".format(usedFromCarryOver), color = Color(0xFF4CAF50), style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+
+                        // 오늘 새로 발생한 미환급금 (외상이 많아서 사무실이 줄 돈)
+                        if (todayNewUnpaid > 0) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("오늘 발생", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                                Text("+%,d원".format(todayNewUnpaid), color = Color(0xFFFFAA00), style = MaterialTheme.typography.bodyMedium)
                             }
                         }
 
@@ -703,17 +740,30 @@ fun HistorySettlementScreen(
                             Text("최종납입금", color = Color.White, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
                             Text("(납입금-외상)", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
                         }
-                        val depositText = if (finalDeposit >= 0) {
-                            "%,d원".format(finalDeposit)
+                        val depositText = if (rawFinalDeposit >= 0) {
+                            "%,d원".format(rawFinalDeposit)
                         } else {
-                            "-%,d원 (받을 금액)".format(-finalDeposit)
+                            "-%,d원 (받을 금액)".format(-rawFinalDeposit)
                         }
                         Text(
                             depositText,
-                            color = if (finalDeposit >= 0) Color.White else Color(0xFF4CAF50),
+                            color = if (rawFinalDeposit >= 0) Color.White else Color(0xFF4CAF50),
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Bold
                         )
+                    }
+
+                    // 미환급금 공제 내역 표시
+                    if (usedFromCarryOver > 0) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("미환급금 공제", color = Color(0xFF4CAF50), style = MaterialTheme.typography.bodyMedium)
+                            Text("-%,d원".format(usedFromCarryOver), color = Color(0xFF4CAF50), style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("실제 납입해야 할 금액", color = Color.White, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            Text("%,d원".format(adjustedDeposit), color = Color(0xFFFFAA00), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
