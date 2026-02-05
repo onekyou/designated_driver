@@ -17,7 +17,8 @@ data class DriverInfo(
     val id: String,
     val name: String,
     val status: String,
-    val phone: String = ""
+    val phone: String = "",
+    val authUid: String = ""
 )
 
 // 콜 정보 데이터 클래스

@@ -12,6 +12,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.functions.ktx.functions
+import com.google.firebase.ktx.Firebase
 
 class DispatchActivity : ComponentActivity() {
 
@@ -62,7 +64,8 @@ class DispatchActivity : ComponentActivity() {
                                             id = doc.id,
                                             name = name,
                                             status = status,
-                                            phone = doc.getString("phoneNumber") ?: ""
+                                            phone = doc.getString("phoneNumber") ?: "",
+                                            authUid = doc.getString("authUid") ?: ""
                                         )
                                     )
                                 }
@@ -148,7 +151,7 @@ class DispatchActivity : ComponentActivity() {
         // 기존 콜 문서 업데이트
         val updateData = hashMapOf<String, Any>(
             "status" to "ASSIGNED",
-            "assignedDriverId" to driver.id,
+            "assignedDriverId" to driver.authUid.ifEmpty { driver.id },
             "assignedDriverName" to driver.name,
             "assignedDriverPhone" to driver.phone,
             "assignedTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
@@ -167,6 +170,32 @@ class DispatchActivity : ComponentActivity() {
         val driverPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/designated_drivers"
         db.collection(driverPath).document(driver.id)
             .update("status", "ON_TRIP")
+
+        // FCM 알림 전송 (Cloud Function 호출)
+        val driverAuthUid = driver.authUid
+        if (driverAuthUid.isNotBlank()) {
+            val functions = Firebase.functions("asia-northeast3")
+            val data = hashMapOf(
+                "callId" to callId,
+                "driverAuthUid" to driverAuthUid,
+                "provinceId" to provinceId,
+                "cityId" to cityId,
+                "officeId" to officeId,
+                "customerName" to "",
+                "departure" to ""
+            )
+            Log.d("DispatchActivity", "Cloud Function 호출: $data")
+            functions.getHttpsCallable("notifyDriverAssignment")
+                .call(data)
+                .addOnSuccessListener { result ->
+                    Log.d("DispatchActivity", "✅ 기사 알림 전송 성공: ${result.data}")
+                }
+                .addOnFailureListener { e ->
+                    Log.e("DispatchActivity", "❌ 기사 알림 전송 실패: ${e.message}", e)
+                }
+        } else {
+            Log.w("DispatchActivity", "⚠️ 기사 authUid가 없어 FCM 알림 전송 불가")
+        }
     }
 
     /**
@@ -197,7 +226,7 @@ class DispatchActivity : ComponentActivity() {
             "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
             "callType" to "수신",
             "timestampClient" to System.currentTimeMillis(),
-            "assignedDriverId" to driver.id,
+            "assignedDriverId" to driver.authUid.ifEmpty { driver.id },
             "assignedDriverName" to driver.name,
             "assignedDriverPhone" to driver.phone,
             "assignedTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
@@ -207,6 +236,38 @@ class DispatchActivity : ComponentActivity() {
 
         // 콜 문서 생성
         db.collection(callPath).add(callData)
+            .addOnSuccessListener { docRef ->
+                Log.d("DispatchActivity", "새 콜 생성: ${docRef.id}")
+
+                // FCM 알림 전송 (Cloud Function 호출)
+                val driverAuthUid = driver.authUid
+                if (driverAuthUid.isNotBlank()) {
+                    val functions = Firebase.functions("asia-northeast3")
+                    val data = hashMapOf(
+                        "callId" to docRef.id,
+                        "driverAuthUid" to driverAuthUid,
+                        "provinceId" to provinceId,
+                        "cityId" to cityId,
+                        "officeId" to officeId,
+                        "customerName" to (contactName ?: ""),
+                        "departure" to ""
+                    )
+                    Log.d("DispatchActivity", "Cloud Function 호출: $data")
+                    functions.getHttpsCallable("notifyDriverAssignment")
+                        .call(data)
+                        .addOnSuccessListener { result ->
+                            Log.d("DispatchActivity", "✅ 기사 알림 전송 성공: ${result.data}")
+                        }
+                        .addOnFailureListener { e ->
+                            Log.e("DispatchActivity", "❌ 기사 알림 전송 실패: ${e.message}", e)
+                        }
+                } else {
+                    Log.w("DispatchActivity", "⚠️ 기사 authUid가 없어 FCM 알림 전송 불가")
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.e("DispatchActivity", "콜 생성 실패", e)
+            }
 
         // 기사 상태를 ON_TRIP으로 변경
         val driverPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/designated_drivers"
