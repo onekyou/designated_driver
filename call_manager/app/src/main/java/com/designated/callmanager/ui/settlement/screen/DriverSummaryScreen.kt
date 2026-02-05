@@ -220,11 +220,11 @@ private fun DriverDetailCard(
     val carryOverBalance = carryOver?.balance ?: 0L
     val status = carryOver?.status
 
-    // TRANSFERRED 상태면 balance에 이미 오늘분 포함됨 → 더하지 않음
-    val totalUnpaid = if (status == CarryOverStatus.TRANSFERRED) {
-        carryOverBalance  // 이체된 금액만 표시
-    } else {
-        carryOverBalance + todayUnpaid  // 이월분 + 오늘분
+    // 상태별 미지급금 계산
+    val totalUnpaid = when (status) {
+        CarryOverStatus.SETTLED -> 0L  // 수령 완료 → 0
+        CarryOverStatus.TRANSFERRED -> carryOverBalance  // 이체됨 → balance에 이미 오늘분 포함
+        else -> carryOverBalance + todayUnpaid  // PENDING → 이월분 + 오늘분
     }
 
     // 업무마감 정보
