@@ -1497,7 +1497,13 @@ class DriverViewModel @Inject constructor(
                     .collection(Constants.COLLECTION_OFFICES).document(officeId)
                     .collection(Constants.COLLECTION_DRIVERS).document(driverId)
 
-                driverRef.update("settlementLastCleared", nowTimestamp).await()
+                // settlementLastCleared 업데이트 + 기사 상태를 OFFLINE으로 변경
+                driverRef.update(
+                    mapOf(
+                        "settlementLastCleared" to nowTimestamp,
+                        Constants.FIELD_STATUS to DriverStatus.OFFLINE.value
+                    )
+                ).await()
 
                 // 로컬 상태 업데이트
                 _lastClearedMillis.value = nowMillis

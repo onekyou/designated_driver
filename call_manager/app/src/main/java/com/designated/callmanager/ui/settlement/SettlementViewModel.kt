@@ -1414,6 +1414,8 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
 
     /**
      * 마감 시 미지급금 누적 처리
+     * 단, 이미 업무마감 정산확인(CONFIRMED)이 완료된 기사는 건너뜀
+     * (confirmDailySettlement에서 이미 carryOver가 처리됨)
      * todayResult: 양수 = 기사가 납부 (미지급 감소), 음수 = 사무실이 지급해야 함 (미지급 증가)
      */
     fun processCarryOverOnFinalize(driverId: String, todayResult: Long) {
@@ -1431,6 +1433,16 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             firestore.runTransaction { transaction ->
                 val doc = transaction.get(driverRef)
+
+                // 이미 업무마감 정산확인이 완료된 기사는 건너뜀
+                @Suppress("UNCHECKED_CAST")
+                val dailySettlementMap = doc.get("dailySettlement") as? Map<String, Any?>
+                val dailySettlementStatus = dailySettlementMap?.get("status") as? String
+                if (dailySettlementStatus == DailySettlementStatus.CONFIRMED.name) {
+                    Log.d("SettlementViewModel", "기사 $driverId: 이미 정산확인 완료, carryOver 재처리 건너뜀")
+                    return@runTransaction null  // 트랜잭션 건너뜀
+                }
+
                 val carryOverMap = doc.get("carryOver") as? Map<String, Any?>
                 val currentBalance = (carryOverMap?.get("balance") as? Long) ?: 0L
                 val currentStatusStr = carryOverMap?.get("status") as? String
@@ -1443,13 +1455,14 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                 // 새 잔액 = 기존 잔액 - 오늘 결과
                 // todayResult가 양수(납부)면 잔액 감소, 음수(미지급)면 잔액 증가
                 val newBalance = currentBalance - todayResult
-                val finalBalance = maxOf(0L, newBalance)  // 음수면 0으로
+                // 음수도 허용 (음수 = 기사가 사무실에 내야 할 돈)
+                val finalBalance = newBalance
 
                 Log.d("SettlementViewModel", "CarryOver 계산: 기존=$currentBalance, 오늘결과=$todayResult, 새잔액=$finalBalance, 현재상태=$currentStatus")
 
                 // 상태 결정: TRANSFERRED 상태는 유지 (기사가 수령완료 눌러야 변경됨)
                 val newStatus = when {
-                    finalBalance <= 0 -> CarryOverStatus.SETTLED.name
+                    finalBalance == 0L -> CarryOverStatus.SETTLED.name
                     currentStatus == CarryOverStatus.TRANSFERRED -> CarryOverStatus.TRANSFERRED.name  // 이체됨 상태 유지
                     else -> CarryOverStatus.PENDING.name
                 }

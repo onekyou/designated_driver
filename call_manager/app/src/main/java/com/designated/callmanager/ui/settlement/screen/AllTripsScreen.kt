@@ -40,6 +40,9 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
     // 이월 정산 (기사별 미지급금) 데이터
     val carryOverList by vm.carryOverList.collectAsState()
 
+    // 일일 정산 (기사별 업무마감) 데이터
+    val dailySettlementList by vm.dailySettlementList.collectAsState()
+
     // 기사별 오늘 미지급금 계산 (로컬 trips 기반)
     val todayUnpaidByDriver = remember(trips, ratio) {
         trips.groupBy { it.driverId }
@@ -108,6 +111,48 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
     var isFinalizingInProgress by remember { mutableStateOf(false) }
     var finalizeResultMessage by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+
+    // 업무 마감 전 체크 경고 다이얼로그
+    var showPreFinalizeWarning by remember { mutableStateOf(false) }
+    var preFinalizeWarnings by remember { mutableStateOf<List<String>>(emptyList()) }
+
+    // 업무 마감 전 체크 함수
+    fun checkBeforeFinalize(): List<String> {
+        val warnings = mutableListOf<String>()
+
+        // 1. 마감 대기 중인 기사 확인 (정산확인 안 된 기사)
+        val pendingConfirmDrivers = dailySettlementList.filter { it.hasSubmitted && !it.isConfirmed }
+        if (pendingConfirmDrivers.isNotEmpty()) {
+            val names = pendingConfirmDrivers.take(3).map { it.driverName }
+            val suffix = if (pendingConfirmDrivers.size > 3) " 외 ${pendingConfirmDrivers.size - 3}명" else ""
+            warnings.add("🔔 정산확인 대기: ${names.joinToString(", ")}$suffix")
+        }
+
+        // 2. 대기탭의 이체/외상 콜 미처리 확인 (creditedIds에 없는 이체/외상 콜)
+        val pendingPaymentTrips = trips.filter {
+            it.paymentMethod in listOf("이체", "외상") && !creditedIds.contains(it.callId)
+        }
+        if (pendingPaymentTrips.isNotEmpty()) {
+            val transferCount = pendingPaymentTrips.count { it.paymentMethod == "이체" }
+            val creditCount = pendingPaymentTrips.count { it.paymentMethod == "외상" }
+            val details = mutableListOf<String>()
+            if (transferCount > 0) details.add("이체 ${transferCount}건")
+            if (creditCount > 0) details.add("외상 ${creditCount}건")
+            warnings.add("💳 정산 미처리: ${details.joinToString(", ")}")
+        }
+
+        // 3. 미지급금 이체 대기 확인 (PENDING 상태)
+        val pendingTransferDrivers = carryOverList.filter {
+            it.balance > 0 && it.status == CarryOverStatus.PENDING
+        }
+        if (pendingTransferDrivers.isNotEmpty()) {
+            val names = pendingTransferDrivers.take(3).map { it.driverName }
+            val suffix = if (pendingTransferDrivers.size > 3) " 외 ${pendingTransferDrivers.size - 3}명" else ""
+            warnings.add("💰 미지급금 이체 대기: ${names.joinToString(", ")}$suffix")
+        }
+
+        return warnings
+    }
 
 
     Column(Modifier.fillMaxSize().padding(vertical = 16.dp)) {
@@ -334,11 +379,69 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
         }
         Spacer(Modifier.height(8.dp))
         Button(
-            onClick = { showFinalizeDialog = true },
+            onClick = {
+                // 업무 마감 전 체크
+                val warnings = checkBeforeFinalize()
+                if (warnings.isNotEmpty()) {
+                    preFinalizeWarnings = warnings
+                    showPreFinalizeWarning = true
+                } else {
+                    showFinalizeDialog = true
+                }
+            },
             enabled = trips.isNotEmpty(),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF4444))
         ) { Text("업무 마감", color = Color.White) }
+    }
+
+    // 업무 마감 전 경고 다이얼로그
+    if (showPreFinalizeWarning) {
+        AlertDialog(
+            onDismissRequest = { showPreFinalizeWarning = false },
+            title = { Text("⚠️ 확인 필요", color = Color(0xFFFFAA00)) },
+            text = {
+                Column {
+                    Text(
+                        "아래 항목을 확인해주세요:",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    preFinalizeWarnings.forEach { warning ->
+                        Text(
+                            "• $warning",
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(vertical = 2.dp)
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "그래도 업무를 마감하시겠습니까?",
+                        color = Color.Gray,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showPreFinalizeWarning = false
+                        showFinalizeDialog = true
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF4444))
+                ) {
+                    Text("강제 마감")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPreFinalizeWarning = false }) {
+                    Text("취소", color = Color.White)
+                }
+            },
+            containerColor = Color(0xFF2A2A2A)
+        )
     }
 
     // 업무 마감 확인 다이얼로그
