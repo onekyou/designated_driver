@@ -586,6 +586,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val status = data["status"] ?: "WAITING"
         val callType = data["callType"]
         val fromCallDetector = data["fromCallDetector"]?.toBooleanStrictOrNull()
+        val fromCallManager = data["fromCallManager"]?.toBooleanStrictOrNull()
         val assignedDriverId = data["assignedDriverId"]
         val assignedDriverName = data["assignedDriverName"]
         val assignedDriverPhone = data["assignedDriverPhone"]
@@ -627,7 +628,9 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         // 앱이 포그라운드일 때는 알림 생성하지 않음 (UI가 실시간 업데이트됨)
-        if (!isAppInForeground()) {
+        // 콜디텍터에서 온 콜은 이미 콜디텍터에서 배차하므로 알림 불필요
+        // 콜매니저에서 생성한 콜도 이미 포그라운드이므로 알림 불필요
+        if (!isAppInForeground() && fromCallDetector != true && fromCallManager != true) {
             showNotification(
                 channelId = NEW_CALL_CHANNEL_ID,
                 notificationId = "new_call_$callId".hashCode(),
@@ -641,7 +644,13 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 timeoutAfter = 60000
             )
         } else {
-            Log.d(TAG, "[handleNewCall] 앱 포그라운드 - 알림 생략")
+            val reason = when {
+                isAppInForeground() -> "앱 포그라운드"
+                fromCallDetector == true -> "콜디텍터에서 온 콜"
+                fromCallManager == true -> "콜매니저에서 생성한 콜"
+                else -> "기타"
+            }
+            Log.d(TAG, "[handleNewCall] 알림 생략 - $reason")
         }
     }
 
