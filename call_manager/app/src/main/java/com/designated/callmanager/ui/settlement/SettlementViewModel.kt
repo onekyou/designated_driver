@@ -571,6 +571,9 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                 // 누적 미지급금에 반영 (양수면 감소, 음수면 증가)
                 Log.d("SettlementViewModel", "기사 $driverId 오늘 정산: $todayResult 원 (양수=납부, 음수=미지급)")
                 processCarryOverOnFinalize(driverId, todayResult.toLong())
+
+                // ✅ dailySettlement 초기화 (다음 세션을 위해)
+                clearDailySettlement(driverId)
             }
         }
 
@@ -1481,6 +1484,35 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                 Log.d("SettlementViewModel", "CarryOver updated for driver $driverId: result=$todayResult")
             }.addOnFailureListener { e ->
                 Log.e("SettlementViewModel", "Failed to update carryOver", e)
+            }
+        }
+    }
+
+    /**
+     * 업무마감 시 기사의 dailySettlement 초기화
+     * 다음 세션에서 "확인완료" 상태가 남아있지 않도록 함
+     */
+    private fun clearDailySettlement(driverId: String) {
+        val provinceId = currentProvinceId
+        val cityId = currentCityId
+        val officeId = currentOfficeId
+
+        if (provinceId == null || cityId == null || officeId == null) return
+
+        val driverRef = firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
+            .collection("offices").document(officeId)
+            .collection("designated_drivers").document(driverId)
+
+        viewModelScope.launch {
+            driverRef.update(
+                mapOf(
+                    "dailySettlement" to com.google.firebase.firestore.FieldValue.delete()
+                )
+            ).addOnSuccessListener {
+                Log.d("SettlementViewModel", "DailySettlement cleared for driver $driverId")
+            }.addOnFailureListener { e ->
+                Log.e("SettlementViewModel", "Failed to clear dailySettlement", e)
             }
         }
     }
