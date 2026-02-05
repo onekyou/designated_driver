@@ -262,7 +262,17 @@ private fun DriverDetailCard(
             Text("수수료 : ${"%,d".format(stat.deposit)}원", color = Color.White)
             Text("미수금 : ${"%,d".format(stat.totalCredit)}원", color = Color.White)
             Divider(color = Color.DarkGray, thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
-            Text("실 수령액 : ${"%,d".format(stat.realDeposit)}원", color = Color.Yellow, fontWeight = FontWeight.Bold)
+            // 업무마감 후에는 실제 납입 금액, 마감 전에는 납입해야 할 금액
+            val displayRealDeposit = if (hasSubmitted && settlement != null) {
+                settlement.realDeposit.toInt()  // 기사가 실제 납입한 금액
+            } else {
+                stat.realDeposit  // 납입해야 할 금액 (예상)
+            }
+            Text(
+                "실 수령액 : ${"%,d".format(displayRealDeposit)}원",
+                color = Color.Yellow,
+                fontWeight = FontWeight.Bold
+            )
 
             // 업무마감 섹션 (마감 대기 상태인 경우)
             if (hasSubmitted && settlement != null) {

@@ -544,7 +544,7 @@ fun DashboardScreen(
                 modifier = Modifier.fillMaxSize().padding(paddingValues)
             ) {
                 CallListContainer(
-                    modifier = Modifier.fillMaxWidth().weight(4.5f),
+                    modifier = Modifier.fillMaxWidth().weight(5.4f),
                     calls = calls.filter { call ->
                         val status = CallStatus.fromFirestoreValue(call.status)
                         // CANCELLED(취소요청)은 표시, CANCELED/COMPLETED/SHARED_OUT만 숨김
@@ -558,7 +558,7 @@ fun DashboardScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 SharedCallListContainer(
-                    modifier = Modifier.fillMaxWidth().weight(4.5f),
+                    modifier = Modifier.fillMaxWidth().weight(3.6f),
                     sharedCalls = sharedCalls,
                     onAccept = { call ->
                         selectedSharedCall = call
