@@ -429,6 +429,7 @@ class CallDetectorService : Service() {
      * 새 콜 감지 시 CallManager를 포그라운드로 전환하고 팝업 트리거
      */
     private fun bringCallManagerToForegroundForNewCall(callId: String, phoneNumber: String, contactName: String?, contactAddress: String?) {
+        Log.d(TAG, "🔔🔔🔔 [CALL_FLOW] bringCallManagerToForegroundForNewCall 함수 진입 - callId=$callId")
         try {
             val intent = Intent(this, com.designated.callmanager.MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or
@@ -451,8 +452,10 @@ class CallDetectorService : Service() {
             }
 
             startActivity(intent)
+            Log.d(TAG, "🔔🔔🔔 [CALL_FLOW] MainActivity Intent 전송 완료 - ACTION_SHOW_CALL_POPUP with callId=$callId")
 
         } catch (e: SecurityException) {
+            Log.e(TAG, "❌ [CALL_FLOW] SecurityException 발생 - Broadcast로 전환: ${e.message}")
             val internalIntent = Intent("com.designated.callmanager.INTERNAL_SHOW_CALL_DIALOG").apply {
                 putExtra("EXTRA_CALL_ID", callId)
                 putExtra("EXTRA_PHONE_NUMBER", phoneNumber)
@@ -461,6 +464,7 @@ class CallDetectorService : Service() {
             }
             sendBroadcast(internalIntent)
         } catch (e: Exception) {
+            Log.e(TAG, "❌ [CALL_FLOW] Exception 발생 - Broadcast로 전환: ${e.message}")
             val internalIntent = Intent("com.designated.callmanager.INTERNAL_SHOW_CALL_DIALOG").apply {
                 putExtra("EXTRA_CALL_ID", callId)
                 putExtra("EXTRA_PHONE_NUMBER", phoneNumber)
@@ -670,6 +674,7 @@ class CallDetectorService : Service() {
                             }
                         }
 
+                        Log.d(TAG, "🔔🔔🔔 [CALL_FLOW] bringCallManagerToForegroundForNewCall 호출 시작 - callId=$callId, phoneNumber=$phoneNumber")
                         bringCallManagerToForegroundForNewCall(callId, phoneNumber, contactName, contactAddress)
                     }
                     .addOnFailureListener { e ->
@@ -724,6 +729,7 @@ class CallDetectorService : Service() {
                             }
                         }
 
+                        Log.d(TAG, "🔔🔔🔔 [CALL_FLOW] bringCallManagerToForegroundForNewCall 호출 시작 (fallback) - callId=$callId, phoneNumber=$phoneNumber")
                         bringCallManagerToForegroundForNewCall(callId, phoneNumber, contactName, contactAddress)
                     }
                     .addOnFailureListener { e2 ->

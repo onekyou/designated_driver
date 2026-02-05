@@ -783,20 +783,32 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun showCallDialog(callId: String) {
+        Log.d(TAG, "🔔🔔🔔 [CALL_FLOW] showCallDialog 호출됨 - callId=$callId")
         viewModelScope.launch {
             try {
                 _isUserClickedCall.value = true  // 사용자 클릭으로 열림 표시
                 val callFromCache = _calls.value.find { it.id == callId }
                 if (callFromCache != null) {
+                    Log.d(TAG, "🔔🔔🔔 [CALL_FLOW] 캐시에서 콜 정보 발견 - _showNewCallPopup=true 설정")
                     _newCallInfo.value = callFromCache
                     _showNewCallPopup.value = true
                     return@launch
                 }
 
-                val province = _provinceId.value ?: return@launch
-                val city = _cityId.value ?: return@launch
-                val office = _officeId.value ?: return@launch
+                val province = _provinceId.value ?: run {
+                    Log.e(TAG, "❌ [CALL_FLOW] provinceId가 null")
+                    return@launch
+                }
+                val city = _cityId.value ?: run {
+                    Log.e(TAG, "❌ [CALL_FLOW] cityId가 null")
+                    return@launch
+                }
+                val office = _officeId.value ?: run {
+                    Log.e(TAG, "❌ [CALL_FLOW] officeId가 null")
+                    return@launch
+                }
 
+                Log.d(TAG, "🔔🔔🔔 [CALL_FLOW] Firestore에서 콜 정보 조회 시작 - callId=$callId")
                 val callDocument = firestore.collection("provinces").document(province)
                     .collection("cities").document(city)
                     .collection("offices").document(office)
@@ -806,13 +818,17 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 if (callDocument.exists()) {
                     val callInfo = parseCallDocument(callDocument)
                     if (callInfo != null) {
+                        Log.d(TAG, "🔔🔔🔔 [CALL_FLOW] Firestore에서 콜 정보 조회 성공 - _showNewCallPopup=true 설정")
                         _newCallInfo.value = callInfo
                         _showNewCallPopup.value = true
                     } else {
+                        Log.e(TAG, "❌ [CALL_FLOW] callInfo 파싱 실패")
                     }
                 } else {
+                    Log.e(TAG, "❌ [CALL_FLOW] Firestore에 해당 콜 문서 없음 - callId=$callId")
                 }
             } catch (e: Exception) {
+                Log.e(TAG, "❌ [CALL_FLOW] showCallDialog 예외: ${e.message}", e)
             }
         }
     }
@@ -913,10 +929,14 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun assignNewCall(driverId: String) {
+        Log.d(TAG, "🔔🔔🔔 [CALL_FLOW] assignNewCall 호출됨 - driverId=$driverId")
         val callInfo = _newCallInfo.value
         if (callInfo != null) {
+            Log.d(TAG, "🔔🔔🔔 [CALL_FLOW] _newCallInfo 있음 - callId=${callInfo.id}, assignCallToDriver 호출")
             assignCallToDriver(callInfo, driverId)
             dismissNewCallPopup()
+        } else {
+            Log.e(TAG, "❌ [CALL_FLOW] _newCallInfo가 null - 배차 불가")
         }
     }
 
