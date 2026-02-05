@@ -216,16 +216,38 @@ private fun DriverDetailCard(
     onConfirmSettlement: (String, Long) -> Unit = { _, _ -> },
     onClick: () -> Unit
 ) {
-    // 총 미지급금 계산
+    // 미지급금 계산 - 기사앱과 동일한 통합 로직 적용
     val carryOverBalance = carryOver?.balance ?: 0L
     val status = carryOver?.status
 
-    // 상태별 미지급금 계산
-    val totalUnpaid = when (status) {
-        CarryOverStatus.SETTLED -> 0L  // 수령 완료 → 0
-        CarryOverStatus.TRANSFERRED -> carryOverBalance  // 이체됨 → balance에 이미 오늘분 포함
-        else -> carryOverBalance + todayUnpaid  // PENDING → 이월분 + 오늘분
+    // rawFinalDeposit = 오늘 운행으로 납입해야 할 금액 (사무실몫 - 미수금)
+    val rawFinalDeposit = stat.realDeposit.toLong()
+
+    // 미지급금에서 공제된 금액 (양수 납입액이 있을 때만 공제)
+    val usedFromCarryOver = if (status == CarryOverStatus.PENDING && rawFinalDeposit > 0 && carryOverBalance > 0) {
+        minOf(carryOverBalance, rawFinalDeposit)
+    } else {
+        0L
     }
+
+    // 상태별 남은 미지급금 계산
+    val remainingCarryOver = when (status) {
+        CarryOverStatus.SETTLED -> 0L  // 수령 완료 → 0
+        CarryOverStatus.TRANSFERRED -> carryOverBalance  // 이체됨 → 저장된 balance 사용
+        else -> {
+            // PENDING: 통합 계산 로직 적용
+            if (rawFinalDeposit > 0) {
+                // 납입액이 있으면 carryOver에서 공제
+                maxOf(0L, carryOverBalance - rawFinalDeposit)
+            } else {
+                // 납입액이 없거나 음수면 이월분 + 오늘 발생분
+                carryOverBalance + todayUnpaid
+            }
+        }
+    }
+
+    // totalUnpaid를 remainingCarryOver로 대체
+    val totalUnpaid = remainingCarryOver
 
     // 업무마감 정보
     val hasSubmitted = dailySettlement?.hasSubmitted == true
@@ -348,7 +370,7 @@ private fun DriverDetailCard(
                         fontWeight = FontWeight.Bold
                     )
 
-                    // 이월/오늘 분리 표시
+                    // 이월/공제/오늘 분리 표시 - 기사앱과 동일한 표시 로직
                     if (status == CarryOverStatus.TRANSFERRED) {
                         // TRANSFERRED: 저장된 값 사용 (이미 이체된 금액)
                         val transferredTodayAmount = carryOver?.todayAmount ?: 0L
@@ -368,7 +390,7 @@ private fun DriverDetailCard(
                             )
                         }
                     } else {
-                        // PENDING: 로컬 계산값 사용
+                        // PENDING: 통합 계산 로직 적용
                         if (carryOverBalance > 0) {
                             Text(
                                 "이월: ${"%,d".format(carryOverBalance)}원",
@@ -376,9 +398,18 @@ private fun DriverDetailCard(
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
-                        if (todayUnpaid > 0) {
+                        // 오늘 공제 표시 (양수 납입액으로 미지급금이 줄어든 경우)
+                        if (usedFromCarryOver > 0) {
                             Text(
-                                "오늘: +${"%,d".format(todayUnpaid)}원",
+                                "오늘 공제: -${"%,d".format(usedFromCarryOver)}원",
+                                color = Color(0xFF66FF66),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        // 오늘 발생 미지급금 (음수 납입액으로 추가 발생한 경우)
+                        if (todayUnpaid > 0 && rawFinalDeposit <= 0) {
+                            Text(
+                                "오늘 발생: +${"%,d".format(todayUnpaid)}원",
                                 color = Color(0xFFFFAA00),
                                 style = MaterialTheme.typography.bodySmall
                             )
