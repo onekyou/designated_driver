@@ -43,23 +43,27 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
     // 일일 정산 (기사별 업무마감) 데이터
     val dailySettlementList by vm.dailySettlementList.collectAsState()
 
-    // 기사별 오늘 미지급금 계산 (로컬 trips 기반)
+    // 기사별 오늘 미지급금 계산 (로컬 trips 기반) - 기사앱과 동일한 로직
+    // rawFinalDeposit = deposit - totalCredit (사무실몫 - 외상)
     val todayUnpaidByDriver = remember(trips, ratio) {
         trips.groupBy { it.driverId }
             .filter { it.key.isNotBlank() }
             .mapValues { (_, driverTrips) ->
                 val fareSum = driverTrips.sumOf { it.fare }
-                val cashReceived = driverTrips.sumOf { trip ->
+                val totalCredit = driverTrips.sumOf { trip ->
                     when {
-                        trip.paymentMethod == "현금" -> trip.fare
-                        trip.paymentMethod.startsWith("현금+") -> trip.cashAmount ?: 0
-                        else -> 0
+                        trip.paymentMethod == "현금" -> 0
+                        trip.paymentMethod == "현금+포인트" -> {
+                            val cash = trip.cashAmount ?: 0
+                            if (cash > 0) trip.fare - cash else trip.fare
+                        }
+                        else -> trip.fare // 이체, 외상은 전액 외상
                     }
                 }
-                val driverShare = (fareSum * (100 - ratio) / 100.0).toInt()
-                val realDeposit = cashReceived - driverShare
-                // 음수면 미지급금 발생
-                if (realDeposit < 0) -realDeposit else 0
+                val deposit = (fareSum * ratio / 100.0).toInt()
+                val rawFinalDeposit = deposit - totalCredit
+                // 음수면 미지급금 발생 (사무실이 기사에게 줘야 할 돈)
+                if (rawFinalDeposit < 0) -rawFinalDeposit else 0
             }
     }
 

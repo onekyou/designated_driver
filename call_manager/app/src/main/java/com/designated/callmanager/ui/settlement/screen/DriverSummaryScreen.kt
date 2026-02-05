@@ -50,23 +50,27 @@ fun DriverSummaryScreen(vm: SettlementViewModel = viewModel()) {
         dailySettlementList.associateBy { it.driverId }
     }
 
-    // 기사별 오늘 미지급금 계산 (로컬 trips 기반)
+    // 기사별 오늘 미지급금 계산 (로컬 trips 기반) - 기사앱과 동일한 로직
+    // rawFinalDeposit = deposit - totalCredit (사무실몫 - 외상)
     val todayUnpaidByDriver = remember(trips, ratio) {
         trips.groupBy { it.driverId }
             .filter { it.key.isNotBlank() }
             .mapValues { (_, driverTrips) ->
                 val fareSum = driverTrips.sumOf { it.fare }
-                val cashReceived = driverTrips.sumOf { trip ->
+                val totalCredit = driverTrips.sumOf { trip ->
                     when {
-                        trip.paymentMethod == "현금" -> trip.fare
-                        trip.paymentMethod.startsWith("현금+") -> trip.cashAmount ?: 0
-                        else -> 0
+                        trip.paymentMethod == "현금" -> 0
+                        trip.paymentMethod == "현금+포인트" -> {
+                            val cash = trip.cashAmount ?: 0
+                            if (cash > 0) trip.fare - cash else trip.fare
+                        }
+                        else -> trip.fare // 이체, 외상은 전액 외상
                     }
                 }
-                val driverShare = (fareSum * (100 - ratio) / 100.0).toInt()
-                val realDeposit = cashReceived - driverShare
-                // 음수면 미지급금 발생
-                if (realDeposit < 0) -realDeposit else 0
+                val deposit = (fareSum * ratio / 100.0).toInt()
+                val rawFinalDeposit = deposit - totalCredit
+                // 음수면 미지급금 발생 (사무실이 기사에게 줘야 할 돈)
+                if (rawFinalDeposit < 0) -rawFinalDeposit else 0
             }
     }
 
@@ -221,7 +225,12 @@ private fun DriverDetailCard(
     val status = carryOver?.status
 
     // rawFinalDeposit = 오늘 운행으로 납입해야 할 금액 (사무실몫 - 미수금)
+    // stat.realDeposit = deposit - totalCredit (기사앱의 officeDeposit - totalCredit과 동일)
     val rawFinalDeposit = stat.realDeposit.toLong()
+
+    // 오늘 발생 미지급금 직접 계산 (기사앱과 동일한 로직)
+    // rawFinalDeposit < 0 이면 사무실이 기사에게 줘야 할 돈
+    val calculatedTodayUnpaid = if (rawFinalDeposit < 0) -rawFinalDeposit else 0L
 
     // 미지급금에서 공제된 금액 (양수 납입액이 있을 때만 공제)
     val usedFromCarryOver = if (status == CarryOverStatus.PENDING && rawFinalDeposit > 0 && carryOverBalance > 0) {
@@ -235,13 +244,13 @@ private fun DriverDetailCard(
         CarryOverStatus.SETTLED -> 0L  // 수령 완료 → 0
         CarryOverStatus.TRANSFERRED -> carryOverBalance  // 이체됨 → 저장된 balance 사용
         else -> {
-            // PENDING: 통합 계산 로직 적용
+            // PENDING: 통합 계산 로직 적용 (기사앱과 동일)
             if (rawFinalDeposit > 0) {
                 // 납입액이 있으면 carryOver에서 공제
                 maxOf(0L, carryOverBalance - rawFinalDeposit)
             } else {
                 // 납입액이 없거나 음수면 이월분 + 오늘 발생분
-                carryOverBalance + todayUnpaid
+                carryOverBalance + calculatedTodayUnpaid
             }
         }
     }
@@ -407,9 +416,9 @@ private fun DriverDetailCard(
                             )
                         }
                         // 오늘 발생 미지급금 (음수 납입액으로 추가 발생한 경우)
-                        if (todayUnpaid > 0 && rawFinalDeposit <= 0) {
+                        if (calculatedTodayUnpaid > 0 && rawFinalDeposit <= 0) {
                             Text(
-                                "오늘 발생: +${"%,d".format(todayUnpaid)}원",
+                                "오늘 발생: +${"%,d".format(calculatedTodayUnpaid)}원",
                                 color = Color(0xFFFFAA00),
                                 style = MaterialTheme.typography.bodySmall
                             )
