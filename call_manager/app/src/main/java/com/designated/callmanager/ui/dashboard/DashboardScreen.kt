@@ -190,6 +190,10 @@ fun DashboardScreen(
     // 새 호출 입력 다이얼로그 관련
     val showNewCallInputDialog by viewModel.showNewCallInputDialog.collectAsStateWithLifecycle()
 
+    // 내부호출 배차팝업 관련
+    val internalCallForAssignment by viewModel.internalCallForAssignment.collectAsStateWithLifecycle()
+    var showInternalCallInfoInput by remember { mutableStateOf(false) }
+
     var showSharedSettings by remember { mutableStateOf(false) }
 
     var selectedSharedCall by remember { mutableStateOf<SharedCallInfo?>(null) }
@@ -552,7 +556,7 @@ fun DashboardScreen(
                     },
                     title = "내부 호출 목록",
                     onCallClick = { callInfo -> viewModel.showCallDialog(callInfo.id) },
-                    onAddCallClick = { viewModel.showNewCallInputDialog() }
+                    onAddCallClick = { viewModel.createEmptyCallAndShowAssignment() }
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -613,6 +617,49 @@ fun DashboardScreen(
                 showSharedAcceptDialog = false
                 selectedSharedCall = null
             }
+        )
+    }
+
+    // 내부호출 배차팝업
+    if (internalCallForAssignment != null) {
+        val call = internalCallForAssignment!!
+        val waitingDrivers = drivers.filter { driver ->
+            val statusEnum = DriverStatus.fromString(driver.status?.trim() ?: "")
+            statusEnum == DriverStatus.WAITING || statusEnum == DriverStatus.ONLINE
+        }
+        InternalCallAssignDialog(
+            callInfo = call,
+            availableDrivers = waitingDrivers,
+            onDismiss = { viewModel.dismissInternalCallAssignment() },
+            onInfoInputClick = { showInternalCallInfoInput = true },
+            onConfirm = { departure, destination, fare, driver ->
+                // 정보 업데이트 후 기사 배정
+                if (departure.isNotBlank() || destination.isNotBlank() || fare > 0) {
+                    viewModel.updateInternalCallInfo(call.id, call.phoneNumber, departure, destination, fare.toLong())
+                }
+                if (driver != null) {
+                    val updatedCall = call.copy(
+                        departure_set = departure.ifBlank { null },
+                        destination_set = destination.ifBlank { null },
+                        fare_set = if (fare > 0) fare.toLong() else null
+                    )
+                    viewModel.assignCallToDriver(updatedCall, driver.id)
+                }
+                viewModel.dismissInternalCallAssignment()
+            }
+        )
+    }
+
+    // 내부호출 정보입력 팝업
+    if (showInternalCallInfoInput && internalCallForAssignment != null) {
+        val call = internalCallForAssignment!!
+        NewCallInputDialog(
+            onDismiss = { showInternalCallInfoInput = false },
+            onConfirm = { phoneNumber, departure, destination, fare ->
+                viewModel.updateInternalCallInfo(call.id, phoneNumber, departure, destination, fare)
+                showInternalCallInfoInput = false
+            },
+            isLoading = false
         )
     }
 
@@ -1955,6 +2002,153 @@ fun DriverBottomBar(drivers: List<DriverInfo>) {
     }
 }
 
+/**
+ * 내부호출 배차팝업
+ * 새콜 추가 시 바로 표시되며, 정보가 비어있으면 노란색 "정보입력" 카드 표시
+ */
+@Composable
+fun InternalCallAssignDialog(
+    callInfo: CallInfo,
+    availableDrivers: List<DriverInfo>,
+    onDismiss: () -> Unit,
+    onInfoInputClick: () -> Unit,
+    onConfirm: (departure: String, destination: String, fare: Int, driver: DriverInfo?) -> Unit
+) {
+    var departure by remember { mutableStateOf(callInfo.departure_set ?: "") }
+    var destination by remember { mutableStateOf(callInfo.destination_set ?: "") }
+    var fareText by remember { mutableStateOf((callInfo.fare_set ?: 0).toString()) }
+    var selectedDriver by remember { mutableStateOf<DriverInfo?>(null) }
+
+    // 정보가 비어있는지 확인
+    val isInfoEmpty = callInfo.phoneNumber.isBlank() &&
+                      callInfo.departure_set.isNullOrBlank() &&
+                      callInfo.destination_set.isNullOrBlank() &&
+                      (callInfo.fare_set == null || callInfo.fare_set == 0L)
+
+    val departureFocusRequester = remember { FocusRequester() }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("새 호출 배차", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // 정보가 비어있으면 노란색 정보입력 카드 표시
+                if (isInfoEmpty) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFFFEB3B)  // 노란색
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "고객 정보 미입력",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.Black
+                                )
+                            }
+                            Button(
+                                onClick = onInfoInputClick,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF333333)
+                                ),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                            ) {
+                                Text("정보입력", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                } else {
+                    // 정보가 있으면 표시
+                    if (callInfo.phoneNumber.isNotBlank()) {
+                        Text("연락처: ${callInfo.phoneNumber}", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+
+                OutlinedTextField(
+                    value = departure,
+                    onValueChange = { departure = it },
+                    label = { Text("출발지") },
+                    placeholder = { Text("예: 서울역") },
+                    singleLine = true,
+                    modifier = Modifier.focusRequester(departureFocusRequester)
+                )
+                OutlinedTextField(
+                    value = destination,
+                    onValueChange = { destination = it },
+                    label = { Text("도착지") },
+                    placeholder = { Text("예: 강남역") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = fareText,
+                    onValueChange = { fareText = it.filter { c -> c.isDigit() } },
+                    label = { Text("요금") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+
+                Spacer(Modifier.height(8.dp))
+                Text("기사 선택", fontWeight = FontWeight.Medium)
+
+                if (availableDrivers.isEmpty()) {
+                    Text("대기 중인 기사가 없습니다.", color = Color.Gray)
+                } else {
+                    LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
+                        items(availableDrivers) { driver ->
+                            val isSelected = selectedDriver?.id == driver.id
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { selectedDriver = driver },
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                                )
+                            ) {
+                                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(driver.name, Modifier.weight(1f))
+                                    if (isSelected) {
+                                        Icon(Icons.Filled.Check, contentDescription = null)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onDismiss) { Text("취소") }
+                Button(
+                    onClick = {
+                        val fare = fareText.toIntOrNull() ?: 0
+                        onConfirm(departure, destination, fare, selectedDriver)
+                    },
+                    enabled = selectedDriver != null
+                ) {
+                    Text("배차")
+                }
+            }
+        }
+    )
+}
+
 @Composable
 fun SharedCallAcceptDialog(
     sharedCall: SharedCallInfo,
@@ -2678,7 +2872,7 @@ fun NewCallInputDialog(
                         val fare = fareText.toLongOrNull() ?: 0L
                         onConfirm(phoneNumber, departure, destination, fare)
                     },
-                    enabled = !isLoading && phoneNumber.isNotBlank()
+                    enabled = !isLoading
                 ) {
                     if (isLoading) {
                         CircularProgressIndicator(

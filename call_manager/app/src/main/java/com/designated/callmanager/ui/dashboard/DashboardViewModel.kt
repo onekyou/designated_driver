@@ -228,6 +228,10 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _showNewCallInputDialog = MutableStateFlow(false)
     val showNewCallInputDialog: StateFlow<Boolean> = _showNewCallInputDialog
 
+    // 내부호출 배차팝업 관련 (새콜 추가 시 바로 표시)
+    private val _internalCallForAssignment = MutableStateFlow<CallInfo?>(null)
+    val internalCallForAssignment: StateFlow<CallInfo?> = _internalCallForAssignment.asStateFlow()
+
     // 새 호출 생성 중 로딩 상태 (중복 클릭 방지)
     private val _isCreatingCall = MutableStateFlow(false)
     val isCreatingCall: StateFlow<Boolean> = _isCreatingCall.asStateFlow()
@@ -1041,6 +1045,138 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun dismissNewCallInputDialog() {
         _showNewCallInputDialog.value = false
         _pendingNewCallData.value = null
+    }
+
+    /**
+     * 빈 콜 생성 후 바로 내부호출 배차팝업 표시
+     */
+    fun createEmptyCallAndShowAssignment() {
+        if (_isCreatingCall.value) {
+            Log.d(TAG, "새 콜 생성 중 - 중복 클릭 무시")
+            return
+        }
+
+        val province = _provinceId.value ?: return
+        val city = _cityId.value ?: return
+        val office = _officeId.value ?: return
+
+        val officeRef = firestore.collection("provinces").document(province)
+            .collection("cities").document(city)
+            .collection("offices").document(office)
+
+        viewModelScope.launch {
+            _isCreatingCall.value = true
+            try {
+                val nowTs = Timestamp.now()
+                val timestampClient = System.currentTimeMillis()
+                val data = hashMapOf(
+                    "phoneNumber" to "",
+                    "customerAddress" to "",
+                    "customerName" to "",
+                    "timestamp" to nowTs,
+                    "timestampClient" to timestampClient,
+                    "status" to CallStatus.WAITING.firestoreValue,
+                    "provinceId" to province,
+                    "cityId" to city,
+                    "officeId" to office,
+                    "createdBy" to (auth.currentUser?.uid ?: ""),
+                    "departure_set" to null,
+                    "destination_set" to null,
+                    "fare_set" to null
+                )
+
+                val docRef = officeRef.collection("calls").add(data).await()
+
+                // 로컬 DB에도 저장
+                callRepository.insertCallFromFCM(
+                    callId = docRef.id,
+                    phoneNumber = "",
+                    customerName = "",
+                    customerAddress = "",
+                    status = CallStatus.WAITING.firestoreValue,
+                    provinceId = province,
+                    officeId = office,
+                    callType = null,
+                    fromCallDetector = false,
+                    assignedDriverId = null,
+                    assignedDriverName = null,
+                    assignedDriverPhone = null
+                )
+
+                Log.d(TAG, "빈 콜 생성 완료: ${docRef.id}")
+
+                // 생성된 콜로 내부호출 배차팝업 표시
+                val createdCall = CallInfo(
+                    id = docRef.id,
+                    phoneNumber = "",
+                    customerName = "",
+                    customerAddress = null,
+                    status = CallStatus.WAITING.firestoreValue,
+                    timestamp = nowTs,
+                    departure_set = null,
+                    destination_set = null,
+                    fare_set = null,
+                    fromCallManager = true
+                )
+                _internalCallForAssignment.value = createdCall
+
+            } catch (e: Exception) {
+                Log.e(TAG, "빈 콜 생성 실패", e)
+                _snackbarMessage.value = "호출 생성 실패: ${e.message}"
+            } finally {
+                _isCreatingCall.value = false
+            }
+        }
+    }
+
+    /**
+     * 내부호출 배차팝업 닫기
+     */
+    fun dismissInternalCallAssignment() {
+        _internalCallForAssignment.value = null
+    }
+
+    /**
+     * 내부호출 정보 업데이트 (정보입력 팝업에서 호출)
+     */
+    fun updateInternalCallInfo(callId: String, phoneNumber: String, departure: String, destination: String, fare: Long) {
+        val province = _provinceId.value ?: return
+        val city = _cityId.value ?: return
+        val office = _officeId.value ?: return
+
+        val callRef = firestore.collection("provinces").document(province)
+            .collection("cities").document(city)
+            .collection("offices").document(office)
+            .collection("calls").document(callId)
+
+        viewModelScope.launch {
+            try {
+                val updateData = mutableMapOf<String, Any?>(
+                    "phoneNumber" to phoneNumber,
+                    "customerAddress" to departure.ifBlank { "" },
+                    "departure_set" to departure.ifBlank { null },
+                    "destination_set" to destination.ifBlank { null },
+                    "fare_set" to if (fare > 0) fare else null
+                )
+
+                callRef.update(updateData as Map<String, Any>).await()
+
+                // 로컬 상태도 업데이트
+                _internalCallForAssignment.value?.let { current ->
+                    _internalCallForAssignment.value = current.copy(
+                        phoneNumber = phoneNumber,
+                        customerAddress = departure.ifBlank { null },
+                        departure_set = departure.ifBlank { null },
+                        destination_set = destination.ifBlank { null },
+                        fare_set = if (fare > 0) fare else null
+                    )
+                }
+
+                Log.d(TAG, "내부호출 정보 업데이트 완료: $callId")
+            } catch (e: Exception) {
+                Log.e(TAG, "내부호출 정보 업데이트 실패", e)
+            }
+        }
     }
 
     /**
