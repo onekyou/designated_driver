@@ -24,8 +24,10 @@ import com.designated.driverapp.data.settlement.DriverCarryOver
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import android.app.Activity
 import android.content.Context
 import androidx.compose.ui.platform.LocalContext
+import com.google.firebase.auth.FirebaseAuth
 import org.json.JSONArray
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
@@ -463,23 +465,27 @@ fun HistorySettlementScreen(
             // 최종 납입액 계산 (사무실 몫 - 외상)
             val finalDeposit = officeDeposit - totalCredit
 
-            // 실납입 입력 상태
-            var actualDepositInput by remember { mutableStateOf("") }
+            // 실납입 상태 (입력 필드 없이 기본값 표시 + 확인/정정)
+            var actualDeposit by remember { mutableStateOf(0) }
             var isDepositConfirmed by remember { mutableStateOf(false) }
+            var showDepositEditDialog by remember { mutableStateOf(false) }
+            var depositEditInput by remember { mutableStateOf("") }
 
             // 정산 카드 접기/펼치기 상태
             var isSettlementExpanded by remember { mutableStateOf(false) }
-            val actualDeposit = actualDepositInput.toIntOrNull() ?: 0
+
+            // 표시 금액: 확인 전이면 finalDeposit 기본값, 확인 후면 actualDeposit
+            val displayDeposit = if (isDepositConfirmed) actualDeposit else (if (finalDeposit > 0) finalDeposit else 0)
 
             // 현금 수령액
             val cashReceived = todaySettlement.cashReceived
 
-            // 수입금 = 현금 수령 - 실납입
-            val actualReceived = cashReceived - actualDeposit
+            // 수입금 = 현금 수령 - 실납입 (확인 전이면 기본값 사용)
+            val actualReceived = cashReceived - displayDeposit
 
             // 총 정산 차액 = (실납입 - 최종 납입액) + 이월 환급금
             // 양수: 환급금 (기사가 받을 돈), 음수: 미납금 (기사가 더 낼 돈)
-            val totalSettlementDiff = (actualDeposit - finalDeposit) + carryOverBalance
+            val totalSettlementDiff = (displayDeposit - finalDeposit) + carryOverBalance
 
             // 수령완료 확인 다이얼로그
             if (showReceiveConfirmDialog) {
@@ -615,111 +621,149 @@ fun HistorySettlementScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // 실납입 입력 필드
+                    // 실납입 카드 (입력 필드 없이 금액 표시 + 확인/정정 버튼)
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF333333)),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Column(
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(12.dp)
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("실납입", color = Color.White, style = MaterialTheme.typography.bodyMedium)
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (isDepositConfirmed) {
-                                        // 확인 완료 상태: 금액 표시만
-                                        Text(
-                                            "%,d".format(actualDeposit),
-                                            color = Color(0xFF4CAF50),
+                            // 실납입 라벨
+                            Text("실납입", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+
+                            // 금액 + 버튼
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                // 금액 표시
+                                Text(
+                                    "%,d원".format(displayDeposit),
+                                    color = if (isDepositConfirmed) Color(0xFF4CAF50) else Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+
+                                // 확인 체크 표시 (확인 완료 시)
+                                if (isDepositConfirmed) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("✓", color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
+                                }
+
+                                Spacer(modifier = Modifier.width(12.dp))
+
+                                // 확인/정정 버튼
+                                if (!isDepositConfirmed) {
+                                    // 미확인 상태: 확인 버튼
+                                    Button(
+                                        onClick = {
+                                            actualDeposit = displayDeposit
+                                            isDepositConfirmed = true
+                                        },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = Color(0xFF4CAF50)
+                                        ),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                        modifier = Modifier.height(32.dp)
+                                    ) {
+                                        Text("확인", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                }
+
+                                // 정정 버튼 (항상 표시)
+                                Button(
+                                    onClick = {
+                                        depositEditInput = displayDeposit.toString()
+                                        showDepositEditDialog = true
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF666666)
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(32.dp)
+                                ) {
+                                    Text("정정", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+                    }
+
+                    // 실납입 정정 다이얼로그
+                    if (showDepositEditDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showDepositEditDialog = false },
+                            title = { Text("실납입 금액 수정", color = Color.White) },
+                            text = {
+                                Column {
+                                    Text("실제 납입한 금액을 입력하세요", color = Color.Gray)
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    BasicTextField(
+                                        value = depositEditInput,
+                                        onValueChange = { newValue ->
+                                            if (newValue.all { it.isDigit() }) {
+                                                depositEditInput = newValue
+                                            }
+                                        },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        singleLine = true,
+                                        textStyle = androidx.compose.ui.text.TextStyle(
+                                            color = Color.White,
                                             fontWeight = FontWeight.Bold,
-                                            style = MaterialTheme.typography.bodyMedium
-                                        )
-                                    } else {
-                                        // 입력 상태: 입력 필드
-                                        BasicTextField(
-                                            value = actualDepositInput,
-                                            onValueChange = { newValue ->
-                                                // 숫자만 입력 허용
-                                                if (newValue.all { it.isDigit() }) {
-                                                    actualDepositInput = newValue
-                                                }
-                                            },
-                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                            singleLine = true,
-                                            textStyle = androidx.compose.ui.text.TextStyle(
-                                                color = Color.White,
-                                                fontWeight = FontWeight.Bold,
-                                                textAlign = androidx.compose.ui.text.style.TextAlign.End
-                                            ),
-                                            modifier = Modifier
-                                                .width(100.dp)
-                                                .background(Color(0xFF222222), RoundedCornerShape(4.dp))
-                                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                                            decorationBox = { innerTextField ->
-                                                Box(contentAlignment = Alignment.CenterEnd) {
-                                                    if (actualDepositInput.isEmpty()) {
+                                            fontSize = MaterialTheme.typography.headlineSmall.fontSize,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.End
+                                        ),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color(0xFF222222), RoundedCornerShape(8.dp))
+                                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                                        decorationBox = { innerTextField ->
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.End,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                                                    if (depositEditInput.isEmpty()) {
                                                         Text(
                                                             "0",
                                                             color = Color.Gray,
                                                             fontWeight = FontWeight.Bold,
+                                                            fontSize = MaterialTheme.typography.headlineSmall.fontSize,
                                                             textAlign = androidx.compose.ui.text.style.TextAlign.End
                                                         )
                                                     }
                                                     innerTextField()
                                                 }
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text("원", color = Color.White, style = MaterialTheme.typography.bodyLarge)
                                             }
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("원", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                                        }
+                                    )
                                 }
-                            }
-
-                            // 확인/정정 버튼
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End
-                            ) {
-                                if (isDepositConfirmed) {
-                                    // 확인 완료 상태: 정정 버튼
-                                    Button(
-                                        onClick = { isDepositConfirmed = false },
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = Color(0xFF666666)
-                                        ),
-                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                                        modifier = Modifier.height(32.dp)
-                                    ) {
-                                        Text("정정", style = MaterialTheme.typography.bodySmall)
-                                    }
-                                } else {
-                                    // 입력 상태: 확인 버튼
-                                    Button(
-                                        onClick = {
-                                            if (actualDepositInput.isNotEmpty()) {
-                                                isDepositConfirmed = true
-                                            }
-                                        },
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = Color(0xFF4CAF50)
-                                        ),
-                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                                        modifier = Modifier.height(32.dp),
-                                        enabled = actualDepositInput.isNotEmpty()
-                                    ) {
-                                        Text("확인", style = MaterialTheme.typography.bodySmall)
-                                    }
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = {
+                                        actualDeposit = depositEditInput.toIntOrNull() ?: 0
+                                        isDepositConfirmed = true
+                                        showDepositEditDialog = false
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                                ) {
+                                    Text("확인")
                                 }
-                            }
-                        }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showDepositEditDialog = false }) {
+                                    Text("취소", color = Color.White)
+                                }
+                            },
+                            containerColor = Color(0xFF2A2A2A)
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -737,8 +781,8 @@ fun HistorySettlementScreen(
                         )
                     }
 
-                    // 총 정산 차액 (실납입 입력 시에만 표시, 이월 환급금 포함)
-                    if (actualDepositInput.isNotEmpty() && totalSettlementDiff != 0) {
+                    // 총 정산 차액 (실납입 확인 시에만 표시, 이월 환급금 포함)
+                    if (isDepositConfirmed && totalSettlementDiff != 0) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(
@@ -788,7 +832,7 @@ fun HistorySettlementScreen(
                     title = { Text("업무마감", color = Color.White) },
                     text = {
                         Column {
-                            Text("오늘의 정산을 마감하시겠습니까?", color = Color.White)
+                            Text("업무를 마감하고 로그아웃 하시겠습니까?", color = Color.White)
                             Spacer(modifier = Modifier.height(12.dp))
                             Text("실납입: %,d원".format(actualDeposit), color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
                             if (totalSettlementDiff != 0) {
@@ -804,7 +848,8 @@ fun HistorySettlementScreen(
                             Spacer(modifier = Modifier.height(8.dp))
                             Text("마감 시 처리 내용:", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
                             Text("• 매니저에게 정산 확인 요청", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-                            Text("• 운행/정산 내역 저장 및 초기화", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                            Text("• 운행/정산 내역 저장", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                            Text("• 로그아웃 및 앱 종료", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
                         }
                     },
                     confirmButton = {
@@ -828,14 +873,28 @@ fun HistorySettlementScreen(
                                         saveSessions(context, updatedSessions)
                                         sessionList = updatedSessions
 
-                                        // 2. 정산 상태 초기화
+                                        // 2. 정산 상태 초기화 후 로그아웃
                                         viewModel.clearSettlement(
                                             onSuccess = {
                                                 isSubmitting = false
                                                 showEndWorkDialog = false
-                                                // 실납입 입력 상태도 초기화
-                                                actualDepositInput = ""
-                                                isDepositConfirmed = false
+
+                                                // 3. 로그아웃 및 앱 종료
+                                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                                    // SharedPreferences 로그인 정보 제거
+                                                    val loginPrefs = context.getSharedPreferences("driver_login_prefs", Context.MODE_PRIVATE)
+                                                    loginPrefs.edit()
+                                                        .putBoolean("auto_login", false)
+                                                        .remove("identifier")
+                                                        .remove("password")
+                                                        .apply()
+
+                                                    // Firebase Auth 로그아웃
+                                                    FirebaseAuth.getInstance().signOut()
+
+                                                    // 앱 종료
+                                                    (context as? Activity)?.finishAffinity()
+                                                }, 500)
                                             },
                                             onError = { errorMsg ->
                                                 Log.e("HistorySettlement", "정산 초기화 실패: $errorMsg")

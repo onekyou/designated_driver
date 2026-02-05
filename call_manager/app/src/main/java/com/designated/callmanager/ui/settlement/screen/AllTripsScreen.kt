@@ -22,7 +22,9 @@ import com.designated.callmanager.ui.settlement.screen.CreditDialog
 import com.designated.callmanager.data.settlement.DriverCarryOverSummary
 import com.designated.callmanager.data.settlement.CarryOverStatus
 import android.app.Activity
+import android.content.Context
 import androidx.compose.ui.platform.LocalContext
+import com.google.firebase.auth.FirebaseAuth
 
 @Composable
 fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
@@ -369,8 +371,20 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
                                 if (success) {
                                     vm.clearAllTrips()
                                     finalizeResultMessage = message
-                                    // 잠시 후 앱 종료
+                                    // 잠시 후 로그아웃 및 앱 종료
                                     android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                        // 1. SharedPreferences 로그인 정보 제거
+                                        val loginPrefs = context.getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
+                                        loginPrefs.edit()
+                                            .putBoolean("auto_login", false)
+                                            .remove("email")
+                                            .remove("password")
+                                            .apply()
+
+                                        // 2. Firebase Auth 로그아웃
+                                        FirebaseAuth.getInstance().signOut()
+
+                                        // 3. 앱 종료
                                         (context as? Activity)?.finishAffinity()
                                     }, 1500)
                                 } else {
