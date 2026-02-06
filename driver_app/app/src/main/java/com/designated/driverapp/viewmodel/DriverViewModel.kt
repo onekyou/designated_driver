@@ -1321,17 +1321,42 @@ class DriverViewModel @Inject constructor(
                 val (provinceId, cityId, officeId) = getDriverLocationInfo()
                 val driverId = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
 
+                val driverRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                    .collection(Constants.COLLECTION_CITIES).document(cityId)
+                    .collection(Constants.COLLECTION_OFFICES).document(officeId)
+                    .collection(Constants.COLLECTION_DRIVERS).document(driverId)
+
+                // 기존 dailySettlement 읽기 (통합 여부 확인)
+                val driverDoc = driverRef.get().await()
+                @Suppress("UNCHECKED_CAST")
+                val existingSettlementMap = driverDoc.get("dailySettlement") as? Map<String, Any?>
+                val prevSettlement = DriverDailySettlement.fromMap(existingSettlementMap)
+                val isIntegration = prevSettlement.status == DailySettlementStatus.PENDING_CONFIRM
+
                 val settlement = _todaySettlement.value
                 val ratio = _depositRatio.value
-                val carryOverBalance = _carryOver.value?.balance?.toInt() ?: 0
 
-                // 최종 납입액 = 사무실 몫 - 외상 (= rawFinalDeposit)
-                val finalDeposit = settlement.officeDeposit - settlement.totalCredit
-                // 총 정산 차액 = (실납입 - 최종 납입액) + 이월 환급금
-                val totalSettlementDiff = (realDeposit - finalDeposit) + carryOverBalance
+                // 통합 시: 원본 carryOver.balance 사용, 신규 시: 현재 carryOver 사용
+                val originalCarryOverBalance = if (isIntegration) {
+                    // 통합: 이전 마감에 기록된 originalCarryOver 사용 (최초 값 유지)
+                    prevSettlement.originalCarryOver.toInt()
+                } else {
+                    // 신규: 현재 carryOver 사용
+                    _carryOver.value?.balance?.toInt() ?: 0
+                }
 
-                // 남은 미환급금 = 기존 미환급금 - 납입해야 할 금액 + 실제 납입 금액
-                val remainingCarryOver = carryOverBalance - finalDeposit + realDeposit
+                // 통합 시 이전 세션 값 합산
+                val mergedTripCount = if (isIntegration) prevSettlement.tripCount + settlement.tripCount else settlement.tripCount
+                val mergedTotalFare = if (isIntegration) prevSettlement.totalFare + settlement.totalFare else settlement.totalFare.toLong()
+                val mergedTotalCredit = if (isIntegration) prevSettlement.totalCredit + settlement.totalCredit else settlement.totalCredit.toLong()
+                val mergedRealDeposit = if (isIntegration) prevSettlement.realDeposit + realDeposit else realDeposit.toLong()
+
+                // 통합된 값 기준으로 납입금 계산
+                val mergedOfficeDeposit = (mergedTotalFare * ratio / 100)
+                val mergedFinalDeposit = mergedOfficeDeposit - mergedTotalCredit
+
+                // 통합 기준 carryOver 재계산 (원본 carryOver 기준)
+                val remainingCarryOver = originalCarryOverBalance - mergedFinalDeposit.toInt() + mergedRealDeposit.toInt()
 
                 // 날짜 계산: 6시 이전이면 전날로 처리 (콜매니저와 동일한 로직)
                 val cal = java.util.Calendar.getInstance()
@@ -1343,27 +1368,33 @@ class DriverViewModel @Inject constructor(
 
                 val dailySettlement = DriverDailySettlement(
                     date = today,
-                    finalDeposit = finalDeposit.toLong(),
-                    realDeposit = realDeposit.toLong(),
-                    settlementDiff = totalSettlementDiff.toLong(),
-                    totalFare = settlement.totalFare.toLong(),
-                    totalCredit = settlement.totalCredit.toLong(),
-                    tripCount = settlement.tripCount,
+                    finalDeposit = mergedFinalDeposit,
+                    realDeposit = mergedRealDeposit,
+                    settlementDiff = (mergedRealDeposit - mergedFinalDeposit) + originalCarryOverBalance,
+                    totalFare = mergedTotalFare,
+                    totalCredit = mergedTotalCredit,
+                    tripCount = mergedTripCount,
                     status = DailySettlementStatus.PENDING_CONFIRM,
                     submittedAt = Timestamp.now(),
                     calculatedCarryOver = remainingCarryOver.toLong(),
-                    originalCarryOver = carryOverBalance.toLong()
+                    originalCarryOver = originalCarryOverBalance.toLong()
                 )
-
-                val driverRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
-                    .collection(Constants.COLLECTION_CITIES).document(cityId)
-                    .collection(Constants.COLLECTION_OFFICES).document(officeId)
-                    .collection(Constants.COLLECTION_DRIVERS).document(driverId)
 
                 driverRef.update("dailySettlement", dailySettlement.toMap()).await()
 
-                Log.d(TAG, "Daily settlement submitted: realDeposit=$realDeposit, diff=$totalSettlementDiff")
-                onResult(true, "업무마감이 완료되었습니다. 매니저 확인을 기다려주세요.")
+                val logMsg = if (isIntegration) {
+                    "Daily settlement MERGED: prev=${prevSettlement.tripCount}건 + curr=${settlement.tripCount}건 = ${mergedTripCount}건, realDeposit=$mergedRealDeposit"
+                } else {
+                    "Daily settlement submitted: tripCount=${mergedTripCount}, realDeposit=$mergedRealDeposit"
+                }
+                Log.d(TAG, logMsg)
+
+                val resultMsg = if (isIntegration) {
+                    "업무마감이 완료되었습니다. (이전 ${prevSettlement.tripCount}건 + 추가 ${settlement.tripCount}건 통합)"
+                } else {
+                    "업무마감이 완료되었습니다. 매니저 확인을 기다려주세요."
+                }
+                onResult(true, resultMsg)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to submit daily settlement", e)
                 onResult(false, "업무마감 실패: ${e.message}")
