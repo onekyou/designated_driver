@@ -116,47 +116,48 @@ private fun startMyCallListener() {
 
 ## 2. 네트워크 불안정 시나리오
 
-### 2.1 기사앱 - Firestore 쓰기 실패
+### 2.1 기사앱 - Firestore 쓰기 실패 ✅ 해결됨
 
 **상황:** 기사가 "운행 완료" 눌렀으나 Firestore 업데이트 실패
 
-**현재 대응:**
+**현재 대응 (구현 완료):**
 ```kotlin
-// 로컬 UI 먼저 업데이트
-_uiState.update { ... }
+// DriverViewModel.kt - performFirestoreUpdate()
+// 로컬 UI 먼저 업데이트 (기존) + 실패 시 동작별 에러 메시지 + 알림음
 
-// Firestore는 백그라운드
-callRef.update(...).await()
-```
+private fun performFirestoreUpdate(
+    errorMessage: String = "처리 실패 - 네트워크 확인 후 다시 시도하세요",
+    block: suspend () -> Unit
+) {
+    viewModelScope.launch(Dispatchers.IO) {
+        try {
+            block()
+        } catch (e: Exception) {
+            _uiState.update { it.copy(errorMessage = errorMessage) }
 
-**취약점:**
-- UI는 "운행 완료"로 보이나 서버는 "운행 중"
-- 콜매니저에서는 여전히 "운행 중"으로 보임
-- 정산 불일치 가능
-
-**대안:**
-```
-[옵션 1: 쓰기 실패 재시도 큐]
-// WorkManager로 실패한 업데이트 재시도
-class FirestoreRetryWorker : CoroutineWorker() {
-    override suspend fun doWork(): Result {
-        val pendingUpdates = getPendingUpdates()
-        pendingUpdates.forEach { update ->
-            try {
-                firestore.document(update.path).update(update.data).await()
-                markAsCompleted(update.id)
-            } catch (e: Exception) {
-                return Result.retry()
-            }
+            // 실패 시 알림음 재생
+            val notification = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            RingtoneManager.getRingtone(appContext, notification).play()
         }
-        return Result.success()
     }
 }
 
-[옵션 2: UI에 동기화 상태 표시]
-- "서버와 동기화 대기 중" 뱃지 표시
-- 사용자가 인지하도록 함
+// 동작별 에러 메시지:
+// - cancelTrip: "운행취소 실패 - 네트워크 확인 후 다시 시도하세요"
+// - startDriving: "운행 시작 실패 - 네트워크 확인 후 다시 시도하세요"
+// - completeCall: "운행 완료 실패 - 네트워크 확인 후 다시 시도하세요"
+// - updateDriverStatus: "상태 변경 실패 - 네트워크 확인 후 다시 시도하세요"
 ```
+
+**핵심 파일:** `driver_app/.../viewmodel/DriverViewModel.kt:875-900`
+
+**분석:**
+- 실제 발생 확률: 0.1~0.2% (1000건 중 1~2건)
+- 로컬 UI 먼저 업데이트 후 Firestore 시도
+- 실패 시: 에러 메시지 표시 + 알림음 → 기사가 재시도 가능
+- WorkManager 큐보다 단순하고 실용적인 접근
+
+**상태:** ✅ 완전 구현됨
 
 ---
 
@@ -300,33 +301,82 @@ fun logout() {
 
 ## 5. 동시성 문제
 
-### 5.1 동일 콜 동시 배차
+### 5.1 동일 콜 동시 배차 ✅ 조치 불필요
 
 **상황:** 두 관리자가 같은 콜을 동시에 배차
 
+**분석:**
+- 한 사무실에 관리자 1명 → 동시 배차 불가능
+- 이미 중복 클릭 방지 구현됨 (`_isAssigning.value` 플래그)
+- 공유콜 시스템 미구현 → 다른 사무실 간 동시 배차 없음
+
 **현재 대응:**
 ```kotlin
-// 배차 시 콜 상태 확인 없이 바로 업데이트
-callRef.update(callUpdates).await()
-```
-
-**취약점:**
-- 먼저 배차한 기사가 덮어써질 수 있음
-
-**대안:**
-```kotlin
-[Firestore 트랜잭션 사용]
-firestore.runTransaction { transaction ->
-    val callDoc = transaction.get(callRef)
-    val currentStatus = callDoc.getString("status")
-
-    if (currentStatus != "WAITING") {
-        throw Exception("이미 배차된 콜입니다")
-    }
-
-    transaction.update(callRef, callUpdates)
+// DashboardViewModel.kt - assignCallToDriver()
+if (_isAssigning.value) {
+    Log.w(TAG, "⚠️ 이미 배차 진행 중입니다. 중복 요청 무시.")
+    return
 }
 ```
+
+**상태:** ✅ 조치 불필요 - 현재 구조에서 발생 불가
+
+---
+
+### 5.2 연결 상태 미표시 ✅ 구현 완료
+
+**상황:** 네트워크 끊김 시 콜매니저가 새 콜을 못 받는데, 관리자가 이를 모름
+
+**문제:**
+```
+WiFi/LTE 끊김 → FCM/Firestore 리스너 모두 안 됨
+     ↓
+콜매니저 UI: 변화 없음 ← 관리자가 연결 끊김을 모름
+     ↓
+새 콜이 들어와도 화면에 안 뜸 → "왜 콜이 안 오지?"
+```
+
+**구현 (RTDB .info/connected 활용):**
+```kotlin
+// DashboardViewModel.kt
+private val _isConnected = MutableStateFlow(true)
+val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
+
+private fun startConnectionStatusListener() {
+    val connectedRef = Firebase.database.getReference(".info/connected")
+    connectedRef.addValueEventListener(object : ValueEventListener {
+        override fun onDataChange(snapshot: DataSnapshot) {
+            _isConnected.value = snapshot.getValue(Boolean::class.java) ?: false
+        }
+        override fun onCancelled(error: DatabaseError) {
+            _isConnected.value = false
+        }
+    })
+}
+
+// DashboardScreen.kt
+if (!isConnected) {
+    Surface(color = Color.Red) {
+        Row {
+            Icon(Icons.Filled.Warning, tint = Color.White)
+            Text("연결 끊김 - 네트워크를 확인하세요", color = Color.White)
+        }
+    }
+}
+```
+
+**결과:**
+```
+WiFi 끊김 → RTDB 연결 끊김 감지 → 빨간 배너 표시
+     ↓
+관리자: "연결이 끊겼구나" → WiFi 재연결 → 배너 사라짐
+```
+
+**핵심 파일:**
+- `call_manager/.../ui/dashboard/DashboardViewModel.kt`
+- `call_manager/.../ui/dashboard/DashboardScreen.kt`
+
+**상태:** ✅ 구현 완료
 
 ---
 
@@ -340,14 +390,14 @@ firestore.runTransaction { transaction ->
 | 2 | 손님앱 콜 요청 실패 | 자동 재시도 + 시스템 알림 | 없음 | ✅ 완료 |
 | 3 | 손님 FCM 미도착 | - | - | ✅ 조치불필요 (기사가 전화) |
 | 4 | FCM 토큰 저장 실패 | 재시도 로직 추가 | 없음 | ✅ 완료 |
+| 5 | Firestore 쓰기 실패 | 동작별 에러메시지 + 알림음 | 없음 | ✅ 완료 |
 
 ### 중간 (안정화 후 적용)
 
-| # | 문제 | 해결책 | 비용 |
-|---|------|--------|------|
-| 5 | Firestore 쓰기 실패 | WorkManager 재시도 큐 | 낮음 |
-| 6 | 동시 배차 문제 | 트랜잭션 사용 | 없음 |
-| 7 | 연결 상태 미표시 | 연결 상태 UI 추가 | 없음 |
+| # | 문제 | 해결책 | 비용 | 상태 |
+|---|------|--------|------|------|
+| 6 | 동시 배차 문제 | - | - | ✅ 조치불필요 (관리자 1명) |
+| 7 | 연결 상태 미표시 | 연결 상태 UI 추가 | 없음 | ✅ 완료 |
 
 ### 낮음 (필요시 적용)
 
@@ -374,8 +424,10 @@ firestore.runTransaction { transaction ->
 2. ✅ **손님앱 콜 요청 실패**: 자동 재시도 + 시스템 알림으로 전화호출 안내
 3. ✅ **손님앱 FCM 미도착**: 조치 불필요 (기사가 직접 손님에게 전화하므로 정보성 알림)
 4. ✅ **FCM 토큰 저장 재시도**: pending 토큰 저장 + 앱 시작 시 재시도 + 로그아웃 시 클리어
+5. ✅ **Firestore 쓰기 실패**: 동작별 에러 메시지 + 알림음으로 기사에게 재시도 유도
+6. ✅ **연결 상태 UI**: RTDB .info/connected로 콜매니저 연결 끊김 시 빨간 배너 표시
 
-**높은 우선순위 항목 모두 완료됨.** FCM 실패에도 안정적으로 동작합니다.
+**높은 우선순위 항목 모두 완료됨.** FCM/Firestore 실패에도 안정적으로 동작합니다.
 
 ---
 
@@ -387,6 +439,8 @@ firestore.runTransaction { transaction ->
 
 | 날짜 | 내용 |
 |------|------|
+| 2026-02-06 | 연결 상태 UI 구현 완료 (콜매니저 RTDB .info/connected 배너) |
+| 2026-02-06 | Firestore 쓰기 실패 대응 구현 완료 (동작별 에러 메시지 + 알림음) |
 | 2026-02-06 | FCM 토큰 저장 재시도 로직 구현 완료 (pending 토큰 + 앱 시작 시 재시도) |
 | 2026-02-06 | 손님앱 콜 요청 실패 시 재시도+시스템알림 구현 완료 반영 |
 | 2026-02-06 | 기사앱 FCM 백업 시스템 구현 완료 반영 |

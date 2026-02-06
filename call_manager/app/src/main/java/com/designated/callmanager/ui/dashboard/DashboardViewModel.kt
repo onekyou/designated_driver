@@ -33,6 +33,10 @@ import com.google.firebase.firestore.Query
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.ktx.functions
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.ValueEventListener
+import com.google.firebase.database.ktx.database
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -261,6 +265,10 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _closingSettlements = MutableStateFlow<List<ClosingSettlement>>(emptyList())
     val closingSettlements: StateFlow<List<ClosingSettlement>> = _closingSettlements.asStateFlow()
 
+    // 연결 상태 (RTDB .info/connected)
+    private val _isConnected = MutableStateFlow(true)
+    val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
+
     private var callsListener: ListenerRegistration? = null
     private var driversListener: ListenerRegistration? = null
     private var officeStatusListener: ListenerRegistration? = null
@@ -277,6 +285,21 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     init {
         fetchCurrentUserAndStartListening()
+        startConnectionStatusListener()
+    }
+
+    private fun startConnectionStatusListener() {
+        val connectedRef = Firebase.database.getReference(".info/connected")
+        connectedRef.addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                _isConnected.value = snapshot.getValue(Boolean::class.java) ?: false
+                Log.d(TAG, "연결 상태 변경: ${_isConnected.value}")
+            }
+            override fun onCancelled(error: DatabaseError) {
+                Log.e(TAG, "연결 상태 리스너 오류: ${error.message}")
+                _isConnected.value = false
+            }
+        })
     }
 
     fun resetApprovalActionState() {

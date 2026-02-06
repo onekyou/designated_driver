@@ -138,6 +138,7 @@ fun DashboardScreen(
     val officeName by viewModel.officeName.collectAsStateWithLifecycle()
     val officeId by viewModel.officeId.collectAsStateWithLifecycle()
     val officeStatus by viewModel.officeStatus.collectAsStateWithLifecycle()
+    val isConnected by viewModel.isConnected.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     var callIdForDriverAssignment by remember { mutableStateOf<String?>(null) }
@@ -547,6 +548,32 @@ fun DashboardScreen(
             Column(
                 modifier = Modifier.fillMaxSize().padding(paddingValues)
             ) {
+                // 연결 끊김 배너
+                if (!isConnected) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color.Red
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.Warning,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "연결 끊김 - 네트워크를 확인하세요",
+                                color = Color.White,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                }
+
                 CallListContainer(
                     modifier = Modifier.fillMaxWidth().weight(5.4f),
                     calls = calls.filter { call ->
