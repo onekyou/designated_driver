@@ -1,11 +1,16 @@
 package com.designated.customer.ui.main
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
+import android.os.Build
 import androidx.compose.runtime.getValue
+import androidx.core.app.NotificationCompat
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
@@ -24,6 +29,7 @@ import com.designated.customer.data.model.WeeklyStepSummary
 import com.designated.customer.data.model.BannerAdData
 import com.designated.customer.service.BannerAdService
 import com.designated.customer.data.model.MonthlyStepSummary
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -281,7 +287,14 @@ class MainViewModel(
                     pointsUsed = if (uiState.usePoints) uiState.pointsToUse else 0
                 )
 
-                val callId = callService.requestCall(call)
+                // 콜 요청 시도 (실패 시 1회 재시도)
+                val callId = try {
+                    callService.requestCall(call)
+                } catch (firstError: Exception) {
+                    android.util.Log.w("MainViewModel", "콜 요청 첫 번째 시도 실패, 재시도 중...", firstError)
+                    delay(1000) // 1초 대기 후 재시도
+                    callService.requestCall(call) // 재시도
+                }
 
                 // 콜 상태를 업데이트하고 포인트 사용 상태 초기화, 바텀시트 닫기
                 uiState = uiState.copy(
@@ -296,10 +309,13 @@ class MainViewModel(
                     showLocationCard = false  // 바텀시트 닫기
                 )
             } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "콜 요청 최종 실패 (재시도 후)", e)
                 uiState = uiState.copy(
                     isLoadingCall = false,
-                    error = "콜 요청 중 오류가 발생했습니다: ${e.message}"
+                    error = "콜 요청에 실패했습니다. 네트워크 연결을 확인해주세요."
                 )
+                // 시스템 알림으로 손님에게 안내
+                showCallFailedNotification()
             }
         }
     }
@@ -687,6 +703,56 @@ class MainViewModel(
 
     fun clearError() {
         uiState = uiState.copy(error = null)
+    }
+
+    /**
+     * 콜 요청 실패 시 시스템 알림 표시
+     * 손님이 앱을 닫아도 알림을 볼 수 있도록 함
+     */
+    private fun showCallFailedNotification() {
+        context?.let { ctx ->
+            val channelId = "call_failed_channel"
+            val notificationManager = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+            // Android 8.0 이상에서 알림 채널 생성
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    channelId,
+                    "콜 요청 실패 알림",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "앱 호출 실패 시 알림"
+                    enableVibration(true)
+                }
+                notificationManager.createNotificationChannel(channel)
+            }
+
+            // 앱을 열기 위한 PendingIntent
+            val intent = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)
+            val pendingIntent = PendingIntent.getActivity(
+                ctx,
+                0,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            // 알림 생성
+            val notification = NotificationCompat.Builder(ctx, channelId)
+                .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                .setContentTitle("앱 호출 실패")
+                .setContentText("네트워크 연결 확인 후 다시 시도하거나 전화호출 버튼을 눌러주세요")
+                .setStyle(NotificationCompat.BigTextStyle()
+                    .bigText("네트워크 연결 확인 후 다시 시도하거나 전화호출 버튼을 눌러주세요"))
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .setVibrate(longArrayOf(0, 500, 200, 500))
+                .build()
+
+            notificationManager.notify(1001, notification)
+
+            android.util.Log.d("MainViewModel", "콜 요청 실패 시스템 알림 표시")
+        }
     }
 
     // 포인트 관련 메서드들
