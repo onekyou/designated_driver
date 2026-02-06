@@ -75,6 +75,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
 
     private var sessionsListener: ListenerRegistration? = null
     private var callsListener: ListenerRegistration? = null
+    private var callsListener2: ListenerRegistration? = null  // completedAt 기준 리스너
     private var carryOverListener: ListenerRegistration? = null
 
     private val database = CallManagerDatabase.getInstance(getApplication())
@@ -374,6 +375,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
     /** 신규 COMPLETED 콜에 대한 실시간 리스너 */
     private fun startCallsListener(provinceId: String, cityId: String, officeId: String, sinceMillis: Long) {
         callsListener?.remove()
+        callsListener2?.remove()
         val baseQuery = firestore.collection("provinces").document(provinceId)
             .collection("cities").document(cityId)
             .collection("offices").document(officeId)
@@ -428,7 +430,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                 }
             }
 
-        firestore.collection("provinces").document(provinceId)
+        callsListener2 = firestore.collection("provinces").document(provinceId)
             .collection("cities").document(cityId)
             .collection("offices").document(officeId)
             .collection("calls")
@@ -510,6 +512,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
         super.onCleared()
         sessionsListener?.remove()
         callsListener?.remove()
+        callsListener2?.remove()
         carryOverListener?.remove()
     }
 

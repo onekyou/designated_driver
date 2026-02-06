@@ -14,6 +14,20 @@ class DriverApplication : Application() {
 
     private val TAG = "DriverApplication"
 
+    companion object {
+        /**
+         * 앱이 포그라운드 상태인지 여부
+         * ProcessLifecycleOwner에 의해 정확하게 관리됨
+         */
+        @Volatile
+        var isInForeground: Boolean = false
+            private set
+
+        internal fun setForegroundState(inForeground: Boolean) {
+            isInForeground = inForeground
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
 
@@ -46,12 +60,14 @@ class DriverApplication : Application() {
         override fun onStart(owner: LifecycleOwner) {
             // 앱이 포그라운드로 전환
             Log.d(TAG, "앱 포그라운드 전환")
+            setForegroundState(true)
             PresenceManager.onAppForeground()
         }
 
         override fun onStop(owner: LifecycleOwner) {
             // 앱이 백그라운드로 전환
             Log.d(TAG, "앱 백그라운드 전환")
+            setForegroundState(false)
             PresenceManager.onAppBackground()
         }
     }

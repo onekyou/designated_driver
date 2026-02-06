@@ -1,6 +1,5 @@
 package com.designated.driverapp
 
-import android.app.ActivityManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -135,16 +134,9 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     private fun isAppInForeground(): Boolean {
-        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        val appProcesses = activityManager.runningAppProcesses ?: return false
-        val packageName = packageName
-        for (appProcess in appProcesses) {
-            if (appProcess.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
-                && appProcess.processName == packageName) {
-                return true
-            }
-        }
-        return false
+        // ProcessLifecycleOwner 기반의 정확한 포그라운드 상태 확인
+        // (Android 12+ 에서도 정확하게 동작)
+        return DriverApplication.isInForeground
     }
 
     private fun showNotification(title: String, body: String, callId: String?) {

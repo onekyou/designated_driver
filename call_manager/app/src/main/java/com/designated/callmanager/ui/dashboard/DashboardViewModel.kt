@@ -266,6 +266,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private var officeStatusListener: ListenerRegistration? = null
     private var sharedCallsListener: ListenerRegistration? = null
     private var allSharedCallsListener: ListenerRegistration? = null
+    private var activeCallsListener: ListenerRegistration? = null  // 미완료 콜 실시간 리스너 (FCM 백업용)
     // Repository 패턴으로 변경됨 - Firebase 리스너 제거
 
     private val callsCache = mutableMapOf<String, CallInfo>()
@@ -558,6 +559,58 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 Log.e(TAG, "기사 데이터 새로고침 실패", e)
             }
         }
+
+        // 4. 미완료 콜 실시간 리스너 (FCM 백업용, 비용 최소화)
+        // 조건: 1시간 내 생성된 미완료 콜만 감시 (보통 0-2개)
+        startActiveCallsListener(provinceId, cityId, officeId)
+    }
+
+    /**
+     * 미완료 콜 실시간 리스너 (FCM 백업용)
+     * 조건: 1시간 내 생성 + 미완료 상태 (OPEN, ASSIGNED, IN_PROGRESS)
+     * 비용: 보통 0-2개 문서만 감시하므로 매우 저렴
+     */
+    private fun startActiveCallsListener(provinceId: String, cityId: String, officeId: String) {
+        activeCallsListener?.remove()
+
+        val oneHourAgo = com.google.firebase.Timestamp(
+            java.util.Date(System.currentTimeMillis() - 60 * 60 * 1000)
+        )
+
+        activeCallsListener = firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
+            .collection("offices").document(officeId)
+            .collection("calls")
+            .whereIn("status", listOf("OPEN", "WAITING", "ASSIGNED", "IN_PROGRESS"))
+            .whereGreaterThan("timestamp", oneHourAgo)
+            .addSnapshotListener { snapshots, e ->
+                if (e != null) {
+                    Log.w(TAG, "미완료 콜 리스너 오류", e)
+                    return@addSnapshotListener
+                }
+
+                val activeCalls = snapshots?.documents?.size ?: 0
+                Log.d(TAG, "🔄 미완료 콜 리스너: ${activeCalls}개 감지")
+
+                // 변경된 콜을 로컬 DB에 upsert (FCM과 중복되어도 REPLACE로 처리됨)
+                viewModelScope.launch {
+                    snapshots?.documentChanges?.forEach { dc ->
+                        if (dc.type == com.google.firebase.firestore.DocumentChange.Type.ADDED ||
+                            dc.type == com.google.firebase.firestore.DocumentChange.Type.MODIFIED) {
+                            val doc = dc.document
+                            try {
+                                val callInfo = parseCallDocument(doc)
+                                if (callInfo != null) {
+                                    callRepository.upsertCallFromListener(callInfo, provinceId, officeId)
+                                    Log.d(TAG, "🔄 리스너에서 콜 upsert: ${callInfo.id}")
+                                }
+                            } catch (ex: Exception) {
+                                Log.e(TAG, "리스너 콜 파싱 실패: ${doc.id}", ex)
+                            }
+                        }
+                    }
+                }
+            }
     }
 
     /**
@@ -1333,12 +1386,14 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         officeStatusListener?.remove()
         sharedCallsListener?.remove()
         allSharedCallsListener?.remove()
+        activeCallsListener?.remove()
         // Repository 패턴으로 변경됨 - Firebase 리스너 제거
         callsListener = null
         driversListener = null
         officeStatusListener = null
         sharedCallsListener = null
         allSharedCallsListener = null
+        activeCallsListener = null
         // Repository 패턴으로 변경됨
     }
 

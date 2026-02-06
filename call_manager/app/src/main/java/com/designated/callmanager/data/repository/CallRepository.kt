@@ -284,6 +284,24 @@ class CallRepository(
         }
     }
 
+    /**
+     * 리스너에서 감지된 콜 저장 (FCM 백업용)
+     * CallInfo 객체를 받아 로컬 DB에 upsert
+     */
+    suspend fun upsertCallFromListener(
+        callInfo: CallInfo,
+        provinceId: String,
+        officeId: String
+    ) = withContext(Dispatchers.IO) {
+        try {
+            val localCall = callInfo.toLocalCallInfo(provinceId, officeId)
+            callDao.upsertCall(localCall)
+            Log.d(TAG, "[리스너] 콜 upsert 완료: ${callInfo.id}")
+        } catch (e: Exception) {
+            Log.e(TAG, "[리스너] 콜 upsert 실패: ${callInfo.id}", e)
+        }
+    }
+
     // ========================================
     // 사용자 액션 (낙관적 업데이트)
     // ========================================
