@@ -88,6 +88,14 @@ class DriverViewModel @Inject constructor(
     private val _lastClearedMillis = MutableStateFlow(0L)
     val lastClearedMillis: StateFlow<Long> = _lastClearedMillis.asStateFlow()
 
+    // 콜 수락 중 (중복 클릭 방지)
+    private val _isAccepting = MutableStateFlow(false)
+    val isAccepting: StateFlow<Boolean> = _isAccepting.asStateFlow()
+
+    // 업무마감 중 (중복 클릭 방지)
+    private val _isSubmittingSettlement = MutableStateFlow(false)
+    val isSubmittingSettlement: StateFlow<Boolean> = _isSubmittingSettlement.asStateFlow()
+
     // calls 기반 오늘 정산 데이터
     data class TodaySettlement(
         val totalFare: Int = 0,           // 총 운행료
@@ -355,7 +363,16 @@ class DriverViewModel @Inject constructor(
      *  3) 팝업을 닫고( newCallPopup=null ) 로컬 UI 업데이트
      *  Firestore 리스너가 activeCall 을 업데이트하므로 별도 fetch 는 생략.
      */
-    fun acceptCall(callId: String) = performFirestoreUpdate {
+    fun acceptCall(callId: String) {
+        // 중복 클릭 방지
+        if (_isAccepting.value) {
+            Log.w(TAG, "⚠️ 이미 콜 수락 진행 중입니다. 중복 요청 무시.")
+            return
+        }
+        _isAccepting.value = true
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
         Log.d(TAG, "🔵 acceptCall 시작 - callId: $callId")
 
         val (provinceId, cityId, officeId) = getDriverLocationInfo()
@@ -430,6 +447,13 @@ class DriverViewModel @Inject constructor(
         Log.d(TAG, "🔵 Transaction 완료")
 
         Log.d(TAG, "✅ 콜 수락 완료: $callId")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ 콜 수락 실패: ${e.message}", e)
+                _uiState.update { it.copy(errorMessage = e.message ?: "콜 수락 중 오류가 발생했습니다.") }
+            } finally {
+                _isAccepting.value = false
+            }
+        }
     }
 
     fun rejectCall(callId: String) {
@@ -1285,6 +1309,13 @@ class DriverViewModel @Inject constructor(
         realDeposit: Int,
         onResult: (Boolean, String) -> Unit
     ) {
+        // 중복 클릭 방지
+        if (_isSubmittingSettlement.value) {
+            Log.w(TAG, "⚠️ 이미 업무마감 진행 중입니다. 중복 요청 무시.")
+            return
+        }
+        _isSubmittingSettlement.value = true
+
         viewModelScope.launch {
             try {
                 val (provinceId, cityId, officeId) = getDriverLocationInfo()
@@ -1299,12 +1330,8 @@ class DriverViewModel @Inject constructor(
                 // 총 정산 차액 = (실납입 - 최종 납입액) + 이월 환급금
                 val totalSettlementDiff = (realDeposit - finalDeposit) + carryOverBalance
 
-                // 남은 미환급금 계산 (HistorySettlementScreen.kt와 동일한 로직)
-                val remainingCarryOver = if (finalDeposit > 0) {
-                    maxOf(0, carryOverBalance - finalDeposit)
-                } else {
-                    carryOverBalance + (-finalDeposit)
-                }
+                // 남은 미환급금 = 기존 미환급금 - 납입해야 할 금액 + 실제 납입 금액
+                val remainingCarryOver = carryOverBalance - finalDeposit + realDeposit
 
                 // 날짜 계산: 6시 이전이면 전날로 처리 (콜매니저와 동일한 로직)
                 val cal = java.util.Calendar.getInstance()
@@ -1340,6 +1367,8 @@ class DriverViewModel @Inject constructor(
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to submit daily settlement", e)
                 onResult(false, "업무마감 실패: ${e.message}")
+            } finally {
+                _isSubmittingSettlement.value = false
             }
         }
     }

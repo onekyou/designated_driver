@@ -236,6 +236,10 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _isCreatingCall = MutableStateFlow(false)
     val isCreatingCall: StateFlow<Boolean> = _isCreatingCall.asStateFlow()
 
+    // 배차 중 로딩 상태 (중복 클릭 방지)
+    private val _isAssigning = MutableStateFlow(false)
+    val isAssigning: StateFlow<Boolean> = _isAssigning.asStateFlow()
+
     // 새 호출 입력 다이얼로그에서 입력된 정보
     data class NewCallInputData(
         val phoneNumber: String = "",
@@ -608,6 +612,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun assignCallToDriver(callInfo: CallInfo, driverId: String) {
         Log.d(TAG, "🚀🚀🚀 assignCallToDriver 호출됨! callId=${callInfo.id}, driverId=$driverId")
+
+        // 중복 클릭 방지
+        if (_isAssigning.value) {
+            Log.w(TAG, "⚠️ 이미 배차 진행 중입니다. 중복 요청 무시.")
+            return
+        }
+
         if (_provinceId.value == null || _cityId.value == null || _officeId.value == null) {
             Log.e(TAG, "❌ provinceId/cityId/officeId가 null")
             return
@@ -626,6 +637,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             .collection("cities").document(_cityId.value!!)
             .collection("offices").document(_officeId.value!!)
 
+        _isAssigning.value = true
         viewModelScope.launch {
             try {
                 val driverSnapshot = officePath.collection("designated_drivers").document(driverId).get().await()
@@ -695,6 +707,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             } catch (e: Exception) {
                 Log.e(TAG, "❌ 배차 실패: ${e.message}", e)
                 _snackbarMessage.value = "배차 실패 - 네트워크 연결을 확인 후 다시 시도하세요"
+            } finally {
+                _isAssigning.value = false
             }
         }
     }

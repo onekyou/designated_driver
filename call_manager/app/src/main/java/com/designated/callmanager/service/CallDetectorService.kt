@@ -122,7 +122,7 @@ class CallDetectorService : Service() {
                         val sharedPreferences = getSharedPreferences("call_manager_prefs", Context.MODE_PRIVATE)
                         val isCallDetectionEnabled = sharedPreferences.getBoolean("call_detection_enabled", false)
                         if (!isCallDetectionEnabled) {
-                            return START_NOT_STICKY
+                            return START_STICKY
                         }
 
                         val (contactName, contactAddress) = getContactInfo(applicationContext, finalPhoneNumber)
@@ -157,7 +157,7 @@ class CallDetectorService : Service() {
             }
             else if (callState == TelephonyManager.CALL_STATE_OFFHOOK && isIncomingCall) {
                 if (phoneNumber == lastProcessedPhoneNumber && (currentTime - lastProcessedCallTime) < PROCESSING_THRESHOLD_MS) {
-                    return START_NOT_STICKY
+                    return START_STICKY
                 }
 
                 lastProcessedPhoneNumber = phoneNumber
@@ -181,7 +181,7 @@ class CallDetectorService : Service() {
             }
         } else {
         }
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

@@ -123,7 +123,7 @@ class CallDetectorService : Service() {
                         // 처리 완료 후 리셋
                         lastProcessedPhoneNumber = null
                         lastProcessedCallTime = 0L
-                        return START_NOT_STICKY
+                        return START_STICKY
                     }
                     
                     // 수신전화 종료 시 사무실 상태 확인 후 처리
@@ -164,7 +164,7 @@ class CallDetectorService : Service() {
                 // Check if this OFFHOOK is a duplicate for the *current* call session
                 if (phoneNumber == lastProcessedPhoneNumber && (currentTime - lastProcessedCallTime) < PROCESSING_THRESHOLD_MS) {
                     Log.w(TAG, "⚠️ Duplicate OFFHOOK event for $phoneNumber within threshold. Skipping processing.")
-                    return START_NOT_STICKY
+                    return START_STICKY
                 }
 
                 Log.i(TAG, "✅ Incoming call answered (OFFHOOK). Recording call session - will process when call ends.")
@@ -195,10 +195,9 @@ class CallDetectorService : Service() {
         } else {
             Log.w(TAG, "⚠️ Phone number is null. Cannot process call. State: $callState, Incoming: $isIncomingCall")
         }
-        // 백그라운드에서 오래 실행되는 작업이 아니므로 START_NOT_STICKY 반환
-        // 서비스가 시스템에 의해 종료된 후 자동으로 다시 시작되지 않도록 함.
-        // 명시적으로 startService 또는 startForegroundService를 호출할 때만 실행되도록 의도.
-        return START_NOT_STICKY
+        // 시스템에 의해 종료되어도 자동으로 재시작되도록 START_STICKY 반환
+        // 콜 감지 서비스는 지속적으로 실행되어야 하므로 자동 재시작 필요
+        return START_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

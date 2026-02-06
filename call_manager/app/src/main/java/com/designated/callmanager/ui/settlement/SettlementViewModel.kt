@@ -109,6 +109,10 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
     private val _dailySettlementList = MutableStateFlow<List<DriverDailySettlementSummary>>(emptyList())
     val dailySettlementList: StateFlow<List<DriverDailySettlementSummary>> = _dailySettlementList.asStateFlow()
 
+    // 정산 확인 중 (중복 클릭 방지)
+    private val _isConfirming = MutableStateFlow(false)
+    val isConfirming: StateFlow<Boolean> = _isConfirming.asStateFlow()
+
     init {
         viewModelScope.launch {
             repository.flowActive().collect { entities ->
@@ -1529,6 +1533,12 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
         settlementDiff: Long,
         onResult: (Boolean, String) -> Unit
     ) {
+        // 중복 클릭 방지
+        if (_isConfirming.value) {
+            Log.w("SettlementViewModel", "⚠️ 이미 정산 확인 진행 중입니다. 중복 요청 무시.")
+            return
+        }
+
         val provinceId = currentProvinceId
         val cityId = currentCityId
         val officeId = currentOfficeId
@@ -1546,6 +1556,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
             .collection("offices").document(officeId)
             .collection("designated_drivers").document(driverId)
 
+        _isConfirming.value = true
         viewModelScope.launch {
             firestore.runTransaction { transaction ->
                 val doc = transaction.get(driverRef)
@@ -1595,9 +1606,11 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                     _dailySettlementList.value = currentList
                 }
 
+                _isConfirming.value = false
                 onResult(true, "확인 완료")
             }.addOnFailureListener { e ->
                 Log.e("SettlementViewModel", "Failed to confirm daily settlement", e)
+                _isConfirming.value = false
                 onResult(false, "확인 실패: ${e.message}")
             }
         }
