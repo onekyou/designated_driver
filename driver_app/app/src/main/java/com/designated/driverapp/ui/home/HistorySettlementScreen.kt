@@ -715,6 +715,11 @@ fun HistorySettlementScreen(
                         Text("총 운임", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
                         Text("%,d원".format(totalFare), color = Color.White, style = MaterialTheme.typography.bodyMedium)
                     }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("납입금", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                        Text("%,d원".format(officeDeposit), color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                    }
 
                     Spacer(modifier = Modifier.height(12.dp))
                     Divider(thickness = 1.dp, color = Color(0xFF666666))
@@ -896,7 +901,7 @@ fun HistorySettlementScreen(
 
                     // 수입금 (현금 수령 - 실납입)
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("수입금", color = Color(0xFFFFB000), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                        Text("최종 수입금", color = Color(0xFFFFB000), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
                         Text(
                             "%,d원".format(actualReceived),
                             color = Color(0xFFFFB000),
