@@ -445,11 +445,12 @@ private fun DriverDetailCard(
                     }
 
                     // 예상 납입금 (미환급금 공제 후 실제 납입할 금액) - 기사앱 adjustedDeposit과 동일
+                    // 확인 완료 후에는 "실납입금"으로 표시
                     val expectedDeposit = maxOf(0L, rawFinalDeposit - usedFromCarryOver)
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "예상 납입금: ${"%,d".format(expectedDeposit)}원",
-                        color = Color(0xFF00BFFF),
+                        "${if (isConfirmed) "실납입금" else "예상 납입금"}: ${"%,d".format(expectedDeposit)}원",
+                        color = if (isConfirmed) Color(0xFF4CAF50) else Color(0xFF00BFFF),
                         fontWeight = FontWeight.Bold
                     )
                 }
