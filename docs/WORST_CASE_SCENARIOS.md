@@ -251,51 +251,50 @@ FCM 없이도 배차 감지 가능
 
 ## 4. FCM 토큰 갱신 문제
 
-### 4.1 토큰 갱신 후 서버 반영 실패
+### 4.1 토큰 갱신 후 서버 반영 실패 ✅ 해결됨
 
 **상황:** FCM 토큰이 갱신됐으나 Firestore에 저장 실패
 
-**현재 대응:**
+**현재 대응 (구현 완료):**
 ```kotlin
 // MyFirebaseMessagingService.kt
-override fun onNewToken(token: String) {
-    sendRegistrationToServer(token)
-}
-
 private fun sendRegistrationToServer(token: String) {
-    // Firestore에 토큰 저장
-    driverRef.update(Constants.FIELD_FCM_TOKEN, token)
-        .addOnSuccessListener { }
-        .addOnFailureListener { e -> }  // 로그만 남김
-}
-```
-
-**취약점:**
-- 실패 시 재시도 없음
-- 구 토큰으로 FCM 전송 시 실패
-
-**대안:**
-```kotlin
-[토큰 저장 재시도]
-private fun sendRegistrationToServer(token: String) {
-    // SharedPreferences에 pending 상태로 저장
-    prefs.edit().putString("pending_fcm_token", token).apply()
+    // pending 상태로 토큰 저장 (실패 대비)
+    sharedPreferences.edit()
+        .putString(Constants.PREF_KEY_PENDING_FCM_TOKEN, token)
+        .apply()
 
     driverRef.update(Constants.FIELD_FCM_TOKEN, token)
         .addOnSuccessListener {
-            prefs.edit().remove("pending_fcm_token").apply()
+            // 성공 시 pending 토큰 제거
+            sharedPreferences.edit()
+                .remove(Constants.PREF_KEY_PENDING_FCM_TOKEN)
+                .apply()
         }
         .addOnFailureListener {
-            // 앱 시작 시 재시도하도록 남겨둠
+            // 실패 시 pending 토큰 유지 (앱 시작 시 재시도)
         }
 }
 
-// 앱 시작 시
-val pendingToken = prefs.getString("pending_fcm_token", null)
-if (pendingToken != null) {
-    sendRegistrationToServer(pendingToken)
+// MainActivity.kt - 앱 시작 시 pending 토큰 재시도
+if (currentUser != null) {
+    MyFirebaseMessagingService.retryPendingFcmToken(this)
+}
+
+// LoginViewModel.kt - 로그아웃 시 pending 토큰 제거
+fun logout() {
+    sharedPreferences.edit()
+        .remove(Constants.PREF_KEY_PENDING_FCM_TOKEN)
+        .apply()
 }
 ```
+
+**핵심 파일:**
+- `driver_app/.../MyFirebaseMessagingService.kt:32-89`
+- `driver_app/.../MainActivity.kt:117-118`
+- `driver_app/.../ui/login/LoginViewModel.kt:283-286`
+
+**상태:** ✅ 완전 구현됨 - 추가 조치 불필요
 
 ---
 
@@ -340,7 +339,7 @@ firestore.runTransaction { transaction ->
 | 1 | 기사 배차 알림 미도착 | ACK + 자동재전송 + 실패알림 | 낮음 | ✅ 완료 |
 | 2 | 손님앱 콜 요청 실패 | 자동 재시도 + 시스템 알림 | 없음 | ✅ 완료 |
 | 3 | 손님 FCM 미도착 | - | - | ✅ 조치불필요 (기사가 전화) |
-| 4 | FCM 토큰 저장 실패 | 재시도 로직 추가 | 없음 | ⚠️ 미구현 |
+| 4 | FCM 토큰 저장 실패 | 재시도 로직 추가 | 없음 | ✅ 완료 |
 
 ### 중간 (안정화 후 적용)
 
@@ -374,9 +373,9 @@ firestore.runTransaction { transaction ->
 1. ✅ **기사앱 FCM 백업**: Cloud Functions로 완전 구현 (ACK + 재전송 + 실패알림)
 2. ✅ **손님앱 콜 요청 실패**: 자동 재시도 + 시스템 알림으로 전화호출 안내
 3. ✅ **손님앱 FCM 미도착**: 조치 불필요 (기사가 직접 손님에게 전화하므로 정보성 알림)
-4. ⚠️ **공통**: FCM 토큰 저장 재시도 로직 필요
+4. ✅ **FCM 토큰 저장 재시도**: pending 토큰 저장 + 앱 시작 시 재시도 + 로그아웃 시 클리어
 
-FCM 토큰 재시도만 추가하면 FCM 실패에도 안정적으로 동작합니다.
+**높은 우선순위 항목 모두 완료됨.** FCM 실패에도 안정적으로 동작합니다.
 
 ---
 
@@ -388,6 +387,7 @@ FCM 토큰 재시도만 추가하면 FCM 실패에도 안정적으로 동작합�
 
 | 날짜 | 내용 |
 |------|------|
+| 2026-02-06 | FCM 토큰 저장 재시도 로직 구현 완료 (pending 토큰 + 앱 시작 시 재시도) |
 | 2026-02-06 | 손님앱 콜 요청 실패 시 재시도+시스템알림 구현 완료 반영 |
 | 2026-02-06 | 기사앱 FCM 백업 시스템 구현 완료 반영 |
 | 2024-02 | 최초 작성 |

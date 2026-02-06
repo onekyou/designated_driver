@@ -280,6 +280,10 @@ class LoginViewModel @Inject constructor(
         auth.signOut()
         sessionManager.clearSession()
         securePreferences.clearAutoLoginCredentials()
+        // pending FCM 토큰 제거 (다른 계정 로그인 시 혼선 방지)
+        sharedPreferences.edit()
+            .remove(Constants.PREF_KEY_PENDING_FCM_TOKEN)
+            .apply()
         _loginState.value = LoginState.Idle
     }
 }

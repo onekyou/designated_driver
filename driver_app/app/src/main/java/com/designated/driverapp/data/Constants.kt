@@ -36,6 +36,7 @@ object Constants {
     const val PREF_KEY_PROVINCE_ID = "pref_province_id"
     const val PREF_KEY_CITY_ID = "pref_city_id"
     const val PREF_KEY_OFFICE_ID = "pref_office_id"
+    const val PREF_KEY_PENDING_FCM_TOKEN = "pref_pending_fcm_token"
 
     const val STATUS_WAITING = "WAITING"
     const val STATUS_ASSIGNED = "ASSIGNED"

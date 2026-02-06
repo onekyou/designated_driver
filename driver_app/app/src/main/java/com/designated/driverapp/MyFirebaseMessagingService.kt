@@ -41,6 +41,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val officeId = sharedPreferences.getString(Constants.PREF_KEY_OFFICE_ID, null)
 
         if (userId.isNotBlank() && !provinceId.isNullOrBlank() && !cityId.isNullOrBlank() && !officeId.isNullOrBlank()) {
+            // pending 상태로 토큰 저장 (실패 대비)
+            sharedPreferences.edit()
+                .putString(Constants.PREF_KEY_PENDING_FCM_TOKEN, token)
+                .apply()
+
             val db = Firebase.firestore
             val driverRef = db.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
                 .collection(Constants.COLLECTION_CITIES).document(cityId)
@@ -48,9 +53,69 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 .collection(Constants.COLLECTION_DRIVERS).document(userId)
 
             driverRef.update(Constants.FIELD_FCM_TOKEN, token)
-                .addOnSuccessListener { }
-                .addOnFailureListener { e -> }
-        } else {
+                .addOnSuccessListener {
+                    // 성공 시 pending 토큰 제거
+                    sharedPreferences.edit()
+                        .remove(Constants.PREF_KEY_PENDING_FCM_TOKEN)
+                        .apply()
+                    Log.d(TAG, "FCM 토큰 서버 저장 성공")
+                }
+                .addOnFailureListener { e ->
+                    // 실패 시 pending 토큰 유지 (앱 시작 시 재시도)
+                    Log.e(TAG, "FCM 토큰 서버 저장 실패 - 앱 재시작 시 재시도", e)
+                }
+        }
+    }
+
+    companion object {
+        private const val TAG_STATIC = "MyFirebaseMsgService"
+
+        /**
+         * 앱 시작 시 pending FCM 토큰 재시도
+         * MainActivity에서 호출
+         */
+        fun retryPendingFcmToken(context: Context) {
+            val sharedPreferences = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+            val pendingToken = sharedPreferences.getString(Constants.PREF_KEY_PENDING_FCM_TOKEN, null)
+
+            if (!pendingToken.isNullOrBlank()) {
+                Log.d(TAG_STATIC, "Pending FCM 토큰 발견 - 재시도: $pendingToken")
+
+                val userId = Firebase.auth.currentUser?.uid ?: return
+                val provinceId = sharedPreferences.getString(Constants.PREF_KEY_PROVINCE_ID, null)
+                val cityId = sharedPreferences.getString(Constants.PREF_KEY_CITY_ID, null)
+                val officeId = sharedPreferences.getString(Constants.PREF_KEY_OFFICE_ID, null)
+
+                if (!provinceId.isNullOrBlank() && !cityId.isNullOrBlank() && !officeId.isNullOrBlank()) {
+                    val db = Firebase.firestore
+                    val driverRef = db.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                        .collection(Constants.COLLECTION_CITIES).document(cityId)
+                        .collection(Constants.COLLECTION_OFFICES).document(officeId)
+                        .collection(Constants.COLLECTION_DRIVERS).document(userId)
+
+                    driverRef.update(Constants.FIELD_FCM_TOKEN, pendingToken)
+                        .addOnSuccessListener {
+                            sharedPreferences.edit()
+                                .remove(Constants.PREF_KEY_PENDING_FCM_TOKEN)
+                                .apply()
+                            Log.d(TAG_STATIC, "Pending FCM 토큰 서버 저장 성공")
+                        }
+                        .addOnFailureListener { e ->
+                            Log.e(TAG_STATIC, "Pending FCM 토큰 재시도 실패", e)
+                        }
+                }
+            }
+        }
+
+        /**
+         * 로그아웃 시 pending FCM 토큰 제거
+         */
+        fun clearPendingFcmToken(context: Context) {
+            context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .remove(Constants.PREF_KEY_PENDING_FCM_TOKEN)
+                .apply()
+            Log.d(TAG_STATIC, "Pending FCM 토큰 제거됨")
         }
     }
 

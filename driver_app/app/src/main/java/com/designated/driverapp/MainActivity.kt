@@ -114,6 +114,9 @@ class MainActivity : ComponentActivity() {
         if (currentUser != null) {
             SettlementSyncWorker.enqueuePeriodicSync(this)
             SettlementSyncWorker.enqueueOnNetworkAvailable(this)
+
+            // Pending FCM 토큰 재시도 (이전 저장 실패 시)
+            MyFirebaseMessagingService.retryPendingFcmToken(this)
         }
 
         // 알림 클릭으로 앱이 시작된 경우 잠금화면 해제 및 알림 취소
