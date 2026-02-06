@@ -1587,7 +1587,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
 
                 transaction.update(driverRef, updateData)
 
-                Log.d("SettlementViewModel", "Confirming daily settlement: driver=$driverId, diff=$settlementDiff, oldBalance=$currentBalance, newBalance=$newBalance")
+                Log.d("SettlementViewModel", "Confirming daily settlement: driver=$driverId, newBalance=$newBalance")
 
                 newBalance // 반환값
             }.addOnSuccessListener { newBalance ->

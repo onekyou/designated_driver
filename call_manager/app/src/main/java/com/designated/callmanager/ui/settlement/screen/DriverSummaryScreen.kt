@@ -444,8 +444,8 @@ private fun DriverDetailCard(
                         Text("미지급 없음", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
                     }
 
-                    // 예상 납입금 (미지급금 공제 후 실제 납입할 금액) - 기사앱 실납입과 동일
-                    val expectedDeposit = maxOf(0L, rawFinalDeposit - totalUnpaid)
+                    // 예상 납입금 (미환급금 공제 후 실제 납입할 금액) - 기사앱 adjustedDeposit과 동일
+                    val expectedDeposit = maxOf(0L, rawFinalDeposit - usedFromCarryOver)
                     Spacer(Modifier.height(4.dp))
                     Text(
                         "예상 납입금: ${"%,d".format(expectedDeposit)}원",

@@ -1,6 +1,7 @@
 package com.designated.driverapp
 
 import android.Manifest
+import android.app.KeyguardManager
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -8,6 +9,7 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -114,8 +116,9 @@ class MainActivity : ComponentActivity() {
             SettlementSyncWorker.enqueueOnNetworkAvailable(this)
         }
 
-        // 알림 클릭으로 앱이 시작된 경우 해당 알림 취소
+        // 알림 클릭으로 앱이 시작된 경우 잠금화면 해제 및 알림 취소
         intent.getStringExtra("callId")?.let { callId ->
+            handleLockScreenWakeUp()
             cancelNotification(callId)
         }
 
@@ -330,6 +333,10 @@ class MainActivity : ComponentActivity() {
         val callId = intent.getStringExtra("callId")
         if (!callId.isNullOrBlank() && auth.currentUser != null) {
             Log.d(TAG, "onNewIntent: callId received = $callId")
+
+            // 잠금화면에서 알림 클릭 시 화면 켜기 및 잠금 해제
+            handleLockScreenWakeUp()
+
             driverViewModel.setNotificationCallId(callId)
 
             // 해당 알림 취소 (notificationId = callId.hashCode())
@@ -418,6 +425,37 @@ class MainActivity : ComponentActivity() {
                     Toast.makeText(this, "설정 > 앱 > 기사앱 > 배터리 에서 '제한 없음'을 선택해주세요", Toast.LENGTH_LONG).show()
                 }
             }
+        }
+    }
+
+    /**
+     * 잠금화면에서 알림 클릭 시 화면을 켜고 잠금 해제
+     * Android 8.1(O_MR1) 이상과 이하에서 다르게 처리
+     */
+    private fun handleLockScreenWakeUp() {
+        Log.d(TAG, "잠금화면 해제 처리 시작")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+            val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+            keyguardManager.requestDismissKeyguard(this, object : KeyguardManager.KeyguardDismissCallback() {
+                override fun onDismissSucceeded() {
+                    Log.d(TAG, "잠금화면 해제 성공")
+                }
+                override fun onDismissError() {
+                    Log.e(TAG, "잠금화면 해제 오류")
+                }
+                override fun onDismissCancelled() {
+                    Log.d(TAG, "잠금화면 해제 취소됨")
+                }
+            })
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+            )
         }
     }
 

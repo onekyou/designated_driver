@@ -734,26 +734,7 @@ fun HistorySettlementScreen(
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Column {
-                            Text("최종납입금", color = Color.White, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-                            Text("(납입금-외상)", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-                        }
-                        val depositText = if (rawFinalDeposit >= 0) {
-                            "%,d원".format(rawFinalDeposit)
-                        } else {
-                            "-%,d원 (받을 금액)".format(-rawFinalDeposit)
-                        }
-                        Text(
-                            depositText,
-                            color = if (rawFinalDeposit >= 0) Color.White else Color(0xFF4CAF50),
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    // 미환급금 공제 내역 표시
+                    // 미환급금 공제 내역 표시 (최종납입금 표시 제거 - 로직은 유지)
                     if (usedFromCarryOver > 0) {
                         Spacer(modifier = Modifier.height(4.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
