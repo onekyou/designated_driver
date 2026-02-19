@@ -46,6 +46,7 @@ class CallDetectorService : Service() {
     private var lastProcessedPhoneNumber: String? = null
     private var lastProcessedCallTime: Long = 0
     private val PROCESSING_THRESHOLD_MS = 5000 // 5초 이내의 동일 번호 호출은 중복으로 간주
+    private var wasRinging: Boolean = false // 현재 통화 세션에서 RINGING이 발생했는지 추적 (수신/발신 구분용)
     private val TAG = "CallDetectorService"
     private val CHANNEL_ID = "CallDetectorChannel"
     private val NOTIFICATION_ID = 1
@@ -114,6 +115,7 @@ class CallDetectorService : Service() {
 
             // 1. Handle call ending (IDLE state) - 원래 로직으로 복원
             if (callState == TelephonyManager.CALL_STATE_IDLE) {
+                wasRinging = false // 다음 통화를 위해 RINGING 플래그 리셋
                 if (phoneNumber == lastProcessedPhoneNumber) {
                     Log.i(TAG, "📞 Call with $phoneNumber ended (IDLE state received). Processing call data and showing dispatch popup.")
                     
@@ -161,6 +163,13 @@ class CallDetectorService : Service() {
             }
             // 2. Handle incoming call answered (OFFHOOK state) - 단순히 기록만
             else if (callState == TelephonyManager.CALL_STATE_OFFHOOK && isIncomingCall) {
+                // 방어 로직: RINGING 없이 OFFHOOK이면 발신 전화 → 스킵
+                // 수신전화는 반드시 RINGING → OFFHOOK 순서, 발신전화는 OFFHOOK만 발생
+                if (!wasRinging) {
+                    Log.i(TAG, "⚠️ OFFHOOK without prior RINGING - outgoing call detected (isIncoming flag was stale), skipping")
+                    return START_STICKY
+                }
+
                 // Check if this OFFHOOK is a duplicate for the *current* call session
                 if (phoneNumber == lastProcessedPhoneNumber && (currentTime - lastProcessedCallTime) < PROCESSING_THRESHOLD_MS) {
                     Log.w(TAG, "⚠️ Duplicate OFFHOOK event for $phoneNumber within threshold. Skipping processing.")
@@ -176,7 +185,8 @@ class CallDetectorService : Service() {
             }
             // 3. Handle incoming call ringing (RINGING state) - 마감 시 빠른 SMS 발송
             else if (callState == TelephonyManager.CALL_STATE_RINGING && isIncomingCall) {
-                Log.i(TAG, "📞 Incoming call ringing from: $phoneNumber")
+                wasRinging = true // 수신전화 RINGING 발생 기록
+                Log.i(TAG, "📞 Incoming call ringing from: $phoneNumber (wasRinging set to true)")
                 
                 // 마감 상태인지 확인 후 2-3초 후 SMS 발송
                 serviceScope.launch {

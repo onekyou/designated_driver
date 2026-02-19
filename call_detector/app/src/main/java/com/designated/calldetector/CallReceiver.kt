@@ -100,23 +100,20 @@ class CallReceiver : BroadcastReceiver() {
             Log.i(tag, "Before calling onCallStateChanged - state: $callStateFromTelephony, number to pass: $numberToPass, isIncoming: $isIncomingToPass")
             onCallStateChanged(context, callStateFromTelephony, numberToPass, isIncomingToPass)
 
-            // 통화가 IDLE 상태로 종료되면 다음 통화를 위해 static 변수 초기화
-            // 주의: CallDetectorService가 처리한 후에 초기화되어야 하므로 약간의 지연 후 초기화
+            // 통화가 IDLE 상태로 종료되면 다음 통화를 위해 static 변수 즉시 초기화
+            // 값은 이미 numberToPass/isIncomingToPass에 캡처되어 서비스로 전달되었으므로 즉시 초기화 가능
             if (callStateFromTelephony == TelephonyManager.CALL_STATE_IDLE) {
-                // 서비스가 처리할 시간을 주기 위해 별도 스레드에서 지연 후 초기화
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                    synchronized(CallReceiver::class.java) {
-                        Log.i(tag, "Resetting static variables after delay as call is IDLE.")
-                        staticSavedNumber = null
-                        staticIsIncoming = false
+                synchronized(CallReceiver::class.java) {
+                    Log.i(tag, "Resetting static variables immediately as call is IDLE.")
+                    staticSavedNumber = null
+                    staticIsIncoming = false
 
-                        // CallScreeningService 초기화 (Android 10+)
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            CallScreeningService.clearIncomingNumber()
-                            Log.i(tag, "CallScreeningService phone number cleared")
-                        }
+                    // CallScreeningService 초기화 (Android 10+)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        CallScreeningService.clearIncomingNumber()
+                        Log.i(tag, "CallScreeningService phone number cleared")
                     }
-                }, 1000) // 1초 지연 후 초기화
+                }
             }
         }
     }
