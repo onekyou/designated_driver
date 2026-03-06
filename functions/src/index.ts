@@ -2676,10 +2676,11 @@ export const onCallCancelledByDriver = onDocumentUpdated(
       return;
     }
 
-    // 기사가 배정/수락된 상태에서 -> HOLD 또는 CANCELLED_BY_DRIVER로 변경된 경우
+    // 기사가 배정/수락된 상태에서 -> HOLD, CANCELLED_BY_DRIVER, 또는 CANCELED로 변경된 경우
     const wasCancelled =
       ((beforeData.status === "ASSIGNED" || beforeData.status === "ACCEPTED") && afterData.status === "HOLD") ||
-      ((beforeData.status === "ASSIGNED" || beforeData.status === "ACCEPTED") && afterData.status === "CANCELLED_BY_DRIVER");
+      ((beforeData.status === "ASSIGNED" || beforeData.status === "ACCEPTED") && afterData.status === "CANCELLED_BY_DRIVER") ||
+      ((beforeData.status === "ASSIGNED" || beforeData.status === "ACCEPTED") && afterData.status === "CANCELED");
 
     if (!wasCancelled) {
       return;

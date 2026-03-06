@@ -50,6 +50,40 @@ class CallService(
     }
 
     /**
+     * 고객의 활성 콜 1건 조회 (FCM 미수신 시 fallback)
+     * WAITING, ASSIGNED, ACCEPTED, IN_PROGRESS 상태의 최신 콜 반환
+     */
+    suspend fun getActiveCall(phoneNumber: String): CustomerCall? {
+        val activeStatuses = listOf("WAITING", "ASSIGNED", "ACCEPTED", "IN_PROGRESS")
+        return try {
+            for (status in activeStatuses) {
+                val snapshot = firestore
+                    .collection("provinces").document(provinceId)
+                    .collection("cities").document(cityId)
+                    .collection("offices").document(officeId)
+                    .collection("calls")
+                    .whereEqualTo("phoneNumber", phoneNumber)
+                    .whereEqualTo("status", status)
+                    .orderBy("timestamp", Query.Direction.DESCENDING)
+                    .limit(1)
+                    .get()
+                    .await()
+
+                val call = snapshot.documents.firstOrNull()?.data?.let { CustomerCall.fromMap(it) }
+                if (call != null) {
+                    android.util.Log.d("CallService", "활성 콜 발견: ${call.id}, status=$status")
+                    return call
+                }
+            }
+            android.util.Log.d("CallService", "활성 콜 없음")
+            null
+        } catch (e: Exception) {
+            android.util.Log.e("CallService", "활성 콜 조회 오류", e)
+            null
+        }
+    }
+
+    /**
      * 고객의 콜 내역 조회
      */
     suspend fun getCustomerCallHistory(

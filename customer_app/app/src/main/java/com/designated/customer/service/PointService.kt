@@ -252,6 +252,64 @@ class PointService(
     }
 
     /**
+     * 포인트 환불 (콜 생성 실패 시 사용한 포인트 복구)
+     */
+    suspend fun refundPoints(
+        phoneNumber: String,
+        amount: Int,
+        description: String = "콜 요청 실패로 인한 포인트 환불"
+    ): Boolean {
+        return try {
+            val points = getCustomerPoints(phoneNumber) ?: return false
+
+            val newBalance = points.currentPoints + amount
+
+            val updatedPoints = points.copy(
+                currentPoints = newBalance,
+                totalUsed = points.totalUsed - amount,
+                lastUpdated = Timestamp.now()
+            )
+
+            val pointTransaction = PointTransaction(
+                id = UUID.randomUUID().toString(),
+                customerId = phoneNumber,
+                type = TransactionType.CANCEL,
+                amount = amount,
+                balance = newBalance,
+                description = description,
+                grade = points.grade.name,
+                timestamp = Timestamp.now()
+            )
+
+            firestore.runTransaction { transaction ->
+                val pointsRef = firestore
+                    .collection("provinces").document(provinceId)
+                    .collection("cities").document(cityId)
+                    .collection("offices").document(officeId)
+                    .collection("customerPoints")
+                    .document(phoneNumber)
+
+                transaction.set(pointsRef, updatedPoints.toMap())
+
+                val transactionRef = firestore
+                    .collection("provinces").document(provinceId)
+                    .collection("cities").document(cityId)
+                    .collection("offices").document(officeId)
+                    .collection("pointTransactions")
+                    .document()
+
+                transaction.set(transactionRef, pointTransaction.toMap())
+            }.await()
+
+            android.util.Log.i("PointService", "포인트 환불 성공: ${amount}P → 잔액 ${newBalance}P")
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("PointService", "포인트 환불 중 오류", e)
+            false
+        }
+    }
+
+    /**
      * 포인트 거래 내역 조회
      */
     suspend fun getPointTransactions(

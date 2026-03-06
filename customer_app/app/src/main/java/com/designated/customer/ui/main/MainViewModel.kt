@@ -136,6 +136,8 @@ class MainViewModel(
         loadLocalAddresses()
         // FCM 브로드캐스트 리스너 등록
         registerRideCompletedReceiver()
+        // 활성 콜 복구 (FCM 미수신 시 fallback)
+        restoreActiveCall()
         // 배너 광고 로드
         loadBannerAds()
 
@@ -198,6 +200,38 @@ class MainViewModel(
                     officeName = officeId,
                     regionName = provinceId
                 )
+            }
+        }
+    }
+
+    /**
+     * 앱 시작 시 Firestore에서 활성 콜 1회 조회 (FCM 미수신 fallback)
+     */
+    private fun restoreActiveCall() {
+        viewModelScope.launch {
+            try {
+                if (uiState.callStatus != null) return@launch
+
+                val activeCall = callService.getActiveCall(phoneNumber) ?: return@launch
+
+                val callState = when (activeCall.status) {
+                    "WAITING" -> CallState.REQUESTED
+                    "ASSIGNED" -> CallState.ASSIGNED
+                    "ACCEPTED" -> CallState.DRIVER_ARRIVING
+                    "IN_PROGRESS" -> CallState.IN_PROGRESS
+                    else -> return@launch
+                }
+
+                uiState = uiState.copy(
+                    callStatus = CallStatus(
+                        callId = activeCall.id,
+                        state = callState,
+                        timestamp = activeCall.timestamp
+                    )
+                )
+                android.util.Log.i("MainViewModel", "활성 콜 복구: ${activeCall.id}, state=$callState")
+            } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "활성 콜 복구 실패", e)
             }
         }
     }
@@ -310,6 +344,24 @@ class MainViewModel(
                 )
             } catch (e: Exception) {
                 android.util.Log.e("MainViewModel", "콜 요청 최종 실패 (재시도 후)", e)
+
+                // 포인트 사용했었다면 환불 처리
+                if (usedPointsAmount > 0) {
+                    val phoneNumber = customerInfo?.phoneNumber ?: ""
+                    if (phoneNumber.isNotEmpty()) {
+                        val refunded = pointService.refundPoints(
+                            phoneNumber = phoneNumber,
+                            amount = usedPointsAmount,
+                            description = "콜 요청 실패로 인한 포인트 환불"
+                        )
+                        if (refunded) {
+                            android.util.Log.i("MainViewModel", "포인트 ${usedPointsAmount}P 환불 완료")
+                        } else {
+                            android.util.Log.e("MainViewModel", "포인트 환불 실패 - 수동 조정 필요: ${usedPointsAmount}P")
+                        }
+                    }
+                }
+
                 uiState = uiState.copy(
                     isLoadingCall = false,
                     error = "콜 요청에 실패했습니다. 네트워크 연결을 확인해주세요."
@@ -591,108 +643,40 @@ class MainViewModel(
                     .get()
                     .await()
 
-                // ✅ 추가: 기사앱에서 사용한 포인트 가져오기
                 val pointsUsed = callDoc.getLong("pointsUsed")?.toInt() ?: 0
-
-                // ✅ 추가: 중복 적립 방지 - 이미 거래 내역이 있으면 스킵
-                val existingTransactions = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                    .collection("provinces").document(provinceId)
-                    .collection("cities").document(cityId)
-                    .collection("offices").document(officeId)
-                    .collection("pointTransactions")
-                    .whereEqualTo("callId", callId)
-                    .get()
-                    .await()
-
-                if (!existingTransactions.isEmpty) {
-                    android.util.Log.d("MainViewModel", "이미 포인트 처리됨 - 팝업만 표시")
-
-                    // 적립 포인트 계산 (팝업용)
-                    val fare = callDoc.getLong("fare_set")?.toInt()
-                        ?: callDoc.getLong("finalFare")?.toInt()
-                        ?: callDoc.getLong("fare")?.toInt()
-                        ?: 0
-
-                    val points = uiState.customerPoints
-                    val earnAmount = points?.calculateEarnPoints(fare) ?: 0
-
-                    // 알림음 재생
-                    try {
-                        val notification = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
-                        val ringtone = android.media.RingtoneManager.getRingtone(context, notification)
-                        ringtone?.play()
-                    } catch (e: Exception) {
-                        android.util.Log.e("MainViewModel", "알림음 재생 실패", e)
-                    }
-
-                    // 팝업만 표시
-                    uiState = uiState.copy(
-                        showPointsEarnedDialog = true,
-                        earnedPoints = earnAmount,
-                        usedPoints = pointsUsed,  // ✅ 추가
-                        rideCompletedFare = fare
-                    )
-
-                    // 포인트 정보 다시 로드
-                    loadCustomerPoints()
-
-                    return@launch
-                }
-
-                // 거래 내역 없으면 기존 적립 로직 실행 (백업)
-                val fare = callDoc.getLong("fare")?.toInt()
+                val fare = callDoc.getLong("fare_set")?.toInt()
                     ?: callDoc.getLong("finalFare")?.toInt()
-                    ?: callDoc.getLong("fare_set")?.toInt()
+                    ?: callDoc.getLong("fare")?.toInt()
+                    ?: 0
 
-                android.util.Log.d("MainViewModel", "요금 확인: fare=${callDoc.getLong("fare")}, finalFare=${callDoc.getLong("finalFare")}, fare_set=${callDoc.getLong("fare_set")}, 최종=$fare")
+                // 포인트 적립은 Cloud Functions에서 일원화 처리 (BUG-D12 수정)
+                // 여기서는 팝업 표시 + 최신 포인트 정보 로드만 수행
+                val points = uiState.customerPoints
+                val earnAmount = points?.calculateEarnPoints(fare) ?: 0
 
-                if (fare != null && fare > 0) {
-                    android.util.Log.d("MainViewModel", "포인트 적립 시도: phoneNumber=$phoneNumber, callId=$callId, fare=$fare")
-
-                    // 포인트 적립
-                    val success = pointService.earnPoints(
-                        phoneNumber = phoneNumber,
-                        callId = callId,
-                        fare = fare,
-                        description = "대리운전 이용 완료"
-                    )
-
-                    android.util.Log.d("MainViewModel", "포인트 적립 결과: success=$success")
-
-                    if (success) {
-                        // 포인트 정보 다시 로드 (최신 포인트 반영)
-                        loadCustomerPoints()
-
-                        // 적립된 포인트 계산
-                        val points = uiState.customerPoints
-                        val earnedPoints = points?.calculateEarnPoints(fare) ?: 0
-
-                        android.util.Log.d("MainViewModel", "포인트 적립 성공: $fare 원에 대한 $earnedPoints 포인트")
-
-                        // 알림음 재생
-                        try {
-                            val notification = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
-                            val ringtone = android.media.RingtoneManager.getRingtone(context, notification)
-                            ringtone?.play()
-                        } catch (e: Exception) {
-                            android.util.Log.e("MainViewModel", "알림음 재생 실패", e)
-                        }
-
-                        // 포인트 적립 팝업 표시
-                        uiState = uiState.copy(
-                            showPointsEarnedDialog = true,
-                            earnedPoints = earnedPoints,
-                            usedPoints = pointsUsed,  // ✅ 추가
-                            rideCompletedFare = fare
-                        )
-                    } else {
-                        android.util.Log.e("MainViewModel", "포인트 적립 실패")
-                    }
-                } else {
-                    android.util.Log.w("MainViewModel", "요금 정보가 없어 포인트 적립 불가")
+                // 알림음 재생
+                try {
+                    val notification = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
+                    val ringtone = android.media.RingtoneManager.getRingtone(context, notification)
+                    ringtone?.play()
+                } catch (e: Exception) {
+                    android.util.Log.e("MainViewModel", "알림음 재생 실패", e)
                 }
+
+                // 팝업 표시 (적립은 CF에서 처리되므로 예상 적립 포인트만 표시)
+                uiState = uiState.copy(
+                    showPointsEarnedDialog = true,
+                    earnedPoints = earnAmount,
+                    usedPoints = pointsUsed,
+                    rideCompletedFare = fare
+                )
+
+                // CF에서 적립 완료된 최신 포인트 정보 로드
+                loadCustomerPoints()
+
+                android.util.Log.d("MainViewModel", "운행 완료 - 포인트 팝업 표시 (적립은 CF에서 처리): fare=$fare, earnAmount=$earnAmount")
             } catch (e: Exception) {
-                android.util.Log.e("MainViewModel", "포인트 적립 중 오류", e)
+                android.util.Log.e("MainViewModel", "운행 완료 포인트 처리 중 오류", e)
             }
         }
     }

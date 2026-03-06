@@ -666,19 +666,8 @@ class DriverViewModel @Inject constructor(
                 val isAppCustomer = callDoc.getBoolean("isAppCustomer") ?: false
                 val phoneNumber = callDoc.getString("phoneNumber")
 
-                // ✅ 추가: 앱 회원이면 포인트 처리
-                if (isAppCustomer && phoneNumber != null) {
-                    val success = processCustomerPoints(
-                        phoneNumber = phoneNumber,
-                        callId = callId,
-                        fare = fareToSet,
-                        pointsUsed = pointsToUse
-                    )
-
-                    if (!success) {
-                        Log.e(TAG, "confirmAndFinalizeTrip: 포인트 처리 실패했지만 정산은 계속 진행")
-                    }
-                }
+                // 포인트 적립은 Cloud Functions에서 일원화 처리 (BUG-D12 수정)
+                // Driver App에서는 적립하지 않음 - CF의 notifyCustomerOnComplete에서 처리
 
                 val tripData = hashMapOf<String, Any>(
                     Constants.FIELD_PAYMENT_METHOD to paymentMethod,
