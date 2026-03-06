@@ -3240,6 +3240,14 @@ export const scheduledDataCleanup = onSchedule(
               .where("status", "==", "CANCELLED")
               .get();
 
+            // CANCELED 상태 조회 (관리자 취소)
+            const canceledCalls = await db.collection("provinces").doc(provinceId)
+              .collection("cities").doc(cityId)
+              .collection("offices").doc(officeId)
+              .collection("calls")
+              .where("status", "==", "CANCELED")
+              .get();
+
             // CANCELLED_BY_DRIVER 상태 조회
             const cancelledByDriverCalls = await db.collection("provinces").doc(provinceId)
               .collection("cities").doc(cityId)
@@ -3248,7 +3256,7 @@ export const scheduledDataCleanup = onSchedule(
               .where("status", "==", "CANCELLED_BY_DRIVER")
               .get();
 
-            const allCancelled = [...cancelledCalls.docs, ...cancelledByDriverCalls.docs];
+            const allCancelled = [...cancelledCalls.docs, ...canceledCalls.docs, ...cancelledByDriverCalls.docs];
 
             if (allCancelled.length > 0) {
               const batches = [];

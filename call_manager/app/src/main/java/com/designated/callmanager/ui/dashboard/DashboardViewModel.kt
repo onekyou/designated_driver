@@ -837,6 +837,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
                 callRef.update("status", CallStatus.CANCELED.firestoreValue).await()
 
+                // 공유콜이면 shared_calls 문서를 OPEN으로 되돌려 재수락 가능하게 함 (BUG-D11)
+                val sourceSharedCallId = callSnapshot.getString("sourceSharedCallId")
+                if (!sourceSharedCallId.isNullOrBlank()) {
+                    reopenSharedCall(sourceSharedCallId)
+                    Log.d(TAG, "공유콜 OPEN으로 복구: $sourceSharedCallId")
+                }
+
                 // 배정된 기사가 있으면 상태 복구 + FCM 전송
                 if (!assignedDriverAuthUid.isNullOrBlank()) {
                     // 기사 상태를 WAITING으로 복구
