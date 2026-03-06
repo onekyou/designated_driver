@@ -728,6 +728,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 }
 
                 val callRef = officePath.collection("calls").document(callInfo.id)
+                val driverRef = officePath.collection("designated_drivers").document(driverId)
+
                 val callUpdates = mapOf(
                     "assignedDriverId" to driverAuthUid,
                     "assignedDriverName" to driverInfo.name,
@@ -736,9 +738,19 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     "assignedTimestamp" to Timestamp.now(),
                     "updatedAt" to Timestamp.now()
                 )
-                callRef.update(callUpdates).await()
 
-                // 로컬 Room DB에도 배차 정보 업데이트 (FCM 지연/누락 방지)
+                // 트랜잭션으로 status==WAITING 확인 후 배차 (이중 배차 방지)
+                firestore.runTransaction { transaction ->
+                    val callDoc = transaction.get(callRef)
+                    val currentStatus = callDoc.getString("status")
+                    if (currentStatus != CallStatus.WAITING.firestoreValue) {
+                        throw IllegalStateException("ALREADY_ASSIGNED")
+                    }
+                    transaction.update(callRef, callUpdates)
+                    transaction.update(driverRef, "status", DriverStatus.ASSIGNED.value)
+                }.await()
+
+                // 트랜잭션 성공 시 로컬 Room DB에도 배차 정보 업데이트
                 callRepository.updateAssignment(
                     callId = callInfo.id,
                     driverId = driverAuthUid,
@@ -747,9 +759,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     status = CallStatus.ASSIGNED.firestoreValue
                 )
                 Log.d(TAG, "로컬 DB 배차 정보 업데이트 완료: ${callInfo.id}")
-
-                val driverRef = officePath.collection("designated_drivers").document(driverId)
-                driverRef.update("status", DriverStatus.ASSIGNED.value).await()
 
                 // 기사에게 FCM 알림 전송 (Cloud Function 호출)
                 Log.d(TAG, "========== 기사 알림 함수 호출 시작 ==========")
@@ -782,7 +791,14 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
             } catch (e: Exception) {
                 Log.e(TAG, "❌ 배차 실패: ${e.message}", e)
-                _snackbarMessage.value = "배차 실패 - 네트워크 연결을 확인 후 다시 시도하세요"
+                if (e.message?.contains("ALREADY_ASSIGNED") == true ||
+                    e.cause?.message?.contains("ALREADY_ASSIGNED") == true) {
+                    _snackbarMessage.value = "이미 다른 기사에게 배차된 콜입니다"
+                } else {
+                    _snackbarMessage.value = "배차 실패 - 네트워크 연결을 확인 후 다시 시도하세요"
+                }
+                // 배차 실패 시 콜 목록 새로고침 (최신 상태 반영)
+                refreshCallData()
             } finally {
                 _isAssigning.value = false
             }

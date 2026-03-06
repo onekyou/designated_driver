@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import android.widget.Toast
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.functions.ktx.functions
@@ -146,9 +147,9 @@ class DispatchActivity : ComponentActivity() {
         officeId: String
     ) {
         val db = FirebaseFirestore.getInstance()
-        val callPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/calls/$callId"
+        val callRef = db.document("provinces/$provinceId/cities/$cityId/offices/$officeId/calls/$callId")
+        val driverRef = db.collection("provinces/$provinceId/cities/$cityId/offices/$officeId/designated_drivers").document(driver.id)
 
-        // 기존 콜 문서 업데이트
         val updateData = hashMapOf<String, Any>(
             "status" to "ASSIGNED",
             "assignedDriverId" to driver.authUid.ifEmpty { driver.id },
@@ -157,44 +158,50 @@ class DispatchActivity : ComponentActivity() {
             "assignedTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
         )
 
-        db.document(callPath)
-            .update(updateData)
-            .addOnSuccessListener {
-                android.util.Log.d("DispatchActivity", "Call updated with driver: ${driver.name}")
+        // 트랜잭션으로 status==WAITING 확인 후 배차 (이중 배차 방지)
+        db.runTransaction { transaction ->
+            val callDoc = transaction.get(callRef)
+            val currentStatus = callDoc.getString("status")
+            if (currentStatus != "WAITING") {
+                throw IllegalStateException("ALREADY_ASSIGNED")
             }
-            .addOnFailureListener { e ->
-                android.util.Log.e("DispatchActivity", "Failed to update call", e)
+            transaction.update(callRef, updateData)
+            transaction.update(driverRef, "status", "ASSIGNED")
+        }.addOnSuccessListener {
+            Log.d("DispatchActivity", "Call updated with driver: ${driver.name}")
+
+            // 트랜잭션 성공 시에만 FCM 알림 전송
+            val driverAuthUid = driver.authUid
+            if (driverAuthUid.isNotBlank()) {
+                val functions = Firebase.functions("asia-northeast3")
+                val data = hashMapOf(
+                    "callId" to callId,
+                    "driverAuthUid" to driverAuthUid,
+                    "provinceId" to provinceId,
+                    "cityId" to cityId,
+                    "officeId" to officeId,
+                    "customerName" to "",
+                    "departure" to ""
+                )
+                Log.d("DispatchActivity", "Cloud Function 호출: $data")
+                functions.getHttpsCallable("notifyDriverAssignment")
+                    .call(data)
+                    .addOnSuccessListener { result ->
+                        Log.d("DispatchActivity", "기사 알림 전송 성공: ${result.data}")
+                    }
+                    .addOnFailureListener { fcmError ->
+                        Log.e("DispatchActivity", "기사 알림 전송 실패: ${fcmError.message}", fcmError)
+                    }
+            } else {
+                Log.w("DispatchActivity", "기사 authUid가 없어 FCM 알림 전송 불가")
             }
-
-        // 기사 상태를 ASSIGNED로 변경 (Manager와 동일하게 통일)
-        val driverPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/designated_drivers"
-        db.collection(driverPath).document(driver.id)
-            .update("status", "ASSIGNED")
-
-        // FCM 알림 전송 (Cloud Function 호출)
-        val driverAuthUid = driver.authUid
-        if (driverAuthUid.isNotBlank()) {
-            val functions = Firebase.functions("asia-northeast3")
-            val data = hashMapOf(
-                "callId" to callId,
-                "driverAuthUid" to driverAuthUid,
-                "provinceId" to provinceId,
-                "cityId" to cityId,
-                "officeId" to officeId,
-                "customerName" to "",
-                "departure" to ""
-            )
-            Log.d("DispatchActivity", "Cloud Function 호출: $data")
-            functions.getHttpsCallable("notifyDriverAssignment")
-                .call(data)
-                .addOnSuccessListener { result ->
-                    Log.d("DispatchActivity", "✅ 기사 알림 전송 성공: ${result.data}")
-                }
-                .addOnFailureListener { e ->
-                    Log.e("DispatchActivity", "❌ 기사 알림 전송 실패: ${e.message}", e)
-                }
-        } else {
-            Log.w("DispatchActivity", "⚠️ 기사 authUid가 없어 FCM 알림 전송 불가")
+        }.addOnFailureListener { e ->
+            Log.e("DispatchActivity", "Failed to update call", e)
+            if (e.message?.contains("ALREADY_ASSIGNED") == true) {
+                Toast.makeText(applicationContext, "이미 다른 기사에게 배차된 콜입니다", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(applicationContext, "배차 실패 - 네트워크를 확인해주세요", Toast.LENGTH_LONG).show()
+            }
         }
     }
 
