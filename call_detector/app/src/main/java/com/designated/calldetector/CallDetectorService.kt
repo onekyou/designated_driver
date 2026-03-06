@@ -38,6 +38,9 @@ import com.google.firebase.Timestamp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.cancel
@@ -895,10 +898,13 @@ class CallDetectorService : Service() {
             Log.i(TAG, "📞 RINGING 상태에서 사무실 상태 확인: $officeStatus")
 
             if (officeStatus == "CLOSED") {
-                Log.i(TAG, "🌙 마감 상태 - 2초 후 SMS 발송 시작")
+                Log.i(TAG, "🌙 마감 상태 - 2초 후 공유콜 생성 시작")
 
-                // 2초 대기 후 SMS 발송
+                // 2초 대기 후 공유콜 생성
                 kotlinx.coroutines.delay(2000)
+
+                // delay 후 서비스가 아직 활성 상태인지 확인 (통화 종료로 서비스 파괴 시 안전하게 중단)
+                kotlin.coroutines.coroutineContext.ensureActive()
 
                 val (contactName, contactAddress) = getContactInfo(applicationContext, phoneNumber)
                 val deviceName = sharedPreferences.getString("deviceName", "") ?: ""
@@ -907,11 +913,12 @@ class CallDetectorService : Service() {
                 sharedCallCreatedFromRinging = true
                 createSharedCallFromRinging(provinceId, cityId, officeId, phoneNumber, contactName, contactAddress, deviceName)
 
-                // SMS 발송 제거 - Cloud Functions에서 FCM으로 처리
-                // sendAutoSMS(phoneNumber, officeName)
-
                 Log.i(TAG, "✅ 마감 시 빠른 응답 완료 (RINGING → Cloud Functions FCM)")
             }
+        } catch (e: CancellationException) {
+            // 코루틴 취소는 정상 동작 (서비스 파괴 시) - 재throw하여 코루틴 취소 전파
+            Log.i(TAG, "ℹ️ 빠른 응답 코루틴 취소됨 (서비스 종료)")
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "❌ 빠른 응답 처리 실패", e)
         }

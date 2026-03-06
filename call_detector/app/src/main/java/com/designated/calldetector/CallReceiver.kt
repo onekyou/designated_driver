@@ -98,7 +98,13 @@ class CallReceiver : BroadcastReceiver() {
             } // synchronized block end
 
             Log.i(tag, "Before calling onCallStateChanged - state: $callStateFromTelephony, number to pass: $numberToPass, isIncoming: $isIncomingToPass")
-            onCallStateChanged(context, callStateFromTelephony, numberToPass, isIncomingToPass)
+
+            // 발신 전화는 콜 디텍터가 처리할 필요 없으므로 서비스 호출 생략
+            if (!isIncomingToPass) {
+                Log.i(tag, "📤 Outgoing call detected - skipping CallDetectorService invocation")
+            } else {
+                onCallStateChanged(context, callStateFromTelephony, numberToPass, isIncomingToPass)
+            }
 
             // 통화가 IDLE 상태로 종료되면 다음 통화를 위해 static 변수 즉시 초기화
             // 값은 이미 numberToPass/isIncomingToPass에 캡처되어 서비스로 전달되었으므로 즉시 초기화 가능
