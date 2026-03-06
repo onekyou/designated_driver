@@ -32,6 +32,8 @@ import com.google.firebase.Timestamp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.cancel
@@ -880,6 +882,9 @@ class CallDetectorService : Service() {
 
                 kotlinx.coroutines.delay(2000)
 
+                // delay 후 서비스가 아직 활성 상태인지 확인 (통화 종료로 서비스 파괴 시 안전하게 중단)
+                kotlin.coroutines.coroutineContext.ensureActive()
+
                 val (contactName, contactAddress) = getContactInfo(applicationContext, phoneNumber)
                 val deviceName = sharedPreferences.getString("deviceName", android.os.Build.MODEL) ?: android.os.Build.MODEL
 
@@ -889,6 +894,10 @@ class CallDetectorService : Service() {
 
             } else {
             }
+        } catch (e: CancellationException) {
+            // 코루틴 취소는 정상 동작 (서비스 파괴 시) - 재throw하여 코루틴 취소 전파
+            Log.i(TAG, "ℹ️ 빠른 응답 코루틴 취소됨 (서비스 종료)")
+            throw e
         } catch (e: Exception) {
         }
     }
