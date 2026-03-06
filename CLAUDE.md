@@ -92,25 +92,35 @@
 
 ---
 
-# 프로젝트 현황 (2026-02-24 기준)
+# 프로젝트 현황 (2026-03-07 기준)
 
-## 코드 리뷰 진행 상태
+## 코드 리뷰 및 수정 현황
 5개 세션에 걸쳐 4개 앱 + Cloud Functions 전체 크로스 검증 완료.
+이후 5단계 순차 수정 진행.
 
 | 구분 | 건수 |
 |------|------|
-| 미해결 이슈 | 40건 (Critical 11, High 13, Medium 11, Low 3, Info 2) |
-| 수정 완료 | 4건 (CROSS-01, CROSS-07일부, Driver취소수신, CD-01) |
+| 전체 이슈 | 40건 |
+| 수정 완료 | 25건 |
 | 오탐 확정 | 3건 |
 | 해소 확정 | 4건 |
+| 잔여 (보안+후순위) | 8건 |
 
-## 다음 작업
-- **최우선**: STL-09 코드 수정 (processCarryOverOnFinalize에 realDeposit 반영)
-- Phase 1 (보안), Phase 2 (데이터 무결성), Phase 3 (기능 개선) 모두 미착수
+## 수정 완료 Phase별 요약
+- **Phase 1** (파일럿 품질): CUST-01, CUST-02, CUST-04, BUG-D12
+- **Phase 2** (파일럿 안정성): BUG-D11, CUST-06/NEW-13, CROSS-05
+- **Phase 3** (정산 정확성): STL-01, STL-02, STL-05, STL-08
+- **Phase 5** (기능 개선): CROSS-06, CUST-03, NEW-15
+- **이전 수정**: CROSS-01, CROSS-07, Driver취소수신, CD-01, STL-09, STL-03, NEW-11
 
-## 운영 긴급
-- Cloud Functions `firebase deploy --only functions` 필요 (코드 수정이 배포 안 됨)
-- STL-09 임시 가이드: 전체내역 초기화 전 **기사별 정산 확인(CONFIRMED) 먼저**
+## CF 배포 상태
+- Cloud Functions 배포 완료 (41개 함수, 2026-03-07)
+- 주요 신규 함수: `notifyDriverCancellation`, `checkAssignedTimeout`
+
+## 잔여 작업
+- **보안 강화 6건**: 플레이스토어 정식 배포 전 필수 (NEW-12, SEC-C01~C04, RTDB)
+- **후순위 2건**: Crashlytics(NEW-08/10), 구 정산 정리(STL-10/11)
+- 파일럿 테스트에는 현재 상태로 진행 가능
 
 ## Agent Teams 문서
 상세 분석 결과는 `.agent-teams/` 폴더 참조:
