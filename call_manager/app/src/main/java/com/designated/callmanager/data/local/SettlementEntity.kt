@@ -17,6 +17,7 @@ data class SettlementEntity(
     val cardAmount: Int?,
     val cashAmount: Int?,
     val creditAmount: Int = 0,
+    val pointsUsed: Int = 0,
     val completedAt: Long,
     val driverId: String = "",
     val regionId: String = "",
@@ -28,14 +29,14 @@ data class SettlementEntity(
 ) {
     fun toData() = SettlementData(
         callId, driverName, customerName, departure, destination, waypoints, fare,
-        paymentMethod, cardAmount, cashAmount, creditAmount, completedAt,
+        paymentMethod, cardAmount, cashAmount, creditAmount, pointsUsed, completedAt,
         driverId, regionId, officeId, workDate
     )
 
     companion object {
         fun fromData(d: SettlementData) = SettlementEntity(
             d.callId, d.driverName, d.customerName, d.departure, d.destination, d.waypoints,
-            d.fare, d.paymentMethod, d.cardAmount, d.cashAmount, d.creditAmount,
+            d.fare, d.paymentMethod, d.cardAmount, d.cashAmount, d.creditAmount, d.pointsUsed,
             d.completedAt, d.driverId, d.regionId, d.officeId, d.workDate
         )
     }

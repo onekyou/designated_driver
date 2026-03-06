@@ -12,7 +12,7 @@ import androidx.room.RoomDatabase
         CreditPersonEntity::class,
         CreditEntryEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class CallManagerDatabase : RoomDatabase() {
@@ -31,6 +31,7 @@ abstract class CallManagerDatabase : RoomDatabase() {
                     CallManagerDatabase::class.java,
                     "callmanager.db"
                 )
+                    .fallbackToDestructiveMigration()
                     .build().also { INSTANCE = it }
             }
         }

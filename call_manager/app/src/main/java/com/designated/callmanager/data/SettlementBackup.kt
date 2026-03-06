@@ -27,6 +27,7 @@ data class SettlementBackupItem(
     val cardAmount: Int? = null,
     val cashAmount: Int? = null,
     val creditAmount: Int = 0,
+    val pointsUsed: Int = 0,
     val completedAt: Long = 0,
     val driverId: String = "",
     val workDate: String = ""
@@ -45,6 +46,7 @@ data class SettlementBackupItem(
             cardAmount = cardAmount,
             cashAmount = cashAmount,
             creditAmount = creditAmount,
+            pointsUsed = pointsUsed,
             completedAt = completedAt,
             driverId = driverId,
             regionId = regionId,
@@ -68,6 +70,7 @@ data class SettlementBackupItem(
                 cardAmount = settlement.cardAmount,
                 cashAmount = settlement.cashAmount,
                 creditAmount = settlement.creditAmount,
+                pointsUsed = settlement.pointsUsed,
                 completedAt = settlement.completedAt,
                 driverId = settlement.driverId,
                 workDate = settlement.workDate

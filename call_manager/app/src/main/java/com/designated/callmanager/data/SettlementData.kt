@@ -12,6 +12,7 @@ data class SettlementData(
     val cardAmount: Int?,
     val cashAmount: Int?,
     val creditAmount: Int = 0,  // 외상 처리된 금액
+    val pointsUsed: Int = 0,  // 포인트 사용액
     val completedAt: Long,
     val driverId: String = "",
     val regionId: String = "",

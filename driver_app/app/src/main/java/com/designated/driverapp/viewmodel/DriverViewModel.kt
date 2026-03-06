@@ -683,7 +683,10 @@ class DriverViewModel @Inject constructor(
                     tripData[Constants.FIELD_CASH_RECEIVED] = cashAmount
                 } else if (paymentMethod == "현금+포인트" && cashAmount != null) {
                     tripData[Constants.FIELD_CASH_RECEIVED] = cashAmount
-                    tripData["creditAmount"] = fareToSet - cashAmount
+                    val actualCredit = maxOf(0, fareToSet - pointsToUse - cashAmount)
+                    tripData["creditAmount"] = actualCredit
+                } else if (paymentMethod == "외상" || paymentMethod == "이체") {
+                    tripData["creditAmount"] = fareToSet
                 }
 
                 firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)

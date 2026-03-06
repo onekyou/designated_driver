@@ -307,6 +307,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
 
                         val cashReceived = doc.getLong("cashReceived")?.toInt()
                         val creditAmount = doc.getLong("creditAmount")?.toInt()
+                        val pointsUsed = doc.getLong("pointsUsed")?.toInt()
 
                         SettlementData(
                             callId = doc.id,
@@ -320,6 +321,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                             cardAmount = null,
                             cashAmount = cashReceived,  // null 허용하여 포인트 계산 정확도 향상
                             creditAmount = creditAmount ?: 0,
+                            pointsUsed = pointsUsed ?: 0,
                             completedAt = completedTimestamp,
                             driverId = doc.getString("assignedDriverId") ?: "",
                             regionId = provinceId,
@@ -1136,7 +1138,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                 paymentMethod = trip.paymentMethod,
                 cashReceived = trip.cashAmount?.toLong() ?: 0L,
                 creditAmount = trip.creditAmount.toLong(),
-                pointsUsed = 0L,
+                pointsUsed = trip.pointsUsed.toLong(),
                 completedAt = Timestamp(Date(trip.completedAt)),
                 confirmedByOffice = true,
                 syncedAt = Timestamp.now()

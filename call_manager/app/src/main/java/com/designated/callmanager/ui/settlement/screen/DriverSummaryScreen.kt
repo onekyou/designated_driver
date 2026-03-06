@@ -89,7 +89,7 @@ fun DriverSummaryScreen(vm: SettlementViewModel = viewModel()) {
                         else -> trip.fare // 이체, 외상은 전액 외상
                     }
                 }
-                val deposit = (fareSum * ratio / 100.0).roundToInt()
+                val deposit = (fareSum * ratio / 100.0).toInt()
                 val realDeposit = deposit - totalCredit  // 올바른 계산: 총납입 - 총외상
                 val driverId = list.first().driverId
                 DriverStat(list.first().driverName.ifBlank { "미지정" }, list.size, fareSum, deposit, totalCredit, realDeposit, driverId)
@@ -110,7 +110,7 @@ fun DriverSummaryScreen(vm: SettlementViewModel = viewModel()) {
             else -> trip.fare // 이체, 외상은 전액 외상
         }
     }
-    val totalDeposit = (totalFare * ratio / 100.0).roundToInt()
+    val totalDeposit = (totalFare * ratio / 100.0).toInt()
     val realDepositAll = totalDeposit - totalCredit  // 올바른 계산: 총납입 - 총외상
 
     var selectedDriver by remember { mutableStateOf<Pair<String,List<SettlementData>>?>(null) }
