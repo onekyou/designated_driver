@@ -1444,31 +1444,34 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
             firestore.runTransaction { transaction ->
                 val doc = transaction.get(driverRef)
 
-                // 이미 업무마감 정산확인이 완료된 기사는 건너뜀
                 @Suppress("UNCHECKED_CAST")
                 val dailySettlementMap = doc.get("dailySettlement") as? Map<String, Any?>
                 val dailySettlementStatus = dailySettlementMap?.get("status") as? String
+
+                // CONFIRMED: 이미 confirmDailySettlement에서 carryOver 처리 완료
                 if (dailySettlementStatus == DailySettlementStatus.CONFIRMED.name) {
                     Log.d("SettlementViewModel", "기사 $driverId: 이미 정산확인 완료, carryOver 재처리 건너뜀")
-                    return@runTransaction null  // 트랜잭션 건너뜀
+                    return@runTransaction null
                 }
 
                 val carryOverMap = doc.get("carryOver") as? Map<String, Any?>
                 val currentBalance = (carryOverMap?.get("balance") as? Long) ?: 0L
                 val currentStatusStr = carryOverMap?.get("status") as? String
 
-                // 현재 상태 파싱
                 val currentStatus = try {
                     currentStatusStr?.let { CarryOverStatus.valueOf(it) }
                 } catch (e: Exception) { null }
 
-                // 새 잔액 = 기존 잔액 - 오늘 결과
-                // todayResult가 양수(납부)면 잔액 감소, 음수(미지급)면 잔액 증가
-                val newBalance = currentBalance - todayResult
-                // 음수도 허용 (음수 = 기사가 사무실에 내야 할 돈)
-                val finalBalance = newBalance
-
-                Log.d("SettlementViewModel", "CarryOver 계산: 기존=$currentBalance, 오늘결과=$todayResult, 새잔액=$finalBalance, 현재상태=$currentStatus")
+                // PENDING_CONFIRM: 기사가 제출한 calculatedCarryOver 직접 사용
+                // 미제출: trip 데이터만으로는 carryOver 변동이 0이므로 변경 없음
+                val finalBalance = if (dailySettlementStatus == DailySettlementStatus.PENDING_CONFIRM.name) {
+                    val calculatedCarryOver = (dailySettlementMap?.get("calculatedCarryOver") as? Long) ?: currentBalance
+                    Log.d("SettlementViewModel", "CarryOver 계산: 기사 $driverId PENDING_CONFIRM → calculatedCarryOver=$calculatedCarryOver 사용 (기존=$currentBalance)")
+                    calculatedCarryOver
+                } else {
+                    Log.d("SettlementViewModel", "CarryOver 계산: 기사 $driverId 미제출 → 변경 없음 (기존=$currentBalance)")
+                    currentBalance
+                }
 
                 // 상태 결정: TRANSFERRED 상태는 유지 (기사가 수령완료 눌러야 변경됨)
                 val newStatus = when {

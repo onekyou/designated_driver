@@ -1400,7 +1400,15 @@ class DriverViewModel @Inject constructor(
                     originalCarryOver = originalCarryOverBalance.toLong()
                 )
 
-                driverRef.update("dailySettlement", dailySettlement.toMap()).await()
+                // dailySettlement + settlementLastCleared를 단일 update로 갱신 (원자적 처리)
+                val nowTimestamp = Timestamp.now()
+                driverRef.update(
+                    mapOf(
+                        "dailySettlement" to dailySettlement.toMap(),
+                        "settlementLastCleared" to nowTimestamp
+                    )
+                ).await()
+                _lastClearedMillis.value = nowTimestamp.toDate().time
 
                 val logMsg = if (isIntegration) {
                     "Daily settlement MERGED: prev=${prevSettlement.tripCount}건 + curr=${settlement.tripCount}건 = ${mergedTripCount}건, realDeposit=$mergedRealDeposit"
