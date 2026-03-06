@@ -90,6 +90,7 @@ private fun CallDetailsContent(
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 Button(onClick = {
+                    viewModel.rejectCall(callInfo.id)
                     navController.popBackStack()
                 }) {
                     Text("거절")

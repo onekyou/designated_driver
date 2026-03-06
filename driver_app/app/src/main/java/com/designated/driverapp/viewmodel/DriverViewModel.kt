@@ -456,9 +456,44 @@ class DriverViewModel @Inject constructor(
         }
     }
 
-    fun rejectCall(callId: String) {
-        viewModelScope.launch {
+    fun rejectCall(callId: String) = performFirestoreUpdate {
+        val (provinceId, cityId, officeId) = getDriverLocationInfo()
+        val driverId = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
+
+        val callRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+            .collection(Constants.COLLECTION_CITIES).document(cityId)
+            .collection(Constants.COLLECTION_OFFICES).document(officeId)
+            .collection(Constants.COLLECTION_CALLS).document(callId)
+
+        // 콜 상태를 WAITING으로 되돌려 재배차 가능하게 함
+        val callUpdates = mapOf(
+            Constants.FIELD_STATUS to Constants.STATUS_WAITING,
+            "assignedDriverId" to null,
+            "assignedDriverName" to null,
+            "assignedDriverPhone" to null,
+            "rejectedByDriver" to driverId,
+            Constants.FIELD_UPDATED_AT to FieldValue.serverTimestamp()
+        )
+        callRef.update(callUpdates).await()
+
+        // 기사 상태를 WAITING으로 복구
+        val driverRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+            .collection(Constants.COLLECTION_CITIES).document(cityId)
+            .collection(Constants.COLLECTION_OFFICES).document(officeId)
+            .collection(Constants.COLLECTION_DRIVERS).document(driverId)
+        driverRef.update(Constants.FIELD_STATUS, DriverStatus.WAITING.value).await()
+
+        // UI 정리: 팝업 닫기, assignedCalls에서 제거, 기사 상태 복구
+        _uiState.update { current ->
+            current.copy(
+                assignedCalls = current.assignedCalls.filter { it.id != callId },
+                newCallPopup = null,
+                activeCall = if (current.activeCall?.id == callId) null else current.activeCall,
+                driverStatus = DriverStatus.WAITING
+            )
         }
+
+        Log.d(TAG, "콜 거절 완료: callId=$callId")
     }
 
     /**

@@ -14,8 +14,13 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import com.designated.driverapp.data.Constants
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -82,6 +87,7 @@ class LockScreenActivity : ComponentActivity() {
                     stopAlertSound()
                     stopVibration()
                     cancelNotification(notificationId)
+                    rejectCallDirectly(callId)
                     finish()
                 }
             )
@@ -176,6 +182,52 @@ class LockScreenActivity : ComponentActivity() {
             notificationManager.cancel(notificationId)
             Log.d(TAG, "알림 취소: $notificationId")
         }
+    }
+
+    private fun rejectCallDirectly(callId: String) {
+        if (callId.isBlank()) return
+
+        val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+        val provinceId = prefs.getString(Constants.PREF_KEY_PROVINCE_ID, null)
+        val cityId = prefs.getString(Constants.PREF_KEY_CITY_ID, null)
+        val officeId = prefs.getString(Constants.PREF_KEY_OFFICE_ID, null)
+        val driverId = FirebaseAuth.getInstance().currentUser?.uid
+
+        if (provinceId == null || cityId == null || officeId == null || driverId == null) {
+            Log.e(TAG, "거절 실패: 위치 정보 또는 로그인 정보 없음")
+            Toast.makeText(this, "거절 실패 - 앱에서 다시 시도해주세요", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val db = FirebaseFirestore.getInstance()
+        val callRef = db.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+            .collection(Constants.COLLECTION_CITIES).document(cityId)
+            .collection(Constants.COLLECTION_OFFICES).document(officeId)
+            .collection(Constants.COLLECTION_CALLS).document(callId)
+
+        val driverRef = db.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+            .collection(Constants.COLLECTION_CITIES).document(cityId)
+            .collection(Constants.COLLECTION_OFFICES).document(officeId)
+            .collection(Constants.COLLECTION_DRIVERS).document(driverId)
+
+        // 콜 상태를 WAITING으로 되돌려 재배차 가능하게 함
+        callRef.update(
+            mapOf(
+                Constants.FIELD_STATUS to Constants.STATUS_WAITING,
+                "assignedDriverId" to null,
+                "assignedDriverName" to null,
+                "assignedDriverPhone" to null,
+                "rejectedByDriver" to driverId,
+                Constants.FIELD_UPDATED_AT to FieldValue.serverTimestamp()
+            )
+        ).addOnSuccessListener {
+            Log.d(TAG, "콜 거절 완료: callId=$callId")
+        }.addOnFailureListener { e ->
+            Log.e(TAG, "콜 거절 실패: ${e.message}", e)
+        }
+
+        // 기사 상태를 WAITING으로 복구
+        driverRef.update(Constants.FIELD_STATUS, "WAITING")
     }
 
     private fun openMainActivity(callId: String) {
