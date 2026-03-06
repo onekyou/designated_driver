@@ -3115,6 +3115,94 @@ export const onCallDetectorCrash = onDocumentCreated(
 
 // =============================
 // 자동 데이터 정리: 매일 오전 11시 실행
+// =============================
+// NEW-15: ASSIGNED 타임아웃 자동 복구
+// 기사가 배차 후 일정 시간 내에 수락하지 않으면 WAITING으로 되돌림
+// =============================
+export const checkAssignedTimeout = onSchedule(
+  {
+    schedule: "every 1 minutes",
+    timeZone: "Asia/Seoul",
+    region: "asia-northeast3",
+  },
+  async () => {
+    const db = admin.firestore();
+
+    try {
+      // 모든 사무실 조회
+      const provincesSnapshot = await db.collection("provinces").get();
+      let totalRecovered = 0;
+
+      for (const provinceDoc of provincesSnapshot.docs) {
+        const citiesSnapshot = await provinceDoc.ref.collection("cities").get();
+        for (const cityDoc of citiesSnapshot.docs) {
+          const officesSnapshot = await cityDoc.ref.collection("offices").get();
+          for (const officeDoc of officesSnapshot.docs) {
+            // 사무실별 타임아웃 설정 (기본 3분)
+            const timeoutMinutes = officeDoc.data().assignedTimeoutMinutes ?? 3;
+            const timeoutMs = timeoutMinutes * 60 * 1000;
+            const cutoff = admin.firestore.Timestamp.fromMillis(Date.now() - timeoutMs);
+
+            // ASSIGNED 상태이고 assignedTimestamp가 타임아웃 초과인 콜 검색
+            const assignedCalls = await officeDoc.ref
+              .collection("calls")
+              .where("status", "==", "ASSIGNED")
+              .where("assignedTimestamp", "<", cutoff)
+              .get();
+
+            for (const callDoc of assignedCalls.docs) {
+              const callData = callDoc.data();
+              const assignedDriverId = callData.assignedDriverId;
+
+              // 콜을 WAITING으로 복구
+              await callDoc.ref.update({
+                status: "WAITING",
+                assignedDriverId: admin.firestore.FieldValue.delete(),
+                assignedDriverName: admin.firestore.FieldValue.delete(),
+                assignedDriverPhone: admin.firestore.FieldValue.delete(),
+                assignedTimestamp: admin.firestore.FieldValue.delete(),
+                timeoutRecoveredAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
+
+              // 기사 상태도 WAITING으로 복구
+              if (assignedDriverId) {
+                const driversQuery = await officeDoc.ref
+                  .collection("designated_drivers")
+                  .where("authUid", "==", assignedDriverId)
+                  .limit(1)
+                  .get();
+
+                if (!driversQuery.empty) {
+                  const driverDoc = driversQuery.docs[0];
+                  const driverStatus = driverDoc.data().status;
+                  // ASSIGNED 상태인 기사만 복구 (이미 다른 콜 수행 중이면 건너뜀)
+                  if (driverStatus === "ASSIGNED") {
+                    await driverDoc.ref.update({ status: "WAITING" });
+                  }
+                }
+              }
+
+              totalRecovered++;
+              logger.info(
+                `[AssignedTimeout] 콜 복구: ${callDoc.id}, ` +
+                `기사: ${assignedDriverId}, 타임아웃: ${timeoutMinutes}분`
+              );
+            }
+          }
+        }
+      }
+
+      if (totalRecovered > 0) {
+        logger.info(`[AssignedTimeout] 총 ${totalRecovered}건 타임아웃 복구 완료`);
+      }
+    } catch (error) {
+      logger.error("[AssignedTimeout] 스케줄러 오류:", error);
+    }
+  }
+);
+
+// =============================
+// 스케줄 기반 데이터 정리 (매일 11시)
 // - WAITING 콜 (1시간 이상)
 // - shared_calls (1시간 이상)
 // - 만료된 attributions (24시간 이상)
