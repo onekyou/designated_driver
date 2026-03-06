@@ -90,3 +90,33 @@
 6. **운행 관리**: 기사가 콜을 수락하고 운행 상태를 업데이트
 7. **정산**: 운행 완료 후 정산 처리
 
+---
+
+# 프로젝트 현황 (2026-02-24 기준)
+
+## 코드 리뷰 진행 상태
+5개 세션에 걸쳐 4개 앱 + Cloud Functions 전체 크로스 검증 완료.
+
+| 구분 | 건수 |
+|------|------|
+| 미해결 이슈 | 40건 (Critical 11, High 13, Medium 11, Low 3, Info 2) |
+| 수정 완료 | 4건 (CROSS-01, CROSS-07일부, Driver취소수신, CD-01) |
+| 오탐 확정 | 3건 |
+| 해소 확정 | 4건 |
+
+## 다음 작업
+- **최우선**: STL-09 코드 수정 (processCarryOverOnFinalize에 realDeposit 반영)
+- Phase 1 (보안), Phase 2 (데이터 무결성), Phase 3 (기능 개선) 모두 미착수
+
+## 운영 긴급
+- Cloud Functions `firebase deploy --only functions` 필요 (코드 수정이 배포 안 됨)
+- STL-09 임시 가이드: 전체내역 초기화 전 **기사별 정산 확인(CONFIRMED) 먼저**
+
+## Agent Teams 문서
+상세 분석 결과는 `.agent-teams/` 폴더 참조:
+- `TEAM_OVERVIEW.md` - 전체 현황 + 이슈 목록
+- `REVIVAL_PROMPT.md` - 팀 재구성 프롬프트
+- `settlement-simulation.md` - 정산 크로스 검증 결과
+- `customer-app-analysis.md` - Customer App 분석 결과
+- `CROSS_VERIFICATION_LOG.md` - 크로스 검증 기록
+

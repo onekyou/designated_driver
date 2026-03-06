@@ -189,7 +189,12 @@
       "Bash(git config:*)",
       "Bash(/opt/android/platform-tools/adb devices:*)",
       "Bash(cmd //c \"gradlew.bat :call_manager:app:compileDebugKotlin :driver_app:app:compileDebugKotlin --no-daemon 2>&1\")",
-      "Bash(bash:*)"
+      "Bash(bash:*)",
+      "WebFetch(domain:developers.raycast.com)",
+      "WebFetch(domain:lucide.dev)",
+      "WebFetch(domain:unpkg.com)",
+      "Bash(cd /c/Users/kala1/designated_driver && firebase hosting:sites:create callmadang-web 2>&1)",
+      "Bash(firebase:*)"
     ],
     "deny": [],
     "ask": [],

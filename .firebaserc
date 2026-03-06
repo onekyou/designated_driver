@@ -1,5 +1,17 @@
 {
   "projects": {
     "default": "calldetector-5d61e"
+  },
+  "targets": {
+    "calldetector-5d61e": {
+      "hosting": {
+        "calldetector": [
+          "calldetector-5d61e"
+        ],
+        "callmadang-web": [
+          "callmadang-web"
+        ]
+      }
+    }
   }
 }
