@@ -103,8 +103,9 @@ class DriverViewModel @Inject constructor(
         val cashReceived: Int = 0,        // 현금 수령액
         val realDeposit: Int = 0,         // 실 납부액 (현금수령 - 기사몫)
         val tripCount: Int = 0,           // 운행 횟수
-        val totalCredit: Int = 0,         // 총 외상 (현금 제외 금액)
-        val officeDeposit: Int = 0        // 총 납입액 (사무실 몫)
+        val totalCredit: Int = 0,         // 총 외상 (현금·포인트 제외 금액)
+        val officeDeposit: Int = 0,       // 총 납입액 (사무실 몫)
+        val pointsUsed: Int = 0           // 총 포인트 사용액
     )
     private val _todaySettlement = MutableStateFlow(TodaySettlement())
     val todaySettlement: StateFlow<TodaySettlement> = _todaySettlement.asStateFlow()
@@ -719,14 +720,17 @@ class DriverViewModel @Inject constructor(
                     paymentMethod.startsWith("현금+") -> cashAmount ?: 0
                     else -> 0
                 }
-                val newDriverShare = (fareToSet * (100 - ratio) / 100.0).toInt()
+                val newPointsUsed = pointsToUse
+                val newOfficeDeposit = (fareToSet * ratio / 100.0).toInt()
+                val newDriverShare = fareToSet - newOfficeDeposit
 
                 _todaySettlement.update { current ->
                     val updatedTotalFare = current.totalFare + fareToSet
                     val updatedCashReceived = current.cashReceived + newCashReceived
                     val updatedDriverShare = current.driverShare + newDriverShare
+                    val updatedPointsUsed = current.pointsUsed + newPointsUsed
                     val updatedOfficeDeposit = (updatedTotalFare * ratio / 100.0).toInt()
-                    val updatedTotalCredit = updatedTotalFare - updatedCashReceived
+                    val updatedTotalCredit = updatedTotalFare - updatedCashReceived - updatedPointsUsed
                     current.copy(
                         totalFare = updatedTotalFare,
                         driverShare = updatedDriverShare,
@@ -734,7 +738,8 @@ class DriverViewModel @Inject constructor(
                         realDeposit = updatedCashReceived - updatedDriverShare,
                         tripCount = current.tripCount + 1,
                         totalCredit = updatedTotalCredit,
-                        officeDeposit = updatedOfficeDeposit
+                        officeDeposit = updatedOfficeDeposit,
+                        pointsUsed = updatedPointsUsed
                     )
                 }
 
@@ -1525,6 +1530,7 @@ class DriverViewModel @Inject constructor(
             val ratio = _depositRatio.value
             var totalFare = 0
             var totalCashReceived = 0
+            var totalPointsUsed = 0
             var tripCount = 0
             val tripItems = mutableListOf<TripHistoryItem>()
 
@@ -1546,9 +1552,11 @@ class DriverViewModel @Inject constructor(
                     paymentMethod.startsWith("현금+") -> doc.getLong("cashReceived")?.toInt() ?: 0
                     else -> 0
                 }
+                val pointsUsed = doc.getLong("pointsUsed")?.toInt() ?: 0
 
                 totalFare += fare
                 totalCashReceived += cashReceived
+                totalPointsUsed += pointsUsed
                 tripCount++
 
                 // 개별 운행내역 아이템 추가
@@ -1577,11 +1585,11 @@ class DriverViewModel @Inject constructor(
 
             _tripHistoryList.value = reNumberedItems
 
-            // 계산 (콜매니저와 동일한 공식 - Double 나눗셈)
+            // 계산 (CF와 동일한 공식 - deposit 먼저, driverShare는 뺄셈)
             val officeDeposit = (totalFare * ratio / 100.0).toInt()        // 총 납입액 (사무실 몫)
-            val driverShare = (totalFare * (100 - ratio) / 100.0).toInt()  // 내 수익 (기사몫)
+            val driverShare = totalFare - officeDeposit                    // 내 수익 (기사몫 = 운행료 - 사무실몫)
             val realDeposit = totalCashReceived - driverShare              // 실 납부액
-            val totalCredit = totalFare - totalCashReceived                // 총 외상 (현금 제외 금액)
+            val totalCredit = totalFare - totalCashReceived - totalPointsUsed  // 총 외상 (현금·포인트 제외 금액)
 
             _todaySettlement.value = TodaySettlement(
                 totalFare = totalFare,
@@ -1590,7 +1598,8 @@ class DriverViewModel @Inject constructor(
                 realDeposit = realDeposit,
                 tripCount = tripCount,
                 totalCredit = totalCredit,
-                officeDeposit = officeDeposit
+                officeDeposit = officeDeposit,
+                pointsUsed = totalPointsUsed
             )
 
             Log.d(TAG, "Today settlement calculated: fare=$totalFare, share=$driverShare, cash=$totalCashReceived, deposit=$realDeposit, trips=$tripCount, credit=$totalCredit, historyItems=${reNumberedItems.size}")

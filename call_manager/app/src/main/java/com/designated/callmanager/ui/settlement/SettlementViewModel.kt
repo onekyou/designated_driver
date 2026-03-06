@@ -562,7 +562,8 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
 
                 // 기사 몫 계산
                 val driverTotalFare = driverTripList.sumOf { it.fare }
-                val driverShare = (driverTotalFare * (100 - ratio) / 100)
+                val driverDeposit = (driverTotalFare * ratio / 100)
+                val driverShare = driverTotalFare - driverDeposit
 
                 // 현금 수령액 계산
                 val cashReceived = driverTripList.sumOf { trip ->
@@ -1121,7 +1122,13 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
         val totalFare = trips.sumOf { it.fare.toLong() }
         val totalDeposit = (totalFare * ratio / 100)
         val totalDriverShare = totalFare - totalDeposit
-        val totalCash = trips.filter { it.paymentMethod == "현금" }.sumOf { it.fare.toLong() }
+        val totalCash = trips.sumOf { trip ->
+            when {
+                trip.paymentMethod == "현금" -> trip.fare.toLong()
+                trip.paymentMethod.startsWith("현금+") -> trip.cashAmount?.toLong() ?: 0L
+                else -> 0L
+            }
+        }
         val totalCard = trips.filter { it.paymentMethod == "이체" || it.paymentMethod == "카드" }.sumOf { it.fare.toLong() }
         val totalCredit = trips.sumOf { it.creditAmount.toLong() }
 
@@ -1161,7 +1168,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                 totalCash = totalCash,
                 totalCard = totalCard,
                 totalCredit = totalCredit,
-                totalPoints = 0L,
+                totalPoints = trips.sumOf { it.pointsUsed.toLong() },
                 callCount = trips.size
             ),
             calls = calls
