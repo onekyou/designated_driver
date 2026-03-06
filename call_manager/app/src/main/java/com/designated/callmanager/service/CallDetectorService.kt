@@ -25,6 +25,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.designated.callmanager.data.CallStatus
+import com.designated.callmanager.data.ExcludeNumberManager
 import com.designated.callmanager.R
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FieldValue
@@ -50,6 +51,7 @@ class CallDetectorService : Service() {
     private var callLogObserver: CallLogObserver? = null
     private val db = FirebaseFirestore.getInstance()
     private lateinit var sharedPreferences: SharedPreferences
+    private lateinit var excludeNumberManager: ExcludeNumberManager
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private var serviceStartTime: Long = 0
@@ -79,6 +81,7 @@ class CallDetectorService : Service() {
         // 먼저 Foreground 서비스로 시작 (5초 타임아웃 방지)
         serviceStartTime = System.currentTimeMillis()
         sharedPreferences = getSharedPreferences("call_manager_prefs", Context.MODE_PRIVATE)
+        excludeNumberManager = ExcludeNumberManager(this)
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
 
@@ -124,6 +127,13 @@ class CallDetectorService : Service() {
                         val sharedPreferences = getSharedPreferences("call_manager_prefs", Context.MODE_PRIVATE)
                         val isCallDetectionEnabled = sharedPreferences.getBoolean("call_detection_enabled", false)
                         if (!isCallDetectionEnabled) {
+                            return START_STICKY
+                        }
+
+                        if (excludeNumberManager.isExcludedNumber(finalPhoneNumber)) {
+                            Log.i(TAG, "개인번호 제외: $finalPhoneNumber")
+                            lastProcessedPhoneNumber = null
+                            lastProcessedCallTime = 0L
                             return START_STICKY
                         }
 
