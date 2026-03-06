@@ -194,7 +194,12 @@
       "WebFetch(domain:lucide.dev)",
       "WebFetch(domain:unpkg.com)",
       "Bash(cd /c/Users/kala1/designated_driver && firebase hosting:sites:create callmadang-web 2>&1)",
-      "Bash(firebase:*)"
+      "Bash(firebase:*)",
+      "Bash(cmd:*)",
+      "Bash(export:*)",
+      "Bash(JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\" ANDROID_HOME=\"/c/Users/kala1/AppData/Local/Android/Sdk\" ./gradlew assembleDebug:*)",
+      "Bash(\"$ADB\" devices:*)",
+      "Bash(\"$ADB\":*)"
     ],
     "deny": [],
     "ask": [],
