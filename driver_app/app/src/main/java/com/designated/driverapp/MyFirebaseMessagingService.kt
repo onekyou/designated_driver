@@ -174,6 +174,21 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 Log.d(TAG, "앱이 백그라운드 - 시스템 알림 표시: $callId")
                 showNotification(title, body, callId)
             }
+        } else if (!callId.isNullOrBlank() && messageType == "call_cancelled") {
+            Log.d(TAG, "콜 취소 FCM 수신: callId=$callId")
+
+            if (isAppInForeground()) {
+                // 포그라운드: LocalBroadcast로 UI에 취소 알림
+                Log.d(TAG, "앱이 포그라운드 - LocalBroadcast로 취소 callId 전달: $callId")
+                val broadcastIntent = Intent(Constants.ACTION_CALL_CANCELLED).apply {
+                    putExtra("callId", callId)
+                }
+                LocalBroadcastManager.getInstance(this).sendBroadcast(broadcastIntent)
+            } else {
+                // 백그라운드: 시스템 알림 표시
+                Log.d(TAG, "앱이 백그라운드 - 취소 알림 표시: $callId")
+                showNotification(title, body, callId)
+            }
         } else if (messageType == "SETTLEMENT_FINALIZED") {
             // 업무 마감 알림 처리
             val sessionDate = remoteMessage.data["sessionDate"] ?: ""

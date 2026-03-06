@@ -66,13 +66,24 @@ class MainActivity : ComponentActivity() {
     private var showBatteryOptimizationDialog = mutableStateOf(false)
     private var hasShownBatteryDialog = false  // 세션 중 배터리 다이얼로그 표시 여부
 
-    // FCM LocalBroadcast 수신용 BroadcastReceiver
+    // FCM LocalBroadcast 수신용 BroadcastReceiver (배차 알림)
     private val fcmBroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val callId = intent?.getStringExtra("callId")
-            Log.d(TAG, "LocalBroadcast 수신: callId=$callId")
+            Log.d(TAG, "LocalBroadcast 수신 (배차): callId=$callId")
             if (!callId.isNullOrBlank() && auth.currentUser != null) {
                 driverViewModel.setNotificationCallId(callId)
+            }
+        }
+    }
+
+    // FCM LocalBroadcast 수신용 BroadcastReceiver (배차 취소)
+    private val callCancelledReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val callId = intent?.getStringExtra("callId")
+            Log.d(TAG, "LocalBroadcast 수신 (취소): callId=$callId")
+            if (!callId.isNullOrBlank() && auth.currentUser != null) {
+                driverViewModel.handleCallCancelled(callId)
             }
         }
     }
@@ -300,10 +311,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // FCM LocalBroadcast 수신 등록
+        // FCM LocalBroadcast 수신 등록 (배차 + 취소)
         LocalBroadcastManager.getInstance(this).registerReceiver(
             fcmBroadcastReceiver,
             IntentFilter(Constants.ACTION_SHOW_CALL_DIALOG)
+        )
+        LocalBroadcastManager.getInstance(this).registerReceiver(
+            callCancelledReceiver,
+            IntentFilter(Constants.ACTION_CALL_CANCELLED)
         )
         Log.d(TAG, "LocalBroadcast 리시버 등록됨")
 
@@ -323,8 +338,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
-        // FCM LocalBroadcast 수신 해제
+        // FCM LocalBroadcast 수신 해제 (배차 + 취소)
         LocalBroadcastManager.getInstance(this).unregisterReceiver(fcmBroadcastReceiver)
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(callCancelledReceiver)
         Log.d(TAG, "LocalBroadcast 리시버 해제됨")
     }
 

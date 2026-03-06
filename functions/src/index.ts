@@ -1195,7 +1195,7 @@ export const onSharedCallClaimed = onDocumentUpdated(
         if (assignedDriverId && driverSnap?.exists) {
           try {
             logger.info(`[shared:${callId}] 기사 상태 업데이트: ${assignedDriverId}`);
-            await driverSnap.ref.update({ status: "배차중" });
+            await driverSnap.ref.update({ status: "ASSIGNED" });
             logger.info(`[shared:${callId}] 기사 상태 업데이트 완료: ${assignedDriverId}`);
           } catch (assignErr) {
             logger.error(`[shared:${callId}] 기사 상태 업데이트 실패`, assignErr);
@@ -4360,6 +4360,74 @@ export const notifyDriverAssignment = onCall(
 
     } catch (error) {
       logger.error("[notifyDriverAssignment] 오류:", error);
+      return { success: false, error: String(error) };
+    }
+  }
+);
+
+// =============================
+// 기사 배차 취소 알림 (Callable Function)
+// 콜매니저에서 콜 취소 시 직접 호출
+// =============================
+export const notifyDriverCancellation = onCall(
+  {
+    region: "asia-northeast3",
+  },
+  async (request) => {
+    const { callId, driverAuthUid, provinceId, cityId, officeId } = request.data;
+
+    logger.info(`[notifyDriverCancellation] 호출됨 - callId: ${callId}, driverAuthUid: ${driverAuthUid}`);
+
+    if (!callId || !driverAuthUid || !provinceId || !cityId || !officeId) {
+      logger.error("[notifyDriverCancellation] 필수 파라미터 누락");
+      return { success: false, error: "Missing required parameters" };
+    }
+
+    try {
+      const driverDocRef = admin.firestore()
+        .collection("provinces").doc(provinceId)
+        .collection("cities").doc(cityId)
+        .collection("offices").doc(officeId)
+        .collection("designated_drivers").doc(driverAuthUid);
+
+      const driverDoc = await driverDocRef.get();
+
+      if (!driverDoc.exists) {
+        logger.error(`[notifyDriverCancellation] 기사 문서 없음 - docId: ${driverAuthUid}`);
+        return { success: false, error: "Driver not found" };
+      }
+
+      const driverData = driverDoc.data();
+      const fcmToken = driverData?.fcmToken;
+      const driverName = driverData?.name || "기사";
+
+      logger.info(`[notifyDriverCancellation] 기사 정보 - name: ${driverName}, token: ${fcmToken ? "exists" : "NONE"}`);
+
+      if (!fcmToken) {
+        logger.warn(`[notifyDriverCancellation] FCM 토큰 없음 - ${driverName}`);
+        return { success: false, error: "No FCM token" };
+      }
+
+      const payload = {
+        data: {
+          callId: callId,
+          type: "call_cancelled",
+          title: "배차 취소",
+          body: "배정된 콜이 취소되었습니다.",
+        },
+        android: {
+          priority: "high" as const,
+        },
+        token: fcmToken,
+      };
+
+      await admin.messaging().send(payload);
+      logger.info(`[notifyDriverCancellation] FCM 전송 성공 - ${driverName}`);
+
+      return { success: true, driverName: driverName };
+
+    } catch (error) {
+      logger.error("[notifyDriverCancellation] 오류:", error);
       return { success: false, error: String(error) };
     }
   }

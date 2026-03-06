@@ -47,6 +47,7 @@ class CallDetectorService : Service() {
     private var lastProcessedCallTime: Long = 0
     private val PROCESSING_THRESHOLD_MS = 5000 // 5초 이내의 동일 번호 호출은 중복으로 간주
     private var wasRinging: Boolean = false // 현재 통화 세션에서 RINGING이 발생했는지 추적 (수신/발신 구분용)
+    private var sharedCallCreatedFromRinging: Boolean = false // RINGING에서 공유콜 생성 여부 (IDLE에서 이중 생성 방지용)
     private val TAG = "CallDetectorService"
     private val CHANNEL_ID = "CallDetectorChannel"
     private val NOTIFICATION_ID = 1
@@ -186,6 +187,7 @@ class CallDetectorService : Service() {
             // 3. Handle incoming call ringing (RINGING state) - 마감 시 빠른 SMS 발송
             else if (callState == TelephonyManager.CALL_STATE_RINGING && isIncomingCall) {
                 wasRinging = true // 수신전화 RINGING 발생 기록
+                sharedCallCreatedFromRinging = false // 새 전화 시작 시 리셋
                 Log.i(TAG, "📞 Incoming call ringing from: $phoneNumber (wasRinging set to true)")
                 
                 // 마감 상태인지 확인 후 2-3초 후 SMS 발송
@@ -687,10 +689,14 @@ class CallDetectorService : Service() {
 
             when (officeStatus) {
                 "CLOSED" -> {
-                    // 마감 상태: shared_calls에 저장 (Cloud Functions에서 FCM 알림 처리)
-                    createSharedCall(provinceId, cityId, officeId, phoneNumber, contactName, contactAddress, deviceName)
-                    // SMS 발송 제거 - Cloud Functions에서 FCM으로 처리
-                    // sendAutoSMS(phoneNumber, officeName)
+                    // CD-01 수정: RINGING에서 이미 공유콜을 생성한 경우 중복 생성 방지
+                    if (sharedCallCreatedFromRinging) {
+                        Log.i(TAG, "⚠️ RINGING에서 이미 공유 콜 생성됨 - IDLE에서 중복 생성 방지")
+                        sharedCallCreatedFromRinging = false
+                    } else {
+                        // 마감 상태: shared_calls에 저장 (Cloud Functions에서 FCM 알림 처리)
+                        createSharedCall(provinceId, cityId, officeId, phoneNumber, contactName, contactAddress, deviceName)
+                    }
                 }
                 else -> {
                     // 운영중: 기존대로 calls에 저장
@@ -897,7 +903,8 @@ class CallDetectorService : Service() {
                 val (contactName, contactAddress) = getContactInfo(applicationContext, phoneNumber)
                 val deviceName = sharedPreferences.getString("deviceName", "") ?: ""
 
-                // 공유콜 생성 (RINGING에서)
+                // 공유콜 생성 (RINGING에서) - 플래그 설정으로 IDLE에서 이중 생성 방지
+                sharedCallCreatedFromRinging = true
                 createSharedCallFromRinging(provinceId, cityId, officeId, phoneNumber, contactName, contactAddress, deviceName)
 
                 // SMS 발송 제거 - Cloud Functions에서 FCM으로 처리

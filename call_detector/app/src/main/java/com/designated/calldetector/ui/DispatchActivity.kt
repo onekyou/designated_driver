@@ -166,10 +166,10 @@ class DispatchActivity : ComponentActivity() {
                 android.util.Log.e("DispatchActivity", "Failed to update call", e)
             }
 
-        // 기사 상태를 ON_TRIP으로 변경
+        // 기사 상태를 ASSIGNED로 변경 (Manager와 동일하게 통일)
         val driverPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/designated_drivers"
         db.collection(driverPath).document(driver.id)
-            .update("status", "ON_TRIP")
+            .update("status", "ASSIGNED")
 
         // FCM 알림 전송 (Cloud Function 호출)
         val driverAuthUid = driver.authUid
@@ -269,10 +269,10 @@ class DispatchActivity : ComponentActivity() {
                 Log.e("DispatchActivity", "콜 생성 실패", e)
             }
 
-        // 기사 상태를 ON_TRIP으로 변경
+        // 기사 상태를 ASSIGNED로 변경 (Manager와 동일하게 통일)
         val driverPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/designated_drivers"
         db.collection(driverPath).document(driver.id)
-            .update("status", "ON_TRIP")
+            .update("status", "ASSIGNED")
     }
 
     // createCallOnHold 함수 삭제됨 - 이미 CallDetectorService에서 WAITING 상태로 콜이 생성되므로 중복 생성 방지

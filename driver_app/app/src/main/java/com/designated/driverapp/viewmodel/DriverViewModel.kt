@@ -830,6 +830,26 @@ class DriverViewModel @Inject constructor(
         _uiState.update { it.copy(newCallPopup = null) }
     }
 
+    /**
+     * 콜 취소 FCM 수신 시 호출
+     * 해당 callId를 assignedCalls에서 제거하고, 관련 팝업/activeCall을 정리한다
+     */
+    fun handleCallCancelled(callId: String) {
+        Log.d(TAG, "handleCallCancelled: callId=$callId")
+        _uiState.update { currentState ->
+            val updatedCalls = currentState.assignedCalls.filter { it.id != callId }
+            val clearPopup = currentState.newCallPopup?.id == callId
+            val clearActive = currentState.activeCall?.id == callId
+
+            currentState.copy(
+                assignedCalls = updatedCalls,
+                newCallPopup = if (clearPopup) null else currentState.newCallPopup,
+                activeCall = if (clearActive) null else currentState.activeCall,
+                driverStatus = if (clearActive || clearPopup) DriverStatus.WAITING else currentState.driverStatus
+            )
+        }
+    }
+
     fun dismissSettlementPopup() {
         val id = _uiState.value.callForSettlement?.id
         _uiState.update { it.copy(callForSettlement = null) }

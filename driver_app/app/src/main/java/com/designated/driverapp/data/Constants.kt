@@ -54,6 +54,7 @@ object Constants {
     const val DRIVER_STATUS_OFFLINE = "OFFLINE"
 
     const val ACTION_SHOW_CALL_DIALOG = "com.designated.driverapp.ACTION_SHOW_CALL_DIALOG"
+    const val ACTION_CALL_CANCELLED = "com.designated.driverapp.ACTION_CALL_CANCELLED"
     const val ACTION_SETTLEMENT_FINALIZED = "com.designated.driverapp.ACTION_SETTLEMENT_FINALIZED"
     const val EXTRA_CALL_INFO = "com.designated.driverapp.EXTRA_CALL_INFO"
 }

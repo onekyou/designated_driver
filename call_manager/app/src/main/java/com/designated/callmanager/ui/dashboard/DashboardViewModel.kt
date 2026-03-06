@@ -807,7 +807,64 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun cancelCall(callId: String) {
-        updateCallStatus(callId, CallStatus.CANCELED)
+        if (_provinceId.value == null || _cityId.value == null || _officeId.value == null) return
+
+        viewModelScope.launch {
+            try {
+                val callRef = firestore.collection("provinces").document(_provinceId.value!!)
+                    .collection("cities").document(_cityId.value!!)
+                    .collection("offices").document(_officeId.value!!)
+                    .collection("calls").document(callId)
+
+                val callSnapshot = callRef.get().await()
+                val assignedDriverAuthUid = callSnapshot.getString("assignedDriverId")
+
+                callRef.update("status", CallStatus.CANCELED.firestoreValue).await()
+
+                // 배정된 기사가 있으면 상태 복구 + FCM 전송
+                if (!assignedDriverAuthUid.isNullOrBlank()) {
+                    // 기사 상태를 WAITING으로 복구
+                    val driversQuery = firestore.collection("provinces").document(_provinceId.value!!)
+                        .collection("cities").document(_cityId.value!!)
+                        .collection("offices").document(_officeId.value!!)
+                        .collection("designated_drivers")
+                        .whereEqualTo("authUid", assignedDriverAuthUid)
+                        .limit(1)
+                        .get()
+                        .await()
+
+                    if (!driversQuery.isEmpty) {
+                        val driverDoc = driversQuery.documents[0]
+                        driverDoc.reference.update("status", "WAITING").await()
+                    }
+
+                    // 기사에게 콜 취소 FCM 전송
+                    try {
+                        val functions = Firebase.functions("asia-northeast3")
+                        val data = hashMapOf(
+                            "callId" to callId,
+                            "driverAuthUid" to assignedDriverAuthUid,
+                            "provinceId" to _provinceId.value,
+                            "cityId" to _cityId.value,
+                            "officeId" to _officeId.value
+                        )
+                        functions.getHttpsCallable("notifyDriverCancellation")
+                            .call(data)
+                            .addOnSuccessListener { result ->
+                                Log.d(TAG, "기사 취소 알림 전송 성공: ${result.getData()}")
+                            }
+                            .addOnFailureListener { e ->
+                                Log.e(TAG, "기사 취소 알림 전송 실패: ${e.message}", e)
+                            }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "기사 취소 알림 함수 호출 예외: ${e.message}", e)
+                    }
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "콜 취소 실패: ${e.message}", e)
+            }
+        }
     }
 
     fun completeCall(callId: String) {
