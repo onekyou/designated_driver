@@ -832,20 +832,36 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     .collection("offices").document(_officeId.value!!)
                     .collection("calls").document(callId)
 
-                val callSnapshot = callRef.get().await()
-                val assignedDriverAuthUid = callSnapshot.getString("assignedDriverId")
+                // 트랜잭션으로 취소 처리 (CROSS-06: 원자적 업데이트)
+                val cancelResult = firestore.runTransaction { transaction ->
+                    val callSnapshot = transaction.get(callRef)
+                    val currentStatus = callSnapshot.getString("status")
+                    if (currentStatus == CallStatus.CANCELED.firestoreValue || currentStatus == CallStatus.CANCELLED.firestoreValue) {
+                        throw IllegalStateException("ALREADY_CANCELLED")
+                    }
+                    transaction.update(callRef, "status", CallStatus.CANCELED.firestoreValue)
 
-                callRef.update("status", CallStatus.CANCELED.firestoreValue).await()
+                    val assignedDriverAuthUid = callSnapshot.getString("assignedDriverId")
+                    val sourceSharedCallId = callSnapshot.getString("sourceSharedCallId")
+                    mapOf(
+                        "assignedDriverAuthUid" to (assignedDriverAuthUid ?: ""),
+                        "sourceSharedCallId" to (sourceSharedCallId ?: "")
+                    )
+                }.await()
+
+                @Suppress("UNCHECKED_CAST")
+                val resultMap = cancelResult as Map<String, String>
+                val assignedDriverAuthUid = resultMap["assignedDriverAuthUid"]?.takeIf { it.isNotBlank() }
+                val sourceSharedCallId = resultMap["sourceSharedCallId"]?.takeIf { it.isNotBlank() }
 
                 // 공유콜이면 shared_calls 문서를 OPEN으로 되돌려 재수락 가능하게 함 (BUG-D11)
-                val sourceSharedCallId = callSnapshot.getString("sourceSharedCallId")
-                if (!sourceSharedCallId.isNullOrBlank()) {
+                if (sourceSharedCallId != null) {
                     reopenSharedCall(sourceSharedCallId)
                     Log.d(TAG, "공유콜 OPEN으로 복구: $sourceSharedCallId")
                 }
 
                 // 배정된 기사가 있으면 상태 복구 + FCM 전송
-                if (!assignedDriverAuthUid.isNullOrBlank()) {
+                if (assignedDriverAuthUid != null) {
                     // 기사 상태를 WAITING으로 복구
                     val driversQuery = firestore.collection("provinces").document(_provinceId.value!!)
                         .collection("cities").document(_cityId.value!!)
@@ -884,6 +900,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     }
                 }
 
+            } catch (e: IllegalStateException) {
+                if (e.message == "ALREADY_CANCELLED") {
+                    Log.w(TAG, "이미 취소된 콜입니다: $callId")
+                } else {
+                    Log.e(TAG, "콜 취소 실패: ${e.message}", e)
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "콜 취소 실패: ${e.message}", e)
             }

@@ -1750,6 +1750,50 @@ export const onCallStatusChanged = onDocumentUpdated(
     } catch (managerError) {
       logger.error(`[onCallStatusChanged:${callId}] 콜매니저 FCM 오류:`, managerError);
     }
+
+    // CUST-03: 앱 회원 고객에게 상태 변경 FCM 전송 (ACCEPTED, IN_PROGRESS)
+    const customerNotifyStatuses = ["ACCEPTED", "IN_PROGRESS"];
+    if (afterData.isAppCustomer && afterData.phoneNumber && customerNotifyStatuses.includes(afterData.status)) {
+      try {
+        const customerDoc = await admin.firestore()
+          .collection("provinces").doc(provinceId)
+          .collection("cities").doc(cityId)
+          .collection("offices").doc(officeId)
+          .collection("customerInfo")
+          .doc(afterData.phoneNumber)
+          .get();
+
+        const fcmToken = customerDoc.data()?.fcmToken;
+        if (fcmToken) {
+          const statusMessages: Record<string, string> = {
+            "ACCEPTED": "기사가 콜을 수락했습니다. 곧 도착합니다.",
+            "IN_PROGRESS": "운행이 시작되었습니다.",
+          };
+
+          await admin.messaging().send({
+            token: fcmToken,
+            data: {
+              type: "call_status_update",
+              callId: callId,
+              status: afterData.status,
+              driverName: afterData.assignedDriverName || "",
+              driverPhone: afterData.assignedDriverPhone || "",
+            },
+            notification: {
+              title: "콜 상태 알림",
+              body: statusMessages[afterData.status] || `상태가 ${afterData.status}(으)로 변경되었습니다.`,
+            },
+            android: {
+              priority: "high",
+              ttl: 60000,
+            },
+          });
+          logger.info(`[onCallStatusChanged:${callId}] 고객 FCM 전송 완료: ${afterData.status}`);
+        }
+      } catch (customerError) {
+        logger.error(`[onCallStatusChanged:${callId}] 고객 FCM 오류:`, customerError);
+      }
+    }
   }
 );
 
