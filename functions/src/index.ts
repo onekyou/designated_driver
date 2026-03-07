@@ -654,6 +654,40 @@ export const sendNewCallNotification = onDocumentCreated(
       return;
     }
 
+    // 중복 콜 감지: 같은 사무실에서 10초 내 같은 phoneNumber의 다른 WAITING 콜이 있는지 확인
+    if (callData.phoneNumber) {
+      const now = admin.firestore.Timestamp.now();
+      const tenSecondsAgo = new admin.firestore.Timestamp(now.seconds - 10, now.nanoseconds);
+
+      const duplicateQuery = await admin.firestore()
+        .collection("provinces").doc(provinceId)
+        .collection("cities").doc(cityId)
+        .collection("offices").doc(officeId)
+        .collection("calls")
+        .where("phoneNumber", "==", callData.phoneNumber)
+        .where("status", "==", "WAITING")
+        .where("createdAt", ">=", tenSecondsAgo)
+        .get();
+
+      // 자기 자신을 제외한 다른 WAITING 콜이 있으면 중복
+      const otherDuplicates = duplicateQuery.docs.filter(doc => doc.id !== callId);
+      if (otherDuplicates.length > 0) {
+        logger.warn(`[new-call:${callId}] 중복 콜 감지! 같은 번호(${callData.phoneNumber})의 WAITING 콜이 이미 존재합니다. 기존 콜 ID: ${otherDuplicates[0].id}. 이 콜을 삭제합니다.`);
+        try {
+          await admin.firestore()
+            .collection("provinces").doc(provinceId)
+            .collection("cities").doc(cityId)
+            .collection("offices").doc(officeId)
+            .collection("calls").doc(callId)
+            .delete();
+          logger.info(`[new-call:${callId}] 중복 콜 삭제 완료`);
+        } catch (deleteError) {
+          logger.error(`[new-call:${callId}] 중복 콜 삭제 실패:`, deleteError);
+        }
+        return;
+      }
+    }
+
     logger.info(`[new-call:${callId}] 새 콜 알림 전송 시작`);
     logger.info(`[new-call:${callId}] 고객: ${callData.customerName || callData.phoneNumber}, 위치: ${callData.customerAddress}`);
 
@@ -1357,51 +1391,53 @@ export const onSharedCallCancelledByDriver = onDocumentUpdated(
         logger.info(`[call-cancelled:${callId}] shared_calls 정보: sourceProvinceId=${sharedCallData.sourceProvinceId}, sourceCityId=${sharedCallData.sourceCityId}, sourceOfficeId=${sharedCallData.sourceOfficeId}, originalCallId=${originalCallId}`);
         
         if (!originalCallId) {
-          logger.error(`[call-cancelled:${callId}] originalCallId가 없습니다. shared_calls 데이터를 확인하세요.`);
-          return;
+          // Detector가 직접 생성한 공유콜 - originalCallId가 없으므로 원본 복구 스킵
+          logger.info(`[call-cancelled:${callId}] Detector 생성 공유콜 - 원본 없으므로 복구 스킵. shared_calls 문서만 삭제합니다.`);
+          await sharedCallRef.delete();
+          logger.info(`[call-cancelled:${callId}] shared_calls 문서 삭제 완료 (Detector 생성 공유콜)`);
+        } else {
+          await admin.firestore().runTransaction(async (tx) => {
+            // 원본 사무실의 콜 문서 레퍼런스 (originalCallId 사용!)
+            const originalCallRef = admin.firestore()
+              .collection("provinces").doc(sharedCallData.sourceProvinceId)
+              .collection("cities").doc(sharedCallData.sourceCityId)
+              .collection("offices").doc(sharedCallData.sourceOfficeId)
+              .collection("calls").doc(originalCallId);
+
+            // 원본 콜 문서 존재 여부 확인
+            const originalCallSnap = await tx.get(originalCallRef);
+
+            // shared_calls는 삭제 (원사무실에서 다시 공유 여부 결정)
+            tx.delete(sharedCallRef);
+
+            // 원본 콜을 HOLD 상태로 복구 (존재하는 경우에만)
+            if (originalCallSnap.exists) {
+              const originalCallData = originalCallSnap.data();
+              logger.info(`[call-cancelled:${callId}] 원본 콜 현재 상태: ${originalCallData?.status}`);
+
+              const updateData = {
+                status: "HOLD", // 공유콜 취소 시 보류 상태로 변경
+                callType: null,
+                sourceSharedCallId: null,
+                assignedDriverId: null,
+                assignedDriverName: null,
+                assignedDriverPhone: null,
+                departure_set: null,
+                destination_set: null,
+                fare_set: null,
+                cancelReason: `공유콜 취소됨: ${afterData.cancelReason || "사유 없음"}`,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+              };
+
+              tx.update(originalCallRef, updateData);
+              logger.info(`[call-cancelled:${callId}] 원본 콜을 HOLD 상태로 복구 완료. Path: ${originalCallRef.path}`);
+            } else {
+              logger.warn(`[call-cancelled:${callId}] 원본 콜 문서가 존재하지 않습니다. Path: ${originalCallRef.path}`);
+            }
+
+            logger.info(`[call-cancelled:${callId}] shared_calls 초기화 완료`);
+          });
         }
-        
-        await admin.firestore().runTransaction(async (tx) => {
-          // 원본 사무실의 콜 문서 레퍼런스 (originalCallId 사용!)
-          const originalCallRef = admin.firestore()
-            .collection("provinces").doc(sharedCallData.sourceProvinceId)
-            .collection("cities").doc(sharedCallData.sourceCityId)
-            .collection("offices").doc(sharedCallData.sourceOfficeId)
-            .collection("calls").doc(originalCallId);
-          
-          // 원본 콜 문서 존재 여부 확인
-          const originalCallSnap = await tx.get(originalCallRef);
-          
-          // shared_calls는 삭제 (원사무실에서 다시 공유 여부 결정)
-          tx.delete(sharedCallRef);
-          
-          // 원본 콜을 HOLD 상태로 복구 (존재하는 경우에만)
-          if (originalCallSnap.exists) {
-            const originalCallData = originalCallSnap.data();
-            logger.info(`[call-cancelled:${callId}] 원본 콜 현재 상태: ${originalCallData?.status}`);
-            
-            const updateData = {
-              status: "HOLD", // 공유콜 취소 시 보류 상태로 변경
-              callType: null,
-              sourceSharedCallId: null,
-              assignedDriverId: null,
-              assignedDriverName: null,
-              assignedDriverPhone: null,
-              departure_set: null,
-              destination_set: null,
-              fare_set: null,
-              cancelReason: `공유콜 취소됨: ${afterData.cancelReason || "사유 없음"}`,
-              updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            };
-            
-            tx.update(originalCallRef, updateData);
-            logger.info(`[call-cancelled:${callId}] 원본 콜을 HOLD 상태로 복구 완료. Path: ${originalCallRef.path}`);
-          } else {
-            logger.warn(`[call-cancelled:${callId}] 원본 콜 문서가 존재하지 않습니다. Path: ${originalCallRef.path}`);
-          }
-          
-          logger.info(`[call-cancelled:${callId}] shared_calls 초기화 완료`);
-        });
         
         // 원본 사무실 관리자들에게 FCM 알림 전송 (팝업 포함)
         const adminQuery = await admin
@@ -2057,7 +2093,7 @@ export const onSharedCallCompleted = onDocumentUpdated(
   }
 );
 
-export { finalizeWorkDay } from "./finalizeWorkDay";
+// [STL-10] finalizeWorkDay 구 정산 함수 제거됨 (새 정산 시스템: settlementSessions 사용)
 
 // 픽업 기사 데이터 마이그레이션 함수 (한 번만 실행)
 

@@ -49,7 +49,9 @@ class CallDetectorService : Service() {
     private var lastProcessedPhoneNumber: String? = null
     private var lastProcessedCallTime: Long = 0
     private val PROCESSING_THRESHOLD_MS = 5000 // 5초 이내의 동일 번호 호출은 중복으로 간주
+    private val DUPLICATE_CALL_CHECK_MS = 10000L // 10초 이내의 동일 번호 Firestore 콜은 중복으로 간주 (3대 Detector 이중 생성 방지)
     private var wasRinging: Boolean = false // 현재 통화 세션에서 RINGING이 발생했는지 추적 (수신/발신 구분용)
+    private var lastRingingTime: Long = 0 // 마지막 RINGING 발생 시간 (OFFHOOK 중복 판단용)
     private var sharedCallCreatedFromRinging: Boolean = false // RINGING에서 공유콜 생성 여부 (IDLE에서 이중 생성 방지용)
     private val TAG = "CallDetectorService"
     private val CHANNEL_ID = "CallDetectorChannel"
@@ -175,9 +177,16 @@ class CallDetectorService : Service() {
                 }
 
                 // Check if this OFFHOOK is a duplicate for the *current* call session
+                // RINGING 기반 판단 우선: 새로운 RINGING이 발생했으면 별개 통화로 판단
                 if (phoneNumber == lastProcessedPhoneNumber && (currentTime - lastProcessedCallTime) < PROCESSING_THRESHOLD_MS) {
-                    Log.w(TAG, "⚠️ Duplicate OFFHOOK event for $phoneNumber within threshold. Skipping processing.")
-                    return START_STICKY
+                    if (lastRingingTime > lastProcessedCallTime) {
+                        // 새로운 RINGING이 있었으므로 별개의 통화 - 중복이 아님
+                        Log.i(TAG, "✅ New RINGING detected after last OFFHOOK (ringing=$lastRingingTime > processed=$lastProcessedCallTime). Treating as new call.")
+                    } else {
+                        // RINGING 없이 시간 내 동일 번호 → 진짜 중복
+                        Log.w(TAG, "⚠️ Duplicate OFFHOOK event for $phoneNumber within threshold (no new RINGING). Skipping processing.")
+                        return START_STICKY
+                    }
                 }
 
                 Log.i(TAG, "✅ Incoming call answered (OFFHOOK). Recording call session - will process when call ends.")
@@ -190,8 +199,9 @@ class CallDetectorService : Service() {
             // 3. Handle incoming call ringing (RINGING state) - 마감 시 빠른 SMS 발송
             else if (callState == TelephonyManager.CALL_STATE_RINGING && isIncomingCall) {
                 wasRinging = true // 수신전화 RINGING 발생 기록
+                lastRingingTime = currentTime // RINGING 시간 기록 (OFFHOOK 중복 판단용)
                 sharedCallCreatedFromRinging = false // 새 전화 시작 시 리셋
-                Log.i(TAG, "📞 Incoming call ringing from: $phoneNumber (wasRinging set to true)")
+                Log.i(TAG, "📞 Incoming call ringing from: $phoneNumber (wasRinging set to true, lastRingingTime=$lastRingingTime)")
                 
                 // 마감 상태인지 확인 후 2-3초 후 SMS 발송
                 serviceScope.launch {
@@ -771,6 +781,24 @@ class CallDetectorService : Service() {
             Log.i(TAG, "🚨 fromCallDetector value: ${callData["fromCallDetector"]}")
             Log.i(TAG, "🚨 isAppCustomer value: ${callData["isAppCustomer"]}")
 
+            // 3대 Detector 이중 콜 생성 방지: 10초 내 같은 phoneNumber의 콜 존재 여부 확인
+            val duplicateCheckThreshold = System.currentTimeMillis() - DUPLICATE_CALL_CHECK_MS
+            val existingCalls = db.collection(targetPath)
+                .whereEqualTo("phoneNumber", phoneNumber)
+                .whereGreaterThan("timestampClient", duplicateCheckThreshold)
+                .whereIn("status", listOf(
+                    CallStatus.WAITING.firestoreValue,
+                    CallStatus.PENDING.firestoreValue,
+                    CallStatus.MATCHED.firestoreValue
+                ))
+                .get()
+                .await()
+
+            if (!existingCalls.isEmpty) {
+                Log.w(TAG, "⚠️ 중복 콜 감지: 10초 내 같은 번호($phoneNumber)의 콜이 이미 존재합니다 (${existingCalls.size()}건). 생성 스킵.")
+                return
+            }
+
             val documentReference = db.collection(targetPath)
                 .add(callData)
                 .await()
@@ -809,7 +837,7 @@ class CallDetectorService : Service() {
     /**
      * 공유 콜 생성 (마감 상태)
      */
-    private fun createSharedCall(
+    private suspend fun createSharedCall(
         provinceId: String,
         cityId: String,
         officeId: String,
@@ -818,30 +846,45 @@ class CallDetectorService : Service() {
         contactAddress: String?,
         deviceName: String
     ) {
-        val sharedCallData = hashMapOf<String, Any>(
-            "phoneNumber" to phoneNumber,
-            "sourceProvinceId" to provinceId,
-            "sourceCityId" to cityId,
-            "sourceOfficeId" to officeId,
-            "deviceName" to deviceName,
-            "status" to "OPEN",
-            "timestamp" to FieldValue.serverTimestamp(),
-            "callType" to "AFTER_HOURS", // 퇴근 후 콜
-            "timestampClient" to System.currentTimeMillis(),
-            "fromCallDetector" to true // 독립 콜디텍터에서 생성된 콜 (콜매니저에서 팝업 표시 방지)
-        )
+        try {
+            // 3대 Detector 이중 공유콜 생성 방지: 10초 내 같은 phoneNumber + sourceOfficeId의 OPEN 콜 존재 여부 확인
+            val duplicateCheckThreshold = System.currentTimeMillis() - DUPLICATE_CALL_CHECK_MS
+            val existingSharedCalls = db.collection("shared_calls")
+                .whereEqualTo("phoneNumber", phoneNumber)
+                .whereEqualTo("sourceOfficeId", officeId)
+                .whereGreaterThan("timestampClient", duplicateCheckThreshold)
+                .whereEqualTo("status", "OPEN")
+                .get()
+                .await()
 
-        contactName?.let { sharedCallData["customerName"] = it }
-        contactAddress?.let { sharedCallData["customerAddress"] = it }
+            if (!existingSharedCalls.isEmpty) {
+                Log.w(TAG, "⚠️ 중복 공유콜 감지: 10초 내 같은 번호($phoneNumber)의 공유콜이 이미 존재합니다 (${existingSharedCalls.size()}건). 생성 스킵.")
+                return
+            }
 
-        db.collection("shared_calls")
-            .add(sharedCallData)
-            .addOnSuccessListener { documentReference ->
-                Log.i(TAG, "✅ Shared call created with ID: ${documentReference.id}")
-            }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "❌ Failed to create shared call: ${e.message}", e)
-            }
+            val sharedCallData = hashMapOf<String, Any>(
+                "phoneNumber" to phoneNumber,
+                "sourceProvinceId" to provinceId,
+                "sourceCityId" to cityId,
+                "sourceOfficeId" to officeId,
+                "deviceName" to deviceName,
+                "status" to "OPEN",
+                "timestamp" to FieldValue.serverTimestamp(),
+                "callType" to "AFTER_HOURS", // 퇴근 후 콜
+                "timestampClient" to System.currentTimeMillis(),
+                "fromCallDetector" to true // 독립 콜디텍터에서 생성된 콜 (콜매니저에서 팝업 표시 방지)
+            )
+
+            contactName?.let { sharedCallData["customerName"] = it }
+            contactAddress?.let { sharedCallData["customerAddress"] = it }
+
+            val documentReference = db.collection("shared_calls")
+                .add(sharedCallData)
+                .await()
+            Log.i(TAG, "✅ Shared call created with ID: ${documentReference.id}")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to create shared call: ${e.message}", e)
+        }
     }
     
     /**
@@ -927,7 +970,7 @@ class CallDetectorService : Service() {
     /**
      * RINGING 상태에서 공유 콜 생성
      */
-    private fun createSharedCallFromRinging(
+    private suspend fun createSharedCallFromRinging(
         provinceId: String,
         cityId: String,
         officeId: String,
@@ -936,31 +979,46 @@ class CallDetectorService : Service() {
         contactAddress: String?,
         deviceName: String
     ) {
-        val sharedCallData = hashMapOf<String, Any>(
-            "phoneNumber" to phoneNumber,
-            "sourceProvinceId" to provinceId,
-            "sourceCityId" to cityId,
-            "sourceOfficeId" to officeId,
-            "deviceName" to deviceName,
-            "status" to "OPEN",
-            "timestamp" to FieldValue.serverTimestamp(),
-            "callType" to "AFTER_HOURS_QUICK", // 마감 후 빠른 응답
-            "timestampClient" to System.currentTimeMillis(),
-            "fromCallDetector" to true, // 독립 콜디텍터에서 생성된 콜 (콜매니저에서 팝업 표시 방지)
-            "fromRinging" to true // RINGING 상태에서 생성됨을 표시
-        )
+        try {
+            // 3대 Detector 이중 공유콜 생성 방지: 10초 내 같은 phoneNumber + sourceOfficeId의 OPEN 콜 존재 여부 확인
+            val duplicateCheckThreshold = System.currentTimeMillis() - DUPLICATE_CALL_CHECK_MS
+            val existingSharedCalls = db.collection("shared_calls")
+                .whereEqualTo("phoneNumber", phoneNumber)
+                .whereEqualTo("sourceOfficeId", officeId)
+                .whereGreaterThan("timestampClient", duplicateCheckThreshold)
+                .whereEqualTo("status", "OPEN")
+                .get()
+                .await()
 
-        contactName?.let { sharedCallData["customerName"] = it }
-        contactAddress?.let { sharedCallData["customerAddress"] = it }
+            if (!existingSharedCalls.isEmpty) {
+                Log.w(TAG, "⚠️ 중복 공유콜(RINGING) 감지: 10초 내 같은 번호($phoneNumber)의 공유콜이 이미 존재합니다 (${existingSharedCalls.size()}건). 생성 스킵.")
+                return
+            }
 
-        db.collection("shared_calls")
-            .add(sharedCallData)
-            .addOnSuccessListener { documentReference ->
-                Log.i(TAG, "✅ Quick response shared call created with ID: ${documentReference.id}")
-            }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "❌ Failed to create quick response shared call: ${e.message}", e)
-            }
+            val sharedCallData = hashMapOf<String, Any>(
+                "phoneNumber" to phoneNumber,
+                "sourceProvinceId" to provinceId,
+                "sourceCityId" to cityId,
+                "sourceOfficeId" to officeId,
+                "deviceName" to deviceName,
+                "status" to "OPEN",
+                "timestamp" to FieldValue.serverTimestamp(),
+                "callType" to "AFTER_HOURS_QUICK", // 마감 후 빠른 응답
+                "timestampClient" to System.currentTimeMillis(),
+                "fromCallDetector" to true, // 독립 콜디텍터에서 생성된 콜 (콜매니저에서 팝업 표시 방지)
+                "fromRinging" to true // RINGING 상태에서 생성됨을 표시
+            )
+
+            contactName?.let { sharedCallData["customerName"] = it }
+            contactAddress?.let { sharedCallData["customerAddress"] = it }
+
+            val documentReference = db.collection("shared_calls")
+                .add(sharedCallData)
+                .await()
+            Log.i(TAG, "✅ Quick response shared call created with ID: ${documentReference.id}")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to create quick response shared call: ${e.message}", e)
+        }
     }
 
     override fun onDestroy() {

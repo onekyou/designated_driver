@@ -237,10 +237,14 @@ fun HomeScreen(
             when {
                 uiState.newCallPopup != null -> {
                     val newCallPopup = uiState.newCallPopup!!
+                    val pendingCount = uiState.assignedCalls.count {
+                        it.id != newCallPopup.id && it.statusEnum == CallStatus.ASSIGNED
+                    }
                     NewCallPopup(
                         callInfo = newCallPopup,
                         onAccept = { viewModel.acceptCall(newCallPopup.id) },
-                        onDismiss = { viewModel.dismissNewCallPopup() }
+                        onDismiss = { viewModel.dismissNewCallPopup() },
+                        pendingCallCount = pendingCount
                     )
                 }
                 uiState.activeCall != null -> {

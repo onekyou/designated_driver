@@ -130,3 +130,28 @@
 - `customer-app-analysis.md` - Customer App 분석 결과
 - `CROSS_VERIFICATION_LOG.md` - 크로스 검증 기록
 
+---
+
+# Agent Teams 운영 규칙
+
+## 팀 구성
+| 팀원 | 담당 | 컨텍스트 파일 |
+|------|------|--------------|
+| detector-analyst | call_detector 앱 | `.agent-teams/detector-analyst.md` |
+| manager-analyst | call_manager 앱 | `.agent-teams/manager-analyst.md` |
+| driver-analyst | driver_app 앱 | `.agent-teams/driver-analyst.md` |
+| firebase-analyst | Cloud Functions + Firebase | `.agent-teams/firebase-analyst.md` |
+
+## 필수 규칙
+1. **팀 해체 금지**: 사용자가 "팀 해체해" 또는 "팀 삭제해"라고 명시하기 전까지 팀 유지
+2. **팀원 소환 시**: 반드시 자기 담당 컨텍스트 파일 + `TEAM_OVERVIEW.md`를 먼저 읽을 것
+3. **임무 완료 후**: 결과를 보고하고 다음 지시 대기 (임의 행동 금지)
+4. **"준비해줘" = 구성/정리까지만**. 실행은 별도 명령을 기다릴 것
+
+## 현재 세션 에이전트 ID (resume용)
+> 세션마다 갱신 필요
+- detector-analyst: ab4f47f5efa6b1002
+- manager-analyst: a36255af2f5e379eb
+- driver-analyst: a21fbb2d596a79496
+- firebase-analyst: aa4c6ce7f42b6ab9e
+

@@ -450,7 +450,19 @@ class DriverViewModel @Inject constructor(
         Log.d(TAG, "✅ 콜 수락 완료: $callId")
             } catch (e: Exception) {
                 Log.e(TAG, "❌ 콜 수락 실패: ${e.message}", e)
-                _uiState.update { it.copy(errorMessage = e.message ?: "콜 수락 중 오류가 발생했습니다.") }
+                // UI 상태 롤백: ACCEPTED -> ASSIGNED로 되돌리기
+                _uiState.update { current ->
+                    current.copy(
+                        assignedCalls = current.assignedCalls.map {
+                            if (it.id == callId) it.copy(status = Constants.STATUS_ASSIGNED)
+                            else it
+                        },
+                        activeCall = null,
+                        newCallPopup = current.assignedCalls.find { it.id == callId },
+                        driverStatus = DriverStatus.ASSIGNED,
+                        errorMessage = e.message ?: "콜 수락 중 오류가 발생했습니다."
+                    )
+                }
             } finally {
                 _isAccepting.value = false
             }
@@ -466,6 +478,11 @@ class DriverViewModel @Inject constructor(
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_CALLS).document(callId)
 
+        val driverRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+            .collection(Constants.COLLECTION_CITIES).document(cityId)
+            .collection(Constants.COLLECTION_OFFICES).document(officeId)
+            .collection(Constants.COLLECTION_DRIVERS).document(driverId)
+
         // 콜 상태를 WAITING으로 되돌려 재배차 가능하게 함
         val callUpdates = mapOf(
             Constants.FIELD_STATUS to Constants.STATUS_WAITING,
@@ -475,14 +492,12 @@ class DriverViewModel @Inject constructor(
             "rejectedByDriver" to driverId,
             Constants.FIELD_UPDATED_AT to FieldValue.serverTimestamp()
         )
-        callRef.update(callUpdates).await()
 
-        // 기사 상태를 WAITING으로 복구
-        val driverRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
-            .collection(Constants.COLLECTION_CITIES).document(cityId)
-            .collection(Constants.COLLECTION_OFFICES).document(officeId)
-            .collection(Constants.COLLECTION_DRIVERS).document(driverId)
-        driverRef.update(Constants.FIELD_STATUS, DriverStatus.WAITING.value).await()
+        // 단일 트랜잭션으로 콜+기사 원자적 업데이트
+        firestore.runTransaction { transaction ->
+            transaction.update(callRef, callUpdates)
+            transaction.update(driverRef, Constants.FIELD_STATUS, DriverStatus.WAITING.value)
+        }.await()
 
         // UI 정리: 팝업 닫기, assignedCalls에서 제거, 기사 상태 복구
         _uiState.update { current ->
@@ -512,6 +527,11 @@ class DriverViewModel @Inject constructor(
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_CALLS).document(callId)
 
+        val driverRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+            .collection(Constants.COLLECTION_CITIES).document(cityId)
+            .collection(Constants.COLLECTION_OFFICES).document(officeId)
+            .collection(Constants.COLLECTION_DRIVERS).document(driverId)
+
         // 내부콜/공유콜 모두 동일하게 HOLD로 처리 (다른 기사에게 재배차 가능)
         val callUpdates = mapOf(
             Constants.FIELD_STATUS to "HOLD",
@@ -522,14 +542,12 @@ class DriverViewModel @Inject constructor(
             "cancelledByDriver" to true,
             Constants.FIELD_UPDATED_AT to FieldValue.serverTimestamp()
         )
-        callRef.update(callUpdates).await()
 
-        val driverRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
-            .collection(Constants.COLLECTION_CITIES).document(cityId)
-            .collection(Constants.COLLECTION_OFFICES).document(officeId)
-            .collection(Constants.COLLECTION_DRIVERS).document(driverId)
-
-        driverRef.update(Constants.FIELD_STATUS, DriverStatus.WAITING.value).await()
+        // 단일 트랜잭션으로 콜+기사 원자적 업데이트
+        firestore.runTransaction { transaction ->
+            transaction.update(callRef, callUpdates)
+            transaction.update(driverRef, Constants.FIELD_STATUS, DriverStatus.WAITING.value)
+        }.await()
 
         _uiState.update { current ->
             current.copy(
@@ -690,22 +708,22 @@ class DriverViewModel @Inject constructor(
                     tripData["creditAmount"] = fareToSet
                 }
 
-                firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
-                    .collection(Constants.COLLECTION_CITIES).document(cityId)
-                    .collection(Constants.COLLECTION_OFFICES).document(officeId)
-                    .collection(Constants.COLLECTION_CALLS).document(callId)
-                    .update(tripData).await()
-
-                firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
-                    .collection(Constants.COLLECTION_CITIES).document(cityId)
-                    .collection(Constants.COLLECTION_OFFICES).document(officeId)
-                    .collection(Constants.COLLECTION_DRIVERS).document(driverId)
-                    .update(Constants.FIELD_STATUS, DriverStatus.WAITING.value).await()
-
                 val callRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
                     .collection(Constants.COLLECTION_CITIES).document(cityId)
                     .collection(Constants.COLLECTION_OFFICES).document(officeId)
                     .collection(Constants.COLLECTION_CALLS).document(callId)
+
+                val driverRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                    .collection(Constants.COLLECTION_CITIES).document(cityId)
+                    .collection(Constants.COLLECTION_OFFICES).document(officeId)
+                    .collection(Constants.COLLECTION_DRIVERS).document(driverId)
+
+                // 단일 트랜잭션으로 콜 완료 + 기사 상태 원자적 업데이트
+                firestore.runTransaction { transaction ->
+                    transaction.update(callRef, tripData)
+                    transaction.update(driverRef, Constants.FIELD_STATUS, DriverStatus.WAITING.value)
+                }.await()
+
                 val latestCallSnapshot = callRef.get().await()
                 val latestCallInfo = latestCallSnapshot.toObject<CallInfo>()?.copy(id = latestCallSnapshot.id)
 
@@ -772,6 +790,9 @@ class DriverViewModel @Inject constructor(
                         isLoading = false
                     )
                 }
+
+                // 운행 완료 후 Firestore 정산 데이터 갱신
+                refreshSettlementData()
 
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = "정산 처리 중 오류: ${e.message}", isLoading = false) }
@@ -859,7 +880,17 @@ class DriverViewModel @Inject constructor(
     }
 
     fun dismissNewCallPopup() {
-        _uiState.update { it.copy(newCallPopup = null) }
+        _uiState.update { currentState ->
+            // 현재 팝업의 콜을 제외하고, 아직 ASSIGNED 상태인 다음 콜이 있으면 팝업 표시
+            val currentPopupId = currentState.newCallPopup?.id
+            val nextCall = currentState.assignedCalls.firstOrNull {
+                it.id != currentPopupId && it.statusEnum == CallStatus.ASSIGNED
+            }
+            if (nextCall != null) {
+                Log.d(TAG, "dismissNewCallPopup: showing next pending call popup: ${nextCall.id}")
+            }
+            currentState.copy(newCallPopup = nextCall)
+        }
     }
 
     /**
@@ -1041,20 +1072,29 @@ class DriverViewModel @Inject constructor(
                 val callInfo = callDocument.toObject(CallInfo::class.java)?.copy(id = callDocument.id)
 
                 if (callInfo != null && callInfo.statusEnum == CallStatus.ASSIGNED) {
-                    // ✅ 배차된 콜이면 assignedCalls에 추가하고 팝업 표시
+                    // ✅ 배차된 콜이면 assignedCalls에 추가
                     _uiState.update { currentState ->
                         val updatedCalls = if (currentState.assignedCalls.none { it.id == callInfo.id }) {
                             currentState.assignedCalls + callInfo
                         } else {
                             currentState.assignedCalls
                         }
-                        currentState.copy(
-                            assignedCalls = updatedCalls,
-                            newCallPopup = callInfo,
-                            navigateToHome = true
-                        )
+                        // 이미 팝업이 표시 중이면 덮어쓰지 않고 assignedCalls에만 추가
+                        if (currentState.newCallPopup != null) {
+                            Log.d(TAG, "handleNotificationCallId: popup already showing, adding to assignedCalls only (total: ${updatedCalls.size})")
+                            currentState.copy(
+                                assignedCalls = updatedCalls,
+                                navigateToHome = true
+                            )
+                        } else {
+                            currentState.copy(
+                                assignedCalls = updatedCalls,
+                                newCallPopup = callInfo,
+                                navigateToHome = true
+                            )
+                        }
                     }
-                    Log.d(TAG, "handleNotificationCallId: showing popup for assigned call")
+                    Log.d(TAG, "handleNotificationCallId: processed assigned call")
                 } else if (callInfo != null) {
                     // 다른 상태의 콜이면 콜 상세 화면으로 이동
                     _callDetailsState.value = callInfo
@@ -1306,8 +1346,9 @@ class DriverViewModel @Inject constructor(
                     carryOver
                 }
 
-                // 미수령금이 있고, SETTLED가 아닌 경우에만 표시
-                if (effectiveCarryOver.balance > 0 && effectiveCarryOver.status != CarryOverStatus.SETTLED) {
+                // 미수령금/미납금이 있거나, TRANSFERRED 상태(수령확인 대기)인 경우 표시
+                if (effectiveCarryOver.status == CarryOverStatus.TRANSFERRED ||
+                    (effectiveCarryOver.balance != 0L && effectiveCarryOver.status != CarryOverStatus.SETTLED)) {
                     _carryOver.value = effectiveCarryOver
                     Log.d(TAG, "CarryOver updated: balance=${effectiveCarryOver.balance}, status=${effectiveCarryOver.status}")
                 } else {

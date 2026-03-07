@@ -67,18 +67,16 @@ async function processSharedCallPoints(sharedCallData, provinceId, cityId, offic
             .collection("provinces").doc(provinceId)
             .collection("cities").doc(cityId)
             .collection("offices").doc(officeId);
-        // 이미 처리된 거래가 있는지 확인
+        // 멱등성 키 기반 중복 처리 방지: 문서 ID로 존재 여부 확인
+        const sourceTransactionRef = sourceOfficeRef.collection("point_transactions")
+            .doc(`shared_receive_${sourceSharedCallId}`);
+        const targetTransactionRef = targetOfficeRef.collection("point_transactions")
+            .doc(`shared_send_${sourceSharedCallId}`);
         const [sourceExistingTx, targetExistingTx] = await Promise.all([
-            tx.get(sourceOfficeRef.collection("point_transactions")
-                .where("relatedSharedCallId", "==", sourceSharedCallId)
-                .where("type", "==", "SHARED_CALL_RECEIVE")
-                .limit(1)),
-            tx.get(targetOfficeRef.collection("point_transactions")
-                .where("relatedSharedCallId", "==", sourceSharedCallId)
-                .where("type", "==", "SHARED_CALL_SEND")
-                .limit(1))
+            tx.get(sourceTransactionRef),
+            tx.get(targetTransactionRef)
         ]);
-        if (!sourceExistingTx.empty || !targetExistingTx.empty) {
+        if (sourceExistingTx.exists || targetExistingTx.exists) {
             logger.warn(`[points] 이미 처리된 공유콜 포인트입니다. SharedCallId: ${sourceSharedCallId}`);
             return; // 이미 처리됨
         }
@@ -103,10 +101,9 @@ async function processSharedCallPoints(sharedCallData, provinceId, cityId, offic
             balance: targetBalance,
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
-        // 2) 포인트 거래 내역 저장 (사무실별 서브컬렉션)
+        // 2) 포인트 거래 내역 저장 (사무실별 서브컬렉션, 멱등성 키 문서 ID 사용)
         const timestamp = admin.firestore.FieldValue.serverTimestamp();
         // 원본 사무실 거래 내역 (포인트 받음)
-        const sourceTransactionRef = sourceOfficeRef.collection("point_transactions").doc();
         tx.set(sourceTransactionRef, {
             type: "SHARED_CALL_RECEIVE",
             amount: pointAmount,
@@ -116,7 +113,6 @@ async function processSharedCallPoints(sharedCallData, provinceId, cityId, offic
             relatedSharedCallId: sourceSharedCallId
         });
         // 대상 사무실 거래 내역 (포인트 차감)
-        const targetTransactionRef = targetOfficeRef.collection("point_transactions").doc();
         tx.set(targetTransactionRef, {
             type: "SHARED_CALL_SEND",
             amount: -pointAmount,
@@ -234,15 +230,12 @@ async function processCustomerPointsOnComplete(provinceId, cityId, officeId, cal
             // 기존 고객 포인트 데이터 조회
             const customerPointsSnap = await tx.get(customerPointsRef);
             const existingData = customerPointsSnap.data();
-            // 중복 처리 방지: 이 콜에 대한 포인트가 이미 적립되었는지 확인
-            const existingTxQuery = officeRef
+            // 중복 처리 방지: 멱등성 키 기반 문서 ID로 존재 여부 확인
+            const earnTransactionRef = officeRef
                 .collection("customerPointTransactions")
-                .where("phoneNumber", "==", normalizedPhone)
-                .where("callId", "==", callId)
-                .where("type", "==", "EARN")
-                .limit(1);
-            const existingTxSnap = await tx.get(existingTxQuery);
-            if (!existingTxSnap.empty) {
+                .doc(`earn_${normalizedPhone}_${callId}`);
+            const existingTxSnap = await tx.get(earnTransactionRef);
+            if (existingTxSnap.exists) {
                 logger.warn(`[customerPoints] 이미 적립된 콜입니다. CallId: ${callId}, Phone: ${normalizedPhone}`);
                 return {
                     success: false,
@@ -284,9 +277,8 @@ async function processCustomerPointsOnComplete(provinceId, cityId, officeId, cal
                 lastUpdated: timestamp,
                 createdAt: (existingData === null || existingData === void 0 ? void 0 : existingData.createdAt) || timestamp,
             }, { merge: true });
-            // 2) 포인트 거래 내역 저장
-            const transactionRef = officeRef.collection("customerPointTransactions").doc();
-            tx.set(transactionRef, {
+            // 2) 포인트 거래 내역 저장 (멱등성 키 문서 ID 사용)
+            tx.set(earnTransactionRef, {
                 phoneNumber: normalizedPhone,
                 customerName: customerName || "",
                 type: "EARN",

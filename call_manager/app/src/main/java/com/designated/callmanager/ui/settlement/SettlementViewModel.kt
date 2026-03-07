@@ -1579,7 +1579,14 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                 // 기사앱이 계산한 calculatedCarryOver를 직접 사용 (중복 계산 방지)
                 @Suppress("UNCHECKED_CAST")
                 val dailySettlementMap = doc.get("dailySettlement") as? Map<String, Any?>
-                val newBalance = (dailySettlementMap?.get("calculatedCarryOver") as? Long) ?: 0L
+                val newBalance = if (dailySettlementMap != null) {
+                    (dailySettlementMap["calculatedCarryOver"] as? Long) ?: 0L
+                } else {
+                    // 미제출 기사: 기존 carryOver.balance 유지
+                    @Suppress("UNCHECKED_CAST")
+                    val carryOverMap = doc.get("carryOver") as? Map<String, Any?>
+                    (carryOverMap?.get("balance") as? Long) ?: 0L
+                }
 
                 // carryOver 상태 결정
                 val newCarryOverStatus = when {

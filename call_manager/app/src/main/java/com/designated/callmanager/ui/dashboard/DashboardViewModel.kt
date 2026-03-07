@@ -746,6 +746,14 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     if (currentStatus != CallStatus.WAITING.firestoreValue) {
                         throw IllegalStateException("ALREADY_ASSIGNED")
                     }
+
+                    // 기사 상태 확인 (WAITING 또는 ONLINE인 경우만 배차 허용)
+                    val driverDoc = transaction.get(driverRef)
+                    val driverStatus = driverDoc.getString("status")
+                    if (driverStatus != DriverStatus.WAITING.value && driverStatus != DriverStatus.ONLINE.value) {
+                        throw IllegalStateException("DRIVER_NOT_AVAILABLE")
+                    }
+
                     transaction.update(callRef, callUpdates)
                     transaction.update(driverRef, "status", DriverStatus.ASSIGNED.value)
                 }.await()
@@ -760,7 +768,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 )
                 Log.d(TAG, "로컬 DB 배차 정보 업데이트 완료: ${callInfo.id}")
 
-                // 기사에게 FCM 알림 전송 (Cloud Function 호출)
+                // 기사에게 FCM 알림 전송 (Cloud Function 호출, 실패 시 최대 2회 재시도)
                 Log.d(TAG, "========== 기사 알림 함수 호출 시작 ==========")
                 Log.d(TAG, "callId: ${callInfo.id}, driverAuthUid: $driverAuthUid")
                 Log.d(TAG, "provinceId: ${_provinceId.value}, cityId: ${_cityId.value}, officeId: ${_officeId.value}")
@@ -776,17 +784,41 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                         "departure" to (callInfo.departure ?: "")
                     )
                     Log.d(TAG, "Cloud Function 호출 전: $data")
-                    functions.getHttpsCallable("notifyDriverAssignment")
-                        .call(data)
-                        .addOnSuccessListener { result ->
-                            Log.d(TAG, "✅ 기사 알림 전송 성공: ${result.getData()}")
+
+                    val maxRetries = 2
+                    val retryDelayMs = 3000L
+                    var lastException: Exception? = null
+                    var success = false
+
+                    for (attempt in 0..maxRetries) {
+                        try {
+                            if (attempt > 0) {
+                                Log.d(TAG, "기사 알림 재시도 ${attempt}/${maxRetries} (${retryDelayMs}ms 후)")
+                                delay(retryDelayMs)
+                            }
+                            val result = functions.getHttpsCallable("notifyDriverAssignment")
+                                .call(data)
+                                .await()
+                            Log.d(TAG, "기사 알림 전송 성공 (attempt=${attempt + 1}): ${result.getData()}")
+                            success = true
+                            break
+                        } catch (retryEx: Exception) {
+                            lastException = retryEx
+                            Log.e(TAG, "기사 알림 전송 실패 (attempt=${attempt + 1}): ${retryEx.message}", retryEx)
                         }
-                        .addOnFailureListener { e ->
-                            Log.e(TAG, "❌ 기사 알림 전송 실패: ${e.message}", e)
+                    }
+
+                    if (!success) {
+                        Log.e(TAG, "기사 알림 최종 전송 실패 (${maxRetries + 1}회 시도): ${lastException?.message}", lastException)
+                        withContext(Dispatchers.Main) {
+                            _snackbarMessage.value = "기사 알림 전송 실패 - 직접 연락해주세요"
                         }
-                    Log.d(TAG, "Cloud Function 호출 완료 (비동기)")
+                    }
                 } catch (e: Exception) {
-                    Log.e(TAG, "❌❌ 기사 알림 함수 호출 예외: ${e.message}", e)
+                    Log.e(TAG, "기사 알림 함수 호출 예외: ${e.message}", e)
+                    withContext(Dispatchers.Main) {
+                        _snackbarMessage.value = "기사 알림 전송 실패 - 직접 연락해주세요"
+                    }
                 }
 
             } catch (e: Exception) {
@@ -794,6 +826,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 if (e.message?.contains("ALREADY_ASSIGNED") == true ||
                     e.cause?.message?.contains("ALREADY_ASSIGNED") == true) {
                     _snackbarMessage.value = "이미 다른 기사에게 배차된 콜입니다"
+                } else if (e.message?.contains("DRIVER_NOT_AVAILABLE") == true ||
+                    e.cause?.message?.contains("DRIVER_NOT_AVAILABLE") == true) {
+                    _snackbarMessage.value = "해당 기사는 현재 배차할 수 없는 상태입니다"
                 } else {
                     _snackbarMessage.value = "배차 실패 - 네트워크 연결을 확인 후 다시 시도하세요"
                 }
@@ -1710,16 +1745,22 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             try {
                 val sharedCallRef = firestore.collection("shared_calls").document(sharedCallId)
 
-                sharedCallRef.update(
-                    mapOf(
+                firestore.runTransaction { transaction ->
+                    val snap = transaction.get(sharedCallRef)
+                    if (!snap.exists()) {
+                        Log.w(TAG, "shared_calls 문서 없음: $sharedCallId")
+                        return@runTransaction
+                    }
+                    transaction.update(sharedCallRef, mapOf(
                         "status" to "OPEN",
                         "cancelledAt" to null,
                         "cancelReason" to null,
                         "updatedAt" to Timestamp.now()
-                    )
-                ).await()
+                    ))
+                }.await()
 
             } catch (e: Exception) {
+                Log.e(TAG, "reopenSharedCall 실패: $sharedCallId", e)
             }
         }
     }

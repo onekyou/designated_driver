@@ -13,7 +13,8 @@ import com.designated.driverapp.model.CallInfo
 fun NewCallPopup(
     callInfo: CallInfo,
     onAccept: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    pendingCallCount: Int = 0
 ) {
     Dialog(onDismissRequest = { /* 바깥 클릭으로 닫히지 않음 */ }) {
         Card(
@@ -36,6 +37,16 @@ fun NewCallPopup(
                     text = "새로운 호출이 들어왔습니다.",
                     style = MaterialTheme.typography.bodyLarge
                 )
+
+                // 대기 중인 다른 배차 콜이 있으면 개수 표시
+                if (pendingCallCount > 0) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "대기 중인 콜 ${pendingCallCount}건",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(24.dp))
 

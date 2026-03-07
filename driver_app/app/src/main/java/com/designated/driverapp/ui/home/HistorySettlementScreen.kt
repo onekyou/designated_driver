@@ -465,28 +465,43 @@ fun HistorySettlementScreen(
             // 최종 납입액 계산 (사무실 몫 - 외상) - 미환급금 적용 전
             val rawFinalDeposit = officeDeposit - totalCredit
 
-            // ========== 미환급금과 납입금 통합 계산 ==========
-            // carryOverBalance > 0 : 사무실이 기사에게 줄 돈 (미환급금)
+            // ========== 미환급금/미납금과 납입금 통합 계산 ==========
+            // carryOverBalance > 0 : 사무실이 기사에게 줄 돈 (미수령금)
+            // carryOverBalance < 0 : 기사가 사무실에 줄 돈 (미납금)
             // rawFinalDeposit > 0 : 기사가 사무실에 낼 돈
             // rawFinalDeposit < 0 : 사무실이 기사에게 줄 돈 (오늘 발생)
 
-            // 미환급금에서 공제 후 실제 납입해야 할 금액
-            val adjustedDeposit = if (rawFinalDeposit > 0) {
-                maxOf(0, rawFinalDeposit - carryOverBalance)
+            // 미환급금/미납금에서 공제 후 실제 납입해야 할 금액
+            val adjustedDeposit = if (carryOverBalance >= 0) {
+                // 미수령금(양수): 납입액에서 미수령금 차감
+                if (rawFinalDeposit > 0) maxOf(0, rawFinalDeposit - carryOverBalance) else 0
             } else {
-                0  // 낼 돈이 없으면 0
+                // 미납금(음수): 납입액에 미납금 추가
+                if (rawFinalDeposit > 0) rawFinalDeposit + (-carryOverBalance) else (-carryOverBalance)
             }
 
-            // 오늘 운행 후 남은 미환급금
-            val remainingCarryOver = if (rawFinalDeposit > 0) {
-                // 기사가 낼 돈으로 미환급금 일부 상쇄
-                maxOf(0, carryOverBalance - rawFinalDeposit)
+            // 오늘 운행 후 남은 이월금
+            val remainingCarryOver = if (carryOverBalance >= 0) {
+                // 미수령금(양수)
+                if (rawFinalDeposit > 0) {
+                    maxOf(0, carryOverBalance - rawFinalDeposit)
+                } else {
+                    carryOverBalance + (-rawFinalDeposit)
+                }
             } else {
-                // 사무실이 줄 돈이 더 생겼으면 추가
-                carryOverBalance + (-rawFinalDeposit)
+                // 미납금(음수)
+                if (rawFinalDeposit > 0) {
+                    // 납입 후 미납금 상쇄 (rawFinalDeposit로 미납금 갚기)
+                    // 남은 이월 = carryOverBalance + rawFinalDeposit (음수 + 양수)
+                    val netBalance = carryOverBalance + rawFinalDeposit
+                    netBalance  // 음수면 미납 잔여, 양수면 미수령금 발생
+                } else {
+                    // 미납금 + 사무실이 줄 돈 → 미납 일부 상쇄
+                    carryOverBalance + (-rawFinalDeposit)
+                }
             }
 
-            // 미환급금에서 공제된 금액
+            // 미환급금에서 공제된 금액 (양수 carryOver일 때만 의미 있음)
             val usedFromCarryOver = if (rawFinalDeposit > 0 && carryOverBalance > 0) {
                 minOf(carryOverBalance, rawFinalDeposit)
             } else {
@@ -552,8 +567,8 @@ fun HistorySettlementScreen(
             // 오늘 발생 미환급금 (최종납입금이 음수인 경우 = 사무실이 기사에게 줄 돈)
             val todayNewUnpaid = if (rawFinalDeposit < 0) -rawFinalDeposit else 0
 
-            // 누적 미환급금 카드 (미환급금이 있거나 공제 내역이 있을 때 표시)
-            if (remainingCarryOver > 0 || usedFromCarryOver > 0 || carryOverStatus == CarryOverStatus.TRANSFERRED) {
+            // 누적 미수령금/미납금 카드 (이월금이 있거나 공제 내역이 있을 때 표시)
+            if (remainingCarryOver != 0 || usedFromCarryOver > 0 || carryOverStatus == CarryOverStatus.TRANSFERRED) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
@@ -569,29 +584,41 @@ fun HistorySettlementScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                "누적 미환급금",
+                                if (remainingCarryOver >= 0) "누적 미수령금" else "누적 미납금",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = if (remainingCarryOver > 0) Color(0xFFFF6666) else Color(0xFF4CAF50)
+                                color = if (remainingCarryOver > 0) Color(0xFFFF6666)
+                                    else if (remainingCarryOver < 0) Color(0xFFFF9800)
+                                    else Color(0xFF4CAF50)
                             )
                             Text(
-                                "%,d원".format(remainingCarryOver),
+                                "%,d원".format(kotlin.math.abs(remainingCarryOver)),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = if (remainingCarryOver > 0) Color(0xFFFF6666) else Color(0xFF4CAF50)
+                                color = if (remainingCarryOver > 0) Color(0xFFFF6666)
+                                    else if (remainingCarryOver < 0) Color(0xFFFF9800)
+                                    else Color(0xFF4CAF50)
                             )
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // 이월 금액 (원래 미환급금)
-                        if (carryOverBalance > 0) {
+                        // 이월 금액 (양수: 미수령금, 음수: 미납금)
+                        if (carryOverBalance != 0) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("이월", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
-                                Text("%,d원".format(carryOverBalance), color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    if (carryOverBalance > 0) "이월 (미수령)" else "이월 (미납)",
+                                    color = Color.Gray,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Text(
+                                    "%,d원".format(kotlin.math.abs(carryOverBalance)),
+                                    color = if (carryOverBalance > 0) Color.White else Color(0xFFFF9800),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
                             }
                         }
 
