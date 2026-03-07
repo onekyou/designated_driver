@@ -43,6 +43,8 @@ class CallDetectorService : Service() {
     private var lastProcessedPhoneNumber: String? = null
     private var lastProcessedCallTime: Long = 0
     private val PROCESSING_THRESHOLD_MS = 5000
+    private val DUPLICATE_CALL_CHECK_MS = 10000L // 10초 이내의 동일 번호 Firestore 콜은 중복으로 간주
+    private var sharedCallCreatedFromRinging: Boolean = false // RINGING에서 공유콜 생성 여부 (IDLE에서 이중 생성 방지용)
     private val TAG = "CallDetectorService"
     private val CHANNEL_ID = "CallDetectorChannel"
     private val NOTIFICATION_ID = 1
@@ -177,6 +179,7 @@ class CallDetectorService : Service() {
 
             }
             else if (callState == TelephonyManager.CALL_STATE_RINGING && isIncomingCall) {
+                sharedCallCreatedFromRinging = false // 새 전화 시작 시 리셋
 
                 serviceScope.launch {
                     val provinceId = sharedPreferences.getString("provinceId", null)
@@ -562,8 +565,14 @@ class CallDetectorService : Service() {
 
                 when (officeStatus) {
                     "CLOSED" -> {
-                        createSharedCall(provinceId, cityId, officeId, phoneNumber, contactName, contactAddress, deviceName)
-                        sendAutoSMS(phoneNumber, officeName)
+                        // CD-01 수정: RINGING에서 이미 공유콜을 생성한 경우 중복 생성 방지
+                        if (sharedCallCreatedFromRinging) {
+                            Log.i(TAG, "⚠️ RINGING에서 이미 공유 콜 생성됨 - IDLE에서 중복 생성 방지")
+                            sharedCallCreatedFromRinging = false
+                        } else {
+                            createSharedCall(provinceId, cityId, officeId, phoneNumber, contactName, contactAddress, deviceName)
+                            sendAutoSMS(phoneNumber, officeName)
+                        }
                     }
                     else -> {
                         createNormalCall(provinceId, cityId, officeId, phoneNumber, contactName, contactAddress, deviceName)
@@ -654,6 +663,24 @@ class CallDetectorService : Service() {
                 )
 
                 val targetPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/calls"
+
+                // 중복 콜 생성 방지: 10초 내 같은 phoneNumber의 콜 존재 여부 확인
+                val duplicateCheckThreshold = System.currentTimeMillis() - DUPLICATE_CALL_CHECK_MS
+                val existingCalls = firestore.collection(targetPath)
+                    .whereEqualTo("phoneNumber", phoneNumber)
+                    .whereGreaterThan("timestampClient", duplicateCheckThreshold)
+                    .whereIn("status", listOf(
+                        CallStatus.WAITING.firestoreValue,
+                        CallStatus.PENDING.firestoreValue,
+                        CallStatus.ASSIGNED.firestoreValue
+                    ))
+                    .get()
+                    .await()
+
+                if (!existingCalls.isEmpty) {
+                    Log.w(TAG, "⚠️ 중복 콜 감지: 10초 내 같은 번호($phoneNumber)의 콜이 이미 존재합니다 (${existingCalls.size()}건). 생성 스킵.")
+                    return@launch
+                }
 
                 firestore.collection(targetPath)
                     .add(callData)
@@ -898,6 +925,8 @@ class CallDetectorService : Service() {
                 val (contactName, contactAddress) = getContactInfo(applicationContext, phoneNumber)
                 val deviceName = sharedPreferences.getString("deviceName", android.os.Build.MODEL) ?: android.os.Build.MODEL
 
+                // 공유콜 생성 (RINGING에서) - 플래그 설정으로 IDLE에서 이중 생성 방지
+                sharedCallCreatedFromRinging = true
                 createSharedCallFromRinging(provinceId, cityId, officeId, phoneNumber, contactName, contactAddress, deviceName)
 
                 sendAutoSMS(phoneNumber, officeName)

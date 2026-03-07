@@ -440,9 +440,10 @@ class DriverViewModel @Inject constructor(
                 transaction.update(callRef, Constants.FIELD_STATUS, Constants.STATUS_ACCEPTED)
 
                 Log.d(TAG, "🔵 Transaction - 기사 상태를 PREPARING으로 업데이트")
-                transaction.update(driverRef, Constants.FIELD_STATUS, "PREPARING")
+                transaction.update(driverRef, Constants.FIELD_STATUS, DriverStatus.PREPARING.value)
             } else {
                 Log.w(TAG, "⚠️ 콜 상태가 ASSIGNED가 아님: $currentStatus")
+                throw IllegalStateException("CALL_NOT_ASSIGNABLE: current status is $currentStatus")
             }
         }.await()
         Log.d(TAG, "🔵 Transaction 완료")
@@ -619,13 +620,15 @@ class DriverViewModel @Inject constructor(
             Constants.FIELD_UPDATED_AT to FieldValue.serverTimestamp()
         )
 
-        callRef.update(callUpdates).await()
-
-        firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+        val driverRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
             .collection(Constants.COLLECTION_CITIES).document(cityId)
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_DRIVERS).document(driverId)
-            .update(Constants.FIELD_STATUS, DriverStatus.ON_TRIP.value).await()
+
+        firestore.runTransaction { transaction ->
+            transaction.update(callRef, callUpdates)
+            transaction.update(driverRef, Constants.FIELD_STATUS, DriverStatus.ON_TRIP.value)
+        }.await()
 
         Log.d(TAG, "✅ 운행 시작 완료: $callId")
     }
@@ -913,6 +916,51 @@ class DriverViewModel @Inject constructor(
         }
     }
 
+    /**
+     * onResume 시 활성 콜의 최신 상태를 Firestore에서 조회하여
+     * 백그라운드에서 취소된 콜이 있으면 UI를 정리한다.
+     * 활성 콜이 없으면 아무 작업도 하지 않는다.
+     */
+    fun refreshActiveCallStatus() {
+        val currentState = _uiState.value
+        val callsToCheck = mutableListOf<String>()
+
+        currentState.activeCall?.id?.let { callsToCheck.add(it) }
+        currentState.assignedCalls.forEach { call ->
+            if (call.id != currentState.activeCall?.id) {
+                callsToCheck.add(call.id)
+            }
+        }
+
+        if (callsToCheck.isEmpty()) return
+
+        viewModelScope.launch {
+            try {
+                val (provinceId, cityId, officeId) = getDriverLocationInfo()
+                for (callId in callsToCheck) {
+                    try {
+                        val callDoc = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                            .collection(Constants.COLLECTION_CITIES).document(cityId)
+                            .collection(Constants.COLLECTION_OFFICES).document(officeId)
+                            .collection(Constants.COLLECTION_CALLS).document(callId)
+                            .get()
+                            .await()
+
+                        val status = callDoc.getString(Constants.FIELD_STATUS)
+                        if (status == Constants.STATUS_CANCELED || status == "WAITING" || !callDoc.exists()) {
+                            Log.d(TAG, "refreshActiveCallStatus: 콜 $callId 상태=$status -> 정리")
+                            handleCallCancelled(callId)
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "refreshActiveCallStatus: 콜 $callId 조회 실패", e)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "refreshActiveCallStatus: 위치 정보 조회 실패", e)
+            }
+        }
+    }
+
     fun dismissSettlementPopup() {
         val id = _uiState.value.callForSettlement?.id
         _uiState.update { it.copy(callForSettlement = null) }
@@ -1172,140 +1220,6 @@ class DriverViewModel @Inject constructor(
         }
     }
 
-    /**
-     * 포인트 사용 + 적립 통합 처리
-     */
-    private suspend fun processCustomerPoints(
-        phoneNumber: String,
-        callId: String,
-        fare: Int,
-        pointsUsed: Int
-    ): Boolean {
-        return try {
-            val (provinceId, cityId, officeId) = getDriverLocationInfo()
-
-            // 중복 체크
-            val existingTransactions = firestore
-                .collection("provinces").document(provinceId)
-                .collection("cities").document(cityId)
-                .collection("offices").document(officeId)
-                .collection("pointTransactions")
-                .whereEqualTo("callId", callId)
-                .get()
-                .await()
-
-            if (!existingTransactions.isEmpty) {
-                Log.w(TAG, "processCustomerPoints: 이미 처리된 포인트 - callId=$callId")
-                return true  // 이미 처리됨
-            }
-
-            // Repository를 통한 포인트 정보 조회 (캐시 활용)
-            var points = customerPointsRepository.getCustomerPoints(phoneNumber, forceRefresh = true)
-
-            // 신규 고객이면 초기 포인트 생성
-            if (points == null) {
-                points = customerPointsRepository.createCustomerPoints(phoneNumber)
-            }
-
-            val currentPoints = points.currentPoints
-            val totalCalls = points.totalCalls
-            val totalEarned = points.totalEarned
-            val totalUsed = points.totalUsed
-            val grade = points.grade
-
-            // 적립률 계산 (고객앱 CustomerGrade.kt 기준과 동일)
-            val earnRate = when(grade) {
-                "BRONZE" -> 0.03   // 3% (고객앱과 동일)
-                "SILVER" -> 0.05   // 5% (고객앱과 동일)
-                "GOLD" -> 0.07     // 7% (고객앱과 동일)
-                "VIP" -> 0.09      // 9% (고객앱과 동일)
-                else -> 0.03       // 기본값 BRONZE
-            }
-
-            val earnAmount = (fare * earnRate).toInt()
-            val newBalance = currentPoints - pointsUsed + earnAmount
-            val newTotalCalls = totalCalls + 1
-
-            // 등급 업데이트 (고객앱 CustomerGrade.fromCallCount() 기준과 동일)
-            val newGrade = when {
-                newTotalCalls >= 50 -> "VIP"     // 50회 이상 (고객앱과 동일)
-                newTotalCalls >= 30 -> "GOLD"    // 30회 이상 (고객앱과 동일)
-                newTotalCalls >= 10 -> "SILVER"  // 10회 이상 (고객앱과 동일)
-                else -> "BRONZE"
-            }
-
-            // Firestore 트랜잭션
-            firestore.runTransaction { transaction ->
-                val pointsRef = firestore
-                    .collection("provinces").document(provinceId)
-                    .collection("cities").document(cityId)
-                    .collection("offices").document(officeId)
-                    .collection("customerPoints")
-                    .document(phoneNumber)
-
-                // 포인트 정보 업데이트
-                transaction.update(pointsRef, mapOf(
-                    "currentPoints" to newBalance,
-                    "totalEarned" to (totalEarned + earnAmount),
-                    "totalUsed" to (totalUsed + pointsUsed),
-                    "totalCalls" to newTotalCalls,
-                    "grade" to newGrade,
-                    "lastUpdated" to FieldValue.serverTimestamp()
-                ))
-
-                // 포인트 사용 내역 추가 (사용한 경우만)
-                if (pointsUsed > 0) {
-                    val useTransactionRef = firestore
-                        .collection("provinces").document(provinceId)
-                        .collection("cities").document(cityId)
-                        .collection("offices").document(officeId)
-                        .collection("pointTransactions")
-                        .document()
-
-                    transaction.set(useTransactionRef, mapOf(
-                        "id" to useTransactionRef.id,
-                        "customerId" to phoneNumber,
-                        "type" to "USE",
-                        "amount" to -pointsUsed,
-                        "balance" to (currentPoints - pointsUsed),
-                        "description" to "대리운전 요금 포인트 사용",
-                        "callId" to callId,
-                        "timestamp" to FieldValue.serverTimestamp()
-                    ))
-                }
-
-                // 포인트 적립 내역 추가
-                val earnTransactionRef = firestore
-                    .collection("provinces").document(provinceId)
-                    .collection("cities").document(cityId)
-                    .collection("offices").document(officeId)
-                    .collection("pointTransactions")
-                    .document()
-
-                transaction.set(earnTransactionRef, mapOf(
-                    "id" to earnTransactionRef.id,
-                    "customerId" to phoneNumber,
-                    "type" to "EARN",
-                    "amount" to earnAmount,
-                    "balance" to newBalance,
-                    "description" to "대리운전 이용 포인트 적립",
-                    "callId" to callId,
-                    "fare" to fare,
-                    "grade" to newGrade,
-                    "timestamp" to FieldValue.serverTimestamp()
-                ))
-            }.await()
-
-            // 트랜잭션 완료 후 캐시 무효화 (다음 조회 시 최신 데이터 로드)
-            customerPointsRepository.invalidateCache(phoneNumber)
-
-            Log.d(TAG, "processCustomerPoints: 포인트 처리 완료 - 사용=$pointsUsed, 적립=$earnAmount, 잔액=$newBalance")
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "processCustomerPoints: 포인트 처리 실패", e)
-            false
-        }
-    }
 
     // ====== 이월 정산 (미수령금) 관련 기능 ======
 

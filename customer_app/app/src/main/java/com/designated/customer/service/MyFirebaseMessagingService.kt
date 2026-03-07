@@ -94,6 +94,27 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 // 취소 브로드캐스트 전송 (팝업 제거용)
                 sendCallCancelledBroadcast(callId, cancelReason)
             }
+
+            "call_status_update" -> {
+                // CF에서 전송하는 콜 상태 변경 알림 (ACCEPTED, IN_PROGRESS)
+                val callId = message.data["callId"]
+                val status = message.data["status"] ?: ""
+                val driverName = message.data["driverName"] ?: ""
+                val driverPhone = message.data["driverPhone"] ?: ""
+
+                Log.d(TAG, "콜 상태 변경 알림 수신 - callId: $callId, status: $status")
+
+                // 상태 변경 브로드캐스트 전송
+                sendCallStatusUpdateBroadcast(callId, status, driverName, driverPhone)
+
+                // 알림 표시
+                val statusMessage = when (status) {
+                    "ACCEPTED" -> "기사가 콜을 수락했습니다. 곧 도착합니다."
+                    "IN_PROGRESS" -> "운행이 시작되었습니다."
+                    else -> "상태가 변경되었습니다."
+                }
+                showCallStatusUpdateNotification(callId, statusMessage)
+            }
         }
     }
 
@@ -264,6 +285,43 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         }
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
         Log.d(TAG, "콜 접수 브로드캐스트 전송 완료 - callId: $callId")
+    }
+
+    private fun sendCallStatusUpdateBroadcast(callId: String?, status: String, driverName: String, driverPhone: String) {
+        val intent = Intent("com.designated.customer.CALL_STATUS_UPDATE").apply {
+            putExtra("callId", callId)
+            putExtra("status", status)
+            putExtra("driverName", driverName)
+            putExtra("driverPhone", driverPhone)
+        }
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+        Log.d(TAG, "콜 상태 변경 브로드캐스트 전송 완료 - callId: $callId, status: $status")
+    }
+
+    private fun showCallStatusUpdateNotification(callId: String?, message: String) {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra("callId", callId)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            System.currentTimeMillis().toInt(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID_DRIVER_ASSIGNED)
+            .setContentTitle("콜 상태 알림")
+            .setContentText(message)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .build()
+
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(1003, notification)
     }
 
     private fun showCallReceivedNotification(callId: String?, message: String) {

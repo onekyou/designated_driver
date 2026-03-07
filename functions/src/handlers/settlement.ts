@@ -53,23 +53,30 @@ interface CallSettlement {
 
 /**
  * 근무일 계산 (새벽 6시 이전은 전날로 처리)
+ * UTC 입력을 KST로 변환 후 판단
  */
 function calculateWorkDate(timestamp: Date): string {
-  const date = new Date(timestamp);
-  if (date.getHours() < 6) {
-    date.setDate(date.getDate() - 1);
+  const utc = new Date(timestamp);
+  const koreaTime = new Date(utc.getTime() + (9 * 60 * 60 * 1000));
+  if (koreaTime.getHours() < 6) {
+    koreaTime.setDate(koreaTime.getDate() - 1);
   }
-  return date.toISOString().substring(0, 10); // YYYY-MM-DD
+  return koreaTime.toISOString().substring(0, 10); // YYYY-MM-DD
 }
 
 /**
  * 오늘 근무일 계산 (exported for use in index.ts)
  */
 export function getTodayWorkDate(): string {
-  const now = new Date();
-  // 한국 시간으로 변환
-  const koreaTime = new Date(now.getTime() + (9 * 60 * 60 * 1000));
-  return calculateWorkDate(koreaTime);
+  return calculateWorkDate(new Date());
+}
+
+/**
+ * 어제 근무일 계산 (exported for use in index.ts)
+ */
+export function getYesterdayWorkDate(): string {
+  const yesterday = new Date(Date.now() - (24 * 60 * 60 * 1000));
+  return calculateWorkDate(yesterday);
 }
 
 /**
@@ -125,6 +132,12 @@ export async function addCallToSettlementSession(
 
       if (sessionDoc.exists) {
         const session = sessionDoc.data() as SettlementSession;
+
+        // 마감된 세션에는 콜 추가 불가
+        if (session.metadata?.isFinalized) {
+          logger.warn(`[Settlement] Session ${workDate} is already finalized. Skipping call ${callId}`);
+          return;
+        }
 
         // 중복 체크
         const existingCallIndex = session.calls?.findIndex(c => c.callId === callId) ?? -1;
@@ -230,9 +243,7 @@ export async function autoFinalizeSettlementSessions(): Promise<{ processed: num
   let processedCount = 0;
 
   // 어제 근무일 계산
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayDate = calculateWorkDate(yesterday);
+  const yesterdayDate = getYesterdayWorkDate();
 
   logger.info(`[Settlement] Starting auto-finalize for date: ${yesterdayDate}`);
 

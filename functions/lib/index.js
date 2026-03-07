@@ -2242,14 +2242,32 @@ exports.onCallCancelledByDriver = (0, firestore_1.onDocumentUpdated)({
     if (!beforeData || !afterData) {
         return;
     }
-    // 기사가 배정/수락된 상태에서 -> HOLD, CANCELLED_BY_DRIVER, 또는 CANCELED로 변경된 경우
-    const wasCancelled = ((beforeData.status === "ASSIGNED" || beforeData.status === "ACCEPTED") && afterData.status === "HOLD") ||
-        ((beforeData.status === "ASSIGNED" || beforeData.status === "ACCEPTED") && afterData.status === "CANCELLED_BY_DRIVER") ||
-        ((beforeData.status === "ASSIGNED" || beforeData.status === "ACCEPTED") && afterData.status === "CANCELED");
-    if (!wasCancelled) {
+    // 콜 취소 감지: 배정/수락 상태에서 취소 또는 고객 취소(WAITING→CANCELLED/CANCELED)
+    const cancelledFromAssigned = (beforeData.status === "ASSIGNED" || beforeData.status === "ACCEPTED") &&
+        (afterData.status === "HOLD" || afterData.status === "CANCELLED_BY_DRIVER" || afterData.status === "CANCELED");
+    const cancelledByCustomer = (beforeData.status === "WAITING" || beforeData.status === "REQUESTED") &&
+        (afterData.status === "CANCELLED" || afterData.status === "CANCELED");
+    if (!cancelledFromAssigned && !cancelledByCustomer) {
         return;
     }
-    logger.info(`[${callId}] 기사가 운행 취소 - 손님에게 알림 전송 시작`);
+    // 포인트 환불 처리 (종료 상태에서만, HOLD는 재배차 가능하므로 제외)
+    const isTerminalCancel = afterData.status === "CANCELED" || afterData.status === "CANCELLED" || afterData.status === "CANCELLED_BY_DRIVER";
+    const pointsUsed = afterData.pointsUsed || 0;
+    if (isTerminalCancel && pointsUsed > 0 && afterData.phoneNumber) {
+        try {
+            const refundResult = await (0, points_1.refundCustomerPointsOnCancel)(provinceId, cityId, officeId, callId, afterData.phoneNumber, pointsUsed);
+            if (refundResult.success) {
+                logger.info(`[${callId}] 포인트 ${pointsUsed}P 환불 완료`);
+            }
+            else {
+                logger.warn(`[${callId}] 포인트 환불 스킵: ${refundResult.error}`);
+            }
+        }
+        catch (error) {
+            logger.error(`[${callId}] 포인트 환불 실패:`, error);
+        }
+    }
+    logger.info(`[${callId}] 콜 취소 감지 - 손님에게 알림 전송 시작`);
     // 앱 고객만 알림
     const isAppCustomer = afterData.isAppCustomer || false;
     const customerPhone = afterData.phoneNumber;
@@ -3583,9 +3601,7 @@ exports.checkSettlementDiscrepanciesScheduled = (0, scheduler_1.onSchedule)({
     const db = admin.firestore();
     logger.info("[Settlement] Starting scheduled discrepancy check");
     // 어제 근무일 계산
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayDate = yesterday.toISOString().substring(0, 10);
+    const yesterdayDate = (0, settlement_1.getYesterdayWorkDate)();
     try {
         const provincesSnap = await db.collection("provinces").get();
         for (const provinceDoc of provincesSnap.docs) {

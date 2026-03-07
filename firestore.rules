@@ -153,6 +153,8 @@ service cloud.firestore {
             (
               // 상태 전환 규칙 (필요시 각 상태별 필드 변경 규칙 추가)
               (resource.data.status == "ASSIGNED" && request.resource.data.status == "ACCEPTED") ||
+              // 기사가 콜을 거절할 때: ASSIGNED → WAITING 허용 (rejectCall)
+              (resource.data.status == "ASSIGNED" && request.resource.data.status == "WAITING") ||
               (resource.data.status == "ACCEPTED" && request.resource.data.status == "IN_PROGRESS") ||
               (resource.data.status == "IN_PROGRESS" && request.resource.data.status == "AWAITING_SETTLEMENT") ||
               (resource.data.status == "AWAITING_SETTLEMENT" && request.resource.data.status == "COMPLETED") ||

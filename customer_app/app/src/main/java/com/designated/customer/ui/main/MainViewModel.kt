@@ -108,6 +108,8 @@ class MainViewModel(
     private var rideCompletedReceiver: BroadcastReceiver? = null
     private var driverAssignedReceiver: BroadcastReceiver? = null
     private var callCancelledReceiver: BroadcastReceiver? = null
+    private var callReceivedReceiver: BroadcastReceiver? = null
+    private var callStatusUpdateReceiver: BroadcastReceiver? = null
     // 배너 광고 서비스
     private val bannerAdService = BannerAdService(provinceId = provinceId, cityId = cityId, officeId = officeId)
 
@@ -457,14 +459,60 @@ class MainViewModel(
 
                     // 팝업 제거
                     uiState = uiState.copy(callStatus = null)
+                    // 포인트 환불 반영을 위해 잔액 재조회
+                    loadCustomerPoints()
                 }
             }
             LocalBroadcastManager.getInstance(ctx).registerReceiver(cancelledReceiver, cancelledFilter)
+
+            // 콜 접수 브로드캐스트 수신
+            val receivedFilter = IntentFilter("com.designated.customer.CALL_RECEIVED")
+            val receivedReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    val callId = intent?.getStringExtra("callId")
+                    android.util.Log.d("MainViewModel", "콜 접수 브로드캐스트 수신 - callId: $callId")
+
+                    // 활성 콜 상태 갱신
+                    restoreActiveCall()
+                }
+            }
+            LocalBroadcastManager.getInstance(ctx).registerReceiver(receivedReceiver, receivedFilter)
+
+            // 콜 상태 변경 브로드캐스트 수신 (ACCEPTED, IN_PROGRESS)
+            val statusUpdateFilter = IntentFilter("com.designated.customer.CALL_STATUS_UPDATE")
+            val statusUpdateReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    val callId = intent?.getStringExtra("callId")
+                    val status = intent?.getStringExtra("status") ?: ""
+
+                    android.util.Log.d("MainViewModel", "콜 상태 변경 브로드캐스트 수신 - callId: $callId, status: $status")
+
+                    val newState = when (status) {
+                        "ACCEPTED" -> CallState.DRIVER_ARRIVING
+                        "IN_PROGRESS" -> CallState.IN_PROGRESS
+                        else -> return
+                    }
+
+                    // 현재 callStatus의 callId와 일치하면 상태 업데이트
+                    val currentStatus = uiState.callStatus
+                    if (currentStatus != null && (callId == null || currentStatus.callId == callId)) {
+                        uiState = uiState.copy(
+                            callStatus = currentStatus.copy(state = newState)
+                        )
+                    } else {
+                        // callId가 다르거나 callStatus가 없는 경우 활성 콜 복구
+                        restoreActiveCall()
+                    }
+                }
+            }
+            LocalBroadcastManager.getInstance(ctx).registerReceiver(statusUpdateReceiver, statusUpdateFilter)
 
             // 리시버 참조 저장 (onCleared에서 해제 위해)
             rideCompletedReceiver = completedReceiver
             driverAssignedReceiver = assignedReceiver
             callCancelledReceiver = cancelledReceiver
+            callReceivedReceiver = receivedReceiver
+            callStatusUpdateReceiver = statusUpdateReceiver
 
             android.util.Log.d("MainViewModel", "브로드캐스트 리스너 등록 완료")
         }
@@ -515,12 +563,16 @@ class MainViewModel(
         viewModelScope.launch {
             android.util.Log.d("MainViewModel", "운행 완료 처리 시작 - fare: $fare, pointsUsed: $pointsUsed")
 
-            // 포인트 정보 재조회
-            loadCustomerPoints()
+            // 포인트 정보 재조회 (완료 대기 후 적립 계산)
+            try {
+                val points = pointService.getCustomerPoints(phoneNumber)
+                uiState = uiState.copy(customerPoints = points)
+            } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "포인트 재조회 실패", e)
+            }
 
-            // 적립 포인트 계산
-            val points = uiState.customerPoints
-            val earnedPoints = points?.calculateEarnPoints(fare) ?: 0
+            // 적립 포인트 계산 (로드 완료 후)
+            val earnedPoints = uiState.customerPoints?.calculateEarnPoints(fare) ?: 0
 
             android.util.Log.d("MainViewModel", "적립 포인트: $earnedPoints")
 
@@ -733,7 +785,7 @@ class MainViewModel(
                 .setVibrate(longArrayOf(0, 500, 200, 500))
                 .build()
 
-            notificationManager.notify(1001, notification)
+            notificationManager.notify(1004, notification)
 
             android.util.Log.d("MainViewModel", "콜 요청 실패 시스템 알림 표시")
         }
@@ -1016,6 +1068,16 @@ class MainViewModel(
             callCancelledReceiver?.let { receiver ->
                 localBroadcast.unregisterReceiver(receiver)
                 android.util.Log.d("MainViewModel", "콜 취소 브로드캐스트 리스너 해제 완료")
+            }
+
+            callReceivedReceiver?.let { receiver ->
+                localBroadcast.unregisterReceiver(receiver)
+                android.util.Log.d("MainViewModel", "콜 접수 브로드캐스트 리스너 해제 완료")
+            }
+
+            callStatusUpdateReceiver?.let { receiver ->
+                localBroadcast.unregisterReceiver(receiver)
+                android.util.Log.d("MainViewModel", "콜 상태 변경 브로드캐스트 리스너 해제 완료")
             }
         }
     }

@@ -6,6 +6,7 @@ enum class DriverStatus(val value: String) {
     WAITING("WAITING"),      // 콜 대기중 (로그인 후, 또는 운행 완료 후)
     ASSIGNED("ASSIGNED"),    // 콜 배정됨
     ACCEPTED("ACCEPTED"),    // 기사가 콜 수락함
+    PREPARING("PREPARING"),  // 운행 준비중
     ON_TRIP("ON_TRIP"),      // 운행중
     UNKNOWN("UNKNOWN");      // 알수없음
 
@@ -16,6 +17,7 @@ enum class DriverStatus(val value: String) {
             WAITING -> "대기중"
             ASSIGNED -> "배정됨"
             ACCEPTED -> "수락함"
+            PREPARING -> "운행준비"
             ON_TRIP -> "운행중"
             UNKNOWN -> "알수없음"
         }

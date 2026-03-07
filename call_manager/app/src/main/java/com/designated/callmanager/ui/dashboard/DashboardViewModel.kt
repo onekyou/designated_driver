@@ -743,7 +743,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 firestore.runTransaction { transaction ->
                     val callDoc = transaction.get(callRef)
                     val currentStatus = callDoc.getString("status")
-                    if (currentStatus != CallStatus.WAITING.firestoreValue) {
+                    if (currentStatus != CallStatus.WAITING.firestoreValue && currentStatus != CallStatus.HOLD.firestoreValue) {
                         throw IllegalStateException("ALREADY_ASSIGNED")
                     }
 
@@ -862,12 +862,29 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
         viewModelScope.launch {
             try {
-                val callRef = firestore.collection("provinces").document(_provinceId.value!!)
+                val officePath = firestore.collection("provinces").document(_provinceId.value!!)
                     .collection("cities").document(_cityId.value!!)
                     .collection("offices").document(_officeId.value!!)
-                    .collection("calls").document(callId)
 
-                // 트랜잭션으로 취소 처리 (CROSS-06: 원자적 업데이트)
+                val callRef = officePath.collection("calls").document(callId)
+
+                // 기사 문서 ref 확보 (트랜잭션 전)
+                val preSnapshot = callRef.get().await()
+                val preAssignedUid = preSnapshot.getString("assignedDriverId")
+
+                var driverRef: com.google.firebase.firestore.DocumentReference? = null
+                if (!preAssignedUid.isNullOrBlank()) {
+                    val driversQuery = officePath.collection("designated_drivers")
+                        .whereEqualTo("authUid", preAssignedUid)
+                        .limit(1)
+                        .get()
+                        .await()
+                    if (!driversQuery.isEmpty) {
+                        driverRef = driversQuery.documents[0].reference
+                    }
+                }
+
+                // 트랜잭션으로 콜 취소 + 기사 복구 원자적 수행
                 val cancelResult = firestore.runTransaction { transaction ->
                     val callSnapshot = transaction.get(callRef)
                     val currentStatus = callSnapshot.getString("status")
@@ -875,6 +892,15 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                         throw IllegalStateException("ALREADY_CANCELLED")
                     }
                     transaction.update(callRef, "status", CallStatus.CANCELED.firestoreValue)
+
+                    // 기사 상태도 트랜잭션 안에서 복구
+                    if (driverRef != null) {
+                        val driverDoc = transaction.get(driverRef)
+                        val driverStatus = driverDoc.getString("status")
+                        if (driverStatus == "ASSIGNED" || driverStatus == "ACCEPTED") {
+                            transaction.update(driverRef, "status", "WAITING")
+                        }
+                    }
 
                     val assignedDriverAuthUid = callSnapshot.getString("assignedDriverId")
                     val sourceSharedCallId = callSnapshot.getString("sourceSharedCallId")
@@ -895,24 +921,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     Log.d(TAG, "공유콜 OPEN으로 복구: $sourceSharedCallId")
                 }
 
-                // 배정된 기사가 있으면 상태 복구 + FCM 전송
+                // 기사에게 콜 취소 FCM 전송
                 if (assignedDriverAuthUid != null) {
-                    // 기사 상태를 WAITING으로 복구
-                    val driversQuery = firestore.collection("provinces").document(_provinceId.value!!)
-                        .collection("cities").document(_cityId.value!!)
-                        .collection("offices").document(_officeId.value!!)
-                        .collection("designated_drivers")
-                        .whereEqualTo("authUid", assignedDriverAuthUid)
-                        .limit(1)
-                        .get()
-                        .await()
-
-                    if (!driversQuery.isEmpty) {
-                        val driverDoc = driversQuery.documents[0]
-                        driverDoc.reference.update("status", "WAITING").await()
-                    }
-
-                    // 기사에게 콜 취소 FCM 전송
                     try {
                         val functions = Firebase.functions("asia-northeast3")
                         val data = hashMapOf(
@@ -952,34 +962,49 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
         viewModelScope.launch {
             try {
-                val callRef = firestore.collection("provinces").document(_provinceId.value!!)
+                val officePath = firestore.collection("provinces").document(_provinceId.value!!)
                     .collection("cities").document(_cityId.value!!)
                     .collection("offices").document(_officeId.value!!)
-                    .collection("calls").document(callId)
 
+                val callRef = officePath.collection("calls").document(callId)
+
+                // 기사 문서 ref 확보 (트랜잭션 전)
                 val callSnapshot = callRef.get().await()
                 val assignedDriverAuthUid = callSnapshot.getString("assignedDriverId")
 
-                callRef.update("status", CallStatus.COMPLETED.firestoreValue).await()
-
+                var driverRef: com.google.firebase.firestore.DocumentReference? = null
                 if (!assignedDriverAuthUid.isNullOrBlank()) {
-                    val driversQuery = firestore.collection("provinces").document(_provinceId.value!!)
-                        .collection("cities").document(_cityId.value!!)
-                        .collection("offices").document(_officeId.value!!)
-                        .collection("designated_drivers")
+                    val driversQuery = officePath.collection("designated_drivers")
                         .whereEqualTo("authUid", assignedDriverAuthUid)
                         .limit(1)
                         .get()
                         .await()
-
                     if (!driversQuery.isEmpty) {
-                        val driverDoc = driversQuery.documents[0]
-                        driverDoc.reference.update("status", "WAITING").await()
-                    } else {
+                        driverRef = driversQuery.documents[0].reference
                     }
                 }
 
+                // 트랜잭션으로 콜 + 기사 원자적 업데이트
+                firestore.runTransaction { transaction ->
+                    val callDoc = transaction.get(callRef)
+                    val currentStatus = callDoc.getString("status")
+                    if (currentStatus == CallStatus.COMPLETED.firestoreValue) {
+                        return@runTransaction
+                    }
+
+                    transaction.update(callRef, mapOf(
+                        "status" to CallStatus.COMPLETED.firestoreValue,
+                        "completedAt" to com.google.firebase.Timestamp.now(),
+                        "updatedAt" to com.google.firebase.Timestamp.now()
+                    ))
+
+                    if (driverRef != null) {
+                        transaction.update(driverRef, "status", "WAITING")
+                    }
+                }.await()
+
             } catch (e: Exception) {
+                Log.e(TAG, "콜 완료 처리 실패: ${e.message}", e)
             }
         }
     }
@@ -1930,7 +1955,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 val popupPrefs = appContext.getSharedPreferences("closing_popups", Context.MODE_PRIVATE)
 
                 // 마지막 마감 시간 가져오기
-                val lastClosingTime = closingTimePrefs.getLong("last_closing_time_${province}_${office}", 0L)
+                val lastClosingTime = closingTimePrefs.getLong("last_closing_time_${province}_${city}_${office}", 0L)
                 val lastPopupShownTime = popupPrefs.getLong("last_popup_shown_${province}_${office}", 0L)
                 val currentTime = System.currentTimeMillis()
 

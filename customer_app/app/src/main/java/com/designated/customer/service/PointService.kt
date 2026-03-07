@@ -115,54 +115,62 @@ class PointService(
     ): Boolean {
         return try {
             android.util.Log.d("PointService", "earnPoints 시작: phoneNumber=$phoneNumber, callId=$callId, fare=$fare")
-            val points = getCustomerPoints(phoneNumber)
-            android.util.Log.d("PointService", "고객 포인트 조회 결과: $points")
 
-            if (points == null) {
-                android.util.Log.e("PointService", "고객 포인트 정보를 찾을 수 없습니다")
-                return false
-            }
+            val pointsRef = firestore
+                .collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
+                .collection("offices").document(officeId)
+                .collection("customerPoints")
+                .document(phoneNumber)
 
-            // 적립 포인트 계산
-            val earnAmount = points.calculateEarnPoints(fare)
-            val newBalance = points.currentPoints + earnAmount
-            val newTotalCalls = points.totalCalls + 1
-
-            // 등급 업데이트 확인
-            val newGrade = CustomerGrade.fromCallCount(newTotalCalls)
-
-            // 포인트 정보 업데이트
-            val updatedPoints = points.copy(
-                currentPoints = newBalance,
-                totalEarned = points.totalEarned + earnAmount,
-                totalCalls = newTotalCalls,
-                grade = newGrade,
-                lastUpdated = Timestamp.now()
-            )
-
-            // 거래 내역 생성
-            val pointTransaction = PointTransaction(
-                id = UUID.randomUUID().toString(),
-                customerId = phoneNumber,
-                type = TransactionType.EARN,
-                amount = earnAmount,
-                balance = newBalance,
-                description = description ?: "대리운전 이용 포인트 적립",
-                callId = callId,
-                fare = fare,
-                grade = newGrade.name,
-                timestamp = Timestamp.now()
-            )
-
-            // Firestore 업데이트 (트랜잭션)
             firestore.runTransaction { transaction ->
+                // 트랜잭션 내부에서 최신 값 읽기
+                val snapshot = transaction.get(pointsRef)
+                val points = if (snapshot.exists()) {
+                    CustomerPoints.fromMap(snapshot.data ?: emptyMap())
+                } else {
+                    // 신규 고객인 경우 초기 포인트 정보
+                    CustomerPoints(
+                        customerId = phoneNumber,
+                        phoneNumber = phoneNumber,
+                        currentPoints = 0,
+                        totalEarned = 0,
+                        totalUsed = 0,
+                        grade = CustomerGrade.BRONZE,
+                        totalCalls = 0
+                    )
+                }
+
+                // 적립 포인트 계산
+                val earnAmount = points.calculateEarnPoints(fare)
+                val newBalance = points.currentPoints + earnAmount
+                val newTotalCalls = points.totalCalls + 1
+
+                // 등급 업데이트 확인
+                val newGrade = CustomerGrade.fromCallCount(newTotalCalls)
+
                 // 포인트 정보 업데이트
-                val pointsRef = firestore
-                    .collection("provinces").document(provinceId)
-                    .collection("cities").document(cityId)
-                    .collection("offices").document(officeId)
-                    .collection("customerPoints")
-                    .document(phoneNumber)
+                val updatedPoints = points.copy(
+                    currentPoints = newBalance,
+                    totalEarned = points.totalEarned + earnAmount,
+                    totalCalls = newTotalCalls,
+                    grade = newGrade,
+                    lastUpdated = Timestamp.now()
+                )
+
+                // 거래 내역 생성
+                val pointTransaction = PointTransaction(
+                    id = UUID.randomUUID().toString(),
+                    customerId = phoneNumber,
+                    type = TransactionType.EARN,
+                    amount = earnAmount,
+                    balance = newBalance,
+                    description = description ?: "대리운전 이용 포인트 적립",
+                    callId = callId,
+                    fare = fare,
+                    grade = newGrade.name,
+                    timestamp = Timestamp.now()
+                )
 
                 transaction.set(pointsRef, updatedPoints.toMap())
 
@@ -194,43 +202,46 @@ class PointService(
         description: String = "포인트 사용"
     ): Boolean {
         return try {
-            val points = getCustomerPoints(phoneNumber) ?: return false
+            val pointsRef = firestore
+                .collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
+                .collection("offices").document(officeId)
+                .collection("customerPoints")
+                .document(phoneNumber)
 
-            // 사용 가능 여부 확인
-            if (!points.canUsePoints(amount)) {
-                return false
-            }
-
-            val newBalance = points.currentPoints - amount
-
-            // 포인트 정보 업데이트
-            val updatedPoints = points.copy(
-                currentPoints = newBalance,
-                totalUsed = points.totalUsed + amount,
-                lastUpdated = Timestamp.now()
-            )
-
-            // 거래 내역 생성
-            val pointTransaction = PointTransaction(
-                id = UUID.randomUUID().toString(),
-                customerId = phoneNumber,
-                type = TransactionType.USE,
-                amount = -amount,  // 사용은 음수로 표시
-                balance = newBalance,
-                description = description,
-                grade = points.grade.name,
-                timestamp = Timestamp.now()
-            )
-
-            // Firestore 업데이트
             firestore.runTransaction { transaction ->
+                // 트랜잭션 내부에서 최신 값 읽기
+                val snapshot = transaction.get(pointsRef)
+                if (!snapshot.exists()) {
+                    throw IllegalStateException("고객 포인트 정보가 존재하지 않습니다")
+                }
+                val points = CustomerPoints.fromMap(snapshot.data ?: emptyMap())
+
+                // 사용 가능 여부 확인
+                if (!points.canUsePoints(amount)) {
+                    throw IllegalStateException("포인트 잔액이 부족합니다")
+                }
+
+                val newBalance = points.currentPoints - amount
+
                 // 포인트 정보 업데이트
-                val pointsRef = firestore
-                    .collection("provinces").document(provinceId)
-                    .collection("cities").document(cityId)
-                    .collection("offices").document(officeId)
-                    .collection("customerPoints")
-                    .document(phoneNumber)
+                val updatedPoints = points.copy(
+                    currentPoints = newBalance,
+                    totalUsed = points.totalUsed + amount,
+                    lastUpdated = Timestamp.now()
+                )
+
+                // 거래 내역 생성
+                val pointTransaction = PointTransaction(
+                    id = UUID.randomUUID().toString(),
+                    customerId = phoneNumber,
+                    type = TransactionType.USE,
+                    amount = -amount,  // 사용은 음수로 표시
+                    balance = newBalance,
+                    description = description,
+                    grade = points.grade.name,
+                    timestamp = Timestamp.now()
+                )
 
                 transaction.set(pointsRef, updatedPoints.toMap())
 
@@ -260,34 +271,39 @@ class PointService(
         description: String = "콜 요청 실패로 인한 포인트 환불"
     ): Boolean {
         return try {
-            val points = getCustomerPoints(phoneNumber) ?: return false
-
-            val newBalance = points.currentPoints + amount
-
-            val updatedPoints = points.copy(
-                currentPoints = newBalance,
-                totalUsed = points.totalUsed - amount,
-                lastUpdated = Timestamp.now()
-            )
-
-            val pointTransaction = PointTransaction(
-                id = UUID.randomUUID().toString(),
-                customerId = phoneNumber,
-                type = TransactionType.CANCEL,
-                amount = amount,
-                balance = newBalance,
-                description = description,
-                grade = points.grade.name,
-                timestamp = Timestamp.now()
-            )
+            val pointsRef = firestore
+                .collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
+                .collection("offices").document(officeId)
+                .collection("customerPoints")
+                .document(phoneNumber)
 
             firestore.runTransaction { transaction ->
-                val pointsRef = firestore
-                    .collection("provinces").document(provinceId)
-                    .collection("cities").document(cityId)
-                    .collection("offices").document(officeId)
-                    .collection("customerPoints")
-                    .document(phoneNumber)
+                // 트랜잭션 내부에서 최신 값 읽기
+                val snapshot = transaction.get(pointsRef)
+                if (!snapshot.exists()) {
+                    throw IllegalStateException("고객 포인트 정보가 존재하지 않습니다")
+                }
+                val points = CustomerPoints.fromMap(snapshot.data ?: emptyMap())
+
+                val newBalance = points.currentPoints + amount
+
+                val updatedPoints = points.copy(
+                    currentPoints = newBalance,
+                    totalUsed = points.totalUsed - amount,
+                    lastUpdated = Timestamp.now()
+                )
+
+                val pointTransaction = PointTransaction(
+                    id = UUID.randomUUID().toString(),
+                    customerId = phoneNumber,
+                    type = TransactionType.CANCEL,
+                    amount = amount,
+                    balance = newBalance,
+                    description = description,
+                    grade = points.grade.name,
+                    timestamp = Timestamp.now()
+                )
 
                 transaction.set(pointsRef, updatedPoints.toMap())
 
@@ -301,7 +317,7 @@ class PointService(
                 transaction.set(transactionRef, pointTransaction.toMap())
             }.await()
 
-            android.util.Log.i("PointService", "포인트 환불 성공: ${amount}P → 잔액 ${newBalance}P")
+            android.util.Log.i("PointService", "포인트 환불 성공: ${amount}P")
             true
         } catch (e: Exception) {
             android.util.Log.e("PointService", "포인트 환불 중 오류", e)

@@ -210,24 +210,22 @@ class LockScreenActivity : ComponentActivity() {
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_DRIVERS).document(driverId)
 
-        // 콜 상태를 WAITING으로 되돌려 재배차 가능하게 함
-        callRef.update(
-            mapOf(
+        // 트랜잭션으로 콜 거절 + 기사 상태 원자적 복구
+        db.runTransaction { transaction ->
+            transaction.update(callRef, mapOf(
                 Constants.FIELD_STATUS to Constants.STATUS_WAITING,
                 "assignedDriverId" to null,
                 "assignedDriverName" to null,
                 "assignedDriverPhone" to null,
                 "rejectedByDriver" to driverId,
                 Constants.FIELD_UPDATED_AT to FieldValue.serverTimestamp()
-            )
-        ).addOnSuccessListener {
+            ))
+            transaction.update(driverRef, Constants.FIELD_STATUS, Constants.STATUS_WAITING)
+        }.addOnSuccessListener {
             Log.d(TAG, "콜 거절 완료: callId=$callId")
         }.addOnFailureListener { e ->
             Log.e(TAG, "콜 거절 실패: ${e.message}", e)
         }
-
-        // 기사 상태를 WAITING으로 복구
-        driverRef.update(Constants.FIELD_STATUS, "WAITING")
     }
 
     private fun openMainActivity(callId: String) {

@@ -405,10 +405,11 @@ private fun StatusChip(
 ) {
     val (text, color) = when (status.uppercase()) {
         "COMPLETED" -> "완료" to Color(0xFF4CAF50)
-        "CANCELLED" -> "취소" to Color(0xFFE53E3E)
+        "CANCELLED", "CANCELED", "CANCELLED_BY_DRIVER" -> "취소" to Color(0xFFE53E3E)
         "IN_PROGRESS" -> "운행중" to Color(0xFF2196F3)
         "ASSIGNED" -> "배정완료" to Color(0xFFFF9800)
-        "REQUESTED" -> "요청중" to Color(0xFF9C27B0)
+        "REQUESTED", "WAITING" -> "요청중" to Color(0xFF9C27B0)
+        "HOLD" -> "보류" to Color(0xFFFF9800)
         else -> status to MaterialTheme.colorScheme.onSurfaceVariant
     }
 

@@ -370,6 +370,93 @@ export async function processCustomerPointsOnComplete(
 }
 
 /**
+ * 콜 취소 시 고객 포인트 환불
+ */
+export interface CustomerRefundResult {
+  success: boolean;
+  refunded: number;
+  newBalance: number;
+  error?: string;
+}
+
+export async function refundCustomerPointsOnCancel(
+  provinceId: string,
+  cityId: string,
+  officeId: string,
+  callId: string,
+  phoneNumber: string,
+  pointsUsed: number
+): Promise<CustomerRefundResult> {
+  if (!pointsUsed || pointsUsed <= 0) {
+    return { success: false, refunded: 0, newBalance: 0, error: "환불할 포인트 없음" };
+  }
+
+  const normalizedPhone = phoneNumber.replace(/-/g, "");
+
+  try {
+    const result = await admin.firestore().runTransaction(async (tx) => {
+      const officeRef = admin.firestore()
+        .collection("provinces").doc(provinceId)
+        .collection("cities").doc(cityId)
+        .collection("offices").doc(officeId);
+
+      // 멱등성 키: 이중 환불 방지
+      const refundTransactionRef = officeRef
+        .collection("customerPointTransactions")
+        .doc(`refund_${normalizedPhone}_${callId}`);
+
+      const existingRefund = await tx.get(refundTransactionRef);
+      if (existingRefund.exists) {
+        logger.warn(`[customerPoints] 이미 환불된 콜: ${callId}, Phone: ${normalizedPhone}`);
+        return { success: false, refunded: 0, newBalance: 0, error: "이미 환불 처리됨" };
+      }
+
+      // 고객 포인트 문서 조회
+      const customerPointsRef = officeRef.collection("customerPoints").doc(normalizedPhone);
+      const customerPointsSnap = await tx.get(customerPointsRef);
+      const existingData = customerPointsSnap.data();
+
+      const currentPoints = existingData?.currentPoints || 0;
+      const totalUsed = existingData?.totalUsed || 0;
+      const newBalance = currentPoints + pointsUsed;
+      const newTotalUsed = Math.max(0, totalUsed - pointsUsed);
+
+      const timestamp = admin.firestore.FieldValue.serverTimestamp();
+
+      // 포인트 잔액 복구
+      tx.set(customerPointsRef, {
+        currentPoints: newBalance,
+        totalUsed: newTotalUsed,
+        lastUpdated: timestamp,
+      }, { merge: true });
+
+      // 환불 거래 내역 저장
+      tx.set(refundTransactionRef, {
+        phoneNumber: normalizedPhone,
+        type: "REFUND",
+        amount: pointsUsed,
+        balance: newBalance,
+        description: `콜 취소 포인트 환불`,
+        callId: callId,
+        timestamp: timestamp,
+        createdBy: "system"
+      });
+
+      return { success: true, refunded: pointsUsed, newBalance: newBalance };
+    });
+
+    if (result.success) {
+      logger.info(`[customerPoints] 포인트 환불 완료. Phone: ${normalizedPhone}, Refunded: ${pointsUsed}P, Balance: ${result.newBalance}P`);
+    }
+    return result;
+
+  } catch (error: any) {
+    logger.error(`[customerPoints] 포인트 환불 실패. Phone: ${phoneNumber}, Error: ${error.message}`);
+    return { success: false, refunded: 0, newBalance: 0, error: error.message };
+  }
+}
+
+/**
  * 고객 포인트 잔액 조회
  */
 export async function getCustomerPointBalance(

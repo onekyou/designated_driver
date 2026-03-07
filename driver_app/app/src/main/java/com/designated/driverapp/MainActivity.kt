@@ -322,6 +322,11 @@ class MainActivity : ComponentActivity() {
         )
         Log.d(TAG, "LocalBroadcast 리시버 등록됨")
 
+        // 백그라운드에서 취소된 콜이 있으면 UI 정리
+        if (auth.currentUser != null) {
+            driverViewModel.refreshActiveCallStatus()
+        }
+
         // 알림 설정이 꺼져있는지 확인 (로그인 상태 + 이번 세션에서 아직 안 물어봤을 때만)
         if (auth.currentUser != null &&
             !hasShownNotificationDialog &&

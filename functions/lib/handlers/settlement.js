@@ -38,6 +38,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getTodayWorkDate = getTodayWorkDate;
+exports.getYesterdayWorkDate = getYesterdayWorkDate;
 exports.addCallToSettlementSession = addCallToSettlementSession;
 exports.autoFinalizeSettlementSessions = autoFinalizeSettlementSessions;
 exports.checkSettlementDiscrepancies = checkSettlementDiscrepancies;
@@ -47,22 +48,28 @@ const admin = __importStar(require("firebase-admin"));
 const logger = __importStar(require("firebase-functions/logger"));
 /**
  * 근무일 계산 (새벽 6시 이전은 전날로 처리)
+ * UTC 입력을 KST로 변환 후 판단
  */
 function calculateWorkDate(timestamp) {
-    const date = new Date(timestamp);
-    if (date.getHours() < 6) {
-        date.setDate(date.getDate() - 1);
+    const utc = new Date(timestamp);
+    const koreaTime = new Date(utc.getTime() + (9 * 60 * 60 * 1000));
+    if (koreaTime.getHours() < 6) {
+        koreaTime.setDate(koreaTime.getDate() - 1);
     }
-    return date.toISOString().substring(0, 10); // YYYY-MM-DD
+    return koreaTime.toISOString().substring(0, 10); // YYYY-MM-DD
 }
 /**
  * 오늘 근무일 계산 (exported for use in index.ts)
  */
 function getTodayWorkDate() {
-    const now = new Date();
-    // 한국 시간으로 변환
-    const koreaTime = new Date(now.getTime() + (9 * 60 * 60 * 1000));
-    return calculateWorkDate(koreaTime);
+    return calculateWorkDate(new Date());
+}
+/**
+ * 어제 근무일 계산 (exported for use in index.ts)
+ */
+function getYesterdayWorkDate() {
+    const yesterday = new Date(Date.now() - (24 * 60 * 60 * 1000));
+    return calculateWorkDate(yesterday);
 }
 /**
  * 콜 완료 시 정산 세션에 자동 추가
@@ -80,7 +87,7 @@ async function addCallToSettlementSession(provinceId, cityId, officeId, callData
         .collection("settlementSessions").doc(workDate);
     try {
         await db.runTransaction(async (transaction) => {
-            var _a, _b, _c, _d;
+            var _a, _b, _c, _d, _e;
             const sessionDoc = await transaction.get(sessionRef);
             // 요금 정보
             const fare = callData.fareFinal || callData.fare_set || 0;
@@ -107,21 +114,26 @@ async function addCallToSettlementSession(provinceId, cityId, officeId, callData
             };
             if (sessionDoc.exists) {
                 const session = sessionDoc.data();
+                // 마감된 세션에는 콜 추가 불가
+                if ((_a = session.metadata) === null || _a === void 0 ? void 0 : _a.isFinalized) {
+                    logger.warn(`[Settlement] Session ${workDate} is already finalized. Skipping call ${callId}`);
+                    return;
+                }
                 // 중복 체크
-                const existingCallIndex = (_b = (_a = session.calls) === null || _a === void 0 ? void 0 : _a.findIndex(c => c.callId === callId)) !== null && _b !== void 0 ? _b : -1;
+                const existingCallIndex = (_c = (_b = session.calls) === null || _b === void 0 ? void 0 : _b.findIndex(c => c.callId === callId)) !== null && _c !== void 0 ? _c : -1;
                 if (existingCallIndex >= 0) {
                     logger.info(`[Settlement] Call ${callId} already exists in session ${workDate}`);
                     return;
                 }
                 // 기존 세션에 콜 추가
                 const updatedCalls = [...(session.calls || []), newCall];
-                const depositRatio = ((_c = session.metadata) === null || _c === void 0 ? void 0 : _c.depositRatio) || 60;
+                const depositRatio = ((_d = session.metadata) === null || _d === void 0 ? void 0 : _d.depositRatio) || 60;
                 // 집계 재계산
                 const updatedTotals = recalculateTotals(updatedCalls, depositRatio);
                 transaction.update(sessionRef, {
                     "calls": updatedCalls,
                     "totals": updatedTotals,
-                    "metadata.version": (((_d = session.metadata) === null || _d === void 0 ? void 0 : _d.version) || 0) + 1,
+                    "metadata.version": (((_e = session.metadata) === null || _e === void 0 ? void 0 : _e.version) || 0) + 1,
                     "metadata.lastUpdatedAt": admin.firestore.Timestamp.now(),
                     "metadata.lastUpdatedBy": "cloud_function"
                 });
@@ -201,9 +213,7 @@ async function autoFinalizeSettlementSessions() {
     const errors = [];
     let processedCount = 0;
     // 어제 근무일 계산
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayDate = calculateWorkDate(yesterday);
+    const yesterdayDate = getYesterdayWorkDate();
     logger.info(`[Settlement] Starting auto-finalize for date: ${yesterdayDate}`);
     try {
         // 모든 사무실 조회

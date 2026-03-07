@@ -99,7 +99,7 @@ class DispatchActivity : ComponentActivity() {
                         ),
                         availableDrivers = drivers,
                         onDriverSelect = { driver ->
-                            if (callId != null) {
+                            if (callId != null && !callId.startsWith("temp_")) {
                                 // Firebase ID가 있으면 기존 문서 업데이트
                                 updateCallWithDriver(callId, driver, provinceId, cityId, officeId)
                             } else {
