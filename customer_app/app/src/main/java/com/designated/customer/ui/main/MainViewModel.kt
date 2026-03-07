@@ -274,9 +274,10 @@ class MainViewModel(
         viewModelScope.launch {
             uiState = uiState.copy(isLoadingCall = true, error = null)
 
+            var usedPointsAmount = 0
             try {
                 // 포인트 사용 처리
-                val usedPointsAmount = if (uiState.usePoints && uiState.pointsToUse > 0) {
+                usedPointsAmount = if (uiState.usePoints && uiState.pointsToUse > 0) {
                     val pointsUsed = pointService.usePoints(
                         phoneNumber = phoneNumber,
                         amount = uiState.pointsToUse,

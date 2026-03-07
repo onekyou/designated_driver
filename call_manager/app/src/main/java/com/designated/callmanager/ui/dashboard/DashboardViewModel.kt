@@ -768,58 +768,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 )
                 Log.d(TAG, "로컬 DB 배차 정보 업데이트 완료: ${callInfo.id}")
 
-                // 기사에게 FCM 알림 전송 (Cloud Function 호출, 실패 시 최대 2회 재시도)
-                Log.d(TAG, "========== 기사 알림 함수 호출 시작 ==========")
-                Log.d(TAG, "callId: ${callInfo.id}, driverAuthUid: $driverAuthUid")
-                Log.d(TAG, "provinceId: ${_provinceId.value}, cityId: ${_cityId.value}, officeId: ${_officeId.value}")
-                try {
-                    val functions = Firebase.functions("asia-northeast3")
-                    val data = hashMapOf(
-                        "callId" to callInfo.id,
-                        "driverAuthUid" to driverAuthUid,
-                        "provinceId" to _provinceId.value,
-                        "cityId" to _cityId.value,
-                        "officeId" to _officeId.value,
-                        "customerName" to (callInfo.customerName ?: ""),
-                        "departure" to (callInfo.departure ?: "")
-                    )
-                    Log.d(TAG, "Cloud Function 호출 전: $data")
-
-                    val maxRetries = 2
-                    val retryDelayMs = 3000L
-                    var lastException: Exception? = null
-                    var success = false
-
-                    for (attempt in 0..maxRetries) {
-                        try {
-                            if (attempt > 0) {
-                                Log.d(TAG, "기사 알림 재시도 ${attempt}/${maxRetries} (${retryDelayMs}ms 후)")
-                                delay(retryDelayMs)
-                            }
-                            val result = functions.getHttpsCallable("notifyDriverAssignment")
-                                .call(data)
-                                .await()
-                            Log.d(TAG, "기사 알림 전송 성공 (attempt=${attempt + 1}): ${result.getData()}")
-                            success = true
-                            break
-                        } catch (retryEx: Exception) {
-                            lastException = retryEx
-                            Log.e(TAG, "기사 알림 전송 실패 (attempt=${attempt + 1}): ${retryEx.message}", retryEx)
-                        }
-                    }
-
-                    if (!success) {
-                        Log.e(TAG, "기사 알림 최종 전송 실패 (${maxRetries + 1}회 시도): ${lastException?.message}", lastException)
-                        withContext(Dispatchers.Main) {
-                            _snackbarMessage.value = "기사 알림 전송 실패 - 직접 연락해주세요"
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "기사 알림 함수 호출 예외: ${e.message}", e)
-                    withContext(Dispatchers.Main) {
-                        _snackbarMessage.value = "기사 알림 전송 실패 - 직접 연락해주세요"
-                    }
-                }
+                // 기사 FCM 알림은 oncallassigned 트리거가 자동 발송 (이중 발송 방지)
+                Log.d(TAG, "배차 완료 - FCM은 oncallassigned 트리거에서 자동 전송됩니다")
 
             } catch (e: Exception) {
                 Log.e(TAG, "❌ 배차 실패: ${e.message}", e)
@@ -888,7 +838,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 val cancelResult = firestore.runTransaction { transaction ->
                     val callSnapshot = transaction.get(callRef)
                     val currentStatus = callSnapshot.getString("status")
-                    if (currentStatus == CallStatus.CANCELED.firestoreValue || currentStatus == CallStatus.CANCELLED.firestoreValue) {
+                    if (currentStatus == CallStatus.CANCELED.firestoreValue || currentStatus == CallStatus.CANCELLED.firestoreValue || currentStatus == CallStatus.CANCELLED_BY_CUSTOMER.firestoreValue || currentStatus == CallStatus.CANCELLED_BY_DRIVER.firestoreValue) {
                         throw IllegalStateException("ALREADY_CANCELLED")
                     }
                     transaction.update(callRef, "status", CallStatus.CANCELED.firestoreValue)

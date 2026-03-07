@@ -39,7 +39,7 @@ class CallService(
                 .collection("offices").document(officeId)
                 .collection("calls")
                 .document(callId)
-                .update("status", "CANCELLED")
+                .update("status", "CANCELLED_BY_CUSTOMER")
                 .await()
             android.util.Log.d("CallService", "cancelCall: success")
             true

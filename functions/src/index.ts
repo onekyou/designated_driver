@@ -2756,21 +2756,21 @@ export const onCallCancelledByDriver = onDocumentUpdated(
       return;
     }
 
-    // 콜 취소 감지: 배정/수락 상태에서 취소 또는 고객 취소(WAITING→CANCELLED/CANCELED)
+    // 콜 취소 감지: 배정/수락 상태에서 취소 또는 고객 취소
     const cancelledFromAssigned =
       (beforeData.status === "ASSIGNED" || beforeData.status === "ACCEPTED") &&
-      (afterData.status === "HOLD" || afterData.status === "CANCELLED_BY_DRIVER" || afterData.status === "CANCELED");
+      (afterData.status === "HOLD" || afterData.status === "CANCELLED_BY_DRIVER" || afterData.status === "CANCELED" || afterData.status === "CANCELLED_BY_CUSTOMER");
 
     const cancelledByCustomer =
-      (beforeData.status === "WAITING" || beforeData.status === "REQUESTED") &&
-      (afterData.status === "CANCELLED" || afterData.status === "CANCELED");
+      (beforeData.status === "WAITING" || beforeData.status === "REQUESTED" || beforeData.status === "ASSIGNED" || beforeData.status === "ACCEPTED") &&
+      (afterData.status === "CANCELLED_BY_CUSTOMER");
 
     if (!cancelledFromAssigned && !cancelledByCustomer) {
       return;
     }
 
     // 포인트 환불 처리 (종료 상태에서만, HOLD는 재배차 가능하므로 제외)
-    const isTerminalCancel = afterData.status === "CANCELED" || afterData.status === "CANCELLED" || afterData.status === "CANCELLED_BY_DRIVER";
+    const isTerminalCancel = afterData.status === "CANCELED" || afterData.status === "CANCELLED" || afterData.status === "CANCELLED_BY_DRIVER" || afterData.status === "CANCELLED_BY_CUSTOMER";
     const pointsUsed = afterData.pointsUsed || 0;
     if (isTerminalCancel && pointsUsed > 0 && afterData.phoneNumber) {
       try {
@@ -2785,6 +2785,52 @@ export const onCallCancelledByDriver = onDocumentUpdated(
         }
       } catch (error) {
         logger.error(`[${callId}] 포인트 환불 실패:`, error);
+      }
+    }
+
+    // 고객이 배정 상태에서 취소한 경우: 기사 상태 복구 + 기사에게 FCM 알림
+    if (afterData.status === "CANCELLED_BY_CUSTOMER" && cancelledFromAssigned && afterData.assignedDriverId) {
+      const driverAuthUid = afterData.assignedDriverId;
+      try {
+        // 기사 상태를 WAITING으로 복구
+        const driversQuery = await admin.firestore()
+          .collection("provinces").doc(provinceId)
+          .collection("cities").doc(cityId)
+          .collection("offices").doc(officeId)
+          .collection(DRIVER_COLLECTION_NAME)
+          .where("authUid", "==", driverAuthUid)
+          .limit(1)
+          .get();
+
+        if (!driversQuery.empty) {
+          const driverDoc = driversQuery.docs[0];
+          const driverData = driverDoc.data();
+          if (driverData.status === "ASSIGNED") {
+            await driverDoc.ref.update({ status: "WAITING" });
+            logger.info(`[${callId}] 기사 ${driverAuthUid} 상태 WAITING으로 복구`);
+          }
+
+          // 기사에게 취소 FCM 알림
+          const driverFcmToken = driverData.fcmToken;
+          if (driverFcmToken) {
+            const driverPayload = {
+              data: {
+                type: "CALL_CANCELLED",
+                callId: callId,
+                cancelReason: "고객이 콜을 취소했습니다"
+              },
+              android: {
+                priority: "high" as const,
+                ttl: 60000
+              },
+              token: driverFcmToken
+            };
+            await admin.messaging().send(driverPayload);
+            logger.info(`[${callId}] 기사에게 고객 취소 알림 전송 완료`);
+          }
+        }
+      } catch (driverError) {
+        logger.error(`[${callId}] 기사 상태 복구/알림 실패:`, driverError);
       }
     }
 
@@ -3222,7 +3268,7 @@ export const checkAssignedTimeout = onSchedule(
                 timeoutRecoveredAt: admin.firestore.FieldValue.serverTimestamp(),
               });
 
-              // 기사 상태도 WAITING으로 복구
+              // 기사 상태도 WAITING으로 복구 + FCM 알림
               if (assignedDriverId) {
                 const driversQuery = await officeDoc.ref
                   .collection("designated_drivers")
@@ -3231,12 +3277,57 @@ export const checkAssignedTimeout = onSchedule(
                   .get();
 
                 if (!driversQuery.empty) {
-                  const driverDoc = driversQuery.docs[0];
-                  const driverStatus = driverDoc.data().status;
+                  const driverDocSnap = driversQuery.docs[0];
+                  const driverData = driverDocSnap.data();
                   // ASSIGNED 상태인 기사만 복구 (이미 다른 콜 수행 중이면 건너뜀)
-                  if (driverStatus === "ASSIGNED") {
-                    await driverDoc.ref.update({ status: "WAITING" });
+                  if (driverData.status === "ASSIGNED") {
+                    await driverDocSnap.ref.update({ status: "WAITING" });
                   }
+
+                  // 기사에게 타임아웃 FCM 알림
+                  const driverFcmToken = driverData.fcmToken;
+                  if (driverFcmToken) {
+                    try {
+                      await admin.messaging().send({
+                        data: {
+                          type: "CALL_CANCELLED",
+                          callId: callDoc.id,
+                          cancelReason: "응답 시간 초과로 배차가 해제되었습니다"
+                        },
+                        android: { priority: "high" as const, ttl: 60000 },
+                        token: driverFcmToken
+                      });
+                      logger.info(`[AssignedTimeout] 기사 FCM 전송 완료: ${assignedDriverId}`);
+                    } catch (fcmError) {
+                      logger.warn(`[AssignedTimeout] 기사 FCM 전송 실패: ${assignedDriverId}`, fcmError);
+                    }
+                  }
+                }
+              }
+
+              // 고객에게 재배정 FCM 알림 (앱 고객인 경우)
+              if (callData.isAppCustomer && callData.phoneNumber) {
+                try {
+                  const customerDoc = await officeDoc.ref
+                    .collection("customerInfo")
+                    .doc(callData.phoneNumber)
+                    .get();
+                  const customerFcmToken = customerDoc.data()?.fcmToken;
+                  if (customerFcmToken) {
+                    await admin.messaging().send({
+                      data: {
+                        type: "CALL_STATUS_UPDATE",
+                        callId: callDoc.id,
+                        status: "WAITING",
+                        message: "기사 재배정 중입니다"
+                      },
+                      android: { priority: "high" as const, ttl: 60000 },
+                      token: customerFcmToken
+                    });
+                    logger.info(`[AssignedTimeout] 고객 FCM 전송 완료: ${callData.phoneNumber}`);
+                  }
+                } catch (custError) {
+                  logger.warn(`[AssignedTimeout] 고객 FCM 전송 실패`, custError);
                 }
               }
 
@@ -3446,7 +3537,15 @@ export const scheduledDataCleanup = onSchedule(
               .where("status", "==", "CANCELLED_BY_DRIVER")
               .get();
 
-            const allCancelled = [...cancelledCalls.docs, ...canceledCalls.docs, ...cancelledByDriverCalls.docs];
+            // CANCELLED_BY_CUSTOMER 상태 조회
+            const cancelledByCustomerCalls = await db.collection("provinces").doc(provinceId)
+              .collection("cities").doc(cityId)
+              .collection("offices").doc(officeId)
+              .collection("calls")
+              .where("status", "==", "CANCELLED_BY_CUSTOMER")
+              .get();
+
+            const allCancelled = [...cancelledCalls.docs, ...canceledCalls.docs, ...cancelledByDriverCalls.docs, ...cancelledByCustomerCalls.docs];
 
             if (allCancelled.length > 0) {
               const batches = [];

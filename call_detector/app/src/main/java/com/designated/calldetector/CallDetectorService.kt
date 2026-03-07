@@ -202,7 +202,13 @@ class CallDetectorService : Service() {
                 lastRingingTime = currentTime // RINGING 시간 기록 (OFFHOOK 중복 판단용)
                 sharedCallCreatedFromRinging = false // 새 전화 시작 시 리셋
                 Log.i(TAG, "📞 Incoming call ringing from: $phoneNumber (wasRinging set to true, lastRingingTime=$lastRingingTime)")
-                
+
+                // 개인번호 체크 - 제외 번호면 공유콜 생성 스킵
+                if (excludeNumberManager.isExcludedNumber(phoneNumber)) {
+                    Log.i(TAG, "🚫 RINGING: 개인번호로 분류된 전화입니다. 공유콜 생성을 건너뜁니다: $phoneNumber")
+                    return START_STICKY
+                }
+
                 // 마감 상태인지 확인 후 2-3초 후 SMS 발송
                 serviceScope.launch {
                     val provinceId = sharedPreferences.getString("provinceId", null)

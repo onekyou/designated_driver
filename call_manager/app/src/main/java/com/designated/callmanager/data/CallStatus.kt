@@ -13,7 +13,9 @@ enum class CallStatus(val firestoreValue: String, val displayName: String) {
     COMPLETED("COMPLETED", "완료"),
     SHARED_OUT("SHARED_OUT", "공유완료"),
     CANCELED("CANCELED", "취소"),
-    CANCELLED("CANCELLED", "취소요청"),  // 고객앱에서 사용하는 철자
+    CANCELLED("CANCELLED", "취소요청"),
+    CANCELLED_BY_CUSTOMER("CANCELLED_BY_CUSTOMER", "고객취소"),
+    CANCELLED_BY_DRIVER("CANCELLED_BY_DRIVER", "기사취소"),
     HOLD("HOLD", "보류"),
     UNKNOWN("UNKNOWN", "알수없음");
 

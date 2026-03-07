@@ -107,6 +107,8 @@ fun CallStatus.getDisplayName(): String {
         CallStatus.SHARED_OUT -> "공유완료"
         CallStatus.CANCELED -> "취소"
         CallStatus.CANCELLED -> "취소요청"
+        CallStatus.CANCELLED_BY_CUSTOMER -> "고객취소"
+        CallStatus.CANCELLED_BY_DRIVER -> "기사취소"
         CallStatus.HOLD -> "보류"
         CallStatus.UNKNOWN -> "알수없음"
     }
@@ -578,8 +580,8 @@ fun DashboardScreen(
                     modifier = Modifier.fillMaxWidth().weight(5.4f),
                     calls = calls.filter { call ->
                         val status = CallStatus.fromFirestoreValue(call.status)
-                        // CANCELLED(취소요청)은 표시, CANCELED/COMPLETED/SHARED_OUT만 숨김
-                        status != CallStatus.COMPLETED && status != CallStatus.CANCELED && status != CallStatus.SHARED_OUT
+                        // CANCELLED(취소요청)은 표시, 완료/취소 계열만 숨김
+                        status != CallStatus.COMPLETED && status != CallStatus.CANCELED && status != CallStatus.SHARED_OUT && status != CallStatus.CANCELLED_BY_CUSTOMER && status != CallStatus.CANCELLED_BY_DRIVER
                     },
                     title = "내부 호출 목록",
                     onCallClick = { callInfo -> viewModel.showCallDialog(callInfo.id) },
@@ -926,6 +928,8 @@ fun CallCard(call: CallInfo, onCallClick: (CallInfo) -> Unit) {
                     CallStatus.SHARED_OUT -> Color(0xFF9C27B0)   // 보라색 - 공유완료
                     CallStatus.CANCELED -> Color.Gray            // 회색 - 취소
                     CallStatus.CANCELLED -> Color(0xFFE91E63)    // 핑크색 - 취소요청
+                    CallStatus.CANCELLED_BY_CUSTOMER -> Color(0xFFE91E63) // 핑크색 - 고객취소
+                    CallStatus.CANCELLED_BY_DRIVER -> Color(0xFFFF5722)   // 주황색 - 기사취소
                     else -> Color(0xFF4CAF50)                     // 녹색 - 기본(대기 등)
                 }
             )

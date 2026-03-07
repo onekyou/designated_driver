@@ -947,7 +947,7 @@ class DriverViewModel @Inject constructor(
                             .await()
 
                         val status = callDoc.getString(Constants.FIELD_STATUS)
-                        if (status == Constants.STATUS_CANCELED || status == "WAITING" || !callDoc.exists()) {
+                        if (status == Constants.STATUS_CANCELED || status == "CANCELLED_BY_CUSTOMER" || status == "WAITING" || !callDoc.exists()) {
                             Log.d(TAG, "refreshActiveCallStatus: 콜 $callId 상태=$status -> 정리")
                             handleCallCancelled(callId)
                         }

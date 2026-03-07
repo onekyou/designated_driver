@@ -170,31 +170,8 @@ class DispatchActivity : ComponentActivity() {
         }.addOnSuccessListener {
             Log.d("DispatchActivity", "Call updated with driver: ${driver.name}")
 
-            // 트랜잭션 성공 시에만 FCM 알림 전송
-            val driverAuthUid = driver.authUid
-            if (driverAuthUid.isNotBlank()) {
-                val functions = Firebase.functions("asia-northeast3")
-                val data = hashMapOf(
-                    "callId" to callId,
-                    "driverAuthUid" to driverAuthUid,
-                    "provinceId" to provinceId,
-                    "cityId" to cityId,
-                    "officeId" to officeId,
-                    "customerName" to "",
-                    "departure" to ""
-                )
-                Log.d("DispatchActivity", "Cloud Function 호출: $data")
-                functions.getHttpsCallable("notifyDriverAssignment")
-                    .call(data)
-                    .addOnSuccessListener { result ->
-                        Log.d("DispatchActivity", "기사 알림 전송 성공: ${result.data}")
-                    }
-                    .addOnFailureListener { fcmError ->
-                        Log.e("DispatchActivity", "기사 알림 전송 실패: ${fcmError.message}", fcmError)
-                    }
-            } else {
-                Log.w("DispatchActivity", "기사 authUid가 없어 FCM 알림 전송 불가")
-            }
+            // 기사 FCM 알림은 oncallassigned 트리거가 자동 발송 (이중 발송 방지)
+            Log.d("DispatchActivity", "배차 완료 - FCM은 oncallassigned 트리거에서 자동 전송됩니다")
         }.addOnFailureListener { e ->
             Log.e("DispatchActivity", "Failed to update call", e)
             if (e.message?.contains("ALREADY_ASSIGNED") == true) {
@@ -246,31 +223,8 @@ class DispatchActivity : ComponentActivity() {
             .addOnSuccessListener { docRef ->
                 Log.d("DispatchActivity", "새 콜 생성: ${docRef.id}")
 
-                // FCM 알림 전송 (Cloud Function 호출)
-                val driverAuthUid = driver.authUid
-                if (driverAuthUid.isNotBlank()) {
-                    val functions = Firebase.functions("asia-northeast3")
-                    val data = hashMapOf(
-                        "callId" to docRef.id,
-                        "driverAuthUid" to driverAuthUid,
-                        "provinceId" to provinceId,
-                        "cityId" to cityId,
-                        "officeId" to officeId,
-                        "customerName" to (contactName ?: ""),
-                        "departure" to ""
-                    )
-                    Log.d("DispatchActivity", "Cloud Function 호출: $data")
-                    functions.getHttpsCallable("notifyDriverAssignment")
-                        .call(data)
-                        .addOnSuccessListener { result ->
-                            Log.d("DispatchActivity", "✅ 기사 알림 전송 성공: ${result.data}")
-                        }
-                        .addOnFailureListener { e ->
-                            Log.e("DispatchActivity", "❌ 기사 알림 전송 실패: ${e.message}", e)
-                        }
-                } else {
-                    Log.w("DispatchActivity", "⚠️ 기사 authUid가 없어 FCM 알림 전송 불가")
-                }
+                // 기사 FCM 알림은 oncallassigned 트리거가 자동 발송 (이중 발송 방지)
+                Log.d("DispatchActivity", "새 콜 생성 완료 - FCM은 oncallassigned 트리거에서 자동 전송됩니다")
             }
             .addOnFailureListener { e ->
                 Log.e("DispatchActivity", "콜 생성 실패", e)
