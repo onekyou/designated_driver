@@ -181,6 +181,12 @@ class CallDetectorService : Service() {
             else if (callState == TelephonyManager.CALL_STATE_RINGING && isIncomingCall) {
                 sharedCallCreatedFromRinging = false // 새 전화 시작 시 리셋
 
+                // 제외번호 체크 (IDLE 핸들러와 동일)
+                if (excludeNumberManager.isExcludedNumber(phoneNumber)) {
+                    Log.i(TAG, "RINGING 제외번호: $phoneNumber")
+                    return START_STICKY
+                }
+
                 serviceScope.launch {
                     val provinceId = sharedPreferences.getString("provinceId", null)
                     val cityId = sharedPreferences.getString("cityId", null)
@@ -377,7 +383,7 @@ class CallDetectorService : Service() {
     /**
      * 부재중 전화에서 공유 콜 생성 (CallManager용)
      */
-    private fun createSharedCallFromMissed(
+    private suspend fun createSharedCallFromMissed(
         provinceId: String,
         cityId: String,
         officeId: String,
@@ -386,32 +392,50 @@ class CallDetectorService : Service() {
         contactAddress: String?,
         deviceName: String
     ) {
-        val sharedCallData = hashMapOf<String, Any>(
-            "phoneNumber" to phoneNumber,
-            "sourceProvinceId" to provinceId,
-            "sourceCityId" to cityId,
-            "sourceOfficeId" to officeId,
-            "targetProvinceId" to provinceId,
-            "targetCityId" to cityId,
-            "deviceName" to deviceName,
-            "status" to "OPEN",
-            "timestamp" to FieldValue.serverTimestamp(),
-            "callType" to "MISSED_CALL",
-            "timestampClient" to System.currentTimeMillis(),
-            "fromMissedCall" to true,
-            "fromCallManager" to true
-        )
+        try {
+            val firestore = FirebaseFirestore.getInstance()
 
-        contactName?.let { sharedCallData["customerName"] = it }
-        contactAddress?.let { sharedCallData["customerAddress"] = it }
+            // 중복 공유콜 생성 방지: 10초 내 같은 phoneNumber + sourceOfficeId의 OPEN 콜 확인
+            val duplicateCheckThreshold = System.currentTimeMillis() - DUPLICATE_CALL_CHECK_MS
+            val existingSharedCalls = firestore.collection("shared_calls")
+                .whereEqualTo("phoneNumber", phoneNumber)
+                .whereEqualTo("sourceOfficeId", officeId)
+                .whereGreaterThan("timestampClient", duplicateCheckThreshold)
+                .whereEqualTo("status", "OPEN")
+                .get()
+                .await()
 
-        val firestore = FirebaseFirestore.getInstance()
-        firestore.collection("shared_calls")
-            .add(sharedCallData)
-            .addOnSuccessListener { documentReference ->
+            if (!existingSharedCalls.isEmpty) {
+                Log.w(TAG, "⚠️ 중복 공유콜 감지 (부재중): 10초 내 같은 번호($phoneNumber)의 공유콜이 이미 존재합니다 (${existingSharedCalls.size()}건). 생성 스킵.")
+                return
             }
-            .addOnFailureListener { e ->
-            }
+
+            val sharedCallData = hashMapOf<String, Any>(
+                "phoneNumber" to phoneNumber,
+                "sourceProvinceId" to provinceId,
+                "sourceCityId" to cityId,
+                "sourceOfficeId" to officeId,
+                "targetProvinceId" to provinceId,
+                "targetCityId" to cityId,
+                "deviceName" to deviceName,
+                "status" to "OPEN",
+                "timestamp" to FieldValue.serverTimestamp(),
+                "callType" to "MISSED_CALL",
+                "timestampClient" to System.currentTimeMillis(),
+                "fromMissedCall" to true,
+                "fromCallManager" to true
+            )
+
+            contactName?.let { sharedCallData["customerName"] = it }
+            contactAddress?.let { sharedCallData["customerAddress"] = it }
+
+            firestore.collection("shared_calls")
+                .add(sharedCallData)
+                .await()
+            Log.d(TAG, "✅ 공유콜 생성 완료 (부재중)")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 공유콜 생성 실패 (부재중): ${e.message}", e)
+        }
     }
 
     private fun bringCallManagerToForeground() {
@@ -570,7 +594,9 @@ class CallDetectorService : Service() {
                             Log.i(TAG, "⚠️ RINGING에서 이미 공유 콜 생성됨 - IDLE에서 중복 생성 방지")
                             sharedCallCreatedFromRinging = false
                         } else {
-                            createSharedCall(provinceId, cityId, officeId, phoneNumber, contactName, contactAddress, deviceName)
+                            serviceScope.launch {
+                                createSharedCall(provinceId, cityId, officeId, phoneNumber, contactName, contactAddress, deviceName)
+                            }
                             sendAutoSMS(phoneNumber, officeName)
                         }
                     }
@@ -736,6 +762,25 @@ class CallDetectorService : Service() {
                 )
 
                 val targetPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/calls"
+
+                // fallback 경로에서도 중복 콜 생성 방지
+                val fbDupThreshold = System.currentTimeMillis() - DUPLICATE_CALL_CHECK_MS
+                val fbExistingCalls = firestore.collection(targetPath)
+                    .whereEqualTo("phoneNumber", phoneNumber)
+                    .whereGreaterThan("timestampClient", fbDupThreshold)
+                    .whereIn("status", listOf(
+                        CallStatus.WAITING.firestoreValue,
+                        CallStatus.PENDING.firestoreValue,
+                        CallStatus.ASSIGNED.firestoreValue
+                    ))
+                    .get()
+                    .await()
+
+                if (!fbExistingCalls.isEmpty) {
+                    Log.w(TAG, "⚠️ 중복 콜 감지 (fallback): 10초 내 같은 번호($phoneNumber)의 콜이 이미 존재합니다 (${fbExistingCalls.size()}건). 생성 스킵.")
+                    return@launch
+                }
+
                 firestore.collection(targetPath)
                     .add(callData)
                     .addOnSuccessListener { documentReference ->
@@ -775,7 +820,7 @@ class CallDetectorService : Service() {
     /**
      * 공유 콜 생성 (마감 상태)
      */
-    private fun createSharedCall(
+    private suspend fun createSharedCall(
         provinceId: String,
         cityId: String,
         officeId: String,
@@ -784,31 +829,49 @@ class CallDetectorService : Service() {
         contactAddress: String?,
         deviceName: String
     ) {
-        val sharedCallData = hashMapOf<String, Any>(
-            "phoneNumber" to phoneNumber,
-            "sourceProvinceId" to provinceId,
-            "sourceCityId" to cityId,
-            "sourceOfficeId" to officeId,
-            "targetProvinceId" to provinceId,
-            "targetCityId" to cityId,
-            "deviceName" to deviceName,
-            "status" to "OPEN",
-            "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-            "callType" to "AFTER_HOURS",
-            "timestampClient" to System.currentTimeMillis(),
-            "fromCallManager" to true
-        )
+        try {
+            val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
 
-        contactName?.let { sharedCallData["customerName"] = it }
-        contactAddress?.let { sharedCallData["customerAddress"] = it }
+            // 중복 공유콜 생성 방지: 10초 내 같은 phoneNumber + sourceOfficeId의 OPEN 콜 확인
+            val duplicateCheckThreshold = System.currentTimeMillis() - DUPLICATE_CALL_CHECK_MS
+            val existingSharedCalls = firestore.collection("shared_calls")
+                .whereEqualTo("phoneNumber", phoneNumber)
+                .whereEqualTo("sourceOfficeId", officeId)
+                .whereGreaterThan("timestampClient", duplicateCheckThreshold)
+                .whereEqualTo("status", "OPEN")
+                .get()
+                .await()
 
-        val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-        firestore.collection("shared_calls")
-            .add(sharedCallData)
-            .addOnSuccessListener { documentReference ->
+            if (!existingSharedCalls.isEmpty) {
+                Log.w(TAG, "⚠️ 중복 공유콜 감지: 10초 내 같은 번호($phoneNumber)의 공유콜이 이미 존재합니다 (${existingSharedCalls.size()}건). 생성 스킵.")
+                return
             }
-            .addOnFailureListener { e ->
-            }
+
+            val sharedCallData = hashMapOf<String, Any>(
+                "phoneNumber" to phoneNumber,
+                "sourceProvinceId" to provinceId,
+                "sourceCityId" to cityId,
+                "sourceOfficeId" to officeId,
+                "targetProvinceId" to provinceId,
+                "targetCityId" to cityId,
+                "deviceName" to deviceName,
+                "status" to "OPEN",
+                "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                "callType" to "AFTER_HOURS",
+                "timestampClient" to System.currentTimeMillis(),
+                "fromCallManager" to true
+            )
+
+            contactName?.let { sharedCallData["customerName"] = it }
+            contactAddress?.let { sharedCallData["customerAddress"] = it }
+
+            firestore.collection("shared_calls")
+                .add(sharedCallData)
+                .await()
+            Log.d(TAG, "✅ 공유콜 생성 완료")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 공유콜 생성 실패: ${e.message}", e)
+        }
     }
 
     /**
@@ -944,7 +1007,7 @@ class CallDetectorService : Service() {
     /**
      * RINGING 상태에서 공유 콜 생성 (콜매니저용)
      */
-    private fun createSharedCallFromRinging(
+    private suspend fun createSharedCallFromRinging(
         provinceId: String,
         cityId: String,
         officeId: String,
@@ -953,32 +1016,50 @@ class CallDetectorService : Service() {
         contactAddress: String?,
         deviceName: String
     ) {
-        val sharedCallData = hashMapOf<String, Any>(
-            "phoneNumber" to phoneNumber,
-            "sourceProvinceId" to provinceId,
-            "sourceCityId" to cityId,
-            "sourceOfficeId" to officeId,
-            "targetProvinceId" to provinceId,
-            "targetCityId" to cityId,
-            "deviceName" to deviceName,
-            "status" to "OPEN",
-            "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-            "callType" to "AFTER_HOURS_QUICK",
-            "timestampClient" to System.currentTimeMillis(),
-            "fromRinging" to true,
-            "fromCallManager" to true
-        )
+        try {
+            val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
 
-        contactName?.let { sharedCallData["customerName"] = it }
-        contactAddress?.let { sharedCallData["customerAddress"] = it }
+            // 중복 공유콜 생성 방지: 10초 내 같은 phoneNumber + sourceOfficeId의 OPEN 콜 확인
+            val duplicateCheckThreshold = System.currentTimeMillis() - DUPLICATE_CALL_CHECK_MS
+            val existingSharedCalls = firestore.collection("shared_calls")
+                .whereEqualTo("phoneNumber", phoneNumber)
+                .whereEqualTo("sourceOfficeId", officeId)
+                .whereGreaterThan("timestampClient", duplicateCheckThreshold)
+                .whereEqualTo("status", "OPEN")
+                .get()
+                .await()
 
-        val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-        firestore.collection("shared_calls")
-            .add(sharedCallData)
-            .addOnSuccessListener { documentReference ->
+            if (!existingSharedCalls.isEmpty) {
+                Log.w(TAG, "⚠️ 중복 공유콜 감지 (RINGING): 10초 내 같은 번호($phoneNumber)의 공유콜이 이미 존재합니다 (${existingSharedCalls.size()}건). 생성 스킵.")
+                return
             }
-            .addOnFailureListener { e ->
-            }
+
+            val sharedCallData = hashMapOf<String, Any>(
+                "phoneNumber" to phoneNumber,
+                "sourceProvinceId" to provinceId,
+                "sourceCityId" to cityId,
+                "sourceOfficeId" to officeId,
+                "targetProvinceId" to provinceId,
+                "targetCityId" to cityId,
+                "deviceName" to deviceName,
+                "status" to "OPEN",
+                "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                "callType" to "AFTER_HOURS_QUICK",
+                "timestampClient" to System.currentTimeMillis(),
+                "fromRinging" to true,
+                "fromCallManager" to true
+            )
+
+            contactName?.let { sharedCallData["customerName"] = it }
+            contactAddress?.let { sharedCallData["customerAddress"] = it }
+
+            firestore.collection("shared_calls")
+                .add(sharedCallData)
+                .await()
+            Log.d(TAG, "✅ 공유콜 생성 완료 (RINGING)")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ 공유콜 생성 실패 (RINGING): ${e.message}", e)
+        }
     }
 
     override fun onDestroy() {

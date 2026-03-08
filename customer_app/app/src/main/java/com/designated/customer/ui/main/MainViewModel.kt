@@ -224,11 +224,30 @@ class MainViewModel(
                     else -> return@launch
                 }
 
+                // 기사 정보 복구 (배정된 상태에서 앱 재시작 시)
+                val restoredDriverInfo = if (activeCall.driverId != null) {
+                    try {
+                        val driverDoc = callService.getDriverInfo(activeCall.driverId)
+                        if (driverDoc != null) {
+                            DriverInfo(
+                                id = activeCall.driverId,
+                                name = driverDoc["name"] as? String ?: "",
+                                phoneNumber = driverDoc["phone"] as? String ?: "",
+                                vehicleNumber = driverDoc["vehicleNumber"] as? String ?: ""
+                            )
+                        } else null
+                    } catch (e: Exception) {
+                        android.util.Log.w("MainViewModel", "기사 정보 복구 실패: ${e.message}")
+                        null
+                    }
+                } else null
+
                 uiState = uiState.copy(
                     callStatus = CallStatus(
                         callId = activeCall.id,
                         state = callState,
-                        timestamp = activeCall.timestamp
+                        timestamp = activeCall.timestamp,
+                        driverInfo = restoredDriverInfo
                     )
                 )
                 android.util.Log.i("MainViewModel", "활성 콜 복구: ${activeCall.id}, state=$callState")

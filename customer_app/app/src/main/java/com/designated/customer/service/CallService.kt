@@ -84,6 +84,30 @@ class CallService(
     }
 
     /**
+     * 기사 정보 조회 (활성 콜 복구 시 사용)
+     */
+    suspend fun getDriverInfo(driverAuthUid: String): Map<String, Any>? {
+        return try {
+            val driversQuery = firestore
+                .collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
+                .collection("offices").document(officeId)
+                .collection("designated_drivers")
+                .whereEqualTo("authUid", driverAuthUid)
+                .limit(1)
+                .get()
+                .await()
+
+            if (!driversQuery.isEmpty) {
+                driversQuery.documents[0].data
+            } else null
+        } catch (e: Exception) {
+            android.util.Log.e("CallService", "기사 정보 조회 실패: ${e.message}")
+            null
+        }
+    }
+
+    /**
      * 고객의 콜 내역 조회
      */
     suspend fun getCustomerCallHistory(

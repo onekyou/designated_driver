@@ -795,7 +795,7 @@ class CallDetectorService : Service() {
                 .whereIn("status", listOf(
                     CallStatus.WAITING.firestoreValue,
                     CallStatus.PENDING.firestoreValue,
-                    CallStatus.MATCHED.firestoreValue
+                    "ASSIGNED"
                 ))
                 .get()
                 .await()

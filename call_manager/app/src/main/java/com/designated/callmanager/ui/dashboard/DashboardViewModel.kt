@@ -847,7 +847,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     if (driverRef != null) {
                         val driverDoc = transaction.get(driverRef)
                         val driverStatus = driverDoc.getString("status")
-                        if (driverStatus == "ASSIGNED" || driverStatus == "ACCEPTED") {
+                        if (driverStatus == "ASSIGNED" || driverStatus == "ACCEPTED" || driverStatus == "ON_TRIP" || driverStatus == "PREPARING") {
                             transaction.update(driverRef, "status", "WAITING")
                         }
                     }

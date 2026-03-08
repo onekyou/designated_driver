@@ -2756,9 +2756,9 @@ export const onCallCancelledByDriver = onDocumentUpdated(
       return;
     }
 
-    // 콜 취소 감지: 배정/수락 상태에서 취소 또는 고객 취소
+    // 콜 취소 감지: 배정/수락/운행중 상태에서 취소 또는 고객 취소
     const cancelledFromAssigned =
-      (beforeData.status === "ASSIGNED" || beforeData.status === "ACCEPTED") &&
+      (beforeData.status === "ASSIGNED" || beforeData.status === "ACCEPTED" || beforeData.status === "IN_PROGRESS") &&
       (afterData.status === "HOLD" || afterData.status === "CANCELLED_BY_DRIVER" || afterData.status === "CANCELED" || afterData.status === "CANCELLED_BY_CUSTOMER");
 
     const cancelledByCustomer =
@@ -2805,9 +2805,9 @@ export const onCallCancelledByDriver = onDocumentUpdated(
         if (!driversQuery.empty) {
           const driverDoc = driversQuery.docs[0];
           const driverData = driverDoc.data();
-          if (driverData.status === "ASSIGNED") {
+          if (driverData.status === "ASSIGNED" || driverData.status === "ACCEPTED" || driverData.status === "ON_TRIP" || driverData.status === "PREPARING") {
             await driverDoc.ref.update({ status: "WAITING" });
-            logger.info(`[${callId}] 기사 ${driverAuthUid} 상태 WAITING으로 복구`);
+            logger.info(`[${callId}] 기사 ${driverAuthUid} 상태 WAITING으로 복구 (이전: ${driverData.status})`);
           }
 
           // 기사에게 취소 FCM 알림
@@ -2815,7 +2815,7 @@ export const onCallCancelledByDriver = onDocumentUpdated(
           if (driverFcmToken) {
             const driverPayload = {
               data: {
-                type: "CALL_CANCELLED",
+                type: "call_cancelled",
                 callId: callId,
                 cancelReason: "고객이 콜을 취소했습니다"
               },
@@ -2832,6 +2832,12 @@ export const onCallCancelledByDriver = onDocumentUpdated(
       } catch (driverError) {
         logger.error(`[${callId}] 기사 상태 복구/알림 실패:`, driverError);
       }
+    }
+
+    // HOLD(재배차 대기)는 취소가 아니므로 고객 알림 스킵
+    if (afterData.status === "HOLD") {
+      logger.info(`[${callId}] HOLD 상태 - 재배차 대기 중이므로 고객 취소 알림 스킵`);
+      return;
     }
 
     logger.info(`[${callId}] 콜 취소 감지 - 손님에게 알림 전송 시작`);
@@ -3290,7 +3296,7 @@ export const checkAssignedTimeout = onSchedule(
                     try {
                       await admin.messaging().send({
                         data: {
-                          type: "CALL_CANCELLED",
+                          type: "call_cancelled",
                           callId: callDoc.id,
                           cancelReason: "응답 시간 초과로 배차가 해제되었습니다"
                         },
