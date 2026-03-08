@@ -199,7 +199,9 @@
       "Bash(export:*)",
       "Bash(JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\" ANDROID_HOME=\"/c/Users/kala1/AppData/Local/Android/Sdk\" ./gradlew assembleDebug:*)",
       "Bash(\"$ADB\" devices:*)",
-      "Bash(\"$ADB\":*)"
+      "Bash(\"$ADB\":*)",
+      "Bash(git status:*)",
+      "Bash(python3:*)"
     ],
     "deny": [],
     "ask": [],
