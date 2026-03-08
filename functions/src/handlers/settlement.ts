@@ -163,8 +163,12 @@ export async function addCallToSettlementSession(
 
         logger.info(`[Settlement] Added call ${callId} to existing session ${workDate}`);
       } else {
-        // 새 세션 생성
-        const depositRatio = 60; // 기본값
+        // 새 세션 생성 - 사무실 문서에서 depositRatio 읽기
+        const officeRef = db.collection("provinces").doc(provinceId)
+          .collection("cities").doc(cityId)
+          .collection("offices").doc(officeId);
+        const officeDoc = await transaction.get(officeRef);
+        const depositRatio = officeDoc.exists ? (officeDoc.data()?.depositRatio || 60) : 60;
         const newTotals = recalculateTotals([newCall], depositRatio);
 
         const newSession: SettlementSession = {

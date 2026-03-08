@@ -277,10 +277,12 @@ class DispatchActivity : ComponentActivity() {
             "phoneNumber" to phoneNumber,
             "customerName" to (contactName ?: phoneNumber),
             "sharedTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-            "status" to "SHARED",
+            "status" to "OPEN",
             "sourceProvinceId" to provinceId,
             "sourceCityId" to cityId,
             "sourceOfficeId" to officeId,
+            "targetProvinceId" to provinceId,
+            "targetCityId" to cityId,
             "deviceName" to deviceName,
             "callType" to "수신",
             "timestampClient" to System.currentTimeMillis()

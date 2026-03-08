@@ -2834,6 +2834,27 @@ export const onCallCancelledByDriver = onDocumentUpdated(
       }
     }
 
+    // 원본 콜 취소 시 관련 shared_calls 문서 정리 (OPEN 상태인 것만)
+    if (isTerminalCancel && !afterData.sourceSharedCallId) {
+      try {
+        const sharedCallsQuery = await admin.firestore()
+          .collection("shared_calls")
+          .where("sourceOfficeId", "==", officeId)
+          .where("status", "==", "OPEN")
+          .get();
+
+        for (const sharedDoc of sharedCallsQuery.docs) {
+          const sharedData = sharedDoc.data();
+          if (sharedData.originalCallId === callId) {
+            await sharedDoc.ref.delete();
+            logger.info(`[${callId}] 관련 shared_calls 문서 삭제: ${sharedDoc.id}`);
+          }
+        }
+      } catch (sharedError) {
+        logger.error(`[${callId}] shared_calls 정리 실패:`, sharedError);
+      }
+    }
+
     // HOLD(재배차 대기)는 취소가 아니므로 고객 알림 스킵
     if (afterData.status === "HOLD") {
       logger.info(`[${callId}] HOLD 상태 - 재배차 대기 중이므로 고객 취소 알림 스킵`);
