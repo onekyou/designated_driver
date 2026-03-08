@@ -33,14 +33,31 @@ class CallService(
     suspend fun cancelCall(callId: String): Boolean {
         android.util.Log.d("CallService", "cancelCall: callId=$callId, provinceId=$provinceId, cityId=$cityId, officeId=$officeId")
         return try {
-            firestore
+            val callRef = firestore
                 .collection("provinces").document(provinceId)
                 .collection("cities").document(cityId)
                 .collection("offices").document(officeId)
                 .collection("calls")
                 .document(callId)
-                .update("status", "CANCELLED_BY_CUSTOMER")
-                .await()
+
+            firestore.runTransaction { transaction ->
+                val snapshot = transaction.get(callRef)
+                val currentStatus = snapshot.getString("status") ?: ""
+
+                // 이미 취소된 상태면 중복 취소 방지
+                if (currentStatus == "CANCELED" || currentStatus == "CANCELLED_BY_DRIVER" ||
+                    currentStatus == "CANCELLED_BY_CUSTOMER") {
+                    throw IllegalStateException("ALREADY_CANCELLED")
+                }
+
+                // WAITING, ASSIGNED만 고객이 직접 취소 가능
+                if (currentStatus != "WAITING" && currentStatus != "ASSIGNED") {
+                    throw IllegalStateException("CANNOT_CANCEL: status=$currentStatus")
+                }
+
+                transaction.update(callRef, "status", "CANCELLED_BY_CUSTOMER")
+            }.await()
+
             android.util.Log.d("CallService", "cancelCall: success")
             true
         } catch (e: Exception) {

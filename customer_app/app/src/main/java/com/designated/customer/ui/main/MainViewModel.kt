@@ -75,7 +75,8 @@ data class MainUiState(
     val currentBanner: BannerAdData? = null
 ) {
     val canRequestCall: Boolean
-        get() = currentLocation.isNotEmpty() &&
+        get() = !isLoadingCall &&
+                currentLocation.isNotEmpty() &&
                 destinationLocation.isNotEmpty() &&
                 callStatus?.state != CallState.REQUESTED &&
                 callStatus?.state != CallState.ASSIGNED &&
