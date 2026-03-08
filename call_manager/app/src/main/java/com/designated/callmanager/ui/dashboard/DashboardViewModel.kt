@@ -1411,6 +1411,27 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             _isCreatingCall.value = true
             try {
+                // 전화번호가 있는 경우 10초 내 동일번호 중복 체크 (Detector와 동일 로직)
+                if (phoneNumber.isNotBlank()) {
+                    val duplicateCheckThreshold = System.currentTimeMillis() - 10000L
+                    val existingCalls = officeRef.collection("calls")
+                        .whereEqualTo("phoneNumber", phoneNumber)
+                        .whereGreaterThan("timestampClient", duplicateCheckThreshold)
+                        .whereIn("status", listOf(
+                            CallStatus.WAITING.firestoreValue,
+                            CallStatus.PENDING.firestoreValue,
+                            CallStatus.ASSIGNED.firestoreValue
+                        ))
+                        .get()
+                        .await()
+
+                    if (!existingCalls.isEmpty) {
+                        Log.w(TAG, "⚠️ 중복 콜 감지: 10초 내 같은 번호(${phoneNumber})의 콜이 이미 존재")
+                        _snackbarMessage.value = "같은 번호의 콜이 이미 존재합니다"
+                        return@launch
+                    }
+                }
+
                 val nowTs = Timestamp.now()
                 val timestampClient = System.currentTimeMillis()
                 val data = hashMapOf(
@@ -1549,6 +1570,14 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 val province = _provinceId.value ?: return@launch
                 val city = _cityId.value ?: return@launch
                 val office = _officeId.value ?: return@launch
+
+                // 공유콜 재공유 차단 (공유의 공유 방지)
+                if (callInfo.callType == "SHARED") {
+                    Log.w(TAG, "⚠️ 공유콜은 다시 공유할 수 없습니다: ${callInfo.id}")
+                    _snackbarMessage.value = "공유콜은 다시 공유할 수 없습니다"
+                    return@launch
+                }
+
                 val docRef = firestore.collection("shared_calls").document()
 
                 // 마감콜 여부 확인 (원본 callInfo의 callType 또는 출발지/도착지/요금이 모두 비어있는 경우)
