@@ -45,6 +45,7 @@ exports.checkSettlementDiscrepancies = checkSettlementDiscrepancies;
 exports.notifyDriversSettlementFinalized = notifyDriversSettlementFinalized;
 exports.notifySettlementDiscrepancy = notifySettlementDiscrepancy;
 const admin = __importStar(require("firebase-admin"));
+const firestore_1 = require("firebase-admin/firestore");
 const logger = __importStar(require("firebase-functions/logger"));
 /**
  * 근무일 계산 (새벽 6시 이전은 전날로 처리)
@@ -87,7 +88,7 @@ async function addCallToSettlementSession(provinceId, cityId, officeId, callData
         .collection("settlementSessions").doc(workDate);
     try {
         await db.runTransaction(async (transaction) => {
-            var _a, _b, _c, _d, _e;
+            var _a, _b, _c, _d, _e, _f;
             const sessionDoc = await transaction.get(sessionRef);
             // 요금 정보
             const fare = callData.fareFinal || callData.fare_set || 0;
@@ -108,9 +109,9 @@ async function addCallToSettlementSession(provinceId, cityId, officeId, callData
                 cashReceived: cashReceived,
                 creditAmount: creditAmount,
                 pointsUsed: pointsUsed,
-                completedAt: callData.completedAt || admin.firestore.Timestamp.now(),
+                completedAt: callData.completedAt || firestore_1.Timestamp.now(),
                 confirmedByOffice: false,
-                syncedAt: admin.firestore.Timestamp.now()
+                syncedAt: firestore_1.Timestamp.now()
             };
             if (sessionDoc.exists) {
                 const session = sessionDoc.data();
@@ -134,22 +135,26 @@ async function addCallToSettlementSession(provinceId, cityId, officeId, callData
                     "calls": updatedCalls,
                     "totals": updatedTotals,
                     "metadata.version": (((_e = session.metadata) === null || _e === void 0 ? void 0 : _e.version) || 0) + 1,
-                    "metadata.lastUpdatedAt": admin.firestore.Timestamp.now(),
+                    "metadata.lastUpdatedAt": firestore_1.Timestamp.now(),
                     "metadata.lastUpdatedBy": "cloud_function"
                 });
                 logger.info(`[Settlement] Added call ${callId} to existing session ${workDate}`);
             }
             else {
-                // 새 세션 생성
-                const depositRatio = 60; // 기본값
+                // 새 세션 생성 - 사무실 문서에서 depositRatio 읽기
+                const officeRef = db.collection("provinces").doc(provinceId)
+                    .collection("cities").doc(cityId)
+                    .collection("offices").doc(officeId);
+                const officeDoc = await transaction.get(officeRef);
+                const depositRatio = officeDoc.exists ? (((_f = officeDoc.data()) === null || _f === void 0 ? void 0 : _f.depositRatio) || 60) : 60;
                 const newTotals = recalculateTotals([newCall], depositRatio);
                 const newSession = {
                     metadata: {
                         version: 1,
-                        lastUpdatedAt: admin.firestore.Timestamp.now(),
+                        lastUpdatedAt: firestore_1.Timestamp.now(),
                         lastUpdatedBy: "cloud_function",
                         depositRatio: depositRatio,
-                        createdAt: admin.firestore.Timestamp.now(),
+                        createdAt: firestore_1.Timestamp.now(),
                         isFinalized: false
                     },
                     totals: newTotals,
@@ -238,7 +243,7 @@ async function autoFinalizeSettlementSessions() {
                             await sessionRef.update({
                                 "metadata.isFinalized": true,
                                 "metadata.version": (((_b = session.metadata) === null || _b === void 0 ? void 0 : _b.version) || 0) + 1,
-                                "metadata.lastUpdatedAt": admin.firestore.Timestamp.now(),
+                                "metadata.lastUpdatedAt": firestore_1.Timestamp.now(),
                                 "metadata.lastUpdatedBy": "auto_finalize"
                             });
                             processedCount++;

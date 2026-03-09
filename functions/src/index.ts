@@ -11,6 +11,7 @@ import {onDocumentWritten, onDocumentUpdated, onDocumentCreated} from "firebase-
 import {onRequest, onCall} from "firebase-functions/v2/https";
 import {onSchedule} from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
+import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 import { processSharedCallPoints, processCustomerPointsOnComplete, refundCustomerPointsOnCancel } from "./handlers/points";
 import { addCallToSettlementSession, autoFinalizeSettlementSessions, checkSettlementDiscrepancies, notifySettlementDiscrepancy, notifyDriversSettlementFinalized, getTodayWorkDate, getYesterdayWorkDate } from "./handlers/settlement";
@@ -57,10 +58,10 @@ interface NotificationStatus {
     provinceId: string;
     cityId: string;
     status: "pending" | "delivered" | "failed";
-    sentAt: admin.firestore.Timestamp;
-    deliveredAt?: admin.firestore.Timestamp;
+    sentAt: Timestamp;
+    deliveredAt?: Timestamp;
     retryCount: number;
-    lastRetryAt?: admin.firestore.Timestamp;
+    lastRetryAt?: Timestamp;
     fcmToken: string;
     payload: any;
 }
@@ -91,7 +92,7 @@ async function saveNotificationStatus(
             provinceId,
             cityId,
             status: "pending",
-            sentAt: admin.firestore.Timestamp.now(),
+            sentAt: Timestamp.now(),
             retryCount: 0,
             fcmToken,
             payload
@@ -133,7 +134,7 @@ export const acknowledgeNotification = onCall(
 
             await notificationRef.update({
                 status: "delivered",
-                deliveredAt: admin.firestore.Timestamp.now()
+                deliveredAt: Timestamp.now()
             });
 
             logger.info(`[ACK] 알림 도착 확인: ${notificationId}`);
@@ -155,7 +156,7 @@ export const retryPendingNotifications = onSchedule(
         timeZone: "Asia/Seoul"
     },
     async () => {
-        const tenSecondsAgo = admin.firestore.Timestamp.fromMillis(
+        const tenSecondsAgo = Timestamp.fromMillis(
             Date.now() - 10000  // 10초 전
         );
 
@@ -197,7 +198,7 @@ export const retryPendingNotifications = onSchedule(
                 // 재시도 횟수 증가
                 batch.update(doc.ref, {
                     retryCount: notification.retryCount + 1,
-                    lastRetryAt: admin.firestore.Timestamp.now()
+                    lastRetryAt: Timestamp.now()
                 });
             }
 
@@ -656,8 +657,8 @@ export const sendNewCallNotification = onDocumentCreated(
 
     // 중복 콜 감지: 같은 사무실에서 10초 내 같은 phoneNumber의 다른 WAITING 콜이 있는지 확인
     if (callData.phoneNumber) {
-      const now = admin.firestore.Timestamp.now();
-      const tenSecondsAgo = new admin.firestore.Timestamp(now.seconds - 10, now.nanoseconds);
+      const now = Timestamp.now();
+      const tenSecondsAgo = new Timestamp(now.seconds - 10, now.nanoseconds);
 
       const duplicateQuery = await admin.firestore()
         .collection("provinces").doc(provinceId)
@@ -756,7 +757,7 @@ export const sendNewCallNotification = onDocumentCreated(
             adminsSnapshot.docs.forEach((doc) => {
               const adminData = doc.data();
               if (adminData.fcmToken === invalidToken) {
-                batch.update(doc.ref, {fcmToken: admin.firestore.FieldValue.delete()});
+                batch.update(doc.ref, {fcmToken: FieldValue.delete()});
                 invalidTokensFound++;
               }
             });
@@ -887,7 +888,7 @@ export const onSharedCallCreated = onDocumentCreated(
             adminQuery.docs.forEach((doc) => {
               const adminData = doc.data();
               if (adminData.fcmToken === invalidToken) {
-                batch.update(doc.ref, { fcmToken: admin.firestore.FieldValue.delete() });
+                batch.update(doc.ref, { fcmToken: FieldValue.delete() });
                 invalidTokensFound++;
                 logger.info(`[shared-created:${callId}] 관리자 ${adminData.associatedOfficeId}의 무효한 토큰 제거 예정`);
               }
@@ -1001,7 +1002,7 @@ export const notifyCustomerOnOfficeClosed = onDocumentCreated(
             .collection("offices").doc(sourceOfficeId)
             .collection("customerInfo")
             .doc(phoneNumber)
-            .update({ fcmToken: admin.firestore.FieldValue.delete() });
+            .update({ fcmToken: FieldValue.delete() });
 
           logger.info(`[customer-closed:${callId}] 무효한 FCM 토큰 제거 완료: ${phoneNumber}`);
         } catch (deleteError) {
@@ -1064,7 +1065,7 @@ export const onSharedCallClaimed = onDocumentUpdated(
             departure_set: null,
             destination_set: null,
             fare_set: null,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            updatedAt: FieldValue.serverTimestamp()
           });
           
           logger.info(`[shared:${callId}] 원본 사무실 콜이 HOLD 상태로 복구되었습니다.`);
@@ -1183,13 +1184,13 @@ export const onSharedCallClaimed = onDocumentUpdated(
             fare_set: afterData.fare ?? null,
             callType: "SHARED",
             sourceSharedCallId: callId,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdAt: FieldValue.serverTimestamp(),
             // 기사 배정이 있다면 바로 포함
             ...(assignedDriverId && {
               assignedDriverId: assignedDriverId,
               assignedDriverName: assignedDriverName,
               assignedDriverPhone: assignedDriverPhone,
-              assignedTimestamp: admin.firestore.FieldValue.serverTimestamp(),
+              assignedTimestamp: FieldValue.serverTimestamp(),
             })
           };
           tx.set(destCallsRef, callDoc);
@@ -1209,7 +1210,7 @@ export const onSharedCallClaimed = onDocumentUpdated(
               status: "CLAIMED", // 수락됨 상태
               claimedOfficeId: afterData.claimedOfficeId,
               assignedDriverName: `수락됨 (${afterData.claimedOfficeId})`,
-              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              updatedAt: FieldValue.serverTimestamp(),
             };
             tx.update(sourceCallRef, sourceCallUpdates);
             logger.info(`[shared:${callId}] 원본 콜을 수락됨 상태로 업데이트 완료`);
@@ -1426,7 +1427,7 @@ export const onSharedCallCancelledByDriver = onDocumentUpdated(
                 destination_set: null,
                 fare_set: null,
                 cancelReason: `공유콜 취소됨: ${afterData.cancelReason || "사유 없음"}`,
-                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                updatedAt: FieldValue.serverTimestamp()
               };
 
               tx.update(originalCallRef, updateData);
@@ -1985,7 +1986,7 @@ export const onSharedCallStatusSync = onDocumentUpdated(
         if (originalCallSnap.exists) {
           const updateData = {
             status: afterData.status,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            updatedAt: FieldValue.serverTimestamp()
           };
           await originalCallRef.update(updateData);
           logger.info(`[shared-sync:${callId}] 원사무실 콜 상태 업데이트 완료: ${originalCallId} → ${afterData.status}`);
@@ -2006,7 +2007,7 @@ export const onSharedCallStatusSync = onDocumentUpdated(
         if (fallbackSnap.exists) {
           await fallbackCallRef.update({
             status: afterData.status,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            updatedAt: FieldValue.serverTimestamp()
           });
           logger.info(`[shared-sync:${callId}] 원사무실 콜 상태 업데이트 완료 (fallback): ${afterData.sourceSharedCallId} → ${afterData.status}`);
         }
@@ -2070,7 +2071,7 @@ export const onSharedCallCompleted = onDocumentUpdated(
         // shared_calls 문서를 COMPLETED로 업데이트
         await sharedCallRef.update({
           status: "COMPLETED",
-          completedAt: admin.firestore.FieldValue.serverTimestamp(),
+          completedAt: FieldValue.serverTimestamp(),
           destCallId: callId
         });
 
@@ -2525,7 +2526,7 @@ export const matchAttribution = onCall(
           fingerprintId: bestMatch.id,
           attributionScore: bestScore,
           source: "automatic",
-          linkedAt: admin.firestore.FieldValue.serverTimestamp(),
+          linkedAt: FieldValue.serverTimestamp(),
           deviceFingerprint: fingerprint
         });
 
@@ -2594,8 +2595,8 @@ export const saveManualAttribution = onCall(
         officeId,
         source: "manual",
         reason,
-        linkedAt: admin.firestore.FieldValue.serverTimestamp(),
-        timestamp: admin.firestore.FieldValue.serverTimestamp()
+        linkedAt: FieldValue.serverTimestamp(),
+        timestamp: FieldValue.serverTimestamp()
       });
 
       return { success: true };
@@ -2651,7 +2652,7 @@ export const matchByToken = onCall(
               const attributionData = attributionDoc.data();
 
               // 만료 확인 (생성 후 7일)
-              const now = admin.firestore.Timestamp.now();
+              const now = Timestamp.now();
               const createdAt = attributionData.createdAt;
               const expiryTime = createdAt.toMillis() + (7 * 24 * 60 * 60 * 1000);
 
@@ -2719,7 +2720,7 @@ export const claimToken = onCall(
       const db = admin.firestore();
       await db.collection("attributionTokens").doc(token).update({
         status: "claimed",
-        claimedAt: admin.firestore.FieldValue.serverTimestamp(),
+        claimedAt: FieldValue.serverTimestamp(),
         claimedBy: phoneNumber || "unknown"
       });
 
@@ -3028,7 +3029,7 @@ export const onNewCustomerRegistered = onDocumentCreated(
             .doc(managerId)
             .set({
               managerId: managerId,
-              requestedAt: admin.firestore.Timestamp.now(),
+              requestedAt: Timestamp.now(),
               reason: "token_expired",
               processed: false
             })
@@ -3077,7 +3078,7 @@ export const onDriverCountChange = onDocumentWritten(
         .collection("offices").doc(officeId)
         .update({
           driverCount: driverCount,
-          statsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+          statsUpdatedAt: FieldValue.serverTimestamp()
         });
 
       logger.info(`[${officeId}] 기사 수 업데이트 완료: ${driverCount}명`);
@@ -3115,7 +3116,7 @@ export const onCustomerCountChange = onDocumentWritten(
         .collection("offices").doc(officeId)
         .update({
           customerCount: customerCount,
-          statsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+          statsUpdatedAt: FieldValue.serverTimestamp()
         });
 
       logger.info(`[${officeId}] 고객 수 업데이트 완료: ${customerCount}명`);
@@ -3272,7 +3273,7 @@ export const checkAssignedTimeout = onSchedule(
             // 사무실별 타임아웃 설정 (기본 3분)
             const timeoutMinutes = officeDoc.data().assignedTimeoutMinutes ?? 3;
             const timeoutMs = timeoutMinutes * 60 * 1000;
-            const cutoff = admin.firestore.Timestamp.fromMillis(Date.now() - timeoutMs);
+            const cutoff = Timestamp.fromMillis(Date.now() - timeoutMs);
 
             // ASSIGNED 상태이고 assignedTimestamp가 타임아웃 초과인 콜 검색
             const assignedCalls = await officeDoc.ref
@@ -3288,11 +3289,11 @@ export const checkAssignedTimeout = onSchedule(
               // 콜을 WAITING으로 복구
               await callDoc.ref.update({
                 status: "WAITING",
-                assignedDriverId: admin.firestore.FieldValue.delete(),
-                assignedDriverName: admin.firestore.FieldValue.delete(),
-                assignedDriverPhone: admin.firestore.FieldValue.delete(),
-                assignedTimestamp: admin.firestore.FieldValue.delete(),
-                timeoutRecoveredAt: admin.firestore.FieldValue.serverTimestamp(),
+                assignedDriverId: FieldValue.delete(),
+                assignedDriverName: FieldValue.delete(),
+                assignedDriverPhone: FieldValue.delete(),
+                assignedTimestamp: FieldValue.delete(),
+                timeoutRecoveredAt: FieldValue.serverTimestamp(),
               });
 
               // 기사 상태도 WAITING으로 복구 + FCM 알림
@@ -3426,7 +3427,7 @@ export const scheduledDataCleanup = onSchedule(
               .collection("offices").doc(officeId)
               .collection("calls")
               .where("status", "==", "WAITING")
-              .where("timestamp", "<", admin.firestore.Timestamp.fromMillis(oneHourAgo))
+              .where("timestamp", "<", Timestamp.fromMillis(oneHourAgo))
               .get();
 
             // Batch 삭제 (최대 500개씩)
@@ -3486,7 +3487,7 @@ export const scheduledDataCleanup = onSchedule(
               .collection("offices").doc(officeId)
               .collection("calls")
               .where("status", "==", "HOLD")
-              .where("timestamp", "<", admin.firestore.Timestamp.fromMillis(oneHourAgo))
+              .where("timestamp", "<", Timestamp.fromMillis(oneHourAgo))
               .get();
 
             if (oldHoldCalls.size > 0) {
@@ -3609,7 +3610,7 @@ export const scheduledDataCleanup = onSchedule(
       logger.info("🔄 shared_calls 정리 시작...");
 
       const oldSharedCalls = await db.collection("shared_calls")
-        .where("timestamp", "<", admin.firestore.Timestamp.fromMillis(oneHourAgo))
+        .where("timestamp", "<", Timestamp.fromMillis(oneHourAgo))
         .get();
 
       if (oldSharedCalls.size > 0) {
@@ -4799,7 +4800,7 @@ export const finalizeSettlementAndNotifyDrivers = onCall(
       }
 
       // 세션 마감 처리 (재마감도 허용)
-      const finalizeTimestamp = admin.firestore.Timestamp.now();
+      const finalizeTimestamp = Timestamp.now();
       await sessionRef.update({
         "metadata.isFinalized": true,
         "metadata.version": (session?.metadata?.version || 0) + 1,

@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import * as functions from "firebase-functions";
 
 const logger = functions.logger;
@@ -75,16 +76,16 @@ export async function processSharedCallPoints(
     // 포인트 문서 업데이트
     tx.set(sourcePointsRef, {
       balance: sourceBalance,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
 
     tx.set(targetPointsRef, {
       balance: targetBalance,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
 
     // 2) 포인트 거래 내역 저장 (사무실별 서브컬렉션, 멱등성 키 문서 ID 사용)
-    const timestamp = admin.firestore.FieldValue.serverTimestamp();
+    const timestamp = FieldValue.serverTimestamp();
 
     // 원본 사무실 거래 내역 (포인트 받음)
     tx.set(sourceTransactionRef, {
@@ -122,7 +123,7 @@ export async function initializePoints(provinceId: string, cityId: string, offic
 
   await pointsRef.set({
     balance: initialBalance,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   });
 
   logger.info(`[points] 포인트 초기화 완료. Province: ${provinceId}, City: ${cityId}, Office: ${officeId}, Balance: ${initialBalance}`);
@@ -293,7 +294,7 @@ export async function processCustomerPointsOnComplete(
       logger.info(`[customerPoints] 계산 완료. 등급: ${previousGrade} → ${newGrade}, 적립률: ${pointRate * 100}%, 적립: ${pointsEarned}P, 잔액: ${newBalance}P`);
 
       // 1) 고객 포인트 문서 업데이트
-      const timestamp = admin.firestore.FieldValue.serverTimestamp();
+      const timestamp = FieldValue.serverTimestamp();
 
       tx.set(customerPointsRef, {
         phoneNumber: normalizedPhone,
@@ -421,7 +422,7 @@ export async function refundCustomerPointsOnCancel(
       const newBalance = currentPoints + pointsUsed;
       const newTotalUsed = Math.max(0, totalUsed - pointsUsed);
 
-      const timestamp = admin.firestore.FieldValue.serverTimestamp();
+      const timestamp = FieldValue.serverTimestamp();
 
       // 포인트 잔액 복구
       tx.set(customerPointsRef, {

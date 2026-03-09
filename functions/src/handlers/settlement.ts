@@ -4,6 +4,7 @@
  */
 
 import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 
 // 정산 세션 인터페이스
@@ -15,10 +16,10 @@ interface SettlementSession {
 
 interface SettlementMetadata {
   version: number;
-  lastUpdatedAt: admin.firestore.Timestamp | null;
+  lastUpdatedAt: Timestamp | null;
   lastUpdatedBy: string;
   depositRatio: number;
-  createdAt: admin.firestore.Timestamp | null;
+  createdAt: Timestamp | null;
   isFinalized: boolean;
 }
 
@@ -46,9 +47,9 @@ interface CallSettlement {
   cashReceived: number;
   creditAmount: number;
   pointsUsed: number;
-  completedAt: admin.firestore.Timestamp | null;
+  completedAt: Timestamp | null;
   confirmedByOffice: boolean;
-  syncedAt: admin.firestore.Timestamp | null;
+  syncedAt: Timestamp | null;
 }
 
 /**
@@ -125,9 +126,9 @@ export async function addCallToSettlementSession(
         cashReceived: cashReceived,
         creditAmount: creditAmount,
         pointsUsed: pointsUsed,
-        completedAt: callData.completedAt || admin.firestore.Timestamp.now(),
+        completedAt: callData.completedAt || Timestamp.now(),
         confirmedByOffice: false,
-        syncedAt: admin.firestore.Timestamp.now()
+        syncedAt: Timestamp.now()
       };
 
       if (sessionDoc.exists) {
@@ -157,7 +158,7 @@ export async function addCallToSettlementSession(
           "calls": updatedCalls,
           "totals": updatedTotals,
           "metadata.version": (session.metadata?.version || 0) + 1,
-          "metadata.lastUpdatedAt": admin.firestore.Timestamp.now(),
+          "metadata.lastUpdatedAt": Timestamp.now(),
           "metadata.lastUpdatedBy": "cloud_function"
         });
 
@@ -174,10 +175,10 @@ export async function addCallToSettlementSession(
         const newSession: SettlementSession = {
           metadata: {
             version: 1,
-            lastUpdatedAt: admin.firestore.Timestamp.now(),
+            lastUpdatedAt: Timestamp.now(),
             lastUpdatedBy: "cloud_function",
             depositRatio: depositRatio,
-            createdAt: admin.firestore.Timestamp.now(),
+            createdAt: Timestamp.now(),
             isFinalized: false
           },
           totals: newTotals,
@@ -281,7 +282,7 @@ export async function autoFinalizeSettlementSessions(): Promise<{ processed: num
               await sessionRef.update({
                 "metadata.isFinalized": true,
                 "metadata.version": (session.metadata?.version || 0) + 1,
-                "metadata.lastUpdatedAt": admin.firestore.Timestamp.now(),
+                "metadata.lastUpdatedAt": Timestamp.now(),
                 "metadata.lastUpdatedBy": "auto_finalize"
               });
 
