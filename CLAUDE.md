@@ -14,6 +14,7 @@
 |--------|----------|
 | **"시작해줘"** 또는 **"깃풀해줘"** | `git pull origin <현재브랜치>` |
 | **"종료해줘"** 또는 **"깃체크해줘"** | `bash git-check.sh` → 상태 확인 |
+| **"시뮬레이션해줘"** | `.agent-teams/simulation/PLAYBOOK.md` 읽기 → `STATE.md` 확인 → 즉시 실행 |
 
 ### Claude 실행 규칙
 

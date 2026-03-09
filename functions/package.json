@@ -7,7 +7,9 @@
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "test:emulator": "npm run build && firebase emulators:exec --only functions,firestore \"npx ts-node test/run-all.ts\"",
+    "test:seed": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npx ts-node test/setup/seed-data.ts"
   },
   "engines": {
     "node": "22"
@@ -19,7 +21,9 @@
   },
   "devDependencies": {
     "firebase-functions-test": "^3.1.0",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "ts-node": "^10.9.2",
+    "@types/node": "^22.0.0"
   },
   "private": true
 }
