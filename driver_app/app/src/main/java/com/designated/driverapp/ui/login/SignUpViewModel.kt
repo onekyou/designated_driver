@@ -76,7 +76,8 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
         _signUpState.value = SignUpState.LoadingProvinces
         viewModelScope.launch {
             try {
-                val snapshot = firestore.collection("provinces").get().await()
+                val snapshot = firestore.collection("provinces")
+                    .whereEqualTo("active", true).get().await()
                 val provinceList = snapshot.documents.mapNotNull { doc ->
                     val provinceName = doc.getString("name")
                     if (provinceName != null) {
@@ -100,7 +101,7 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             try {
                 val snapshot = firestore.collection("provinces").document(provinceId)
-                    .collection("cities").get().await()
+                    .collection("cities").whereEqualTo("active", true).get().await()
                 val cityList = snapshot.documents.mapNotNull { doc ->
                     val cityName = doc.getString("name")
                     if (cityName != null) {

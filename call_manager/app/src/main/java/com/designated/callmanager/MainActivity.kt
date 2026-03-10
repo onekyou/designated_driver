@@ -292,6 +292,7 @@ class MainActivity : ComponentActivity() {
         const val ACTION_SHOW_SHARED_CALL_CANCELLED_NOTIFICATION = "ACTION_SHOW_SHARED_CALL_CANCELLED_NOTIFICATION"
         const val ACTION_SHOW_SHARED_CALL_CLAIMED = "ACTION_SHOW_SHARED_CALL_CLAIMED"
 // const val ACTION_SHOW_NEW_CALL_WAITING = "ACTION_SHOW_NEW_CALL_WAITING" // 제거됨
+        const val ACTION_SHOW_PENDING_DRIVERS = "ACTION_SHOW_PENDING_DRIVERS"
         const val ACTION_SHOW_DEVICE_CRASH = "ACTION_SHOW_DEVICE_CRASH"
         const val ACTION_SHOW_TRIP_STARTED_POPUP = "ACTION_SHOW_TRIP_STARTED_POPUP"
         const val ACTION_SHOW_TRIP_COMPLETED_POPUP = "ACTION_SHOW_TRIP_COMPLETED_POPUP"
@@ -484,7 +485,7 @@ class MainActivity : ComponentActivity() {
                                     provinceId = params.provinceId,
                                     cityId = params.cityId,
                                     officeId = params.officeId,
-                                    onNavigateBack = { screenState = Screen.Settings }
+                                    onNavigateBack = { screenState = Screen.Dashboard }
                                 )
                             } else {
                                 LaunchedEffect(Unit) {
@@ -566,6 +567,25 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         // FCM 알림 클릭 처리
+        Log.d("MainActivity", "[handleIntent] action=${intent?.action}, extras=${intent?.extras?.keySet()?.toList()}")
+
+        // 기사 승인 알림 클릭 처리 (action이 아닌 extras의 type으로 판별)
+        if (intent?.extras?.getString("type") == "DRIVER_APPROVAL_REQUEST") {
+            lifecycleScope.launch {
+                val prefs = getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
+                val p = provinceId ?: prefs.getString("provinceId", null)
+                val c = cityId ?: prefs.getString("cityId", null)
+                val o = officeId ?: prefs.getString("officeId", null)
+                if (p != null && c != null && o != null) {
+                    Log.d("MainActivity", "[handleIntent] 대기기사 페이지로 이동")
+                    navigationParams = NavigationParams.DriverManagement(p, c, o)
+                    _screenState.value = Screen.PendingDrivers
+                } else {
+                    Log.w("MainActivity", "사무실 정보 없음 - 대기기사 화면 이동 불가")
+                }
+            }
+            return
+        }
 
         if (intent?.action == Intent.ACTION_MAIN || intent?.action == null) {
             val sharedCallId = intent?.extras?.getString("sharedCallId")
@@ -648,6 +668,20 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            ACTION_SHOW_PENDING_DRIVERS -> {
+                lifecycleScope.launch {
+                    val prefs = getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
+                    val p = provinceId ?: prefs.getString("provinceId", null)
+                    val c = cityId ?: prefs.getString("cityId", null)
+                    val o = officeId ?: prefs.getString("officeId", null)
+                    if (p != null && c != null && o != null) {
+                        navigationParams = NavigationParams.DriverManagement(p, c, o)
+                        _screenState.value = Screen.PendingDrivers
+                    } else {
+                        Log.w("MainActivity", "사무실 정보 없음 - 대기기사 화면 이동 불가")
+                    }
+                }
+            }
             ACTION_SHOW_TRIP_STARTED_POPUP -> {
                 val callId = intent.getStringExtra(EXTRA_CALL_ID)
                 val driverName = intent.getStringExtra("driverName") ?: "기사"

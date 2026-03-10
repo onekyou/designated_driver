@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.designated.callmanager.CallManagerApplication
 import com.designated.callmanager.data.DriverInfo
 
 sealed class PendingDriversUiState {
@@ -206,6 +207,19 @@ class PendingDriversViewModel(
                         }
                     }
                     _uiState.value = PendingDriversUiState.Success(updatedDrivers)
+                }
+
+                // Room DB에 새 기사 반영 (Local-First: refreshData 필요)
+                try {
+                    val app = getApplication<CallManagerApplication>()
+                    app.driverRepository.refreshData(
+                        driverInfo.targetProvinceId,
+                        driverInfo.targetCityId,
+                        driverInfo.targetOfficeId
+                    )
+                    android.util.Log.d("PendingDriversViewModel", "기사 승인 후 Room DB 갱신 완료")
+                } catch (e: Exception) {
+                    android.util.Log.w("PendingDriversViewModel", "Room DB 갱신 실패 (다음 앱 재시작 시 반영됨): ${e.message}")
                 }
 
                 _approvalState.value = DriverApprovalState.Success(driverInfo.name ?: "(이름 없음)", true)

@@ -1,14 +1,36 @@
 # 개발 환경
 
-## 로컬 환경
-
 | 항목 | 내용 |
 |------|------|
 | **경로** | `C:\Users\kala1\designated_driver` |
-| **SSD** | Samsung 980 Pro 1TB |
 | **역할** | 코드 수정, 빌드, 테스트, commit/push 모두 로컬에서 수행 |
+| **브랜치** | `firestore-migration-backup` |
+| **빌드** | JAVA_HOME=`/c/Program Files/Android/Android Studio/jbr`, ANDROID_HOME 환경변수 필수 |
 
-## 세션 명령어
+### 연결된 기기
+| 기기 | 시리얼 | 설치 앱 |
+|------|--------|---------|
+| **SM-G996N** S21+ | R3CR312MB1L | call_manager, driver_app |
+| **SM-S901N** S22 | R5CT41TJZFP | call_detector, driver_app |
+| **SM-F721N** Z Flip4 | R3CT80K78NP | driver_app, customer_app |
+
+### 로그캣
+테스트 시 각 기기별 터미널에서 실시간 모니터링 준비할 것:
+```bash
+ADB="$ANDROID_HOME/platform-tools/adb"
+$ADB -s R3CR312MB1L logcat -s CallManager_FCM,DashboardViewModel,DriverRepository,PendingDriversViewModel
+$ADB -s R5CT41TJZFP logcat -s CallDetector,DispatchActivity
+$ADB -s R3CT80K78NP logcat -s DriverApp,DriverViewModel,MyFirebaseMessagingService
+```
+
+### 워크플로우
+```
+[로컬] 코드 수정 → 빌드 → 기기 설치 → 테스트 → commit → push
+```
+
+---
+
+# 세션 명령어
 
 | 말하면 | 실행 내용 |
 |--------|----------|
@@ -27,109 +49,130 @@
 2. [SAFE] → "안전하게 종료 가능" 안내
 3. [WARNING] → 로컬 변경사항 있음 → commit/push 필요 여부 확인
 
-## 워크플로우
-```
-[로컬] 코드 수정 → 빌드 → 기기 설치 → 테스트 → commit → push
-```
-
-### 연결된 기기
-- **SM_A325N** (RF9R5013HEK): call_manager 설치
-- **SM_G996N** (R3CR312MB1L): driver_app 설치
-
-### 현재 브랜치
-- `firestore-migration-backup`
-
 ---
 
 # 실행원칙
+
 1. 모든 대답은 속도에 연연하지말고 심사숙고해서 두번 이상 검토해서 내놓을것
 2. 하드코딩은 절대 안돼 항상 정석으로 진행할것
 3. 수정전에는 항상 허락을 구할 것
 4. 요구한것 이상의 수정을 하지말것. 요구한것에 도움이 되는것은 제안을 하고 허락을 구할 것. 임의로 수정하지말것.
-5. 정확한 답이 아닌 경우 혹은 모호한 경우에는 외부검색을 통해 근접한 대답을 추론하여 실행전 사실대로 말해 허락을 구할 것 
-
-
-# 대리운전 통합 플랫폼 프로젝트 문서
-
-## 프로젝트 개요
-
-이 프로젝트는 지방 대리운전 회사를 위한 통합 관리 플랫폼입니다. 현재 5명의 대리기사와 3명의 픽업기사가 근무하는 환경에서, 3대의 전화기로 들어오는 고객 호출을 효율적으로 관리하고 배차하는 시스템입니다.
-
-### 주요 목표
-- 무작위로 걸려오는 호출 전화를 자동으로 감지하고 Firebase에 저장
-- 관리자가 실시간으로 호출을 확인하고 기사에게 배차
-- 기사 앱을 통한 운행 상태 관리 및 정산
-- 다중 사무실 지원 및 콜 공유 시스템 구축
-
-## 시스템 아키텍처
-
-### 전체 구성
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Call Detector  │     │  Call Manager   │     │   Driver App    │
-│   (Android)     │     │   (Android)     │     │   (Android)     │
-└────────┬────────┘     └────────┬────────┘     └────────┬────────┘
-         │                       │                         │
-         └───────────────────────┴─────────────────────────┘
-                                 │
-                         ┌───────┴────────┐
-                         │   Firebase     │
-                         │  (Firestore)   │
-                         └───────┬────────┘
-                                 │
-                         ┌───────┴────────┐
-                         │Cloud Functions │
-                         └────────────────┘
-```
-
-### 데이터 흐름
-1. **콜 발생**: 고객이 사무실 전화로 전화
-2. **콜 감지**: Call Detector 앱이 전화를 감지하고 Firebase에 정보 저장
-3. **콜 확인**: Call Manager 앱에서 실시간으로 새로운 콜 확인
-4. **배차**: 관리자가 대기 중인 기사 중 한 명을 선택하여 배차
-5. **알림**: FCM을 통해 기사 앱에 푸시 알림 전송
-6. **운행 관리**: 기사가 콜을 수락하고 운행 상태를 업데이트
-7. **정산**: 운행 완료 후 정산 처리
+5. 정확한 답이 아닌 경우 혹은 모호한 경우에는 외부검색을 통해 근접한 대답을 추론하여 실행전 사실대로 말해 허락을 구할 것
+6. **버그 분석 절차** (반드시 이 순서로):
+   - ① 이 문서의 "앱별 데이터 아키텍처" 섹션 확인
+   - ② `memory/project-characteristics.md` 읽기 (앱별 코드 맵)
+   - ③ 관련 코드 읽기
+   - ④ 원인 분석 후 보고
+   - **코드를 읽기 전에 추측하지 말 것. 시스템을 이해한 후 말할 것.**
 
 ---
 
-# 프로젝트 현황 (2026-03-07 기준)
+# 프로젝트 개요
 
-## 코드 리뷰 및 수정 현황
-5개 세션에 걸쳐 4개 앱 + Cloud Functions 전체 크로스 검증 완료.
-이후 5단계 순차 수정 진행.
+지방 대리운전 회사 통합 관리 플랫폼. 관리자 1명이 폰 3대로 콜 수신 + 배차 + 픽업을 처리하는 환경.
+앱: call_detector, call_manager, driver_app, customer_app, functions(Cloud Functions)
 
-| 구분 | 건수 |
-|------|------|
-| 전체 이슈 | 40건 |
-| 수정 완료 | 25건 |
-| 오탐 확정 | 3건 |
-| 해소 확정 | 4건 |
-| 잔여 (보안+후순위) | 8건 |
+---
 
-## 수정 완료 Phase별 요약
-- **Phase 1** (파일럿 품질): CUST-01, CUST-02, CUST-04, BUG-D12
-- **Phase 2** (파일럿 안정성): BUG-D11, CUST-06/NEW-13, CROSS-05
-- **Phase 3** (정산 정확성): STL-01, STL-02, STL-05, STL-08
-- **Phase 5** (기능 개선): CROSS-06, CUST-03, NEW-15
-- **이전 수정**: CROSS-01, CROSS-07, Driver취소수신, CD-01, STL-09, STL-03, NEW-11
+# Firestore 데이터 구조
 
-## CF 배포 상태
-- Cloud Functions 배포 완료 (41개 함수, 2026-03-07)
-- 주요 신규 함수: `notifyDriverCancellation`, `checkAssignedTimeout`
+```
+provinces/{p}/cities/{c}/offices/{o}/
+  ├── designated_drivers/{uid}   기사 (승인 후 생성)
+  ├── pickup_drivers/{uid}       픽업기사
+  ├── calls/{callId}             콜 (Detector/Manager가 생성)
+  ├── customers/{uid}            고객 (customer_app 가입 시)
+  ├── customerInfo/{phone}       고객 FCM 토큰
+  ├── settings/attribution       QR/귀속 설정
+  ├── managerTokens/{uid}        관리자 FCM 토큰
+  ├── dailySettlements/          일일 정산
+  └── settlementSessions/        정산 세션
 
-## 잔여 작업
-- **보안 강화 6건**: 플레이스토어 정식 배포 전 필수 (NEW-12, SEC-C01~C04, RTDB)
-- **후순위 2건**: Crashlytics(NEW-08/10), 구 정산 정리(STL-10/11)
-- 파일럿 테스트에는 현재 상태로 진행 가능
+pending_drivers/{uid}            가입 대기 (승인 후 삭제)
+admins/{uid}                     관리자 (associatedOfficeId 포함)
+shared_calls/{callId}            공유콜 (영업시간 외)
+```
 
-## Agent Teams 문서
-상세 분석 결과는 `.agent-teams/` 폴더 참조:
-- `TEAM_OVERVIEW.md` - 전체 현황 + 이슈 목록
-- `REVIVAL_PROMPT.md` - 팀 재구성 프롬프트
-- `settlement-simulation.md` - 정산 크로스 검증 결과
-- `customer-app-analysis.md` - Customer App 분석 결과
-- `CROSS_VERIFICATION_LOG.md` - 크로스 검증 기록
+---
+
+# 앱별 데이터 아키텍처
+
+## Call Detector (전화 감지 + 즉시 배차)
+- **저장소**: Firestore 직접 (Room DB 미사용, FCM 미수신)
+- **콜 감지**: BroadcastReceiver (PHONE_STATE) → CallDetectorService (Foreground Service)
+- **콜 생성**: createNormalCall() → offices/{o}/calls (영업중), createSharedCall() → shared_calls (영업외)
+- **배차**: DispatchActivity에서 **Firestore 실시간 리스너**로 기사 목록 조회 (WAITING/ONLINE), runTransaction으로 배차
+- **사무실 정보**: SharedPreferences (`CallDetectorPrefs`에서 provinceId/cityId/officeId/deviceName)
+- **로그인**: admins/{uid}에서 associatedOfficeId 읽어옴
+- **중복 방지**: 5초(서비스레벨) + 10초(Firestore 쿼리) 이중 체크
+- **FCM 전송 안 함**: 배차 후 Cloud Functions `oncallassigned` 트리거가 FCM 전송
+
+## Call Manager (관리자 종합 관리) ★ Local-First
+- **저장소**: Room DB (로컬) + Firestore (원격)
+- **기사 목록**: `refreshData()`로 Firestore → Room DB 초기 로드, 이후 FCM `DRIVER_STATUS_UPDATE`로 기존 레코드 상태 UPDATE만 (**새 기사 INSERT 안 함**)
+- **콜 목록**: `refreshData()`로 초기 로드 + Firestore 실시간 리스너 (1시간 내 미완료 콜 백업)
+- **UI 반영**: Room DB Flow → StateFlow → Compose (DB 변경 시 자동 emit)
+- **FCM 메시지 타입**: NEW_CALL, DRIVER_STATUS_UPDATE, CALL_STATUS_UPDATE, STATUS_CHANGE, NEW_SHARED_CALL, DRIVER_APPROVAL_REQUEST
+- **⚠️ 알려진 제약**: 새 기사 승인(PendingDriversViewModel.approveDriver) 후 Room DB에 자동 INSERT 안 됨 → `refreshData()` 호출 필요
+- **사무실 정보**: SharedPreferences에서 provinceId/cityId/officeId 읽음
+- **배차/취소/공유**: DashboardViewModel에서 runTransaction 사용
+
+## Driver App (기사용 운행 + 정산)
+- **저장소**: Firestore 직접 + Room DB (정산 캐시만, SettlementRepository)
+- **콜 수신**: FCM push (`call_assigned`) → 포그라운드: LocalBroadcast, 백그라운드: FullScreenIntent
+- **현재 콜**: 앱 시작 시 1회 조회 `.get().await()` (리스너 아님, 비용 최적화 ~$414/월 절감)
+- **상태 변경**: runTransaction으로 Firestore 직접 업데이트 (수락/거절/시작/완료/정산)
+- **로그인**: `collectionGroup("designated_drivers")` 쿼리로 authUid 기반 기사 문서 찾기 → SharedPreferences에 provinceId/cityId/officeId 저장
+- **이월금**: 유일한 실시간 리스너 (`carryOverListener`)
+- **FCM 메시지 타입**: call_assigned, call_cancelled, SETTLEMENT_FINALIZED
+
+## Customer App (고객용, 미배포)
+- **인증**: Phone Auth (SMS 인증)
+- **프로필 저장**: offices/{o}/customers/{uid} + customerInfo/{phone}
+- **사무실 매칭**: QR → Play Store → Install Referrer 자동 매칭 (핵심 온보딩 흐름)
+- **플로우**: QR스캔 → 플레이스토어 → 앱설치 → Install Referrer → 약관동의 → SMS인증 → 프로필설정
+
+## Cloud Functions (41개)
+- **트리거**: onDocumentWritten (배차 FCM `oncallassigned`, 상태변경 FCM, 공유콜 알림 등)
+- **Callable**: notifyDriverCancellation (관리자 취소 시 기사에게 FCM)
+- **Scheduled**: checkAssignedTimeout (매 1분, 3분 미수락 시 WAITING 복귀)
+- **정산**: onCallCompletedUpdateSettlement (COMPLETED 시 자동 정산 세션 추가)
+
+---
+
+# 상태 전이 맵
+
+### 콜 상태
+```
+WAITING → ASSIGNED → ACCEPTED → IN_PROGRESS → AWAITING_SETTLEMENT → COMPLETED
+                ↓         ↓            ↓
+             (타임아웃)  (거절)      (운행취소)
+             → WAITING  → WAITING    → HOLD → 재배차 → ASSIGNED
+
+취소: CANCELED (관리자), CANCELLED_BY_DRIVER (기사), CANCELLED_BY_CUSTOMER (고객)
+공유: WAITING → SHARED_WAITING → (타 사무실 수임) CLAIMED
+```
+
+### 기사 상태
+```
+ONLINE/WAITING → ASSIGNED → PREPARING → ON_TRIP → WAITING (완료 후 복귀)
+```
+
+### 정산 플로우
+```
+Driver submitDailySettlement → PENDING_CONFIRM
+Manager confirmDailySettlement → CONFIRMED
+Manager transferCarryOver → TRANSFERRED
+Driver confirmReceiveCarryOver → SETTLED
+```
+
+### 정산 공식
+```
+officeDeposit = totalFare × depositRatio / 100  (사무실 몫)
+driverShare = totalFare - officeDeposit          (기사 몫)
+realDeposit = cashReceived - driverShare         (실 납입액)
+carryOver = originalCarryOver - finalDeposit + realDeposit
+```
 
 ---
 
@@ -149,10 +192,15 @@
 3. **임무 완료 후**: 결과를 보고하고 다음 지시 대기 (임의 행동 금지)
 4. **"준비해줘" = 구성/정리까지만**. 실행은 별도 명령을 기다릴 것
 
-## 현재 세션 에이전트 ID (resume용)
-> 세션마다 갱신 필요
-- detector-analyst: ab4f47f5efa6b1002
-- manager-analyst: a36255af2f5e379eb
-- driver-analyst: a21fbb2d596a79496
-- firebase-analyst: aa4c6ce7f42b6ab9e
+---
 
+# 상세 참조 파일
+
+| 상황 | 파일 |
+|------|------|
+| 앱별 코드 맵 (함수/파일/라인) | `memory/project-characteristics.md` |
+| 이슈 수정 이력 | `memory/issue-history.md` |
+| 잔여 작업/배포 상태 | `memory/pending-work.md` |
+| Firestore 접근 유틸 | `functions/scripts/firestore-util.js` |
+| 정산 상세 분석 | `memory/settlement_analysis.md` |
+| 팀 운영 현황 | `.agent-teams/TEAM_OVERVIEW.md` |

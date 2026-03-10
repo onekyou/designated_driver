@@ -65,10 +65,11 @@ fun PendingDriversScreen(
             is DriverApprovalState.Success -> {
                 val message = if (state.approved) "${state.driverName} 기사님을 승인했습니다." else "${state.driverName} 기사님을 삭제했습니다."
                 Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                // 성공 후 잠시 delay 후 processingDriverId 리셋
                 kotlinx.coroutines.delay(1000)
                 processingDriverId = null
                 viewModel.resetApprovalState()
+                // 승인/삭제 완료 후 대시보드로 이동
+                onNavigateBack()
             }
             is DriverApprovalState.Error -> {
                 Toast.makeText(context, "오류: ${state.message}", Toast.LENGTH_LONG).show()

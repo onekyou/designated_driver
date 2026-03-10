@@ -17,7 +17,9 @@ import { processSharedCallPoints, processCustomerPointsOnComplete, refundCustome
 import { addCallToSettlementSession, autoFinalizeSettlementSessions, checkSettlementDiscrepancies, notifySettlementDiscrepancy, notifyDriversSettlementFinalized, getTodayWorkDate, getYesterdayWorkDate } from "./handlers/settlement";
 
 // Firebase Admin SDK 초기화
-admin.initializeApp();
+admin.initializeApp({
+  databaseURL: "https://calldetector-5d61e-default-rtdb.firebaseio.com",
+});
 
 // 데이터 구조를 명확히 하기 위한 인터페이스 정의
 interface CallData {

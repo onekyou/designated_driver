@@ -531,6 +531,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             color = ContextCompat.getColor(this, android.R.color.holo_blue_dark),
             autoCancel = true,
             isNewCall = false,
+            isDriverApproval = true,
             timeoutAfter = 0
         )
 
@@ -930,6 +931,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         isNewCall: Boolean = false,
         isSharedCall: Boolean = false,
         isSharedCallCancelled: Boolean = false,
+        isDriverApproval: Boolean = false,
         timeoutAfter: Long? = null
     ) {
         Log.d(TAG, "🔔🔔🔔 [NOTIFICATION] showNotification 호출 시작 🔔🔔🔔")
@@ -954,6 +956,9 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 isSharedCallCancelled -> {
                     action = "ACTION_SHOW_SHARED_CALL_CANCELLED"
                     putExtra("callId", callId)
+                }
+                isDriverApproval -> {
+                    action = "ACTION_SHOW_PENDING_DRIVERS"
                 }
             }
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
