@@ -38,6 +38,7 @@ data class LocalCallInfo(
     // 콜 타입
     val callType: String?,  // "REGULAR", "SHARED", etc.
     val fromCallDetector: Boolean?,
+    val fromCallManager: Boolean? = null,
 
     // 사무실 정보
     val regionId: String,

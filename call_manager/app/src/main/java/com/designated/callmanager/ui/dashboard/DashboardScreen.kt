@@ -194,8 +194,7 @@ fun DashboardScreen(
     val showNewCallInputDialog by viewModel.showNewCallInputDialog.collectAsStateWithLifecycle()
 
     // 내부호출 배차팝업 관련
-    val internalCallForAssignment by viewModel.internalCallForAssignment.collectAsStateWithLifecycle()
-    var showInternalCallInfoInput by remember { mutableStateOf(false) }
+    // internalCallForAssignment 제거 - NewCallAssignmentDialog로 통합됨
 
     var showSharedSettings by remember { mutableStateOf(false) }
 
@@ -448,6 +447,9 @@ fun DashboardScreen(
             onDriverSelect = { driver ->
                 viewModel.assignNewCall(driver.id)
             },
+            onDriverSelectWithInfo = { driver, departure, destination, fare ->
+                viewModel.assignNewCallWithInfo(driver.id, departure, destination, fare)
+            },
             onDelete = {
                 viewModel.deleteCall(newCallInfo!!.id)
             },
@@ -649,48 +651,7 @@ fun DashboardScreen(
         )
     }
 
-    // 내부호출 배차팝업
-    if (internalCallForAssignment != null) {
-        val call = internalCallForAssignment!!
-        val waitingDrivers = drivers.filter { driver ->
-            val statusEnum = DriverStatus.fromString(driver.status?.trim() ?: "")
-            statusEnum == DriverStatus.WAITING || statusEnum == DriverStatus.ONLINE
-        }
-        InternalCallAssignDialog(
-            callInfo = call,
-            availableDrivers = waitingDrivers,
-            onDismiss = { viewModel.dismissInternalCallAssignment() },
-            onInfoInputClick = { showInternalCallInfoInput = true },
-            onConfirm = { departure, destination, fare, driver ->
-                // 정보 업데이트 후 기사 배정
-                if (departure.isNotBlank() || destination.isNotBlank() || fare > 0) {
-                    viewModel.updateInternalCallInfo(call.id, call.phoneNumber, departure, destination, fare.toLong())
-                }
-                if (driver != null) {
-                    val updatedCall = call.copy(
-                        departure_set = departure.ifBlank { null },
-                        destination_set = destination.ifBlank { null },
-                        fare_set = if (fare > 0) fare.toLong() else null
-                    )
-                    viewModel.assignCallToDriver(updatedCall, driver.id)
-                }
-                viewModel.dismissInternalCallAssignment()
-            }
-        )
-    }
-
-    // 내부호출 정보입력 팝업
-    if (showInternalCallInfoInput && internalCallForAssignment != null) {
-        val call = internalCallForAssignment!!
-        NewCallInputDialog(
-            onDismiss = { showInternalCallInfoInput = false },
-            onConfirm = { phoneNumber, departure, destination, fare ->
-                viewModel.updateInternalCallInfo(call.id, phoneNumber, departure, destination, fare)
-                showInternalCallInfoInput = false
-            },
-            isLoading = false
-        )
-    }
+    // 내부호출은 NewCallAssignmentDialog로 통합됨 (fromCallManager 콜 감지)
 
     if (showNewSharedCallPopup && newSharedCallInfo != null) {
         Log.d("DashboardScreen", "🔍 [FCM_DEBUG] 팝업 조건 만족 - SharedCallAcceptDialog 표시 시작")
@@ -1299,6 +1260,7 @@ fun NewCallAssignmentDialog(
     availableDrivers: List<DriverInfo>,
     onDismiss: () -> Unit,
     onDriverSelect: (DriverInfo) -> Unit,
+    onDriverSelectWithInfo: ((DriverInfo, String, String, Long) -> Unit)? = null,
     onDelete: () -> Unit,
     onShare: (departure: String, destination: String, fare: Int) -> Unit
 ) {
@@ -1306,6 +1268,33 @@ fun NewCallAssignmentDialog(
 
     var showShareDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+
+    // fromCallManager 콜인지 감지 (내부호출: 정보가 비어있는 상태로 생성됨)
+    val isFromCallManager = callInfo.fromCallManager == true
+
+    // 출발지/도착지/요금 편집 상태 (fromCallManager 콜용)
+    var departure by remember { mutableStateOf(callInfo.departure_set ?: "") }
+    var destination by remember { mutableStateOf(callInfo.destination_set ?: "") }
+    var fareText by remember { mutableStateOf(if ((callInfo.fare_set ?: 0L) > 0) callInfo.fare_set.toString() else "") }
+
+    // 음성인식 관련 상태
+    var isRecordingDeparture by remember { mutableStateOf(false) }
+    var isRecordingDestination by remember { mutableStateOf(false) }
+    var isRecordingFare by remember { mutableStateOf(false) }
+
+    // Kakao 주소 검색 결과
+    var departureSearchResults by remember { mutableStateOf<List<AddressSearchResult>>(emptyList()) }
+    var destinationSearchResults by remember { mutableStateOf<List<AddressSearchResult>>(emptyList()) }
+    var showDepartureResults by remember { mutableStateOf(false) }
+    var showDestinationResults by remember { mutableStateOf(false) }
+
+    val departureFocusRequester = remember { FocusRequester() }
+    val destinationFocusRequester = remember { FocusRequester() }
+    val fareFocusRequester = remember { FocusRequester() }
+
+    // 음성인식/주소검색 헬퍼 (fromCallManager일 때만 사용되지만 항상 생성)
+    val voiceHelper = remember { VoiceInputHelper(context) }
+    val addressSearchHelper = remember { AddressSearchHelper() }
 
     AlertDialog(
         onDismissRequest = {
@@ -1322,159 +1311,41 @@ fun NewCallAssignmentDialog(
             }
             onDismiss()
         },
-        title = { Text("새로운 호출 접수", fontWeight = FontWeight.Bold) },
+        title = { Text(if (isFromCallManager) "새 호출 배차" else "새로운 호출 접수", fontWeight = FontWeight.Bold) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            text = callInfo.phoneNumber,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        callInfo.customerName?.let {
-                            Text(
-                                text = it,
-                                color = Color.White
-                            )
-                        }
-                        callInfo.customerAddress?.let {
-                            Text(
-                                text = it,
-                                color = Color.White
-                            )
-                        }
-                    }
-                }
-
-                if (availableDrivers.isNotEmpty()) {
-                    Text("대기중인 기사 선택:", fontWeight = FontWeight.Medium)
-                    LazyColumn(
-                        modifier = Modifier.heightIn(max = 200.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+            Column(
+                verticalArrangement = Arrangement.spacedBy(if (isFromCallManager) 8.dp else 12.dp),
+                modifier = if (isFromCallManager) Modifier.verticalScroll(rememberScrollState()) else Modifier
+            ) {
+                // 일반 콜: 기존 정보 카드 표시
+                if (!isFromCallManager) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
-                        items(availableDrivers) { driver ->
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        onDriverSelect(driver)
-                                    },
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = driver.name,
-                                        modifier = Modifier.weight(1f),
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Text(
-                                        text = DriverStatus.fromString(driver.status).getDisplayName(),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color.Green
-                                    )
-                                }
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = callInfo.phoneNumber,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            callInfo.customerName?.let {
+                                Text(text = it, color = Color.White)
+                            }
+                            callInfo.customerAddress?.let {
+                                Text(text = it, color = Color.White)
                             }
                         }
                     }
-                } else {
-                    Text(
-                        "현재 대기중인 기사가 없습니다.",
-                        color = MaterialTheme.colorScheme.error
-                    )
                 }
-            }
-        },
-        confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = {
-                    try {
-                        val stickyR = RingtoneManager.getRingtone(context.applicationContext, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI)
-                        if (stickyR.isPlaying) stickyR.stop()
-                        val defaultR = RingtoneManager.getRingtone(context.applicationContext, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
-                        if (defaultR.isPlaying) defaultR.stop()
-                    } catch (e: Exception) {
-                    }
-                    onDismiss()
-                }) { Text("나중에") }
 
-                TextButton(onClick = { showShareDialog = true }) { Text("공유") }
-
-                TextButton(
-                    onClick = {
-                        try {
-                            val stickyR = RingtoneManager.getRingtone(context.applicationContext, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI)
-                            if (stickyR.isPlaying) stickyR.stop()
-                            val defaultR = RingtoneManager.getRingtone(context.applicationContext, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
-                            if (defaultR.isPlaying) defaultR.stop()
-                        } catch (e: Exception) {
-                        }
-                        showDeleteConfirmDialog = true
-                    },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
-                ) { Text("삭제") }
-            }
-        }
-    )
-
-    if (showShareDialog) {
-        // 초기값에 공백을 넣어 한글 입력을 유도
-        var departure by remember { mutableStateOf("") }
-        var destination by remember { mutableStateOf("") }
-        var fareText by remember { mutableStateOf("") }
-
-        // 음성인식 관련 상태
-        var isRecordingDeparture by remember { mutableStateOf(false) }
-        var isRecordingDestination by remember { mutableStateOf(false) }
-        var isRecordingFare by remember { mutableStateOf(false) }
-
-        // Kakao 주소 검색 결과
-        var departureSearchResults by remember { mutableStateOf<List<AddressSearchResult>>(emptyList()) }
-        var destinationSearchResults by remember { mutableStateOf<List<AddressSearchResult>>(emptyList()) }
-        var showDepartureResults by remember { mutableStateOf(false) }
-        var showDestinationResults by remember { mutableStateOf(false) }
-
-        val departureFocusRequester = remember { FocusRequester() }
-        val destinationFocusRequester = remember { FocusRequester() }
-        val fareFocusRequester = remember { FocusRequester() }
-
-        // Speech recognizer
-        val speechRecognizer = remember { context.createSpeechRecognizer() }
-        val voiceHelper = remember { VoiceInputHelper(context) }
-        val addressSearchHelper = remember { AddressSearchHelper() }
-
-        LaunchedEffect(Unit) {
-            departureFocusRequester.requestFocus()
-        }
-
-        DisposableEffect(Unit) {
-            onDispose {
-                speechRecognizer.destroy()
-            }
-        }
-
-        AlertDialog(
-            onDismissRequest = { showShareDialog = false },
-            title = { Text("공유 정보 입력", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.verticalScroll(rememberScrollState())
-                ) {
+                // fromCallManager 콜: 출발지/도착지/요금 입력 필드 (음성입력 + Kakao 주소검색)
+                if (isFromCallManager) {
                     // 출발지 입력
                     OutlinedTextField(
                         value = departure,
                         onValueChange = {
                             departure = it
-                            // 주소 검색
                             if (it.length >= 2) {
                                 addressSearchHelper.searchAddress(it) { results ->
                                     departureSearchResults = results
@@ -1491,13 +1362,11 @@ fun NewCallAssignmentDialog(
                             .focusRequester(departureFocusRequester),
                         trailingIcon = {
                             Row {
-                                // 음성 입력 버튼
                                 IconButton(onClick = {
                                     if (!isRecordingDeparture) {
                                         voiceHelper.startListening { result ->
                                             departure = result
                                             isRecordingDeparture = false
-                                            // 음성인식 결과로 주소 검색
                                             addressSearchHelper.searchAddress(result) { results ->
                                                 departureSearchResults = results
                                                 showDepartureResults = results.isNotEmpty()
@@ -1515,7 +1384,6 @@ fun NewCallAssignmentDialog(
                                         tint = if (isRecordingDeparture) Color.Red else MaterialTheme.colorScheme.primary
                                     )
                                 }
-                                // 삭제 버튼
                                 if (departure.isNotEmpty()) {
                                     IconButton(onClick = {
                                         departure = ""
@@ -1568,7 +1436,6 @@ fun NewCallAssignmentDialog(
                         value = destination,
                         onValueChange = {
                             destination = it
-                            // 주소 검색
                             if (it.length >= 2) {
                                 addressSearchHelper.searchAddress(it) { results ->
                                     destinationSearchResults = results
@@ -1585,13 +1452,11 @@ fun NewCallAssignmentDialog(
                             .focusRequester(destinationFocusRequester),
                         trailingIcon = {
                             Row {
-                                // 음성 입력 버튼
                                 IconButton(onClick = {
                                     if (!isRecordingDestination) {
                                         voiceHelper.startListening { result ->
                                             destination = result
                                             isRecordingDestination = false
-                                            // 음성인식 결과로 주소 검색
                                             addressSearchHelper.searchAddress(result) { results ->
                                                 destinationSearchResults = results
                                                 showDestinationResults = results.isNotEmpty()
@@ -1609,7 +1474,6 @@ fun NewCallAssignmentDialog(
                                         tint = if (isRecordingDestination) Color.Red else MaterialTheme.colorScheme.primary
                                     )
                                 }
-                                // 삭제 버튼
                                 if (destination.isNotEmpty()) {
                                     IconButton(onClick = {
                                         destination = ""
@@ -1668,11 +1532,9 @@ fun NewCallAssignmentDialog(
                             .focusRequester(fareFocusRequester),
                         trailingIcon = {
                             Row {
-                                // 음성 입력 버튼
                                 IconButton(onClick = {
                                     if (!isRecordingFare) {
                                         voiceHelper.startListening { result ->
-                                            // 한국어 숫자를 아라비아 숫자로 변환
                                             fareText = voiceHelper.convertKoreanNumberToDigit(result)
                                             isRecordingFare = false
                                         }
@@ -1688,9 +1550,347 @@ fun NewCallAssignmentDialog(
                                         tint = if (isRecordingFare) Color.Red else MaterialTheme.colorScheme.primary
                                     )
                                 }
-                                // 삭제 버튼
                                 if (fareText.isNotEmpty()) {
                                     IconButton(onClick = { fareText = "" }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "지우기")
+                                    }
+                                }
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Number,
+                            imeAction = ImeAction.Done
+                        )
+                    )
+
+                    Spacer(Modifier.height(4.dp))
+                }
+
+                // 기사 선택 목록 (공통)
+                if (availableDrivers.isNotEmpty()) {
+                    Text("대기중인 기사 선택:", fontWeight = FontWeight.Medium)
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 200.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items(availableDrivers) { driver ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        if (isFromCallManager && onDriverSelectWithInfo != null) {
+                                            val fare = fareText.toLongOrNull() ?: 0L
+                                            onDriverSelectWithInfo(driver, departure, destination, fare)
+                                        } else {
+                                            onDriverSelect(driver)
+                                        }
+                                    },
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = driver.name,
+                                        modifier = Modifier.weight(1f),
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = DriverStatus.fromString(driver.status).getDisplayName(),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.Green
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Text(
+                        "현재 대기중인 기사가 없습니다.",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = {
+                    try {
+                        val stickyR = RingtoneManager.getRingtone(context.applicationContext, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI)
+                        if (stickyR.isPlaying) stickyR.stop()
+                        val defaultR = RingtoneManager.getRingtone(context.applicationContext, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+                        if (defaultR.isPlaying) defaultR.stop()
+                    } catch (e: Exception) {
+                    }
+                    onDismiss()
+                }) { Text(if (isFromCallManager) "취소" else "나중에") }
+
+                if (!isFromCallManager) {
+                    TextButton(onClick = { showShareDialog = true }) { Text("공유") }
+                }
+
+                TextButton(
+                    onClick = {
+                        try {
+                            val stickyR = RingtoneManager.getRingtone(context.applicationContext, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI)
+                            if (stickyR.isPlaying) stickyR.stop()
+                            val defaultR = RingtoneManager.getRingtone(context.applicationContext, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+                            if (defaultR.isPlaying) defaultR.stop()
+                        } catch (e: Exception) {
+                        }
+                        showDeleteConfirmDialog = true
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) { Text("삭제") }
+            }
+        }
+    )
+
+    if (showShareDialog) {
+        var shareDeparture by remember { mutableStateOf("") }
+        var shareDestination by remember { mutableStateOf("") }
+        var shareFareText by remember { mutableStateOf("") }
+
+        var isRecShareDep by remember { mutableStateOf(false) }
+        var isRecShareDest by remember { mutableStateOf(false) }
+        var isRecShareFare by remember { mutableStateOf(false) }
+
+        var shareDepResults by remember { mutableStateOf<List<AddressSearchResult>>(emptyList()) }
+        var shareDestResults by remember { mutableStateOf<List<AddressSearchResult>>(emptyList()) }
+        var showShareDepResults by remember { mutableStateOf(false) }
+        var showShareDestResults by remember { mutableStateOf(false) }
+
+        val shareDepFocus = remember { FocusRequester() }
+        val shareDestFocus = remember { FocusRequester() }
+        val shareFareFocus = remember { FocusRequester() }
+
+        val shareVoiceHelper = remember { VoiceInputHelper(context) }
+        val shareAddressHelper = remember { AddressSearchHelper() }
+
+        LaunchedEffect(Unit) {
+            shareDepFocus.requestFocus()
+        }
+
+        AlertDialog(
+            onDismissRequest = { showShareDialog = false },
+            title = { Text("공유 정보 입력", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.verticalScroll(rememberScrollState())
+                ) {
+                    // 출발지 입력
+                    OutlinedTextField(
+                        value = shareDeparture,
+                        onValueChange = {
+                            shareDeparture = it
+                            if (it.length >= 2) {
+                                shareAddressHelper.searchAddress(it) { results ->
+                                    shareDepResults = results
+                                    showShareDepResults = results.isNotEmpty()
+                                }
+                            } else {
+                                showShareDepResults = false
+                            }
+                        },
+                        label = { Text("출발지") },
+                        placeholder = { Text("예: 서울역") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(shareDepFocus),
+                        trailingIcon = {
+                            Row {
+                                IconButton(onClick = {
+                                    if (!isRecShareDep) {
+                                        shareVoiceHelper.startListening { result ->
+                                            shareDeparture = result
+                                            isRecShareDep = false
+                                            shareAddressHelper.searchAddress(result) { results ->
+                                                shareDepResults = results
+                                                showShareDepResults = results.isNotEmpty()
+                                            }
+                                        }
+                                        isRecShareDep = true
+                                    } else {
+                                        shareVoiceHelper.stopListening()
+                                        isRecShareDep = false
+                                    }
+                                }) {
+                                    Icon(
+                                        Icons.Default.Mic,
+                                        contentDescription = "음성 입력",
+                                        tint = if (isRecShareDep) Color.Red else MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                if (shareDeparture.isNotEmpty()) {
+                                    IconButton(onClick = {
+                                        shareDeparture = ""
+                                        showShareDepResults = false
+                                    }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "지우기")
+                                    }
+                                }
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            imeAction = ImeAction.Next,
+                            keyboardType = KeyboardType.Text,
+                            capitalization = KeyboardCapitalization.None
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onNext = { shareDestFocus.requestFocus() }
+                        )
+                    )
+
+                    if (showShareDepResults) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 150.dp)
+                        ) {
+                            LazyColumn {
+                                items(shareDepResults) { result ->
+                                    Text(
+                                        text = result.address,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                shareDeparture = result.address
+                                                showShareDepResults = false
+                                                shareDestFocus.requestFocus()
+                                            }
+                                            .padding(12.dp),
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Divider()
+                                }
+                            }
+                        }
+                    }
+
+                    // 도착지 입력
+                    OutlinedTextField(
+                        value = shareDestination,
+                        onValueChange = {
+                            shareDestination = it
+                            if (it.length >= 2) {
+                                shareAddressHelper.searchAddress(it) { results ->
+                                    shareDestResults = results
+                                    showShareDestResults = results.isNotEmpty()
+                                }
+                            } else {
+                                showShareDestResults = false
+                            }
+                        },
+                        label = { Text("도착지") },
+                        placeholder = { Text("예: 강남역") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(shareDestFocus),
+                        trailingIcon = {
+                            Row {
+                                IconButton(onClick = {
+                                    if (!isRecShareDest) {
+                                        shareVoiceHelper.startListening { result ->
+                                            shareDestination = result
+                                            isRecShareDest = false
+                                            shareAddressHelper.searchAddress(result) { results ->
+                                                shareDestResults = results
+                                                showShareDestResults = results.isNotEmpty()
+                                            }
+                                        }
+                                        isRecShareDest = true
+                                    } else {
+                                        shareVoiceHelper.stopListening()
+                                        isRecShareDest = false
+                                    }
+                                }) {
+                                    Icon(
+                                        Icons.Default.Mic,
+                                        contentDescription = "음성 입력",
+                                        tint = if (isRecShareDest) Color.Red else MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                if (shareDestination.isNotEmpty()) {
+                                    IconButton(onClick = {
+                                        shareDestination = ""
+                                        showShareDestResults = false
+                                    }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "지우기")
+                                    }
+                                }
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            imeAction = ImeAction.Next,
+                            keyboardType = KeyboardType.Text,
+                            capitalization = KeyboardCapitalization.None
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onNext = { shareFareFocus.requestFocus() }
+                        )
+                    )
+
+                    if (showShareDestResults) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 150.dp)
+                        ) {
+                            LazyColumn {
+                                items(shareDestResults) { result ->
+                                    Text(
+                                        text = result.address,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                shareDestination = result.address
+                                                showShareDestResults = false
+                                                shareFareFocus.requestFocus()
+                                            }
+                                            .padding(12.dp),
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Divider()
+                                }
+                            }
+                        }
+                    }
+
+                    // 요금 입력
+                    OutlinedTextField(
+                        value = shareFareText,
+                        onValueChange = { shareFareText = it.filter { c -> c.isDigit() } },
+                        label = { Text("요금") },
+                        placeholder = { Text("예: 30000") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(shareFareFocus),
+                        trailingIcon = {
+                            Row {
+                                IconButton(onClick = {
+                                    if (!isRecShareFare) {
+                                        shareVoiceHelper.startListening { result ->
+                                            shareFareText = shareVoiceHelper.convertKoreanNumberToDigit(result)
+                                            isRecShareFare = false
+                                        }
+                                        isRecShareFare = true
+                                    } else {
+                                        shareVoiceHelper.stopListening()
+                                        isRecShareFare = false
+                                    }
+                                }) {
+                                    Icon(
+                                        Icons.Default.Mic,
+                                        contentDescription = "음성 입력",
+                                        tint = if (isRecShareFare) Color.Red else MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                if (shareFareText.isNotEmpty()) {
+                                    IconButton(onClick = { shareFareText = "" }) {
                                         Icon(Icons.Default.Clear, contentDescription = "지우기")
                                     }
                                 }
@@ -1702,9 +1902,9 @@ fun NewCallAssignmentDialog(
                         ),
                         keyboardActions = KeyboardActions(
                             onDone = {
-                                val fare = fareText.toIntOrNull() ?: 0
-                                if (departure.isNotBlank() && destination.isNotBlank() && fare > 0) {
-                                    onShare(departure, destination, fare)
+                                val fare = shareFareText.toIntOrNull() ?: 0
+                                if (shareDeparture.isNotBlank() && shareDestination.isNotBlank() && fare > 0) {
+                                    onShare(shareDeparture, shareDestination, fare)
                                     showShareDialog = false
                                     onDismiss()
                                 }
@@ -1715,9 +1915,9 @@ fun NewCallAssignmentDialog(
             },
             confirmButton = {
                 Button(onClick = {
-                    val fare = fareText.toIntOrNull() ?: 0
-                    if (departure.isNotBlank() && destination.isNotBlank() && fare > 0) {
-                        onShare(departure, destination, fare)
+                    val fare = shareFareText.toIntOrNull() ?: 0
+                    if (shareDeparture.isNotBlank() && shareDestination.isNotBlank() && fare > 0) {
+                        onShare(shareDeparture, shareDestination, fare)
                         showShareDialog = false
                         onDismiss()
                     }

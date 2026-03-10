@@ -1123,9 +1123,48 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
-     * '+' 아이콘 클릭 시 호출: 기본값으로 WAITING 상태의 콜 문서를 먼저 생성하여
-     * 기존 대기 호출 흐름(NewCallPopup)과 동일하게 처리되도록 한다.
+     * 내부호출(fromCallManager) 배차 시 출발지/도착지/요금 정보를 먼저 업데이트한 후 배차
      */
+    fun assignNewCallWithInfo(driverId: String, departure: String, destination: String, fare: Long) {
+        val callInfo = _newCallInfo.value ?: return
+        val province = _provinceId.value ?: return
+        val city = _cityId.value ?: return
+        val office = _officeId.value ?: return
+
+        viewModelScope.launch {
+            try {
+                // Firestore에 출발지/도착지/요금 업데이트
+                val callRef = firestore.collection("provinces").document(province)
+                    .collection("cities").document(city)
+                    .collection("offices").document(office)
+                    .collection("calls").document(callInfo.id)
+
+                val updateData = mutableMapOf<String, Any?>(
+                    "customerAddress" to departure.ifBlank { "" },
+                    "departure_set" to departure.ifBlank { null },
+                    "destination_set" to destination.ifBlank { null },
+                    "fare_set" to if (fare > 0) fare else null
+                )
+                callRef.update(updateData as Map<String, Any>).await()
+
+                // 업데이트된 콜 정보로 배차
+                val updatedCall = callInfo.copy(
+                    customerAddress = departure.ifBlank { null },
+                    departure_set = departure.ifBlank { null },
+                    destination_set = destination.ifBlank { null },
+                    fare_set = if (fare > 0) fare else null
+                )
+                assignCallToDriver(updatedCall, driverId)
+                dismissNewCallPopup()
+
+                Log.d(TAG, "내부호출 정보 업데이트 + 배차 완료: ${callInfo.id}")
+            } catch (e: Exception) {
+                Log.e(TAG, "내부호출 정보 업데이트 실패", e)
+                _snackbarMessage.value = "정보 업데이트 실패: ${e.message}"
+            }
+        }
+    }
+
     /**
      * 설정 페이지에서 사용하는 사무실 상태 업데이트 함수
      */
@@ -1282,6 +1321,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     "cityId" to city,
                     "officeId" to office,
                     "createdBy" to (auth.currentUser?.uid ?: ""),
+                    "fromCallManager" to true,
                     "departure_set" to null,
                     "destination_set" to null,
                     "fare_set" to null
@@ -1320,7 +1360,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     fare_set = null,
                     fromCallManager = true
                 )
-                _internalCallForAssignment.value = createdCall
+                _newCallInfo.value = createdCall
+                _showNewCallPopup.value = true
 
             } catch (e: Exception) {
                 Log.e(TAG, "빈 콜 생성 실패", e)
