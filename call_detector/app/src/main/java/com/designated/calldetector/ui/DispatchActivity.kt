@@ -213,7 +213,8 @@ class DispatchActivity : ComponentActivity() {
             "assignedDriverId" to driver.authUid.ifEmpty { driver.id },
             "assignedDriverName" to driver.name,
             "assignedDriverPhone" to driver.phone,
-            "assignedTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+            "assignedTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+            "expireAt" to com.google.firebase.Timestamp(java.util.Date(System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000))
         )
 
         contactAddress?.let { callData["customerAddress"] = it }
@@ -285,7 +286,8 @@ class DispatchActivity : ComponentActivity() {
             "targetCityId" to cityId,
             "deviceName" to deviceName,
             "callType" to "수신",
-            "timestampClient" to System.currentTimeMillis()
+            "timestampClient" to System.currentTimeMillis(),
+            "expireAt" to com.google.firebase.Timestamp(java.util.Date(System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000))
         )
 
         contactAddress?.let { sharedCallData["customerAddress"] = it }

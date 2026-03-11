@@ -584,20 +584,20 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
 
         // 4. 미완료 콜 실시간 리스너 (FCM 백업용, 비용 최소화)
-        // 조건: 1시간 내 생성된 미완료 콜만 감시 (보통 0-2개)
+        // 조건: 12시간 내 생성된 미완료 콜만 감시 (보통 0-2개)
         startActiveCallsListener(provinceId, cityId, officeId)
     }
 
     /**
      * 미완료 콜 실시간 리스너 (FCM 백업용)
-     * 조건: 1시간 내 생성 + 미완료 상태 (OPEN, ASSIGNED, IN_PROGRESS)
+     * 조건: 12시간 내 생성 + 미완료 상태 (OPEN, ASSIGNED, IN_PROGRESS)
      * 비용: 보통 0-2개 문서만 감시하므로 매우 저렴
      */
     private fun startActiveCallsListener(provinceId: String, cityId: String, officeId: String) {
         activeCallsListener?.remove()
 
-        val oneHourAgo = com.google.firebase.Timestamp(
-            java.util.Date(System.currentTimeMillis() - 60 * 60 * 1000)
+        val twelveHoursAgo = com.google.firebase.Timestamp(
+            java.util.Date(System.currentTimeMillis() - 12 * 60 * 60 * 1000)
         )
 
         activeCallsListener = firestore.collection("provinces").document(provinceId)
@@ -605,7 +605,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             .collection("offices").document(officeId)
             .collection("calls")
             .whereIn("status", listOf("OPEN", "WAITING", "ASSIGNED", "IN_PROGRESS"))
-            .whereGreaterThan("timestamp", oneHourAgo)
+            .whereGreaterThan("timestamp", twelveHoursAgo)
             .addSnapshotListener { snapshots, e ->
                 if (e != null) {
                     Log.w(TAG, "미완료 콜 리스너 오류", e)
@@ -1223,7 +1223,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     "provinceId" to province,
                     "cityId" to city,
                     "officeId" to office,
-                    "createdBy" to (auth.currentUser?.uid ?: "")
+                    "createdBy" to (auth.currentUser?.uid ?: ""),
+                    "expireAt" to Timestamp(java.util.Date(System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000))
                 )
 
                 val docRef = officeRef.collection("calls").add(data).await()
@@ -1239,6 +1240,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     officeId = office,
                     callType = null,
                     fromCallDetector = false,
+                    fromCallManager = true,
                     assignedDriverId = null,
                     assignedDriverName = null,
                     assignedDriverPhone = null
@@ -1324,7 +1326,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     "fromCallManager" to true,
                     "departure_set" to null,
                     "destination_set" to null,
-                    "fare_set" to null
+                    "fare_set" to null,
+                    "expireAt" to Timestamp(java.util.Date(System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000))
                 )
 
                 val docRef = officeRef.collection("calls").add(data).await()
@@ -1340,6 +1343,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     officeId = office,
                     callType = null,
                     fromCallDetector = false,
+                    fromCallManager = true,
                     assignedDriverId = null,
                     assignedDriverName = null,
                     assignedDriverPhone = null
@@ -1488,7 +1492,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     "createdBy" to (auth.currentUser?.uid ?: ""),
                     "departure_set" to departure.ifBlank { null },
                     "destination_set" to destination.ifBlank { null },
-                    "fare_set" to if (fare > 0) fare else null
+                    "fare_set" to if (fare > 0) fare else null,
+                    "expireAt" to Timestamp(java.util.Date(System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000))
                 )
 
                 val docRef = officeRef.collection("calls").add(data).await()
@@ -1504,6 +1509,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     officeId = office,
                     callType = null,
                     fromCallDetector = false,
+                    fromCallManager = true,
                     assignedDriverId = null,
                     assignedDriverName = null,
                     assignedDriverPhone = null
@@ -1640,7 +1646,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     "phoneNumber" to callInfo.phoneNumber,
                     "originalCallId" to callInfo.id,
                     "timestamp" to Timestamp.now(),
-                    "callType" to if (isClosingCall) "마감콜" else null
+                    "callType" to if (isClosingCall) "마감콜" else null,
+                    "expireAt" to Timestamp(java.util.Date(System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000))
                 )
 
                 docRef.set(data).await()

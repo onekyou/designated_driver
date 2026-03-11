@@ -1269,8 +1269,11 @@ fun NewCallAssignmentDialog(
     var showShareDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
-    // fromCallManager 콜인지 감지 (내부호출: 정보가 비어있는 상태로 생성됨)
-    val isFromCallManager = callInfo.fromCallManager == true
+    // 빈 콜 감지: WAITING 상태 + 정보 미입력 (대시보드에서 생성 직후 상태)
+    val isFromCallManager = callInfo.status == "WAITING" &&
+        callInfo.phoneNumber.isBlank() &&
+        callInfo.departure_set.isNullOrBlank() &&
+        callInfo.destination_set.isNullOrBlank()
 
     // 출발지/도착지/요금 편집 상태 (fromCallManager 콜용)
     var departure by remember { mutableStateOf(callInfo.departure_set ?: "") }

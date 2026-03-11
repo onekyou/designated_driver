@@ -658,7 +658,8 @@ class CallDetectorService : Service() {
                     "status" to "OPEN",
                     "timestamp" to FieldValue.serverTimestamp(),
                     "callType" to "MISSED_AFTER_HOURS", // 마감 후 부재중
-                    "timestampClient" to System.currentTimeMillis()
+                    "timestampClient" to System.currentTimeMillis(),
+                    "expireAt" to com.google.firebase.Timestamp(java.util.Date(System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000))
                 )
 
                 contactName?.let { sharedCallData["customerName"] = it }
@@ -778,7 +779,8 @@ class CallDetectorService : Service() {
                 "fromCallDetector" to true, // 독립 콜디텍터에서 생성된 콜 (콜매니저에서 팝업 표시 방지)
                 "isAppCustomer" to isAppCustomer,  // ✅ 추가: 앱 회원 여부
                 "customerId" to if (isAppCustomer) phoneNumber else "",  // ✅ 추가: 회원이면 phoneNumber
-                "createdFrom" to "phone"  // ✅ 추가: 전화로 생성됨
+                "createdFrom" to "phone",  // ✅ 추가: 전화로 생성됨
+                "expireAt" to com.google.firebase.Timestamp(java.util.Date(System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000))
             )
 
             // Firebase에 먼저 업로드하고 ID를 받아서 팝업 생성 (콜매니저와 동일한 방식)
@@ -880,7 +882,8 @@ class CallDetectorService : Service() {
                 "timestamp" to FieldValue.serverTimestamp(),
                 "callType" to "AFTER_HOURS", // 퇴근 후 콜
                 "timestampClient" to System.currentTimeMillis(),
-                "fromCallDetector" to true // 독립 콜디텍터에서 생성된 콜 (콜매니저에서 팝업 표시 방지)
+                "fromCallDetector" to true, // 독립 콜디텍터에서 생성된 콜 (콜매니저에서 팝업 표시 방지)
+                "expireAt" to com.google.firebase.Timestamp(java.util.Date(System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000))
             )
 
             contactName?.let { sharedCallData["customerName"] = it }
@@ -1016,7 +1019,8 @@ class CallDetectorService : Service() {
                 "callType" to "AFTER_HOURS_QUICK", // 마감 후 빠른 응답
                 "timestampClient" to System.currentTimeMillis(),
                 "fromCallDetector" to true, // 독립 콜디텍터에서 생성된 콜 (콜매니저에서 팝업 표시 방지)
-                "fromRinging" to true // RINGING 상태에서 생성됨을 표시
+                "fromRinging" to true, // RINGING 상태에서 생성됨을 표시
+                "expireAt" to com.google.firebase.Timestamp(java.util.Date(System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000))
             )
 
             contactName?.let { sharedCallData["customerName"] = it }

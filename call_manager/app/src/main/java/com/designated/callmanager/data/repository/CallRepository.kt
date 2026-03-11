@@ -79,17 +79,29 @@ class CallRepository(
     // ========================================
 
     /**
-     * 콜 목록 Flow 구독 (최근 1시간 이내 + 운행완료 제외)
+     * 콜 목록 Flow 구독 (상태별 시간 필터 + 운행완료 제외)
+     * - WAITING, HOLD, 취소 상태: 1시간 이내만 표시
+     * - 나머지 (ASSIGNED, IN_PROGRESS 등): 12시간 이내 표시
      * UI가 이 Flow를 collect하면 DB 변경 시 자동 업데이트
-     * 시간 필터는 매 emit마다 동적으로 적용됨
      */
     fun getCallsFlow(provinceId: String, officeId: String): Flow<List<CallInfo>> {
         return callDao.getAllCallsFlow(provinceId, officeId)
             .map { localCalls ->
-                val oneHourAgo = System.currentTimeMillis() - (60 * 60 * 1000) // 1시간 전
+                val oneHourAgo = System.currentTimeMillis() - (60 * 60 * 1000)
+                val twelveHoursAgo = System.currentTimeMillis() - (12 * 60 * 60 * 1000)
+                val shortLivedStatuses = setOf(
+                    "WAITING", "HOLD", "CANCELED",
+                    "CANCELLED_BY_DRIVER", "CANCELLED_BY_CUSTOMER"
+                )
                 localCalls
-                    .filter { it.timestamp >= oneHourAgo }
-                    .filter { it.status != "COMPLETED" } // 운행완료 제외
+                    .filter { it.status != "COMPLETED" }
+                    .filter { call ->
+                        if (call.status in shortLivedStatuses) {
+                            call.timestamp >= oneHourAgo
+                        } else {
+                            call.timestamp >= twelveHoursAgo
+                        }
+                    }
                     .map { it.toCallInfo() }
             }
     }
@@ -250,6 +262,7 @@ class CallRepository(
         officeId: String,
         callType: String? = null,
         fromCallDetector: Boolean? = null,
+        fromCallManager: Boolean? = null,
         assignedDriverId: String? = null,
         assignedDriverName: String? = null,
         assignedDriverPhone: String? = null
@@ -271,6 +284,7 @@ class CallRepository(
                 assignedDriverPhone = assignedDriverPhone,
                 callType = callType,
                 fromCallDetector = fromCallDetector,
+                fromCallManager = fromCallManager,
                 regionId = provinceId, // regionId 필드에 provinceId 저장
                 officeId = officeId,
                 synced = true,

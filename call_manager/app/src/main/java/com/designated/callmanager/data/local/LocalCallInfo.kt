@@ -68,7 +68,8 @@ fun LocalCallInfo.toCallInfo(): CallInfo {
         assignedDriverName = assignedDriverName,
         assignedDriverPhone = assignedDriverPhone,
         callType = callType,
-        fromCallDetector = fromCallDetector
+        fromCallDetector = fromCallDetector,
+        fromCallManager = fromCallManager
     )
 }
 
@@ -92,6 +93,7 @@ fun CallInfo.toLocalCallInfo(regionId: String, officeId: String): LocalCallInfo 
         assignedDriverPhone = assignedDriverPhone,
         callType = callType,
         fromCallDetector = fromCallDetector,
+        fromCallManager = fromCallManager,
         regionId = regionId,
         officeId = officeId,
         synced = true,

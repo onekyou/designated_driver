@@ -423,7 +423,8 @@ class CallDetectorService : Service() {
                 "callType" to "MISSED_CALL",
                 "timestampClient" to System.currentTimeMillis(),
                 "fromMissedCall" to true,
-                "fromCallManager" to true
+                "fromCallManager" to true,
+                "expireAt" to com.google.firebase.Timestamp(java.util.Date(System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000))
             )
 
             contactName?.let { sharedCallData["customerName"] = it }
@@ -685,7 +686,8 @@ class CallDetectorService : Service() {
                     "isAppCustomer" to isAppCustomer,  // ✅ 추가: 앱 회원 여부
                     "customerId" to if (isAppCustomer) phoneNumber else "",  // ✅ 추가: 회원이면 phoneNumber
                     "customerGrade" to (customerGrade ?: ""),  // ✅ 추가: 고객 등급
-                    "createdFrom" to "phone"  // ✅ 추가: 전화로 생성됨
+                    "createdFrom" to "phone",  // ✅ 추가: 전화로 생성됨
+                    "expireAt" to com.google.firebase.Timestamp(java.util.Date(System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000))
                 )
 
                 val targetPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/calls"
@@ -758,7 +760,8 @@ class CallDetectorService : Service() {
                     "fromCallManager" to true,
                     "isAppCustomer" to false,
                     "customerId" to "",
-                    "createdFrom" to "phone"
+                    "createdFrom" to "phone",
+                    "expireAt" to com.google.firebase.Timestamp(java.util.Date(System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000))
                 )
 
                 val targetPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/calls"
@@ -859,7 +862,8 @@ class CallDetectorService : Service() {
                 "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
                 "callType" to "AFTER_HOURS",
                 "timestampClient" to System.currentTimeMillis(),
-                "fromCallManager" to true
+                "fromCallManager" to true,
+                "expireAt" to com.google.firebase.Timestamp(java.util.Date(System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000))
             )
 
             contactName?.let { sharedCallData["customerName"] = it }
@@ -1047,7 +1051,8 @@ class CallDetectorService : Service() {
                 "callType" to "AFTER_HOURS_QUICK",
                 "timestampClient" to System.currentTimeMillis(),
                 "fromRinging" to true,
-                "fromCallManager" to true
+                "fromCallManager" to true,
+                "expireAt" to com.google.firebase.Timestamp(java.util.Date(System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000))
             )
 
             contactName?.let { sharedCallData["customerName"] = it }
