@@ -40,10 +40,10 @@ fun AppNavigation(
 ) {
     val uiState by driverViewModel.uiState.collectAsState()
 
-    LaunchedEffect(uiState.newCallPopup, uiState.navigateToHome) {
-        if (uiState.newCallPopup != null && uiState.navigateToHome) {
+    LaunchedEffect(uiState.navigateToHome) {
+        if (uiState.navigateToHome) {
             val currentRoute = navController.currentDestination?.route
-            if (currentRoute == AppDestinations.HISTORY_SETTLEMENT_ROUTE) {
+            if (currentRoute != AppDestinations.HOME_ROUTE) {
                 navController.navigate(AppDestinations.HOME_ROUTE) {
                     launchSingleTop = true
                 }

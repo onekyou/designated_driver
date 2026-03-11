@@ -357,7 +357,8 @@ enum class CarryOverStatus {
 enum class DailySettlementStatus {
     WORKING,          // 근무 중 (아직 마감 안 함)
     PENDING_CONFIRM,  // 마감 완료, 매니저 확인 대기
-    CONFIRMED         // 매니저 확인 완료
+    CONFIRMED,        // 매니저 확인 완료
+    REJECTED          // 매니저 거절 (재제출 필요)
 }
 
 /**
@@ -377,7 +378,10 @@ data class DriverDailySettlement(
     val confirmedAt: Timestamp? = null,    // 매니저 확인 시간
     val confirmedBy: String? = null,       // 확인한 매니저 ID
     val calculatedCarryOver: Long = 0,     // 업무마감 시점 계산된 남은 미환급금
-    val originalCarryOver: Long = 0        // 업무마감 시점 이월 미환급금 (원본)
+    val originalCarryOver: Long = 0,       // 업무마감 시점 이월 미환급금 (원본)
+    val originalTripCount: Int = 0,        // 1차 마감 운행 횟수 (추가 운행 없으면 0)
+    val originalTotalFare: Long = 0,       // 1차 마감 총 운행료
+    val originalRealDeposit: Long = 0      // 1차 마감 실납입
 ) {
     companion object {
         fun fromMap(map: Map<String, Any?>?): DriverDailySettlement {
@@ -399,7 +403,10 @@ data class DriverDailySettlement(
                 confirmedAt = map["confirmedAt"] as? Timestamp,
                 confirmedBy = map["confirmedBy"] as? String,
                 calculatedCarryOver = (map["calculatedCarryOver"] as? Long) ?: 0,
-                originalCarryOver = (map["originalCarryOver"] as? Long) ?: 0
+                originalCarryOver = (map["originalCarryOver"] as? Long) ?: 0,
+                originalTripCount = (map["originalTripCount"] as? Long)?.toInt() ?: 0,
+                originalTotalFare = (map["originalTotalFare"] as? Long) ?: 0,
+                originalRealDeposit = (map["originalRealDeposit"] as? Long) ?: 0
             )
         }
     }
@@ -417,7 +424,10 @@ data class DriverDailySettlement(
         "confirmedAt" to confirmedAt,
         "confirmedBy" to confirmedBy,
         "calculatedCarryOver" to calculatedCarryOver,
-        "originalCarryOver" to originalCarryOver
+        "originalCarryOver" to originalCarryOver,
+        "originalTripCount" to originalTripCount,
+        "originalTotalFare" to originalTotalFare,
+        "originalRealDeposit" to originalRealDeposit
     )
 }
 
@@ -493,4 +503,8 @@ data class DriverDailySettlementSummary(
     /** 확인 완료 상태인지 */
     val isConfirmed: Boolean
         get() = dailySettlement?.status == DailySettlementStatus.CONFIRMED
+
+    /** 거절 상태인지 */
+    val isRejected: Boolean
+        get() = dailySettlement?.status == DailySettlementStatus.REJECTED
 }

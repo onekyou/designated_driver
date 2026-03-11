@@ -96,6 +96,10 @@ class DriverViewModel @Inject constructor(
     private val _isSubmittingSettlement = MutableStateFlow(false)
     val isSubmittingSettlement: StateFlow<Boolean> = _isSubmittingSettlement.asStateFlow()
 
+    // 일일 정산 상태 (carryOverListener에서 업데이트)
+    private val _dailySettlementStatus = MutableStateFlow(DailySettlementStatus.WORKING)
+    val dailySettlementStatus: StateFlow<DailySettlementStatus> = _dailySettlementStatus.asStateFlow()
+
     // calls 기반 오늘 정산 데이터
     data class TodaySettlement(
         val totalFare: Int = 0,           // 총 운행료
@@ -1250,6 +1254,9 @@ class DriverViewModel @Inject constructor(
                 val dailySettlementMap = snapshot.get("dailySettlement") as? Map<String, Any?>
                 val dailySettlement = DriverDailySettlement.fromMap(dailySettlementMap)
 
+                // 일일 정산 상태 emit (UI에서 대기/확인/거절 상태 표시용)
+                _dailySettlementStatus.value = dailySettlement.status
+
                 val effectiveCarryOver = if (dailySettlement.status == DailySettlementStatus.PENDING_CONFIRM) {
                     // 업무마감 후 매니저 확인 대기 중 - 계산된 carryOver 사용
                     val calculatedBalance = dailySettlement.calculatedCarryOver
@@ -1358,6 +1365,17 @@ class DriverViewModel @Inject constructor(
                 val mergedTotalCredit = if (isIntegration) prevSettlement.totalCredit + settlement.totalCredit else settlement.totalCredit.toLong()
                 val mergedRealDeposit = if (isIntegration) prevSettlement.realDeposit + realDeposit else realDeposit.toLong()
 
+                // 통합 시 1차 원본 값 보존 (이미 통합된 상태면 기존 original 유지)
+                val origTripCount = if (isIntegration) {
+                    if (prevSettlement.originalTripCount > 0) prevSettlement.originalTripCount else prevSettlement.tripCount
+                } else 0
+                val origTotalFare = if (isIntegration) {
+                    if (prevSettlement.originalTotalFare > 0) prevSettlement.originalTotalFare else prevSettlement.totalFare
+                } else 0L
+                val origRealDeposit = if (isIntegration) {
+                    if (prevSettlement.originalRealDeposit > 0) prevSettlement.originalRealDeposit else prevSettlement.realDeposit
+                } else 0L
+
                 // 통합된 값 기준으로 납입금 계산
                 val mergedOfficeDeposit = (mergedTotalFare * ratio / 100)
                 val mergedFinalDeposit = mergedOfficeDeposit - mergedTotalCredit
@@ -1384,18 +1402,18 @@ class DriverViewModel @Inject constructor(
                     status = DailySettlementStatus.PENDING_CONFIRM,
                     submittedAt = Timestamp.now(),
                     calculatedCarryOver = remainingCarryOver.toLong(),
-                    originalCarryOver = originalCarryOverBalance.toLong()
+                    originalCarryOver = originalCarryOverBalance.toLong(),
+                    originalTripCount = origTripCount,
+                    originalTotalFare = origTotalFare,
+                    originalRealDeposit = origRealDeposit
                 )
 
-                // dailySettlement + settlementLastCleared를 단일 update로 갱신 (원자적 처리)
-                val nowTimestamp = Timestamp.now()
+                // dailySettlement 저장 (settlementLastCleared는 매니저 확인 후 퇴근 시 설정)
                 driverRef.update(
                     mapOf(
-                        "dailySettlement" to dailySettlement.toMap(),
-                        "settlementLastCleared" to nowTimestamp
+                        "dailySettlement" to dailySettlement.toMap()
                     )
                 ).await()
-                _lastClearedMillis.value = nowTimestamp.toDate().time
 
                 val logMsg = if (isIntegration) {
                     "Daily settlement MERGED: prev=${prevSettlement.tripCount}건 + curr=${settlement.tripCount}건 = ${mergedTripCount}건, realDeposit=$mergedRealDeposit"

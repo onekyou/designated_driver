@@ -1627,10 +1627,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
                 val docRef = firestore.collection("shared_calls").document()
 
-                // 마감콜 여부 확인 (원본 callInfo의 callType 또는 출발지/도착지/요금이 모두 비어있는 경우)
+                // 마감콜 여부 확인 (callType으로만 판단)
                 val isClosingCall = callInfo.callType == "MISSED_AFTER_HOURS" ||
-                                  callInfo.callType == "AFTER_HOURS_QUICK" ||
-                                  (departure.isBlank() && destination.isBlank() && fare == 0)
+                                  callInfo.callType == "AFTER_HOURS_QUICK"
 
                 val data = hashMapOf(
                     "status" to "OPEN",
@@ -2031,15 +2030,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 for (doc in callsQuery.documents) {
                     val callInfo = parseCallDocument(doc)
                     if (callInfo != null) {
-                        // 마감콜 판단 로직: callType이 마감콜 관련이거나, 출발지/도착지/요금이 모두 없는 경우
+                        // 마감콜 판단 로직: callType으로만 판단
                         val isClosingCall = callInfo.callType == "MISSED_AFTER_HOURS" ||
-                                          callInfo.callType == "AFTER_HOURS_QUICK" ||
-                                          (callInfo.departure_set.isNullOrBlank() &&
-                                           callInfo.destination_set.isNullOrBlank() &&
-                                           (callInfo.fare_set == null || callInfo.fare_set == 0L) &&
-                                           callInfo.departure.isNullOrBlank() &&
-                                           callInfo.destination.isNullOrBlank() &&
-                                           (callInfo.fare == null || callInfo.fare == 0L))
+                                          callInfo.callType == "AFTER_HOURS_QUICK"
 
                         if (isClosingCall) {
                             closingCalls.add(callInfo)
@@ -2138,14 +2131,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     for (doc in callsQuery.documents) {
                         val callInfo = parseCallDocument(doc)
                         if (callInfo != null) {
+                            // 마감콜 판단 로직: callType으로만 판단
                             val isClosingCall = callInfo.callType == "MISSED_AFTER_HOURS" ||
-                                              callInfo.callType == "AFTER_HOURS_QUICK" ||
-                                              (callInfo.departure_set.isNullOrBlank() &&
-                                               callInfo.destination_set.isNullOrBlank() &&
-                                               (callInfo.fare_set == null || callInfo.fare_set == 0L) &&
-                                               callInfo.departure.isNullOrBlank() &&
-                                               callInfo.destination.isNullOrBlank() &&
-                                               (callInfo.fare == null || callInfo.fare == 0L))
+                                              callInfo.callType == "AFTER_HOURS_QUICK"
 
                             if (isClosingCall) {
                                 dayClosingCalls.add(callInfo)

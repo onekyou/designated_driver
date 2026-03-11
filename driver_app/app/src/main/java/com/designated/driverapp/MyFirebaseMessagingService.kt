@@ -207,6 +207,26 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
             // 알림 표시
             showSettlementNotification(title, body, sessionDate)
+        } else if (messageType == "SETTLEMENT_CONFIRMED") {
+            // 매니저 정산 확인 완료
+            Log.d(TAG, "정산 확인 FCM 수신")
+            val broadcastIntent = Intent(Constants.ACTION_SETTLEMENT_CONFIRMED)
+            LocalBroadcastManager.getInstance(this).sendBroadcast(broadcastIntent)
+            showNotification(
+                title ?: "정산 확인 완료",
+                body ?: "매니저가 정산을 확인했습니다. 퇴근할 수 있습니다.",
+                null
+            )
+        } else if (messageType == "SETTLEMENT_REJECTED") {
+            // 매니저 정산 거절
+            Log.d(TAG, "정산 거절 FCM 수신")
+            val broadcastIntent = Intent(Constants.ACTION_SETTLEMENT_REJECTED)
+            LocalBroadcastManager.getInstance(this).sendBroadcast(broadcastIntent)
+            showNotification(
+                title ?: "정산 거절",
+                body ?: "매니저가 정산을 거절했습니다. 재제출해주세요.",
+                null
+            )
         } else {
             // 기타 알림
             showNotification(title, body, callId)

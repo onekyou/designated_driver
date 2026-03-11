@@ -8,6 +8,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.media.AudioAttributes
 import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
@@ -32,8 +33,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         private const val TAG = "CallManager_FCM"
 
         private const val NEW_CALL_CHANNEL_ID = "new_call_fcm_channel_v2"
-        private const val STATUS_CHANGE_CHANNEL_ID = "status_change_fcm_channel"
-        private const val DRIVER_UPDATE_CHANNEL_ID = "driver_update_fcm_channel"
+        private const val STATUS_CHANGE_CHANNEL_ID = "status_change_fcm_channel_v2"
+        private const val DRIVER_UPDATE_CHANNEL_ID = "driver_update_fcm_channel_v3"
         private const val SHARED_CALL_CHANNEL_ID = "shared_call_fcm_channel_v3"  // v3로 변경하여 새 채널 생성
     }
 
@@ -390,12 +391,13 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-            try {
-                val oldChannel = notificationManager.getNotificationChannel("new_call_fcm_channel")
-                if (oldChannel != null) {
-                    notificationManager.deleteNotificationChannel("new_call_fcm_channel")
-                }
-            } catch (e: Exception) {
+            // 구 채널 삭제 (사운드 변경을 위해 채널 ID 버전업 시 필요)
+            listOf("new_call_fcm_channel", "status_change_fcm_channel", "driver_update_fcm_channel", "driver_update_fcm_channel_v2").forEach { oldId ->
+                try {
+                    notificationManager.getNotificationChannel(oldId)?.let {
+                        notificationManager.deleteNotificationChannel(oldId)
+                    }
+                } catch (e: Exception) { }
             }
 
             if (notificationManager.getNotificationChannel(NEW_CALL_CHANNEL_ID) == null) {
@@ -421,6 +423,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             }
 
             if (notificationManager.getNotificationChannel(STATUS_CHANGE_CHANNEL_ID) == null) {
+                val customSoundUri = Uri.parse("android.resource://${packageName}/${R.raw.status_alert}")
                 val statusChangeChannel = NotificationChannel(
                     STATUS_CHANGE_CHANNEL_ID,
                     "운행 상태 변경 알림",
@@ -432,7 +435,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     enableVibration(true)
                     vibrationPattern = longArrayOf(0, 300, 100, 300, 100, 300)
                     setShowBadge(true)
-                    setSound(Settings.System.DEFAULT_NOTIFICATION_URI, AudioAttributes.Builder()
+                    setSound(customSoundUri, AudioAttributes.Builder()
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .setUsage(AudioAttributes.USAGE_NOTIFICATION)
                         .build())
@@ -441,15 +444,16 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             }
 
             if (notificationManager.getNotificationChannel(DRIVER_UPDATE_CHANNEL_ID) == null) {
+                val customSoundUri2 = Uri.parse("android.resource://${packageName}/${R.raw.status_alert}")
                 val driverUpdateChannel = NotificationChannel(
                     DRIVER_UPDATE_CHANNEL_ID,
                     "기사 응답 알림",
-                    NotificationManager.IMPORTANCE_DEFAULT
+                    NotificationManager.IMPORTANCE_HIGH
                 ).apply {
                     description = "기사 수락/거절 알림"
                     enableVibration(true)
                     setShowBadge(true)
-                    setSound(Settings.System.DEFAULT_NOTIFICATION_URI, AudioAttributes.Builder()
+                    setSound(customSoundUri2, AudioAttributes.Builder()
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .setUsage(AudioAttributes.USAGE_NOTIFICATION)
                         .build())

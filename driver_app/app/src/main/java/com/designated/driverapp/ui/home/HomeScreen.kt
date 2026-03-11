@@ -72,7 +72,7 @@ fun HomeScreen(
 
     // 업무 마감 FCM 브로드캐스트 수신
     DisposableEffect(Unit) {
-        val receiver = object : BroadcastReceiver() {
+        val finalizedReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 Log.d(TAG, "업무 마감 브로드캐스트 수신")
                 val sessionDate = intent?.getStringExtra("sessionDate") ?: ""
@@ -86,13 +86,31 @@ fun HomeScreen(
             }
         }
 
-        LocalBroadcastManager.getInstance(context).registerReceiver(
-            receiver,
-            IntentFilter(Constants.ACTION_SETTLEMENT_FINALIZED)
-        )
+        // 정산 확인/거절 FCM 브로드캐스트 수신 (HistorySettlementScreen의 StateFlow로도 감지되지만, 다른 화면에 있을 때를 위해)
+        val confirmedReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                Log.d(TAG, "정산 확인 브로드캐스트 수신")
+                // Firestore listener가 _dailySettlementStatus를 업데이트하므로
+                // HistorySettlementScreen에서 자동으로 CONFIRMED 다이얼로그 표시
+            }
+        }
+        val rejectedReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                Log.d(TAG, "정산 거절 브로드캐스트 수신")
+                // Firestore listener가 _dailySettlementStatus를 업데이트하므로
+                // HistorySettlementScreen에서 자동으로 REJECTED 다이얼로그 표시
+            }
+        }
+
+        val lbm = LocalBroadcastManager.getInstance(context)
+        lbm.registerReceiver(finalizedReceiver, IntentFilter(Constants.ACTION_SETTLEMENT_FINALIZED))
+        lbm.registerReceiver(confirmedReceiver, IntentFilter(Constants.ACTION_SETTLEMENT_CONFIRMED))
+        lbm.registerReceiver(rejectedReceiver, IntentFilter(Constants.ACTION_SETTLEMENT_REJECTED))
 
         onDispose {
-            LocalBroadcastManager.getInstance(context).unregisterReceiver(receiver)
+            lbm.unregisterReceiver(finalizedReceiver)
+            lbm.unregisterReceiver(confirmedReceiver)
+            lbm.unregisterReceiver(rejectedReceiver)
         }
     }
 

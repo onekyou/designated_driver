@@ -27,6 +27,10 @@ class PreferencesManager(context: Context) {
         private const val KEY_FAVORITE_ADDRESSES = "favorite_addresses"
         private const val KEY_DRIVER_ID = "driver_id"
         private const val KEY_DRIVER_NAME = "driver_name"
+        private const val KEY_TERMS_ACCEPTED = "terms_accepted"
+        private const val KEY_TERMS_VERSION = "terms_version"
+        private const val KEY_TERMS_ACCEPTED_AT = "terms_accepted_at"
+        private const val KEY_MARKETING_CONSENT = "marketing_consent"
     }
 
     // 사무실 정보 저장/조회
@@ -122,6 +126,21 @@ class PreferencesManager(context: Context) {
         saveFavoriteAddresses(current)
     }
 
+    // 약관 동의 저장/조회
+    fun saveTermsAcceptance(version: String, marketingConsent: Boolean) {
+        prefs.edit().apply {
+            putBoolean(KEY_TERMS_ACCEPTED, true)
+            putString(KEY_TERMS_VERSION, version)
+            putLong(KEY_TERMS_ACCEPTED_AT, System.currentTimeMillis())
+            putBoolean(KEY_MARKETING_CONSENT, marketingConsent)
+            apply()
+        }
+    }
+
+    fun isTermsAccepted(): Boolean = prefs.getBoolean(KEY_TERMS_ACCEPTED, false)
+    fun getTermsVersion(): String? = prefs.getString(KEY_TERMS_VERSION, null)
+    fun getMarketingConsent(): Boolean = prefs.getBoolean(KEY_MARKETING_CONSENT, false)
+
     // 기사 추천 정보 저장/조회
     fun saveDriverReferralInfo(driverId: String, driverName: String) {
         prefs.edit().apply {
@@ -153,6 +172,10 @@ class PreferencesManager(context: Context) {
             remove(KEY_ACCOUNT_HOLDER)
             remove(KEY_DRIVER_ID)
             remove(KEY_DRIVER_NAME)
+            remove(KEY_TERMS_ACCEPTED)
+            remove(KEY_TERMS_VERSION)
+            remove(KEY_TERMS_ACCEPTED_AT)
+            remove(KEY_MARKETING_CONSENT)
             apply()
         }
     }

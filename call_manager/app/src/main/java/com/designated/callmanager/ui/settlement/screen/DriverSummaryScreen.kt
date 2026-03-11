@@ -157,6 +157,11 @@ fun DriverSummaryScreen(vm: SettlementViewModel = viewModel()) {
                         vm.confirmDailySettlement(id, diff) { success, msg ->
                             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                         }
+                    },
+                    onRejectSettlement = { id ->
+                        vm.rejectDailySettlement(id) { success, msg ->
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        }
                     }
                 ) {
                     val list = trips.filter { (it.driverName.ifBlank { "미지정" }) == stat.name }
@@ -218,6 +223,7 @@ private fun DriverDetailCard(
     onTransferClick: (String) -> Unit = {},
     onCancelClick: (String) -> Unit = {},
     onConfirmSettlement: (String, Long) -> Unit = { _, _ -> },
+    onRejectSettlement: (String) -> Unit = {},
     onClick: () -> Unit
 ) {
     // 미지급금 계산 - 기사앱과 동일한 통합 로직 적용
@@ -261,6 +267,7 @@ private fun DriverDetailCard(
     // 업무마감 정보
     val hasSubmitted = dailySettlement?.hasSubmitted == true
     val isConfirmed = dailySettlement?.isConfirmed == true
+    val isRejected = dailySettlement?.isRejected == true
     val settlement = dailySettlement?.dailySettlement
 
     Card(modifier = Modifier.fillMaxWidth().clickable { onClick() }, colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A))) {
@@ -285,6 +292,13 @@ private fun DriverDetailCard(
                         color = Color(0xFF66FF66),
                         style = MaterialTheme.typography.bodySmall
                     )
+                } else if (isRejected) {
+                    Text(
+                        "✗ 거절됨",
+                        color = Color(0xFFFF6666),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
             Divider(color = Color.DarkGray, thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
@@ -293,20 +307,9 @@ private fun DriverDetailCard(
             Text("수수료 : ${"%,d".format(stat.deposit)}원", color = Color.White)
             Text("미수금 : ${"%,d".format(stat.totalCredit)}원", color = Color.White)
             Divider(color = Color.DarkGray, thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
-            // 업무마감 후(마감대기 또는 확인완료) 실제 납입 금액, 마감 전에는 납입해야 할 금액
-            val displayRealDeposit = if ((hasSubmitted || isConfirmed) && settlement != null) {
-                settlement.realDeposit.toInt()  // 기사가 실제 납입한 금액
-            } else {
-                stat.realDeposit  // 납입해야 할 금액 (예상)
-            }
-            Text(
-                "납입금 : ${"%,d".format(displayRealDeposit)}원",
-                color = Color.Yellow,
-                fontWeight = FontWeight.Bold
-            )
 
-            // 업무마감 섹션 (마감 대기 상태인 경우)
-            if (hasSubmitted && settlement != null) {
+            // 업무마감 섹션 (마감 대기 또는 확인완료 상태인 경우)
+            if ((hasSubmitted || isConfirmed) && settlement != null) {
                 Spacer(Modifier.height(8.dp))
                 Divider(color = Color(0xFFFF9800), thickness = 2.dp)
                 Spacer(Modifier.height(8.dp))
@@ -319,144 +322,173 @@ private fun DriverDetailCard(
                 )
                 Spacer(Modifier.height(4.dp))
 
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("최종 납입액: ${"%,d".format(settlement.finalDeposit)}원", color = Color.White, style = MaterialTheme.typography.bodySmall)
-                        Text(
-                            "실납입: ${"%,d".format(settlement.realDeposit)}원",
-                            color = Color(0xFF00BFFF),
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        val diff = settlement.settlementDiff
-                        val diffColor = when {
-                            diff > 0 -> Color(0xFF66FF66)  // 환급금 (기사가 받아야 함)
-                            diff < 0 -> Color(0xFFFF6666)  // 미납금 (기사가 내야 함)
-                            else -> Color.Gray
-                        }
-                        val diffText = when {
-                            diff > 0 -> "환급금: +${"%,d".format(diff)}원"
-                            diff < 0 -> "미납금: ${"%,d".format(diff)}원"
-                            else -> "정산완료"
-                        }
-                        Text(diffText, color = diffColor, fontWeight = FontWeight.Bold)
+                // 통합 정산인 경우 1차/추가 분리 표시
+                if (settlement.originalTripCount > 0) {
+                    val addedTripCount = settlement.tripCount - settlement.originalTripCount
+                    val addedTotalFare = settlement.totalFare - settlement.originalTotalFare
+                    val addedRealDeposit = settlement.realDeposit - settlement.originalRealDeposit
 
-                        // 마감 시간
-                        settlement.submittedAt?.let {
-                            val timeText = SimpleDateFormat("HH:mm", Locale.getDefault()).format(it.toDate())
-                            Text("마감시간: $timeText", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-                        }
+                    Text("▸ 1차 마감", color = Color(0xFF88CCFF), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
+                    Text("  운행 ${settlement.originalTripCount}건 / ${"%,d".format(settlement.originalTotalFare)}원  |  납입: ${"%,d".format(settlement.originalRealDeposit)}원",
+                        color = Color.White, style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(4.dp))
+
+                    Text("▸ 추가 운행", color = Color(0xFFFFCC00), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
+                    Text("  운행 ${addedTripCount}건 / ${"%,d".format(addedTotalFare)}원  |  납입: ${"%,d".format(addedRealDeposit)}원",
+                        color = Color.White, style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(4.dp))
+
+                    Text("▸ 합계", color = Color(0xFFFF9800), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
+                }
+
+                // 세로 배치: 최종 납입액 → 실납입 → 환급금/미납금
+                Text("최종 납입액: ${"%,d".format(settlement.finalDeposit)}원", color = Color.White, style = MaterialTheme.typography.bodySmall)
+                Text(
+                    "실납입: ${"%,d".format(settlement.realDeposit)}원",
+                    color = Color(0xFF00BFFF),
+                    fontWeight = FontWeight.Bold
+                )
+                val diff = settlement.settlementDiff
+                val diffColor = when {
+                    diff > 0 -> Color(0xFF66FF66)
+                    diff < 0 -> Color(0xFFFF6666)
+                    else -> Color.Gray
+                }
+                val origCarryOver = settlement.originalCarryOver
+                val diffText = when {
+                    diff > 0 && origCarryOver > 0 -> "환급금: +${"%,d".format(diff)}원 (이월 ${"%,d".format(origCarryOver)}원)"
+                    diff > 0 -> "환급금: +${"%,d".format(diff)}원"
+                    diff < 0 && origCarryOver < 0 -> "미납금: ${"%,d".format(diff)}원 (미수 ${"%,d".format(-origCarryOver)}원)"
+                    diff < 0 -> "미납금: ${"%,d".format(diff)}원"
+                    else -> "정산완료"
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(diffText, color = diffColor, fontWeight = FontWeight.Bold)
+                    settlement.submittedAt?.let {
+                        val timeText = SimpleDateFormat("HH:mm", Locale.getDefault()).format(it.toDate())
+                        Text("마감시간: $timeText", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
                     }
                 }
 
-                Spacer(Modifier.height(8.dp))
-
-                // 확인 버튼
-                Button(
-                    onClick = { onConfirmSettlement(stat.driverId, settlement.settlementDiff) },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
-                ) {
-                    Text("✓ 정산 확인", fontWeight = FontWeight.Bold)
+                // 확인/거절 버튼 (마감대기 상태에서만 표시)
+                if (hasSubmitted && !isConfirmed && !isRejected) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { onConfirmSettlement(stat.driverId, settlement.settlementDiff) },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                        ) {
+                            Text("✓ 확인", fontWeight = FontWeight.Bold)
+                        }
+                        OutlinedButton(
+                            onClick = { onRejectSettlement(stat.driverId) },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFF6666)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF6666))
+                        ) {
+                            Text("✗ 거절", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                // 거절됨 상태 표시
+                if (isRejected) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "기사 재제출 대기 중",
+                        color = Color(0xFFFF6666),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
                 }
             }
 
-            // 미지급금 섹션 (항상 표시)
-            Spacer(Modifier.height(8.dp))
-            Divider(color = Color(0xFFFFAA00), thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
+            // 미지급금 섹션 - 상태별 분기
+            // 마감대기: 숨김 (업무마감 보고에 정보 있음)
+            // 마감 전 / 확인완료 / 거절됨: 표시
+            if (!hasSubmitted || isConfirmed || isRejected) {
+                Spacer(Modifier.height(8.dp))
+                Divider(color = Color(0xFFFFAA00), thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    // 총 미지급금
-                    Text(
-                        "미지급 합계: ${"%,d".format(totalUnpaid)}원",
-                        color = if (totalUnpaid > 0) Color(0xFFFF6666) else Color.Gray,
-                        fontWeight = FontWeight.Bold
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        if (isConfirmed) {
+                            // 확인완료: carryOver 잔액만 표시 (소급계산 없음)
+                            Text(
+                                "미지급 합계: ${"%,d".format(carryOverBalance)}원",
+                                color = if (carryOverBalance > 0) Color(0xFFFF6666) else Color.Gray,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (carryOver != null && carryOverBalance > 0) {
+                                when (carryOver.status) {
+                                    CarryOverStatus.PENDING -> {
+                                        Text("상태: 미지급", color = Color(0xFFFF6666), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    CarryOverStatus.TRANSFERRED -> {
+                                        val timeText = carryOver.transferredAt?.let {
+                                            SimpleDateFormat("MM/dd HH:mm", Locale.getDefault()).format(it.toDate())
+                                        } ?: ""
+                                        Text("상태: 이체됨 ($timeText)", color = Color(0xFFFFCC00), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    CarryOverStatus.SETTLED -> {
+                                        Text("상태: 수령완료", color = Color(0xFF66FF66), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                            } else if (carryOverBalance == 0L) {
+                                Text("미지급 없음", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                            }
+                        } else {
+                            // 마감 전: carryOver 그대로 표시 (소급공제 없음)
+                            Text(
+                                "미지급 합계: ${"%,d".format(carryOverBalance)}원",
+                                color = if (carryOverBalance > 0) Color(0xFFFF6666) else Color.Gray,
+                                fontWeight = FontWeight.Bold
+                            )
 
-                    // 이월/공제/오늘 분리 표시 - 기사앱과 동일한 표시 로직
-                    if (status == CarryOverStatus.TRANSFERRED) {
-                        // TRANSFERRED: 저장된 값 사용 (이미 이체된 금액)
-                        val transferredTodayAmount = carryOver?.todayAmount ?: 0L
-                        val transferredPreviousAmount = carryOverBalance - transferredTodayAmount
-                        if (transferredPreviousAmount > 0) {
+                            // 상태
+                            if (carryOver != null && carryOverBalance > 0) {
+                                when (carryOver.status) {
+                                    CarryOverStatus.PENDING -> {
+                                        Text("상태: 미지급", color = Color(0xFFFF6666), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    CarryOverStatus.TRANSFERRED -> {
+                                        val timeText = carryOver.transferredAt?.let {
+                                            SimpleDateFormat("MM/dd HH:mm", Locale.getDefault()).format(it.toDate())
+                                        } ?: ""
+                                        Text("상태: 이체됨 ($timeText)", color = Color(0xFFFFCC00), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    CarryOverStatus.SETTLED -> {
+                                        Text("상태: 수령완료", color = Color(0xFF66FF66), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                            } else if (carryOverBalance == 0L) {
+                                Text("미지급 없음", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                            }
+
+                            // 예상 납입금 (수수료 그대로, 공제 없음)
+                            Spacer(Modifier.height(4.dp))
                             Text(
-                                "이월: ${"%,d".format(transferredPreviousAmount)}원",
-                                color = Color.White,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        if (transferredTodayAmount > 0) {
-                            Text(
-                                "오늘: +${"%,d".format(transferredTodayAmount)}원",
-                                color = Color(0xFFFFAA00),
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    } else {
-                        // PENDING: 통합 계산 로직 적용
-                        if (carryOverBalance > 0) {
-                            Text(
-                                "이월: ${"%,d".format(carryOverBalance)}원",
-                                color = Color.White,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        // 오늘 공제 표시 (양수 납입액으로 미지급금이 줄어든 경우)
-                        if (usedFromCarryOver > 0) {
-                            Text(
-                                "오늘 공제: -${"%,d".format(usedFromCarryOver)}원",
-                                color = Color(0xFF66FF66),
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        // 오늘 발생 미지급금 (음수 납입액으로 추가 발생한 경우)
-                        if (calculatedTodayUnpaid > 0 && rawFinalDeposit <= 0) {
-                            Text(
-                                "오늘 발생: +${"%,d".format(calculatedTodayUnpaid)}원",
-                                color = Color(0xFFFFAA00),
-                                style = MaterialTheme.typography.bodySmall
+                                "예상 납입금: ${"%,d".format(stat.deposit)}원",
+                                color = Color(0xFF00BFFF),
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
-                    // 상태
-                    if (carryOver != null && carryOverBalance > 0) {
-                        when (carryOver.status) {
-                            CarryOverStatus.PENDING -> {
-                                Text("상태: 미지급", color = Color(0xFFFF6666), style = MaterialTheme.typography.bodySmall)
-                            }
-                            CarryOverStatus.TRANSFERRED -> {
-                                val timeText = carryOver.transferredAt?.let {
-                                    SimpleDateFormat("MM/dd HH:mm", Locale.getDefault()).format(it.toDate())
-                                } ?: ""
-                                Text("상태: 이체됨 ($timeText)", color = Color(0xFFFFCC00), style = MaterialTheme.typography.bodySmall)
-                            }
-                            CarryOverStatus.SETTLED -> {
-                                Text("상태: 수령완료", color = Color(0xFF66FF66), style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                    } else if (totalUnpaid == 0L) {
-                        Text("미지급 없음", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-                    }
-
-                    // 예상 납입금 (미환급금 공제 후 실제 납입할 금액) - 기사앱 adjustedDeposit과 동일
-                    // 확인 완료 후에는 "실납입금"으로 표시
-                    val expectedDeposit = maxOf(0L, rawFinalDeposit - usedFromCarryOver)
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "${if (isConfirmed) "실납입금" else "예상 납입금"}: ${"%,d".format(expectedDeposit)}원",
-                        color = if (isConfirmed) Color(0xFF4CAF50) else Color(0xFF00BFFF),
-                        fontWeight = FontWeight.Bold
-                    )
-                }
 
                 // 이체하기 / 이체취소 버튼 (미지급금이 있을 때)
-                if (totalUnpaid > 0) {
+                val displayedUnpaid = if (isConfirmed) carryOverBalance else totalUnpaid
+                if (displayedUnpaid > 0) {
                     val status = carryOver?.status ?: CarryOverStatus.PENDING
                     when (status) {
                         CarryOverStatus.PENDING -> {
@@ -482,6 +514,7 @@ private fun DriverDetailCard(
                         }
                     }
                 }
+            }
             }
         }
     }

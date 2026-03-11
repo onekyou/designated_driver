@@ -19,8 +19,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import com.designated.customer.BuildConfig
 import com.designated.customer.ui.auth.PhoneAuthScreen
+import com.designated.customer.ui.auth.TermsAgreementScreen
+import com.designated.customer.ui.auth.DocumentViewerScreen
+import com.designated.customer.ui.auth.LegalDocuments
 import com.designated.customer.ui.profile.ProfileSetupScreen
 import com.designated.customer.ui.navigation.MainNavigation
 import com.designated.customer.ui.theme.DesignatedCustomerTheme
@@ -32,9 +34,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.size
 import com.designated.customer.util.PreferencesManager
 import kotlinx.coroutines.tasks.await
-import com.google.firebase.functions.FirebaseFunctions
-import com.google.firebase.functions.ktx.functions
-import com.google.firebase.ktx.Firebase as FirebaseKtx
 import com.google.firebase.messaging.FirebaseMessaging
 import android.Manifest
 import android.content.pm.PackageManager
@@ -397,6 +396,17 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+enum class AppScreen {
+    LOADING,
+    OFFICE_SELECTION,
+    TERMS_AGREEMENT,
+    TERMS_VIEWER,
+    PRIVACY_VIEWER,
+    PHONE_AUTH,
+    PROFILE_SETUP,
+    MAIN
+}
+
 @Composable
 fun CustomerApp(
     initialIntent: Intent? = null,
@@ -407,8 +417,7 @@ fun CustomerApp(
     val coroutineScope = rememberCoroutineScope()
     val auth = FirebaseAuth.getInstance()
 
-    // ✅ Intent 처리는 MainActivity.onCreate() 및 onNewIntent()에서 수행됨
-    // ✅ URL 파라미터 처리: d (driverId), dn (driverName)
+    // URL 파라미터 처리: d (driverId), dn (driverName)
     LaunchedEffect(initialIntent) {
         initialIntent?.data?.let { uri ->
             val driverId = uri.getQueryParameter("d")
@@ -421,123 +430,107 @@ fun CustomerApp(
         }
     }
 
-    // 사무실 정보: SharedPreferences 또는 Attribution 매칭에서 얻음
+    // 화면 상태
+    var currentScreen by remember { mutableStateOf(AppScreen.LOADING) }
+
+    // 사무실 정보
     var currentOfficeId by remember { mutableStateOf<String?>(null) }
     var currentProvinceId by remember { mutableStateOf<String?>(null) }
     var currentCityId by remember { mutableStateOf<String?>(null) }
     var currentUserId by remember { mutableStateOf<String?>(null) }
-    var showProfileSetup by remember { mutableStateOf(false) }
-    var hasProfileInFirestore by remember { mutableStateOf(false) }
 
-    // 기사 추천 정보
-    var referralDriverId by remember { mutableStateOf<String?>(null) }
-    var referralDriverName by remember { mutableStateOf<String?>(null) }
+    // 인증된 전화번호 (Phone Auth에서 전달)
+    var verifiedPhoneNumber by remember { mutableStateOf("") }
 
-    // 초기화: SharedPreferences에서 값 로드 + 익명 인증 확인
+    // CustomerInfo 상태 (사무실 연락처 포함)
+    var customerInfo by remember { mutableStateOf<com.designated.customer.data.model.CustomerInfo?>(null) }
+
+    // 초기화: Phone Auth 상태 + 사무실 정보 + 프로필 확인
     LaunchedEffect(Unit) {
-        var prefsOfficeId = preferencesManager.getOfficeId()
-        var prefsProvinceId = preferencesManager.getProvinceId()
-        var prefsCityId = preferencesManager.getCityId()
-
-        // TODO: 테스트용 하드코딩 - 나중에 제거할 것
-        // 사무실 정보가 없으면 VIP 사무실(경기도 양평군)로 자동 설정
-        if (prefsOfficeId == null || prefsProvinceId == null || prefsCityId == null) {
-            android.util.Log.d("TestMode", "⚠️ 테스트 모드: VIP 사무실(양평군) 자동 설정")
-            prefsProvinceId = "gyeonggi"
-            prefsCityId = "yangpyeong"
-            prefsOfficeId = "UoLbMg6QhUQoc8Bz73sC"
-            preferencesManager.saveOfficeInfo(prefsOfficeId, prefsProvinceId, prefsCityId)
-        }
+        val prefsOfficeId = preferencesManager.getOfficeId()
+        val prefsProvinceId = preferencesManager.getProvinceId()
+        val prefsCityId = preferencesManager.getCityId()
 
         currentOfficeId = prefsOfficeId
         currentProvinceId = prefsProvinceId
         currentCityId = prefsCityId
 
-        // 익명 인증 상태 확인
         val currentUser = auth.currentUser
-        if (currentUser != null) {
-            android.util.Log.d("AnonymousAuth", "이미 로그인됨: ${currentUser.uid}")
+        if (currentUser != null && currentUser.phoneNumber != null) {
+            // Phone Auth로 로그인된 사용자 (재방문)
+            android.util.Log.d("PhoneAuth", "이미 로그인됨: ${currentUser.uid}, phone: ${currentUser.phoneNumber}")
             currentUserId = currentUser.uid
-        } else {
-            // 자동 익명 인증
-            try {
-                android.util.Log.d("AnonymousAuth", "익명 인증 시작")
-                val result = auth.signInAnonymously().await()
-                currentUserId = result.user?.uid
-                android.util.Log.d("AnonymousAuth", "익명 인증 성공: $currentUserId")
-            } catch (e: Exception) {
-                android.util.Log.e("AnonymousAuth", "익명 인증 실패", e)
+            verifiedPhoneNumber = currentUser.phoneNumber ?: ""
+
+            // 프로필 존재 여부 확인
+            if (prefsOfficeId != null && prefsProvinceId != null && prefsCityId != null) {
+                try {
+                    val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                    val doc = firestore
+                        .collection("provinces").document(prefsProvinceId)
+                        .collection("cities").document(prefsCityId)
+                        .collection("offices").document(prefsOfficeId)
+                        .collection("customers").document(currentUser.uid)
+                        .get()
+                        .await()
+
+                    if (doc.exists()) {
+                        android.util.Log.d("ProfileCheck", "프로필 발견: ${currentUser.uid}")
+                        customerInfo = com.designated.customer.data.model.CustomerInfo.fromMap(doc.data ?: emptyMap())
+
+                        // 전화번호를 SharedPreferences에 저장 (FCM 토큰 저장에 필요)
+                        customerInfo?.phoneNumber?.let { phone ->
+                            preferencesManager.savePhoneNumber(phone)
+                        }
+
+                        // lastActiveAt 업데이트 (앱 실행 시마다)
+                        try {
+                            firestore
+                                .collection("provinces").document(prefsProvinceId)
+                                .collection("cities").document(prefsCityId)
+                                .collection("offices").document(prefsOfficeId)
+                                .collection("customers").document(currentUser.uid)
+                                .update("lastActiveAt", com.google.firebase.Timestamp.now())
+                                .await()
+                            android.util.Log.d("ProfileCheck", "lastActiveAt 업데이트 완료")
+                        } catch (e: Exception) {
+                            android.util.Log.e("ProfileCheck", "lastActiveAt 업데이트 실패", e)
+                        }
+
+                        currentScreen = AppScreen.MAIN
+                    } else {
+                        // 로그인은 됐지만 프로필 없음 (가입 중단된 경우)
+                        android.util.Log.d("ProfileCheck", "프로필 없음, 프로필 입력 화면 표시")
+                        currentScreen = AppScreen.PROFILE_SETUP
+                    }
+                } catch (e: Exception) {
+                    if (e::class.simpleName?.contains("LeftCompositionCancellationException") == true ||
+                        e.message?.contains("left the composition") == true) {
+                        return@LaunchedEffect
+                    }
+                    android.util.Log.e("ProfileCheck", "프로필 확인 실패", e)
+                    currentScreen = AppScreen.PROFILE_SETUP
+                }
+            } else {
+                // Phone Auth 완료됐지만 사무실 정보 없음 (비정상 상태)
+                android.util.Log.w("PhoneAuth", "로그인됨이지만 사무실 정보 없음")
+                currentScreen = AppScreen.OFFICE_SELECTION
             }
-        }
-    }
-
-    // CustomerInfo 상태 (사무실 연락처 포함)
-    var customerInfo by remember { mutableStateOf<com.designated.customer.data.model.CustomerInfo?>(null) }
-
-    // 프로필 존재 여부 확인 (익명 인증 완료 + 사무실 매칭 완료 후)
-    LaunchedEffect(currentUserId, currentProvinceId, currentCityId, currentOfficeId) {
-        if (currentUserId != null && currentProvinceId != null && currentCityId != null && currentOfficeId != null) {
-            try {
-                val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                val doc = firestore
-                    .collection("provinces").document(currentProvinceId!!)
-                    .collection("cities").document(currentCityId!!)
-                    .collection("offices").document(currentOfficeId!!)
-                    .collection("customers").document(currentUserId!!)
-                    .get()
-                    .await()
-
-                if (doc.exists()) {
-                    // 프로필이 이미 있음
-                    android.util.Log.d("ProfileCheck", "프로필 발견: ${currentUserId}")
-                    hasProfileInFirestore = true
-                    customerInfo = com.designated.customer.data.model.CustomerInfo.fromMap(doc.data ?: emptyMap())
-
-                    // ✅ 전화번호를 SharedPreferences에 저장 (FCM 토큰 저장에 필요)
-                    customerInfo?.phoneNumber?.let { phone ->
-                        preferencesManager.savePhoneNumber(phone)
-                        android.util.Log.d("ProfileCheck", "전화번호 저장 완료: $phone")
-                    }
-
-                    // lastActiveAt 업데이트 (앱 실행 시마다)
-                    try {
-                        firestore
-                            .collection("provinces").document(currentProvinceId!!)
-                            .collection("cities").document(currentCityId!!)
-                            .collection("offices").document(currentOfficeId!!)
-                            .collection("customers").document(currentUserId!!)
-                            .update("lastActiveAt", com.google.firebase.Timestamp.now())
-                            .await()
-                        android.util.Log.d("ProfileCheck", "lastActiveAt 업데이트 완료")
-                    } catch (e: Exception) {
-                        android.util.Log.e("ProfileCheck", "lastActiveAt 업데이트 실패", e)
-                    }
-                } else {
-                    // 프로필 없음 → 프로필 입력 화면 표시
-                    android.util.Log.d("ProfileCheck", "프로필 없음, 입력 화면 표시")
-                    hasProfileInFirestore = false
-                    showProfileSetup = true
-                }
-            } catch (e: Exception) {
-                // LeftCompositionCancellationException은 Compose 라이프사이클 에러이므로 무시
-                if (e::class.simpleName?.contains("LeftCompositionCancellationException") == true ||
-                    e.message?.contains("left the composition") == true) {
-                    android.util.Log.d("ProfileCheck", "Composition cancelled - 정상 동작, 무시")
-                    return@LaunchedEffect
-                }
-
-                android.util.Log.e("ProfileCheck", "프로필 확인 실패", e)
-                // 다른 에러 시에만 프로필 입력 화면 표시
-                hasProfileInFirestore = false
-                showProfileSetup = true
+        } else {
+            // 미로그인 → 가입 흐름 시작
+            if (prefsOfficeId == null || prefsProvinceId == null || prefsCityId == null) {
+                currentScreen = AppScreen.OFFICE_SELECTION
+            } else if (!preferencesManager.isTermsAccepted()) {
+                currentScreen = AppScreen.TERMS_AGREEMENT
+            } else {
+                currentScreen = AppScreen.PHONE_AUTH
             }
         }
     }
 
     Scaffold(modifier = Modifier.fillMaxSize()) { paddingValues ->
-        when {
-            // 0. 인증 대기 중이면 로딩 화면
-            currentUserId == null -> {
+        when (currentScreen) {
+            AppScreen.LOADING -> {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -551,61 +544,15 @@ fun CustomerApp(
                         androidx.compose.material3.CircularProgressIndicator()
                         Spacer(modifier = Modifier.height(16.dp))
                         androidx.compose.material3.Text(
-                            text = "인증 중...",
+                            text = "로딩 중...",
                             style = androidx.compose.material3.MaterialTheme.typography.bodyLarge
                         )
                     }
                 }
             }
 
-            // 2. 프로필 입력이 필요하면 프로필 입력 화면
-            showProfileSetup && currentProvinceId != null && currentCityId != null && currentOfficeId != null -> {
-                ProfileSetupScreen(
-                    provinceId = currentProvinceId!!,
-                    cityId = currentCityId!!,
-                    officeId = currentOfficeId!!,
-
-                    onProfileComplete = {
-                        // 프로필 입력 완료
-                        android.util.Log.d("ProfileSetup", "프로필 입력 완료")
-                        showProfileSetup = false
-                        hasProfileInFirestore = true
-
-                        // CustomerInfo 다시 로드
-                        coroutineScope.launch {
-                            try {
-                                val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                                val doc = firestore
-                                    .collection("provinces").document(currentProvinceId!!)
-                                    .collection("cities").document(currentCityId!!)
-                                    .collection("offices").document(currentOfficeId!!)
-                                    .collection("customers").document(currentUserId!!)
-                                    .get()
-                                    .await()
-
-                                if (doc.exists()) {
-                                    customerInfo = com.designated.customer.data.model.CustomerInfo.fromMap(doc.data ?: emptyMap())
-
-                                    // ✅ 전화번호를 SharedPreferences에 저장 (FCM 토큰 저장에 필요)
-                                    customerInfo?.phoneNumber?.let { phone ->
-                                        preferencesManager.savePhoneNumber(phone)
-                                        android.util.Log.d("ProfileSetup", "전화번호 저장 완료: $phone")
-                                    }
-                                }
-
-
-                            } catch (e: Exception) {
-                                android.util.Log.e("ProfileSetup", "CustomerInfo 로드 실패", e)
-                            }
-                        }
-                    },
-                    modifier = Modifier.padding(paddingValues)
-                )
-            }
-            // 2. 사무실 정보가 없으면 Remote Config에 따라 처리
-            currentOfficeId == null || currentProvinceId == null || currentCityId == null -> {
+            AppScreen.OFFICE_SELECTION -> {
                 if (allowDirectInstall) {
-                    // Direct install 허용 시: 사무실 선택 화면 표시
                     com.designated.customer.ui.office.OfficeSelectionScreen(
                         modifier = Modifier.padding(paddingValues),
                         onOfficeSelected = { officeId, provinceId, cityId ->
@@ -613,10 +560,19 @@ fun CustomerApp(
                             currentOfficeId = officeId
                             currentProvinceId = provinceId
                             currentCityId = cityId
+                            // 이미 Phone Auth 완료 상태면 프로필 입력으로 직행
+                            val user = auth.currentUser
+                            if (user != null && user.phoneNumber != null) {
+                                verifiedPhoneNumber = user.phoneNumber ?: ""
+                                currentUserId = user.uid
+                                currentScreen = AppScreen.PROFILE_SETUP
+                            } else {
+                                currentScreen = AppScreen.TERMS_AGREEMENT
+                            }
                         }
                     )
                 } else {
-                    // Direct install 불허 시: 기존 에러 화면 (QR 코드 재설치 안내)
+                    // QR 코드 재설치 안내 화면
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -629,7 +585,7 @@ fun CustomerApp(
                             modifier = Modifier.padding(32.dp)
                         ) {
                             androidx.compose.material3.Icon(
-                                imageVector = androidx.compose.material.icons.Icons.Default.LocationOn,
+                                imageVector = Icons.Default.LocationOn,
                                 contentDescription = null,
                                 modifier = Modifier.size(72.dp),
                                 tint = androidx.compose.material3.MaterialTheme.colorScheme.error
@@ -638,35 +594,127 @@ fun CustomerApp(
                             androidx.compose.material3.Text(
                                 text = "사무실 정보를 찾을 수 없습니다",
                                 style = androidx.compose.material3.MaterialTheme.typography.headlineSmall,
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             androidx.compose.material3.Text(
                                 text = "QR 코드를 통해 앱을 다시 설치해주세요.\n\n1. 사무실에서 받은 QR 코드를 스캔하세요\n2. 랜딩페이지에서 APK를 다운로드하세요\n3. 앱을 설치하고 실행하세요",
                                 style = androidx.compose.material3.MaterialTheme.typography.bodyLarge,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                textAlign = TextAlign.Center,
                                 color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                 }
             }
-            // 3. 모든 정보가 있으면 메인 네비게이션
-            hasProfileInFirestore && currentProvinceId != null && currentCityId != null && currentOfficeId != null && customerInfo != null -> {
-                MainNavigation(
-                    provinceId = currentProvinceId!!,
-                    cityId = currentCityId!!,
-                    officeId = currentOfficeId!!,
-                    phoneNumber = customerInfo!!.phoneNumber,
-                    customerInfo = customerInfo, // CustomerInfo 전달
-                    onLogout = {
-                        // 로그아웃 처리 (경고 필요)
-                        android.util.Log.w("Logout", "로그아웃은 데이터 손실을 초래할 수 있습니다")
-                        // 실제로는 로그아웃 안 함 (자동 로그인 유지)
+
+            AppScreen.TERMS_AGREEMENT -> {
+                TermsAgreementScreen(
+                    onTermsAgreed = { termsVersion, marketingConsent ->
+                        preferencesManager.saveTermsAcceptance(termsVersion, marketingConsent)
+                        // 이미 Phone Auth 완료 상태면 프로필 입력으로 직행
+                        val user = auth.currentUser
+                        if (user != null && user.phoneNumber != null) {
+                            verifiedPhoneNumber = user.phoneNumber ?: ""
+                            currentUserId = user.uid
+                            currentScreen = AppScreen.PROFILE_SETUP
+                        } else {
+                            currentScreen = AppScreen.PHONE_AUTH
+                        }
                     },
+                    onViewTerms = { currentScreen = AppScreen.TERMS_VIEWER },
+                    onViewPrivacy = { currentScreen = AppScreen.PRIVACY_VIEWER },
                     modifier = Modifier.padding(paddingValues)
                 )
+            }
+
+            AppScreen.TERMS_VIEWER -> {
+                DocumentViewerScreen(
+                    title = "이용약관",
+                    content = LegalDocuments.termsOfService,
+                    onBack = { currentScreen = AppScreen.TERMS_AGREEMENT }
+                )
+            }
+
+            AppScreen.PRIVACY_VIEWER -> {
+                DocumentViewerScreen(
+                    title = "개인정보처리방침",
+                    content = LegalDocuments.privacyPolicy,
+                    onBack = { currentScreen = AppScreen.TERMS_AGREEMENT }
+                )
+            }
+
+            AppScreen.PHONE_AUTH -> {
+                PhoneAuthScreen(
+                    onAuthSuccess = { phoneNumber ->
+                        verifiedPhoneNumber = phoneNumber
+                        currentUserId = auth.currentUser?.uid
+                        preferencesManager.savePhoneNumber(phoneNumber)
+                        currentScreen = AppScreen.PROFILE_SETUP
+                    },
+                    onBack = { currentScreen = AppScreen.TERMS_AGREEMENT },
+                    modifier = Modifier.padding(paddingValues)
+                )
+            }
+
+            AppScreen.PROFILE_SETUP -> {
+                if (currentProvinceId != null && currentCityId != null && currentOfficeId != null) {
+                    ProfileSetupScreen(
+                        provinceId = currentProvinceId!!,
+                        cityId = currentCityId!!,
+                        officeId = currentOfficeId!!,
+                        verifiedPhoneNumber = verifiedPhoneNumber,
+                        termsVersion = preferencesManager.getTermsVersion() ?: "1.0.0",
+                        marketingConsent = preferencesManager.getMarketingConsent(),
+                        onProfileComplete = {
+                            android.util.Log.d("ProfileSetup", "프로필 입력 완료")
+
+                            // CustomerInfo 로드 후 메인 화면으로 전환
+                            coroutineScope.launch {
+                                try {
+                                    val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                                    val doc = firestore
+                                        .collection("provinces").document(currentProvinceId!!)
+                                        .collection("cities").document(currentCityId!!)
+                                        .collection("offices").document(currentOfficeId!!)
+                                        .collection("customers").document(currentUserId!!)
+                                        .get()
+                                        .await()
+
+                                    if (doc.exists()) {
+                                        customerInfo = com.designated.customer.data.model.CustomerInfo.fromMap(doc.data ?: emptyMap())
+
+                                        customerInfo?.phoneNumber?.let { phone ->
+                                            preferencesManager.savePhoneNumber(phone)
+                                            android.util.Log.d("ProfileSetup", "전화번호 저장 완료: $phone")
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    android.util.Log.e("ProfileSetup", "CustomerInfo 로드 실패", e)
+                                }
+                                currentScreen = AppScreen.MAIN
+                            }
+                        },
+                        modifier = Modifier.padding(paddingValues)
+                    )
+                }
+            }
+
+            AppScreen.MAIN -> {
+                if (currentProvinceId != null && currentCityId != null && currentOfficeId != null && customerInfo != null) {
+                    MainNavigation(
+                        provinceId = currentProvinceId!!,
+                        cityId = currentCityId!!,
+                        officeId = currentOfficeId!!,
+                        phoneNumber = customerInfo!!.phoneNumber,
+                        customerInfo = customerInfo,
+                        onLogout = {
+                            android.util.Log.w("Logout", "로그아웃은 데이터 손실을 초래할 수 있습니다")
+                        },
+                        modifier = Modifier.padding(paddingValues)
+                    )
+                }
             }
         }
     }

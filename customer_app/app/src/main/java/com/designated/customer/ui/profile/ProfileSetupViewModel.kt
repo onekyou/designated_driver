@@ -15,7 +15,6 @@ import kotlinx.coroutines.tasks.await
 
 data class ProfileSetupState(
     val nickname: String = "",
-    val phoneNumber: String = "",
     val address: String = "",
     val isLoading: Boolean = false,
     val error: String? = null,
@@ -35,10 +34,6 @@ class ProfileSetupViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(nickname = nickname, error = null)
     }
 
-    fun updatePhoneNumber(phoneNumber: String) {
-        _uiState.value = _uiState.value.copy(phoneNumber = phoneNumber, error = null)
-    }
-
     fun updateAddress(address: String) {
         _uiState.value = _uiState.value.copy(address = address, error = null)
     }
@@ -50,7 +45,9 @@ class ProfileSetupViewModel : ViewModel() {
         provinceId: String,
         cityId: String,
         officeId: String,
-
+        phoneNumber: String,
+        termsVersion: String,
+        marketingConsent: Boolean,
         driverId: String? = null,
         driverName: String? = null
     ) {
@@ -62,15 +59,8 @@ class ProfileSetupViewModel : ViewModel() {
             return
         }
 
-        if (state.phoneNumber.isBlank()) {
-            _uiState.value = state.copy(error = "전화번호를 입력해주세요")
-            return
-        }
-
-        // 전화번호 형식 검사 (간단한 검증)
-        val phonePattern = Regex("^01[0-9]-?[0-9]{3,4}-?[0-9]{4}$")
-        if (!phonePattern.matches(state.phoneNumber.replace("-", ""))) {
-            _uiState.value = state.copy(error = "올바른 전화번호 형식이 아닙니다")
+        if (phoneNumber.isBlank()) {
+            _uiState.value = state.copy(error = "전화번호 인증이 필요합니다")
             return
         }
 
@@ -98,9 +88,9 @@ class ProfileSetupViewModel : ViewModel() {
                 val initialGrade = if (officeId == "testOffice") "vip" else "bronze"
                 val customerData = hashMapOf(
                     "id" to userId,
-                    "phoneNumber" to state.phoneNumber,
+                    "phoneNumber" to phoneNumber,
                     "name" to state.nickname,
-                    "homeAddress" to state.address,  // homeAddress로 저장
+                    "homeAddress" to state.address,
                     "grade" to initialGrade,
                     "points" to 0,
                     "totalRides" to 0,
@@ -111,12 +101,15 @@ class ProfileSetupViewModel : ViewModel() {
                     "attributionScore" to null,
                     "registeredAt" to now,
                     "lastRideAt" to null,
-                    "lastActiveAt" to now,  // 마지막 활동 시간 추가
-                    // 사무실 연락처 정보는 기본값으로 빈 문자열 설정
+                    "lastActiveAt" to now,
                     "officePhone" to "",
                     "bankName" to "",
                     "accountNumber" to "",
-                    "accountHolder" to ""
+                    "accountHolder" to "",
+                    "termsAcceptedAt" to now,
+                    "termsVersion" to termsVersion,
+                    "marketingConsent" to marketingConsent,
+                    "authProvider" to "phone"
                 )
 
                 // 기사 추천 정보가 있으면 추가
@@ -152,11 +145,11 @@ class ProfileSetupViewModel : ViewModel() {
                         .collection("offices")
                         .document(officeId)
                         .collection("customerInfo")
-                        .document(state.phoneNumber)
+                        .document(phoneNumber)
                         .set(
                             mapOf(
                                 "fcmToken" to fcmToken,
-                                "phoneNumber" to state.phoneNumber,
+                                "phoneNumber" to phoneNumber,
                                 "updatedAt" to now
                             ),
                             com.google.firebase.firestore.SetOptions.merge()

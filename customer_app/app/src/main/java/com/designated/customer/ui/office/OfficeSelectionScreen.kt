@@ -76,7 +76,7 @@ fun OfficeSelectionScreen(
         // 테스트용 버튼 - VIP 사무실 (양평군)
         Button(
             onClick = {
-                onOfficeSelected("UoLbMg6QhUQoc8Bz73sC", "gyeonggi", "yangpyeong")
+                onOfficeSelected("0evNgfgm3xdq0v3VTFYK", "gyeonggi", "yangpyeong")
             },
             modifier = Modifier
                 .fillMaxWidth()

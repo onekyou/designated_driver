@@ -17,13 +17,13 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun PhoneAuthScreen(
     modifier: Modifier = Modifier,
-    onAuthSuccess: (String) -> Unit
+    onAuthSuccess: (String) -> Unit,
+    onBack: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val activity = context as Activity
 
-    // ViewModel 생성
-    val viewModel = remember { PhoneAuthViewModel() }
+    val viewModel: PhoneAuthViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val uiState = viewModel.uiState
 
     // 인증 성공 시 전화번호 반환
@@ -40,6 +40,18 @@ fun PhoneAuthScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        if (onBack != null && !uiState.isCodeSent) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Start
+            ) {
+                TextButton(onClick = onBack) {
+                    Text("< 뒤로")
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
         Text(
             text = "전화번호 인증",
             fontSize = 24.sp,

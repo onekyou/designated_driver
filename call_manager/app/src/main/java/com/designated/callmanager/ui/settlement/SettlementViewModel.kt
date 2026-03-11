@@ -25,6 +25,7 @@ import com.designated.callmanager.data.local.CreditEntryEntity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.tasks.await
 import android.util.Log
 import com.designated.callmanager.data.settlement.SettlementSession
 import com.designated.callmanager.data.settlement.CallSettlement
@@ -1234,10 +1235,11 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                         )
                     }
 
-                    // 오늘 날짜의 dailySettlement가 있고, 마감 상태인 경우 리스트에 추가
+                    // 오늘 날짜의 dailySettlement가 있고, 마감/확인/거절 상태인 경우 리스트에 추가
                     if (dailySettlement.date == today &&
                         (dailySettlement.status == DailySettlementStatus.PENDING_CONFIRM ||
-                         dailySettlement.status == DailySettlementStatus.CONFIRMED)) {
+                         dailySettlement.status == DailySettlementStatus.CONFIRMED ||
+                         dailySettlement.status == DailySettlementStatus.REJECTED)) {
                         dailySettlements.add(
                             DriverDailySettlementSummary(
                                 driverId = driverId,
@@ -1457,9 +1459,10 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                 val dailySettlementMap = doc.get("dailySettlement") as? Map<String, Any?>
                 val dailySettlementStatus = dailySettlementMap?.get("status") as? String
 
-                // CONFIRMED: 이미 confirmDailySettlement에서 carryOver 처리 완료
-                if (dailySettlementStatus == DailySettlementStatus.CONFIRMED.name) {
-                    Log.d("SettlementViewModel", "기사 $driverId: 이미 정산확인 완료, carryOver 재처리 건너뜀")
+                // CONFIRMED/REJECTED: carryOver 재처리 불필요
+                if (dailySettlementStatus == DailySettlementStatus.CONFIRMED.name ||
+                    dailySettlementStatus == DailySettlementStatus.REJECTED.name) {
+                    Log.d("SettlementViewModel", "기사 $driverId: 정산 ${dailySettlementStatus}, carryOver 재처리 건너뜀")
                     return@runTransaction null
                 }
 
@@ -1630,10 +1633,109 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
 
                 _isConfirming.value = false
                 onResult(true, "확인 완료")
+
+                // 기사에게 FCM 전송 (Cloud Function 호출)
+                notifyDriverSettlementResult(driverId, "CONFIRMED")
             }.addOnFailureListener { e ->
                 Log.e("SettlementViewModel", "Failed to confirm daily settlement", e)
                 _isConfirming.value = false
                 onResult(false, "확인 실패: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * 정산 거절 (기사가 재제출해야 함)
+     * - dailySettlement.status → REJECTED
+     * - carryOver는 변경하지 않음 (원래값 유지)
+     */
+    fun rejectDailySettlement(
+        driverId: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        val provinceId = currentProvinceId
+        val cityId = currentCityId
+        val officeId = currentOfficeId
+
+        if (provinceId == null || cityId == null || officeId == null) {
+            onResult(false, "사무실 정보가 설정되지 않았습니다")
+            return
+        }
+
+        val driverRef = firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
+            .collection("offices").document(officeId)
+            .collection("designated_drivers").document(driverId)
+
+        viewModelScope.launch {
+            firestore.runTransaction { transaction ->
+                val doc = transaction.get(driverRef)
+
+                @Suppress("UNCHECKED_CAST")
+                val dailySettlementMap = doc.get("dailySettlement") as? Map<String, Any?>
+                val currentStatus = dailySettlementMap?.get("status") as? String
+
+                if (currentStatus != DailySettlementStatus.PENDING_CONFIRM.name) {
+                    throw Exception("마감 대기 상태가 아닙니다 (현재: $currentStatus)")
+                }
+
+                // dailySettlement.status만 REJECTED로 변경 (carryOver 변경 없음)
+                transaction.update(driverRef, mapOf(
+                    "dailySettlement.status" to DailySettlementStatus.REJECTED.name,
+                    "dailySettlement.rejectedAt" to Timestamp.now()
+                ))
+            }.addOnSuccessListener {
+                Log.d("SettlementViewModel", "Daily settlement rejected for driver $driverId")
+
+                // 로컬 리스트 즉시 업데이트
+                val currentList = _dailySettlementList.value.toMutableList()
+                val index = currentList.indexOfFirst { it.driverId == driverId }
+                if (index >= 0) {
+                    val existing = currentList[index]
+                    currentList[index] = existing.copy(
+                        dailySettlement = existing.dailySettlement?.copy(
+                            status = DailySettlementStatus.REJECTED
+                        )
+                    )
+                    _dailySettlementList.value = currentList
+                }
+
+                onResult(true, "거절 완료")
+
+                // 기사에게 FCM 전송
+                notifyDriverSettlementResult(driverId, "REJECTED")
+            }.addOnFailureListener { e ->
+                Log.e("SettlementViewModel", "Failed to reject daily settlement", e)
+                onResult(false, "거절 실패: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * 기사에게 정산 확인/거절 FCM 전송 (Cloud Function 호출)
+     */
+    private fun notifyDriverSettlementResult(driverId: String, result: String) {
+        val provinceId = currentProvinceId ?: return
+        val cityId = currentCityId ?: return
+        val officeId = currentOfficeId ?: return
+
+        viewModelScope.launch {
+            try {
+                val data = hashMapOf(
+                    "driverId" to driverId,
+                    "result" to result,
+                    "provinceId" to provinceId,
+                    "cityId" to cityId,
+                    "officeId" to officeId
+                )
+                FirebaseFunctions.getInstance()
+                    .getHttpsCallable("notifyDriverSettlementResult")
+                    .call(data)
+                    .await()
+                Log.d("SettlementViewModel", "FCM sent: $result for driver $driverId")
+            } catch (e: Exception) {
+                // FCM 전송 실패는 치명적이지 않음 (Firestore 리스너로 감지 가능)
+                Log.w("SettlementViewModel", "FCM 전송 실패 (무시 가능): ${e.message}")
             }
         }
     }
