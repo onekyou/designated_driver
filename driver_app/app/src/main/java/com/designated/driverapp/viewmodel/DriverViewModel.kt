@@ -1627,7 +1627,8 @@ class DriverViewModel @Inject constructor(
                 driverRef.update(
                     mapOf(
                         "settlementLastCleared" to nowTimestamp,
-                        Constants.FIELD_STATUS to DriverStatus.OFFLINE.value
+                        Constants.FIELD_STATUS to DriverStatus.OFFLINE.value,
+                        "dailySettlement" to com.google.firebase.firestore.FieldValue.delete()
                     )
                 ).await()
 

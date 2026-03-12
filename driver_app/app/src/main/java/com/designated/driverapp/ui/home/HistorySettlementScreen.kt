@@ -511,8 +511,13 @@ fun HistorySettlementScreen(
             }
 
             // 실납입 상태 (입력 필드 없이 기본값 표시 + 확인/정정)
-            var actualDeposit by remember { mutableStateOf(0) }
-            var isDepositConfirmed by remember { mutableStateOf(false) }
+            var isDepositEdited by remember { mutableStateOf(false) }
+            var actualDeposit by remember { mutableStateOf(adjustedDeposit) }
+            // 정정하지 않은 상태에서는 adjustedDeposit 변경에 동기화
+            if (!isDepositEdited) {
+                actualDeposit = adjustedDeposit
+            }
+            var isDepositConfirmed by remember { mutableStateOf(true) }
             var showDepositEditDialog by remember { mutableStateOf(false) }
             var depositEditInput by remember { mutableStateOf("") }
 
@@ -525,8 +530,8 @@ fun HistorySettlementScreen(
             // 현금 수령액
             val cashReceived = todaySettlement.cashReceived
 
-            // 수입금 = 현금 수령 - 실납입 (확인 전이면 기본값 사용)
-            val actualReceived = cashReceived - displayDeposit
+            // 최종 수입금 = 기사 몫 (총운행료 × (1 - 납입비율))
+            val actualReceived = realIncome
 
             // 총 정산 차액 = (실납입 - 조정된 납입액)
             // 양수: 환급금 (기사가 받을 돈), 음수: 미납금 (기사가 더 낼 돈)
@@ -564,124 +569,6 @@ fun HistorySettlementScreen(
                     },
                     containerColor = Color(0xFF2A2A2A)
                 )
-            }
-
-            // 오늘 발생 미환급금 (최종납입금이 음수인 경우 = 사무실이 기사에게 줄 돈)
-            val todayNewUnpaid = if (rawFinalDeposit < 0) -rawFinalDeposit else 0
-
-            // 누적 미수령금/미납금 카드 (이월금이 있거나 공제 내역이 있을 때 표시)
-            if (remainingCarryOver != 0 || usedFromCarryOver > 0 || carryOverStatus == CarryOverStatus.TRANSFERRED) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (carryOverStatus == CarryOverStatus.TRANSFERRED)
-                            Color(0xFF2E4A2E) else Color(0xFF4A3A2A)
-                    ),
-                    elevation = CardDefaults.cardElevation(0.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                if (remainingCarryOver >= 0) "누적 미수령금" else "누적 미납금",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = if (remainingCarryOver > 0) Color(0xFFFF6666)
-                                    else if (remainingCarryOver < 0) Color(0xFFFF9800)
-                                    else Color(0xFF4CAF50)
-                            )
-                            Text(
-                                "%,d원".format(kotlin.math.abs(remainingCarryOver)),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = if (remainingCarryOver > 0) Color(0xFFFF6666)
-                                    else if (remainingCarryOver < 0) Color(0xFFFF9800)
-                                    else Color(0xFF4CAF50)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // 이월 금액 (양수: 미수령금, 음수: 미납금)
-                        if (carryOverBalance != 0) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    if (carryOverBalance > 0) "이월 (미수령)" else "이월 (미납)",
-                                    color = Color.Gray,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                                Text(
-                                    "%,d원".format(kotlin.math.abs(carryOverBalance)),
-                                    color = if (carryOverBalance > 0) Color.White else Color(0xFFFF9800),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                        }
-
-                        // 오늘 납입으로 공제된 금액
-                        if (usedFromCarryOver > 0) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("오늘 공제", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
-                                Text("-%,d원".format(usedFromCarryOver), color = Color(0xFF4CAF50), style = MaterialTheme.typography.bodyMedium)
-                            }
-                        }
-
-                        // 오늘 새로 발생한 미환급금 (외상이 많아서 사무실이 줄 돈)
-                        if (todayNewUnpaid > 0) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("오늘 발생", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
-                                Text("+%,d원".format(todayNewUnpaid), color = Color(0xFFFFAA00), style = MaterialTheme.typography.bodyMedium)
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        // 상태 표시
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "상태: ${when (carryOverStatus) {
-                                    CarryOverStatus.TRANSFERRED -> "이체됨"
-                                    CarryOverStatus.SETTLED -> "수령완료"
-                                    else -> "미지급"
-                                }}",
-                                color = when (carryOverStatus) {
-                                    CarryOverStatus.TRANSFERRED -> Color(0xFF4CAF50)
-                                    CarryOverStatus.SETTLED -> Color.Gray
-                                    else -> Color(0xFFFFAA00)
-                                },
-                                style = MaterialTheme.typography.bodySmall
-                            )
-
-                            // 이체됨 상태일 때 수령완료 버튼
-                            if (carryOverStatus == CarryOverStatus.TRANSFERRED) {
-                                Button(
-                                    onClick = { showReceiveConfirmDialog = true },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
-                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
-                                ) {
-                                    Text("수령완료", style = MaterialTheme.typography.bodySmall)
-                                }
-                            }
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(12.dp))
             }
 
             // 통합 정산 카드 (접기/펼치기)
@@ -805,34 +692,9 @@ fun HistorySettlementScreen(
                                     style = MaterialTheme.typography.bodyMedium
                                 )
 
-                                // 확인 체크 표시 (확인 완료 시)
-                                if (isDepositConfirmed) {
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("✓", color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
-                                }
-
                                 Spacer(modifier = Modifier.width(12.dp))
 
-                                // 확인/정정 버튼
-                                if (!isDepositConfirmed) {
-                                    // 미확인 상태: 확인 버튼
-                                    Button(
-                                        onClick = {
-                                            actualDeposit = displayDeposit
-                                            isDepositConfirmed = true
-                                        },
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = Color(0xFF4CAF50)
-                                        ),
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                        modifier = Modifier.height(32.dp)
-                                    ) {
-                                        Text("확인", style = MaterialTheme.typography.bodySmall)
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                }
-
-                                // 정정 버튼 (항상 표시)
+                                // 정정 버튼
                                 Button(
                                     onClick = {
                                         depositEditInput = displayDeposit.toString()
@@ -907,6 +769,7 @@ fun HistorySettlementScreen(
                                 Button(
                                     onClick = {
                                         actualDeposit = depositEditInput.toIntOrNull() ?: 0
+                                        isDepositEdited = true
                                         isDepositConfirmed = true
                                         showDepositEditDialog = false
                                     },
@@ -980,6 +843,126 @@ fun HistorySettlementScreen(
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 오늘 발생 미환급금 (최종납입금이 음수인 경우 = 사무실이 기사에게 줄 돈)
+            val todayNewUnpaid = if (rawFinalDeposit < 0) -rawFinalDeposit else 0
+
+            // 누적 미수령금/미납금 카드 (이월금이 있거나 공제 내역이 있을 때 표시)
+            if (remainingCarryOver != 0 || usedFromCarryOver > 0 || carryOverStatus == CarryOverStatus.TRANSFERRED) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (carryOverStatus == CarryOverStatus.TRANSFERRED)
+                            Color(0xFF2E4A2E) else Color(0xFF4A3A2A)
+                    ),
+                    elevation = CardDefaults.cardElevation(0.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                if (remainingCarryOver >= 0) "누적 미수령금" else "누적 미납금",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (remainingCarryOver > 0) Color(0xFFFF6666)
+                                    else if (remainingCarryOver < 0) Color(0xFFFF9800)
+                                    else Color(0xFF4CAF50)
+                            )
+                            Text(
+                                "%,d원".format(kotlin.math.abs(remainingCarryOver)),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (remainingCarryOver > 0) Color(0xFFFF6666)
+                                    else if (remainingCarryOver < 0) Color(0xFFFF9800)
+                                    else Color(0xFF4CAF50)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // 이월 금액 (양수: 미수령금, 음수: 미납금)
+                        if (carryOverBalance != 0) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    if (carryOverBalance > 0) "이월 (미수령)" else "이월 (미납)",
+                                    color = Color.Gray,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Text(
+                                    "%,d원".format(kotlin.math.abs(carryOverBalance)),
+                                    color = if (carryOverBalance > 0) Color.White else Color(0xFFFF9800),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+
+                        // 오늘 납입으로 공제된 금액
+                        if (usedFromCarryOver > 0) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("오늘 공제", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                                Text("-%,d원".format(usedFromCarryOver), color = Color(0xFF4CAF50), style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+
+                        // 오늘 새로 발생한 미환급금 (외상이 많아서 사무실이 줄 돈)
+                        if (todayNewUnpaid > 0) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("오늘 발생", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                                Text("+%,d원".format(todayNewUnpaid), color = Color(0xFFFFAA00), style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        // 상태 표시
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "상태: ${when (carryOverStatus) {
+                                    CarryOverStatus.TRANSFERRED -> "이체됨"
+                                    CarryOverStatus.SETTLED -> "수령완료"
+                                    else -> "미지급"
+                                }}",
+                                color = when (carryOverStatus) {
+                                    CarryOverStatus.TRANSFERRED -> Color(0xFF4CAF50)
+                                    CarryOverStatus.SETTLED -> Color.Gray
+                                    else -> Color(0xFFFFAA00)
+                                },
+                                style = MaterialTheme.typography.bodySmall
+                            )
+
+                            // 이체됨 상태일 때 수령완료 버튼
+                            if (carryOverStatus == CarryOverStatus.TRANSFERRED) {
+                                Button(
+                                    onClick = { showReceiveConfirmDialog = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
+                                ) {
+                                    Text("수령완료", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
             // 업무마감 다이얼로그
             var showEndWorkDialog by remember { mutableStateOf(false) }
             var isSubmitting by remember { mutableStateOf(false) }

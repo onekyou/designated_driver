@@ -20,9 +20,10 @@ import androidx.compose.ui.unit.dp
 fun SettlementTabHost(
     onBack: () -> Unit,
     onHome: () -> Unit,
+    initialTab: Int = 0,
 ) {
     val pages = listOf("전체", "대기", "기사별", "일일", "외상")
-    var selected by remember { mutableStateOf(0) }
+    var selected by remember { mutableStateOf(initialTab) }
 
     // 활성 탭: 밝은 노랑, 비활성 탭: 채도 낮은 색상
     val activeColor = Color(0xFFFFB000)       // 밝은 노랑/주황

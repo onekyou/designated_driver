@@ -41,7 +41,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notifyDriverSettlementResult = exports.sendDriverNotification = exports.finalizeSettlementAndNotifyDrivers = exports.notifyDriverCancellation = exports.notifyDriverAssignment = exports.manualCheckSettlementDiscrepancy = exports.checkSettlementDiscrepanciesScheduled = exports.autoFinalizeSettlements = exports.onCallCompletedUpdateSettlement = exports.onDriverStatusChange = exports.getOfficeReport = exports.searchArchivedCalls = exports.getArchivedStats = exports.archiveOldCalls = exports.scheduledDataCleanup = exports.checkAssignedTimeout = exports.onCallDetectorCrash = exports.onCustomerCountChange = exports.onDriverCountChange = exports.onNewCustomerRegistered = exports.onCallCancelledByDriver = exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.notifyCustomerOnComplete = exports.notifyCustomerOnPhoneCall = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.notifyCustomerOnOfficeClosed = exports.onSharedCallCreated = exports.sendNewCallNotification = exports.oncallassigned = exports.handleFailedNotifications = exports.retryPendingNotifications = exports.acknowledgeNotification = void 0;
+exports.onDriverSettlementSubmitted = exports.notifyDriverSettlementResult = exports.sendDriverNotification = exports.finalizeSettlementAndNotifyDrivers = exports.notifyDriverCancellation = exports.notifyDriverAssignment = exports.manualCheckSettlementDiscrepancy = exports.autoFinalizeSettlements = exports.onCallCompletedUpdateSettlement = exports.onDriverStatusChange = exports.getOfficeReport = exports.searchArchivedCalls = exports.getArchivedStats = exports.archiveOldCalls = exports.scheduledDataCleanup = exports.checkAssignedTimeout = exports.onCallDetectorCrash = exports.onCustomerCountChange = exports.onDriverCountChange = exports.onNewCustomerRegistered = exports.onCallCancelledByDriver = exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.notifyCustomerOnComplete = exports.notifyCustomerOnPhoneCall = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.notifyCustomerOnOfficeClosed = exports.onSharedCallCreated = exports.sendNewCallNotification = exports.oncallassigned = exports.handleFailedNotifications = exports.retryPendingNotifications = exports.acknowledgeNotification = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -3712,48 +3712,6 @@ exports.autoFinalizeSettlements = (0, scheduler_1.onSchedule)({
     }
 });
 // =============================
-// 정산 불일치 검사: 매일 오전 7시 실행
-// - 전날 정산 데이터 불일치 확인 및 알림
-// =============================
-exports.checkSettlementDiscrepanciesScheduled = (0, scheduler_1.onSchedule)({
-    schedule: "0 7 * * *", // 매일 오전 7시 (한국 시간)
-    timeZone: "Asia/Seoul",
-    region: "asia-northeast3",
-    memory: "512MiB",
-    timeoutSeconds: 540
-}, async () => {
-    const db = admin.firestore();
-    logger.info("[Settlement] Starting scheduled discrepancy check");
-    // 어제 근무일 계산
-    const yesterdayDate = (0, settlement_1.getYesterdayWorkDate)();
-    try {
-        const provincesSnap = await db.collection("provinces").get();
-        for (const provinceDoc of provincesSnap.docs) {
-            const citiesSnap = await provinceDoc.ref.collection("cities").get();
-            for (const cityDoc of citiesSnap.docs) {
-                const officesSnap = await cityDoc.ref.collection("offices").get();
-                for (const officeDoc of officesSnap.docs) {
-                    try {
-                        const result = await (0, settlement_1.checkSettlementDiscrepancies)(provinceDoc.id, cityDoc.id, officeDoc.id, yesterdayDate);
-                        if (result.hasDiscrepancy) {
-                            logger.warn(`[Settlement] Discrepancies found for ${provinceDoc.id}/${cityDoc.id}/${officeDoc.id}:`, result.details);
-                            // 불일치 발견 시 관리자에게 알림
-                            await (0, settlement_1.notifySettlementDiscrepancy)(provinceDoc.id, cityDoc.id, officeDoc.id, yesterdayDate, result.details);
-                        }
-                    }
-                    catch (officeError) {
-                        logger.error(`[Settlement] Discrepancy check failed for ${provinceDoc.id}/${cityDoc.id}/${officeDoc.id}:`, officeError);
-                    }
-                }
-            }
-        }
-        logger.info("[Settlement] Discrepancy check completed");
-    }
-    catch (error) {
-        logger.error("[Settlement] Discrepancy check failed:", error);
-    }
-});
-// =============================
 // 수동 정산 불일치 검사 (HTTP Callable)
 // =============================
 exports.manualCheckSettlementDiscrepancy = (0, https_1.onCall)({
@@ -4011,5 +3969,86 @@ exports.notifyDriverSettlementResult = (0, https_1.onCall)({
     region: "asia-northeast3",
 }, async (request) => {
     return (0, settlement_1.notifyDriverSettlementResultHandler)(request.data);
+});
+/**
+ * 기사가 업무마감(dailySettlement) 제출 시 매니저에게 FCM 알림
+ * designated_drivers/{uid} 문서의 dailySettlement.status가 PENDING_CONFIRM으로 변경되면 트리거
+ */
+exports.onDriverSettlementSubmitted = (0, firestore_1.onDocumentUpdated)({
+    region: "asia-northeast3",
+    document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/designated_drivers/{driverId}",
+}, async (event) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    const beforeData = (_b = (_a = event.data) === null || _a === void 0 ? void 0 : _a.before) === null || _b === void 0 ? void 0 : _b.data();
+    const afterData = (_d = (_c = event.data) === null || _c === void 0 ? void 0 : _c.after) === null || _d === void 0 ? void 0 : _d.data();
+    if (!beforeData || !afterData)
+        return;
+    const beforeStatus = (_e = beforeData.dailySettlement) === null || _e === void 0 ? void 0 : _e.status;
+    const afterStatus = (_f = afterData.dailySettlement) === null || _f === void 0 ? void 0 : _f.status;
+    // dailySettlement.status가 PENDING_CONFIRM으로 변경된 경우만 처리
+    if (afterStatus !== "PENDING_CONFIRM" || beforeStatus === afterStatus)
+        return;
+    const { provinceId, cityId, officeId, driverId } = event.params;
+    const driverName = afterData.name || "기사";
+    const tripCount = ((_g = afterData.dailySettlement) === null || _g === void 0 ? void 0 : _g.tripCount) || 0;
+    const realDeposit = ((_h = afterData.dailySettlement) === null || _h === void 0 ? void 0 : _h.realDeposit) || 0;
+    logger.info(`[onDriverSettlementSubmitted] ${driverName}(${driverId}) 업무마감 제출 - ${tripCount}건, 실납입: ${realDeposit}원`);
+    try {
+        // 매니저 토큰 조회
+        const managerTokensSnap = await admin.firestore()
+            .collection("provinces").doc(provinceId)
+            .collection("cities").doc(cityId)
+            .collection("offices").doc(officeId)
+            .collection("managerTokens")
+            .get();
+        if (managerTokensSnap.empty) {
+            logger.warn(`[onDriverSettlementSubmitted] 매니저 토큰 없음 - office: ${officeId}`);
+            return;
+        }
+        const tokens = [];
+        managerTokensSnap.forEach(doc => {
+            const token = doc.data().fcmToken;
+            if (token)
+                tokens.push(token);
+        });
+        if (tokens.length === 0) {
+            logger.warn(`[onDriverSettlementSubmitted] 유효한 매니저 토큰 없음`);
+            return;
+        }
+        // FCM 전송
+        const payload = {
+            notification: {
+                title: "📋 업무마감 제출",
+                body: `${driverName}님이 업무마감을 제출했습니다. (${tripCount}건, 실납입: ${realDeposit.toLocaleString()}원)`,
+            },
+            data: {
+                type: "SETTLEMENT_SUBMITTED",
+                driverId: driverId,
+                driverName: driverName,
+                tripCount: String(tripCount),
+                realDeposit: String(realDeposit),
+            },
+            android: {
+                priority: "high",
+                notification: {
+                    sound: "default",
+                    clickAction: "com.designated.callmanager.HOME",
+                    channelId: "status_change_fcm_channel_v2",
+                },
+            },
+        };
+        for (const token of tokens) {
+            try {
+                await admin.messaging().send(Object.assign(Object.assign({}, payload), { token }));
+                logger.info(`[onDriverSettlementSubmitted] FCM 전송 성공 - token: ${token.substring(0, 10)}...`);
+            }
+            catch (error) {
+                logger.error(`[onDriverSettlementSubmitted] FCM 전송 실패:`, error);
+            }
+        }
+    }
+    catch (error) {
+        logger.error(`[onDriverSettlementSubmitted] 오류:`, error);
+    }
 });
 //# sourceMappingURL=index.js.map

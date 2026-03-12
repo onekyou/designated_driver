@@ -40,23 +40,18 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
     var autoLogin by mutableStateOf(false)
 
     init {
-        val autoLoginFlag = sharedPreferences.getBoolean("auto_login", false)
+        autoLogin = sharedPreferences.getBoolean("auto_login", false)
 
-        autoLogin = autoLoginFlag
+        // 저장된 이메일/비번을 항상 입력칸에 채움
+        val savedEmail = sharedPreferences.getString("email", "")
+        val savedPassword = sharedPreferences.getString("password", "")
 
-        if (autoLogin) {
-            val savedEmail = sharedPreferences.getString("email", "")
-            val savedPassword = sharedPreferences.getString("password", "")
+        if (!savedEmail.isNullOrBlank()) email = savedEmail
+        if (!savedPassword.isNullOrBlank()) password = savedPassword
 
-            if (!savedEmail.isNullOrBlank() && !savedPassword.isNullOrBlank()) {
-                email = savedEmail
-                password = savedPassword
-                login()
-            } else {
-
-            }
-        } else {
-
+        // 자동 로그인이 켜져 있으면 바로 로그인 실행
+        if (autoLogin && email.isNotBlank() && password.isNotBlank()) {
+            login()
         }
     }
 
@@ -93,23 +88,12 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                     val officeId = adminDoc.getString("associatedOfficeId")
 
                     if (!provinceId.isNullOrBlank() && !cityId.isNullOrBlank() && !officeId.isNullOrBlank()) {
-                        if (autoLogin) {
-                            val autoLoginEditor = sharedPreferences.edit()
-                            autoLoginEditor.putString("email", email)
-                            autoLoginEditor.putString("password", password)
-                            autoLoginEditor.putBoolean("auto_login", true)
-                            val prefsEditSuccess = autoLoginEditor.commit()
-
-                            if (prefsEditSuccess) {
-                            } else {
-                            }
-                        } else {
-                            val editor = sharedPreferences.edit()
-                            editor.remove("email")
-                            editor.remove("password")
-                            editor.putBoolean("auto_login", false)
-                            editor.apply()
-                        }
+                        // 로그인 성공 시 항상 이메일/비번 저장 (앱 재시작 시 입력칸에 미리 채움)
+                        val credEditor = sharedPreferences.edit()
+                        credEditor.putString("email", email)
+                        credEditor.putString("password", password)
+                        credEditor.putBoolean("auto_login", autoLogin)
+                        credEditor.commit()
 
                         val regionOfficeEditor = sharedPreferences.edit()
                         regionOfficeEditor.putString("provinceId", provinceId)

@@ -162,6 +162,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private val _screenState = mutableStateOf(Screen.Login)
+    private val _settlementInitialTab = mutableStateOf(0)
     var screenState: Screen
         get() = _screenState.value
         set(value) { _screenState.value = value }
@@ -296,6 +297,7 @@ class MainActivity : ComponentActivity() {
         const val ACTION_SHOW_DEVICE_CRASH = "ACTION_SHOW_DEVICE_CRASH"
         const val ACTION_SHOW_TRIP_STARTED_POPUP = "ACTION_SHOW_TRIP_STARTED_POPUP"
         const val ACTION_SHOW_TRIP_COMPLETED_POPUP = "ACTION_SHOW_TRIP_COMPLETED_POPUP"
+        const val ACTION_SHOW_SETTLEMENT = "ACTION_SHOW_SETTLEMENT"
         const val EXTRA_CALL_ID = "callId"
         const val EXTRA_SHARED_CALL_ID = "sharedCallId"
     }
@@ -444,8 +446,6 @@ class MainActivity : ComponentActivity() {
                                     val loginPrefs = getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
                                     loginPrefs.edit()
                                         .putBoolean("auto_login", false)
-                                        .remove("email")
-                                        .remove("password")
                                         .apply()
 
                                     auth.signOut()
@@ -495,10 +495,13 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         Screen.Settlement -> {
+                            val initTab = _settlementInitialTab.value
                             SettlementTabHost(
                                 onBack = { screenState = Screen.Settings },
-                                onHome = { screenState = Screen.Dashboard }
+                                onHome = { screenState = Screen.Dashboard },
+                                initialTab = initTab
                             )
+                            LaunchedEffect(Unit) { _settlementInitialTab.value = 0 }
                         }
                         Screen.ExcludeNumber -> {
                             ExcludeNumberScreen(
@@ -680,6 +683,12 @@ class MainActivity : ComponentActivity() {
                     } else {
                         Log.w("MainActivity", "사무실 정보 없음 - 대기기사 화면 이동 불가")
                     }
+                }
+            }
+            ACTION_SHOW_SETTLEMENT -> {
+                lifecycleScope.launch {
+                    _settlementInitialTab.value = 2  // 기사별 탭
+                    _screenState.value = Screen.Settlement
                 }
             }
             ACTION_SHOW_TRIP_STARTED_POPUP -> {

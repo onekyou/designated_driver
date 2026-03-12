@@ -70,7 +70,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             "DRIVER_STATUS_UPDATE",  // 기사 상태 변경은 항상 처리
             "CALL_STATUS_UPDATE",    // 콜 상태 업데이트는 항상 처리
             "STATUS_CHANGE",         // 운행 시작/완료 알림은 항상 처리
-            "NOTIFICATION_FAILURE"   // 알림 전달 실패 경고는 항상 처리
+            "NOTIFICATION_FAILURE",  // 알림 전달 실패 경고는 항상 처리
+            "SETTLEMENT_SUBMITTED"   // 기사 업무마감 제출 알림
         )
         val shouldProcessInForeground = alwaysProcessTypes.contains(messageType)
 
@@ -88,6 +89,28 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             Log.d(TAG, "🔔 [DEBUG] DRIVER_STATUS_UPDATE 처리 시작 - driverId: $driverId")
             handleDriverStatusUpdate(remoteMessage, driverId)
             Log.d(TAG, "🔔 [DEBUG] DRIVER_STATUS_UPDATE 처리 완료")
+            return
+        }
+
+        // SETTLEMENT_SUBMITTED는 callId 불필요
+        if (messageType == "SETTLEMENT_SUBMITTED") {
+            val driverId = remoteMessage.data["driverId"] ?: ""
+            val driverName = remoteMessage.data["driverName"] ?: "기사"
+            val tripCount = remoteMessage.data["tripCount"] ?: "0"
+            val realDeposit = remoteMessage.data["realDeposit"] ?: "0"
+            Log.d(TAG, "🔔 SETTLEMENT_SUBMITTED - $driverName, ${tripCount}건, 실납입: ${realDeposit}원")
+            showNotification(
+                channelId = STATUS_CHANGE_CHANNEL_ID,
+                notificationId = "settlement_$driverId".hashCode(),
+                title = "업무마감 제출",
+                content = "${driverName}님이 업무마감을 제출했습니다.",
+                bigText = "기사: $driverName\n운행: ${tripCount}건\n실납입: ${realDeposit}원",
+                callId = driverId,
+                color = ContextCompat.getColor(this, android.R.color.holo_orange_dark),
+                autoCancel = true,
+                isSettlement = true,
+                timeoutAfter = 0
+            )
             return
         }
 
@@ -937,6 +960,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         isSharedCall: Boolean = false,
         isSharedCallCancelled: Boolean = false,
         isDriverApproval: Boolean = false,
+        isSettlement: Boolean = false,
         timeoutAfter: Long? = null
     ) {
         Log.d(TAG, "🔔🔔🔔 [NOTIFICATION] showNotification 호출 시작 🔔🔔🔔")
@@ -964,6 +988,9 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 }
                 isDriverApproval -> {
                     action = "ACTION_SHOW_PENDING_DRIVERS"
+                }
+                isSettlement -> {
+                    action = "ACTION_SHOW_SETTLEMENT"
                 }
             }
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
