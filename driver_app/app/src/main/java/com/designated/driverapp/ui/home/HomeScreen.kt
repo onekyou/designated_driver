@@ -166,15 +166,8 @@ fun HomeScreen(
                             // 미저장 운행 내역 확인
                             if (hasUnsavedTripHistory(context)) {
                                 unsavedTripCount = getUnsavedTripCount(context)
-                                showLogoutDialog = true
-                            } else {
-                                // 미저장 데이터 없으면 바로 로그아웃
-                                logoutUserAndExitApp(context, scope, viewModel)
-                                navController.navigate(AppDestinations.LOGIN_ROUTE) {
-                                    popUpTo(0) { inclusive = true }
-                                    launchSingleTop = true
-                                }
                             }
+                            showLogoutDialog = true
                         },
                         modifier = Modifier.size(48.dp)
                     ) {
@@ -351,42 +344,49 @@ fun HomeScreen(
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
-            title = { Text("저장되지 않은 운행 내역") },
+            title = { Text("종료 확인") },
             text = {
-                Text("저장되지 않은 운행 내역이 ${unsavedTripCount}건 있습니다.\n정산 내역을 저장하시겠습니까?")
+                if (unsavedTripCount > 0) {
+                    Text("저장되지 않은 운행 내역이 ${unsavedTripCount}건 있습니다.\n정산 내역을 저장하고 종료하시겠습니까?")
+                } else {
+                    Text("정말 종료하시겠습니까?")
+                }
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        // 저장 후 로그아웃
-                        saveAndClearSettlement(context)
-                        showLogoutDialog = false
-                        logoutUserAndExitApp(context, scope, viewModel)
-                        navController.navigate(AppDestinations.LOGIN_ROUTE) {
-                            popUpTo(0) { inclusive = true }
-                            launchSingleTop = true
+                if (unsavedTripCount > 0) {
+                    Button(
+                        onClick = {
+                            saveAndClearSettlement(context)
+                            showLogoutDialog = false
+                            logoutUserAndExitApp(context, scope, viewModel)
                         }
+                    ) {
+                        Text("저장 후 종료")
                     }
-                ) {
-                    Text("저장 후 로그아웃")
+                } else {
+                    Button(
+                        onClick = {
+                            showLogoutDialog = false
+                            logoutUserAndExitApp(context, scope, viewModel)
+                        }
+                    ) {
+                        Text("종료")
+                    }
                 }
             },
             dismissButton = {
                 Row {
-                    TextButton(
-                        onClick = {
-                            // 저장 없이 로그아웃
-                            showLogoutDialog = false
-                            logoutUserAndExitApp(context, scope, viewModel)
-                            navController.navigate(AppDestinations.LOGIN_ROUTE) {
-                                popUpTo(0) { inclusive = true }
-                                launchSingleTop = true
+                    if (unsavedTripCount > 0) {
+                        TextButton(
+                            onClick = {
+                                showLogoutDialog = false
+                                logoutUserAndExitApp(context, scope, viewModel)
                             }
+                        ) {
+                            Text("저장 없이 종료", color = Color.Red)
                         }
-                    ) {
-                        Text("그냥 로그아웃", color = Color.Red)
+                        Spacer(modifier = Modifier.width(8.dp))
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
                     TextButton(onClick = { showLogoutDialog = false }) {
                         Text("취소")
                     }
@@ -406,24 +406,18 @@ fun HomeScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        // 저장 후 로그아웃
                         saveAndClearSettlement(context)
                         showSettlementFinalizedDialog = false
                         logoutUserAndExitApp(context, scope, viewModel)
-                        navController.navigate(AppDestinations.LOGIN_ROUTE) {
-                            popUpTo(0) { inclusive = true }
-                            launchSingleTop = true
-                        }
                     }
                 ) {
-                    Text("저장 후 로그아웃")
+                    Text("저장 후 종료")
                 }
             },
             dismissButton = {
                 Row {
                     TextButton(
                         onClick = {
-                            // 저장만 하고 계속 대기
                             saveAndClearSettlement(context)
                             showSettlementFinalizedDialog = false
                         }

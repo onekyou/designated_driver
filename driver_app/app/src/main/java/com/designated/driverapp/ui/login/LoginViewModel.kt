@@ -58,9 +58,11 @@ class LoginViewModel @Inject constructor(
         if (autoLogin) {
             val savedIdentifier = securePreferences.getSavedIdentifier()
             val savedPassword = securePreferences.getSavedPassword()
-            if (!savedIdentifier.isNullOrBlank()) {
+            if (!savedIdentifier.isNullOrBlank() && !savedPassword.isNullOrBlank()) {
                 email = savedIdentifier
-                password = savedPassword ?: ""
+                password = savedPassword
+                // 자동 로그인이 켜져 있고 자격증명이 있으면 바로 로그인 실행
+                login()
             }
         }
     }
@@ -267,6 +269,7 @@ class LoginViewModel @Inject constructor(
 
     fun toggleAutoLogin(enabled: Boolean) {
         autoLogin = enabled
+        securePreferences.setAutoLoginEnabled(enabled)
     }
 
     fun resetLoginState() {
@@ -279,7 +282,7 @@ class LoginViewModel @Inject constructor(
     fun logout() {
         auth.signOut()
         sessionManager.clearSession()
-        securePreferences.clearAutoLoginCredentials()
+        // 자동로그인 자격증명은 유지 (재실행 시 자동로그인 위해)
         // pending FCM 토큰 제거 (다른 계정 로그인 시 혼선 방지)
         sharedPreferences.edit()
             .remove(Constants.PREF_KEY_PENDING_FCM_TOKEN)

@@ -52,6 +52,13 @@ class SecurePreferencesManager @Inject constructor(
     }
 
     /**
+     * 자동 로그인 플래그만 설정 (자격증명은 유지)
+     */
+    fun setAutoLoginEnabled(enabled: Boolean) {
+        securePrefs.edit().putBoolean(KEY_AUTO_LOGIN, enabled).apply()
+    }
+
+    /**
      * 저장된 식별자 가져오기
      */
     fun getSavedIdentifier(): String? {

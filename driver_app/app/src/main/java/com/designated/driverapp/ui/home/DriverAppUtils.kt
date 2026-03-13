@@ -63,18 +63,6 @@ fun logoutUserAndExitApp(context: Context, scope: CoroutineScope, viewModel: Dri
 fun performSignOut(context: Context, scope: CoroutineScope) {
     scope.launch(Dispatchers.IO) {
         try {
-            val sharedPreferences = context.getSharedPreferences("driver_login_prefs", Context.MODE_PRIVATE)
-            val autoLoginEnabled = sharedPreferences.getBoolean("auto_login", false)
-
-            if (!autoLoginEnabled) {
-                sharedPreferences.edit().apply {
-                    remove("identifier")
-                    remove("password")
-                    apply()
-                }
-            } else {
-            }
-
             withContext(Dispatchers.Main) {
                 Firebase.auth.signOut()
                 Toast.makeText(context, "로그아웃되었습니다.", Toast.LENGTH_SHORT).show()
