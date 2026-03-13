@@ -439,18 +439,35 @@ class MainActivity : ComponentActivity() {
                                     permissionManager.requestAllPermissions()
                                 }
                             }
+
+                            var showLogoutConfirmDialog by remember { mutableStateOf(false) }
+
+                            if (showLogoutConfirmDialog) {
+                                androidx.compose.material3.AlertDialog(
+                                    onDismissRequest = { showLogoutConfirmDialog = false },
+                                    title = { Text("종료 확인") },
+                                    text = { Text("정말 종료하시겠습니까?") },
+                                    confirmButton = {
+                                        TextButton(onClick = {
+                                            showLogoutConfirmDialog = false
+                                            // auto_login 설정은 유지 (체크박스 해제 시에만 변경됨)
+                                            auth.signOut()
+                                            finishAffinity()
+                                        }) {
+                                            Text("종료")
+                                        }
+                                    },
+                                    dismissButton = {
+                                        TextButton(onClick = { showLogoutConfirmDialog = false }) {
+                                            Text("취소")
+                                        }
+                                    }
+                                )
+                            }
+
                             DashboardScreen(
                                 viewModel = dashboardViewModel,
-                                onLogout = {
-                                    // 자동 로그인 설정 및 저장된 정보 클리어
-                                    val loginPrefs = getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
-                                    loginPrefs.edit()
-                                        .putBoolean("auto_login", false)
-                                        .apply()
-
-                                    auth.signOut()
-                                    screenState = Screen.Login
-                                },
+                                onLogout = { showLogoutConfirmDialog = true },
                                 onNavigateToSettings = { screenState = Screen.Settings }
                             )
                         }

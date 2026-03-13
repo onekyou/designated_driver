@@ -77,7 +77,7 @@ fun SettlementTabHost(
             Spacer(Modifier.height(8.dp))
 
             when (selected) {
-                0 -> com.designated.callmanager.ui.settlement.screen.AllTripsScreen()
+                0 -> com.designated.callmanager.ui.settlement.screen.AllTripsScreen(onHome = onHome)
                 1 -> com.designated.callmanager.ui.settlement.screen.PendingSettlementsScreen()
                 2 -> com.designated.callmanager.ui.settlement.screen.DriverSummaryScreen()
                 3 -> com.designated.callmanager.ui.settlement.screen.DailySessionScreen()

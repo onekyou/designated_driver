@@ -27,7 +27,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.google.firebase.auth.FirebaseAuth
 
 @Composable
-fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
+fun AllTripsScreen(vm: SettlementViewModel = viewModel(), onHome: (() -> Unit)? = null) {
     val trips by vm.settlementList.collectAsState()
     val creditedIds by vm.creditedTripIds.collectAsState()
     var showCreditDialog by remember { mutableStateOf(false) }
@@ -465,7 +465,7 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
                 } else if (finalizeResultMessage != null) {
                     Text(finalizeResultMessage!!, color = Color.White)
                 } else {
-                    Text("업무를 마감하고 로그아웃 하시겠습니까?", color = Color.White)
+                    Text("업무를 마감하시겠습니까?", color = Color.White)
                 }
             },
             confirmButton = {
@@ -478,22 +478,6 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
                                 if (success) {
                                     vm.clearAllTrips()
                                     finalizeResultMessage = message
-                                    // 잠시 후 로그아웃 및 앱 종료
-                                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                                        // 1. SharedPreferences 로그인 정보 제거
-                                        val loginPrefs = context.getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
-                                        loginPrefs.edit()
-                                            .putBoolean("auto_login", false)
-                                            .remove("email")
-                                            .remove("password")
-                                            .apply()
-
-                                        // 2. Firebase Auth 로그아웃
-                                        FirebaseAuth.getInstance().signOut()
-
-                                        // 3. 앱 종료
-                                        (context as? Activity)?.finishAffinity()
-                                    }, 1500)
                                 } else {
                                     finalizeResultMessage = "마감 실패: $message"
                                 }
@@ -502,6 +486,13 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel()) {
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF4444))
                     ) {
                         Text("확인")
+                    }
+                } else if (!isFinalizingInProgress && finalizeResultMessage != null) {
+                    TextButton(onClick = {
+                        showFinalizeDialog = false
+                        onHome?.invoke()
+                    }) {
+                        Text("닫기", color = Color.White)
                     }
                 }
             },

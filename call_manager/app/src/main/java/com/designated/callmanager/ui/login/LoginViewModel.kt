@@ -89,6 +89,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
 
                     if (!provinceId.isNullOrBlank() && !cityId.isNullOrBlank() && !officeId.isNullOrBlank()) {
                         // 로그인 성공 시 항상 이메일/비번 저장 (앱 재시작 시 입력칸에 미리 채움)
+                        android.util.Log.d("LoginViewModel", "[fetchAdminInfoAndProceed] autoLogin=$autoLogin, saving credentials")
                         val credEditor = sharedPreferences.edit()
                         credEditor.putString("email", email)
                         credEditor.putString("password", password)
@@ -129,6 +130,9 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleAutoLogin(enabled: Boolean) {
         autoLogin = enabled
+        sharedPreferences.edit()
+            .putBoolean("auto_login", enabled)
+            .apply()
     }
 
     fun resetLoginState() {
