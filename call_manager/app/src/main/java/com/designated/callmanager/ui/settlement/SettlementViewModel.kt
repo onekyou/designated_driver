@@ -79,6 +79,10 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
     private var callsListener2: ListenerRegistration? = null  // completedAt 기준 리스너
     private var carryOverListener: ListenerRegistration? = null
 
+    // 기사별 settlementLastCleared 맵 (driverId → millis)
+    // 개별 기사 정산 완료(퇴근) 시 갱신된 기사별 마감 시점
+    private var driverLastClearedMap: Map<String, Long> = emptyMap()
+
     private val database = CallManagerDatabase.getInstance(getApplication())
     private val repository = SettlementRepository(database)
     private val creditDao = database.creditDao()
@@ -287,6 +291,32 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
     private fun fetchCompletedCalls(provinceId: String, cityId: String, officeId: String, lastCleared: Long) {
         val effectiveLastCleared = maxOf(lastCleared, lastClearedMillisCache)
 
+        // 1단계: 기사별 settlementLastCleared 조회
+        firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
+            .collection("offices").document(officeId)
+            .collection("designated_drivers")
+            .get()
+            .addOnSuccessListener { driversSnapshot ->
+                val driverClearedMap = mutableMapOf<String, Long>()
+                driversSnapshot.documents.forEach { doc ->
+                    val driverCleared = doc.getTimestamp("settlementLastCleared")?.toDate()?.time ?: 0L
+                    driverClearedMap[doc.id] = driverCleared
+                }
+                driverLastClearedMap = driverClearedMap
+                Log.d("SettlementViewModel", "Driver settlementLastCleared map loaded: ${driverClearedMap.size} drivers")
+
+                // 2단계: COMPLETED 콜 조회
+                fetchCompletedCallsWithDriverFilter(provinceId, cityId, officeId, effectiveLastCleared)
+            }
+            .addOnFailureListener { e ->
+                Log.e("SettlementViewModel", "Failed to load driver settlementLastCleared", e)
+                // 실패 시 기존 방식(office-level만)으로 폴백
+                fetchCompletedCallsWithDriverFilter(provinceId, cityId, officeId, effectiveLastCleared)
+            }
+    }
+
+    private fun fetchCompletedCallsWithDriverFilter(provinceId: String, cityId: String, officeId: String, effectiveLastCleared: Long) {
         firestore.collection("provinces").document(provinceId)
             .collection("cities").document(cityId)
             .collection("offices").document(officeId)
@@ -300,7 +330,12 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                             ?: doc.getTimestamp("updatedAt")?.toDate()?.time
                             ?: System.currentTimeMillis()
 
-                        if (completedTimestamp <= effectiveLastCleared) return@mapNotNull null // 필터링
+                        // 기사별 settlementLastCleared와 office-level 중 더 큰 값으로 필터
+                        val driverId = doc.getString("assignedDriverId") ?: ""
+                        val driverCleared = driverLastClearedMap[driverId] ?: 0L
+                        val cutoff = maxOf(effectiveLastCleared, driverCleared)
+
+                        if (completedTimestamp <= cutoff) return@mapNotNull null // 필터링
 
                         val fareAmount = doc.getLong("fareFinal")?.toInt()
                             ?: doc.getLong("fare_set")?.toInt()
@@ -400,6 +435,12 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                         val completedTimestamp = doc.getTimestamp("completedAt")?.toDate()?.time
                             ?: doc.getTimestamp("updatedAt")?.toDate()?.time
                             ?: System.currentTimeMillis()
+
+                        // 기사별 settlementLastCleared 필터
+                        val driverId = doc.getString("assignedDriverId") ?: ""
+                        val driverCleared = driverLastClearedMap[driverId] ?: 0L
+                        if (completedTimestamp <= driverCleared) return@mapNotNull null
+
                         val fareAmount = doc.getLong("fareFinal")?.toInt() ?: doc.getLong("fare_set")?.toInt() ?: 0
 
                         SettlementEntity(
@@ -415,7 +456,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                             cashAmount = doc.getLong("cashReceived")?.toInt(),
                             creditAmount = doc.getLong("creditAmount")?.toInt() ?: 0,
                             completedAt = completedTimestamp,
-                            driverId = doc.getString("assignedDriverId") ?: "",
+                            driverId = driverId,
                             regionId = provinceId,
                             officeId = officeId,
                             workDate = calculateWorkDate(completedTimestamp)
@@ -452,6 +493,12 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                     try {
                         val completedTimestamp = doc.getTimestamp("completedAt")?.toDate()?.time
                             ?: System.currentTimeMillis()
+
+                        // 기사별 settlementLastCleared 필터
+                        val driverId = doc.getString("assignedDriverId") ?: ""
+                        val driverCleared = driverLastClearedMap[driverId] ?: 0L
+                        if (completedTimestamp <= driverCleared) return@mapNotNull null
+
                         val fareAmount = doc.getLong("fareFinal")?.toInt() ?: doc.getLong("fare_set")?.toInt() ?: 0
 
                         SettlementEntity(
@@ -1037,17 +1084,21 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             sessionRef.get().addOnSuccessListener { doc ->
                 if (!doc.exists()) {
-                    // 세션이 없으면 로컬 데이터로 먼저 생성
-                    val newSession = createSettlementSessionFromLocalData(sessionDate)
-                    sessionRef.set(newSession.toMap())
-                        .addOnSuccessListener {
-                            // 세션 생성 후 Cloud Function 호출
-                            callFinalizeFunction(provinceId, cityId, officeId, sessionDate, onResult)
+                    // 세션이 없으면 Firestore calls에서 직접 조회하여 생성
+                    createSettlementSessionFromFirestore(provinceId, cityId, officeId, sessionDate) { session ->
+                        if (session != null) {
+                            sessionRef.set(session.toMap())
+                                .addOnSuccessListener {
+                                    callFinalizeFunction(provinceId, cityId, officeId, sessionDate, onResult)
+                                }
+                                .addOnFailureListener { e ->
+                                    Log.e("SettlementViewModel", "Failed to create session", e)
+                                    onResult(false, "세션 생성 실패: ${e.message}")
+                                }
+                        } else {
+                            onResult(false, "정산 데이터가 없습니다")
                         }
-                        .addOnFailureListener { e ->
-                            Log.e("SettlementViewModel", "Failed to create session", e)
-                            onResult(false, "세션 생성 실패: ${e.message}")
-                        }
+                    }
                 } else {
                     // 세션이 있으면 바로 Cloud Function 호출
                     callFinalizeFunction(provinceId, cityId, officeId, sessionDate, onResult)
@@ -1177,6 +1228,109 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     /**
+     * Firestore calls 컬렉션에서 직접 조회하여 정산 세션 생성 (폴백용)
+     * Room DB가 per-driver 필터로 불완전할 수 있으므로 Firestore를 원본으로 사용
+     */
+    private fun createSettlementSessionFromFirestore(
+        provinceId: String,
+        cityId: String,
+        officeId: String,
+        sessionDate: String,
+        onComplete: (SettlementSession?) -> Unit
+    ) {
+        firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
+            .collection("offices").document(officeId)
+            .collection("calls")
+            .whereEqualTo("status", "COMPLETED")
+            .get()
+            .addOnSuccessListener { result ->
+                val ratio = _officeShareRatio.value
+                val calls = result.documents.mapNotNull { doc ->
+                    try {
+                        val completedTimestamp = doc.getTimestamp("completedAt")?.toDate()?.time
+                            ?: doc.getTimestamp("updatedAt")?.toDate()?.time
+                            ?: return@mapNotNull null
+                        val workDate = calculateWorkDate(completedTimestamp)
+                        if (workDate != sessionDate) return@mapNotNull null
+
+                        val fareAmount = doc.getLong("fareFinal")
+                            ?: doc.getLong("fare_set")
+                            ?: 0L
+
+                        CallSettlement(
+                            callId = doc.id,
+                            driverId = doc.getString("assignedDriverId") ?: "",
+                            driverName = doc.getString("assignedDriverName") ?: "N/A",
+                            customerName = doc.getString("customerName") ?: "N/A",
+                            customerPhone = doc.getString("customerPhone") ?: "",
+                            departure = doc.getString("departure_set") ?: "N/A",
+                            destination = doc.getString("destination_set") ?: "N/A",
+                            fare = fareAmount,
+                            paymentMethod = doc.getString("paymentMethod") ?: "N/A",
+                            cashReceived = doc.getLong("cashReceived") ?: 0L,
+                            creditAmount = doc.getLong("creditAmount") ?: 0L,
+                            pointsUsed = doc.getLong("pointsUsed") ?: 0L,
+                            completedAt = Timestamp(Date(completedTimestamp)),
+                            confirmedByOffice = true,
+                            syncedAt = Timestamp.now()
+                        )
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+
+                if (calls.isEmpty()) {
+                    onComplete(null)
+                    return@addOnSuccessListener
+                }
+
+                val totalFare = calls.sumOf { it.fare }
+                val totalDeposit = totalFare * ratio / 100
+                val totalDriverShare = totalFare - totalDeposit
+                val totalCash = calls.sumOf { call ->
+                    when {
+                        call.paymentMethod == "현금" -> call.fare
+                        call.paymentMethod.startsWith("현금+") -> call.cashReceived
+                        else -> 0L
+                    }
+                }
+                val totalCard = calls.filter { it.paymentMethod == "이체" || it.paymentMethod == "카드" }.sumOf { it.fare }
+                val totalCredit = calls.sumOf { it.creditAmount }
+                val totalPoints = calls.sumOf { it.pointsUsed }
+
+                val session = SettlementSession(
+                    metadata = SettlementMetadata(
+                        version = 1,
+                        lastUpdatedAt = Timestamp.now(),
+                        lastUpdatedBy = "call_manager",
+                        depositRatio = ratio,
+                        createdAt = Timestamp.now(),
+                        isFinalized = true
+                    ),
+                    totals = SettlementTotals(
+                        totalFare = totalFare,
+                        totalDeposit = totalDeposit,
+                        totalDriverShare = totalDriverShare,
+                        totalCash = totalCash,
+                        totalCard = totalCard,
+                        totalCredit = totalCredit,
+                        totalPoints = totalPoints,
+                        callCount = calls.size
+                    ),
+                    calls = calls
+                )
+                onComplete(session)
+            }
+            .addOnFailureListener { e ->
+                Log.e("SettlementViewModel", "Failed to create session from Firestore", e)
+                // 최종 폴백: 로컬 데이터 사용
+                val localSession = createSettlementSessionFromLocalData(sessionDate)
+                onComplete(if (localSession.calls.isEmpty()) null else localSession)
+            }
+    }
+
+    /**
      * 동기화 상태 초기화
      */
     fun clearSyncState() {
@@ -1221,8 +1375,11 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                     val dailySettlementMap = doc.get("dailySettlement") as? Map<String, Any?>
                     val dailySettlement = DriverDailySettlement.fromMap(dailySettlementMap)
 
-                    // carryOver가 있는 경우 리스트에 추가
-                    if (carryOver.balance != 0L) {
+                    // 디버그: 리스너 재발동 시 각 기사의 carryOver 상태 확인
+                    Log.d("SettlementViewModel", "CarryOver listener - driver=$driverName($driverId), balance=${carryOver.balance}, status=${carryOver.status}")
+
+                    // carryOver가 있는 경우 리스트에 추가 (SETTLED도 포함하여 null fallback 방지)
+                    if (carryOver.balance != 0L || carryOver.status == CarryOverStatus.TRANSFERRED || carryOver.status == CarryOverStatus.SETTLED) {
                         carryOvers.add(
                             DriverCarryOverSummary(
                                 driverId = driverId,

@@ -354,7 +354,7 @@ fun DashboardScreen(
                 val statusEnum = DriverStatus.fromString(statusString)
                 val isEligible = statusEnum == DriverStatus.WAITING || statusEnum == DriverStatus.ONLINE
                 isEligible
-        }
+        }.sortedBy { it.lastLoginTime?.seconds ?: Long.MAX_VALUE }
 
         DriverListDialog(
             drivers = waitingDrivers,
@@ -438,7 +438,7 @@ fun DashboardScreen(
             val statusString = driver.status?.trim() ?: ""
             val statusEnum = DriverStatus.fromString(statusString)
             statusEnum == DriverStatus.WAITING || statusEnum == DriverStatus.ONLINE
-        }
+        }.sortedBy { it.lastLoginTime?.seconds ?: Long.MAX_VALUE }
 
         NewCallAssignmentDialog(
             callInfo = newCallInfo!!,
@@ -629,7 +629,7 @@ fun DashboardScreen(
         val waitingDrivers = drivers.filter { driver ->
             val statusEnum = DriverStatus.fromString(driver.status?.trim() ?: "")
             statusEnum == DriverStatus.WAITING || statusEnum == DriverStatus.ONLINE
-        }
+        }.sortedBy { it.lastLoginTime?.seconds ?: Long.MAX_VALUE }
         SharedCallAcceptDialog(
             sharedCall = call,
             availableDrivers = waitingDrivers,
@@ -659,7 +659,7 @@ fun DashboardScreen(
         val waitingDrivers = drivers.filter { driver ->
             val statusEnum = DriverStatus.fromString(driver.status?.trim() ?: "")
             statusEnum == DriverStatus.WAITING || statusEnum == DriverStatus.ONLINE
-        }
+        }.sortedBy { it.lastLoginTime?.seconds ?: Long.MAX_VALUE }
         Log.d("DashboardScreen", "🔍 [FCM_DEBUG] 전체 드라이버 수: ${drivers.size}, 대기 중 드라이버 수: ${waitingDrivers.size}")
         SharedCallAcceptDialog(
             sharedCall = call,
@@ -971,7 +971,7 @@ fun DriverStatusCard(
                         DriverStatus.OFFLINE -> 4
                         else -> 5
                     }
-                }.thenBy { it.name })
+                }.thenBy { it.lastLoginTime?.seconds ?: Long.MAX_VALUE }.thenBy { it.name })
             }
 
             LazyRow(

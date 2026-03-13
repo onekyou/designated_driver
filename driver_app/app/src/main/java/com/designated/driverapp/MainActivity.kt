@@ -136,6 +136,9 @@ class MainActivity : ComponentActivity() {
             cancelNotification(callId)
         }
 
+        // 정산 알림 클릭으로 앱이 시작된 경우
+        val initialNavigateTo = intent.getStringExtra("navigateTo")
+
         setContent {
             DriverAppTheme {
                 val navController = rememberNavController()
@@ -179,12 +182,16 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // 최초 실행 시 intent에서 callId 확인
+                // 최초 실행 시 intent에서 callId/navigateTo 확인
                 LaunchedEffect(Unit) {
                     val initialCallId = intent.getStringExtra("callId")
                     if (!initialCallId.isNullOrBlank() && auth.currentUser != null) {
                         Log.d(TAG, "Initial callId from intent: $initialCallId")
                         driverViewModel.setNotificationCallId(initialCallId)
+                    }
+                    if (initialNavigateTo == "settlement") {
+                        Log.d(TAG, "Initial navigateTo from intent: settlement")
+                        driverViewModel.requestNavigateToSettlement()
                     }
                 }
 
@@ -365,6 +372,13 @@ class MainActivity : ComponentActivity() {
 
             // 해당 알림 취소 (notificationId = callId.hashCode())
             cancelNotification(callId)
+        }
+
+        // 정산 알림 클릭으로 들어온 navigateTo 처리
+        val navigateTo = intent.getStringExtra("navigateTo")
+        if (navigateTo == "settlement") {
+            Log.d(TAG, "onNewIntent: navigateTo settlement")
+            driverViewModel.requestNavigateToSettlement()
         }
     }
 

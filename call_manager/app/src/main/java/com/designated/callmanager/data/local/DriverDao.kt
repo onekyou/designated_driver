@@ -21,7 +21,7 @@ interface DriverDao {
     @Query("""
         SELECT * FROM drivers
         WHERE regionId = :regionId AND officeId = :officeId
-        ORDER BY name ASC
+        ORDER BY COALESCE(lastLoginTime, 9999999999999) ASC, name ASC
     """)
     fun getDriversFlow(regionId: String, officeId: String): Flow<List<LocalDriverInfo>>
 

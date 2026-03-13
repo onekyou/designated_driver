@@ -215,7 +215,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             showNotification(
                 title ?: "정산 확인 완료",
                 body ?: "매니저가 정산을 확인했습니다. 퇴근할 수 있습니다.",
-                null
+                null,
+                navigateTo = "settlement"
             )
         } else if (messageType == "SETTLEMENT_REJECTED") {
             // 매니저 정산 거절
@@ -225,7 +226,17 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             showNotification(
                 title ?: "정산 거절",
                 body ?: "매니저가 정산을 거절했습니다. 재제출해주세요.",
-                null
+                null,
+                navigateTo = "settlement"
+            )
+        } else if (messageType == "CARRYOVER_TRANSFERRED") {
+            // 이체 알림
+            Log.d(TAG, "이체 알림 FCM 수신")
+            showNotification(
+                title ?: "미수령금 이체 알림",
+                body ?: "이체가 완료되었습니다.",
+                null,
+                navigateTo = "settlement"
             )
         } else {
             // 기타 알림
@@ -239,7 +250,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         return DriverApplication.isInForeground
     }
 
-    private fun showNotification(title: String, body: String, callId: String?) {
+    private fun showNotification(title: String, body: String, callId: String?, navigateTo: String? = null) {
         val channelId = "call_assignment_channel"
         val notificationId = if (callId != null) callId.hashCode() else System.currentTimeMillis().toInt()
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -277,6 +288,9 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             if (callId != null) {
                 putExtra("callId", callId)
+            }
+            if (navigateTo != null) {
+                putExtra("navigateTo", navigateTo)
             }
         }
 

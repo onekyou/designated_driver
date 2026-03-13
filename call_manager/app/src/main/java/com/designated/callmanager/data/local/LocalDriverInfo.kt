@@ -25,6 +25,7 @@ data class LocalDriverInfo(
     // 타임스탬프
     val createdAt: Long?,
     val updatedAt: Long?,
+    val lastLoginTime: Long?,
 
     // 사무실 정보
     val regionId: String,
@@ -46,7 +47,8 @@ fun LocalDriverInfo.toDriverInfo(): DriverInfo {
         authUid = authUid,
         status = status,
         createdAt = createdAt?.let { Timestamp(it / 1000, ((it % 1000) * 1000000).toInt()) },
-        updatedAt = updatedAt?.let { Timestamp(it / 1000, ((it % 1000) * 1000000).toInt()) }
+        updatedAt = updatedAt?.let { Timestamp(it / 1000, ((it % 1000) * 1000000).toInt()) },
+        lastLoginTime = lastLoginTime?.let { Timestamp(it / 1000, ((it % 1000) * 1000000).toInt()) }
     )
 }
 
@@ -62,6 +64,7 @@ fun DriverInfo.toLocalDriverInfo(regionId: String, officeId: String): LocalDrive
         status = status,
         createdAt = createdAt?.seconds?.times(1000),
         updatedAt = updatedAt?.seconds?.times(1000),
+        lastLoginTime = lastLoginTime?.seconds?.times(1000),
         regionId = regionId,
         officeId = officeId,
         synced = true,

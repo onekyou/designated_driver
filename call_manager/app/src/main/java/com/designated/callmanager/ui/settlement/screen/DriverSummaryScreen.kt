@@ -476,10 +476,11 @@ private fun DriverDetailCard(
                                 Text("미지급 없음", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
                             }
 
-                            // 예상 납입금 (수수료 그대로, 공제 없음)
+                            // 예상 납입금 = 수수료 - 미지급 - 미수금
+                            val expectedDeposit = stat.deposit - carryOverBalance.toInt() - stat.totalCredit
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                "예상 납입금: ${"%,d".format(stat.deposit)}원",
+                                "예상 납입금: ${"%,d".format(expectedDeposit)}원",
                                 color = Color(0xFF00BFFF),
                                 fontWeight = FontWeight.Bold
                             )

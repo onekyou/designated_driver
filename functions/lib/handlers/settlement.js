@@ -370,16 +370,14 @@ async function notifyDriversSettlementFinalized(provinceId, cityId, officeId, se
         }
         // FCM 알림 전송
         const payload = {
-            notification: {
-                title: "업무 마감 안내",
-                body: `오늘 업무가 마감되었습니다. 총 ${totals.callCount}건, ${totals.totalFare.toLocaleString()}원`
-            },
             data: {
                 type: "SETTLEMENT_FINALIZED",
                 sessionDate: sessionDate,
                 totalCount: String(totals.callCount),
                 totalFare: String(totals.totalFare),
-                totalDeposit: String(totals.totalDeposit)
+                totalDeposit: String(totals.totalDeposit),
+                title: "업무 마감 안내",
+                body: `오늘 업무가 마감되었습니다. 총 ${totals.callCount}건, ${totals.totalFare.toLocaleString()}원`
             },
             android: {
                 priority: "high"
@@ -477,11 +475,13 @@ async function notifyDriverSettlementResultHandler(data) {
             : "매니저가 정산을 거절했습니다. 재제출해주세요.";
         await admin.messaging().send({
             token: fcmToken,
-            notification: { title, body },
             data: {
                 type: isConfirmed ? "SETTLEMENT_CONFIRMED" : "SETTLEMENT_REJECTED",
                 driverId: driverId,
+                title: title,
+                body: body,
             },
+            android: { priority: "high" },
         });
         logger.info(`[notifyDriverSettlementResult] FCM sent: ${result} to driver ${driverId}`);
         return { success: true };

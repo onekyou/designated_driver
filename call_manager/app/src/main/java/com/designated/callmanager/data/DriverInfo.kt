@@ -21,7 +21,8 @@ data class DriverInfo(
     @PropertyName("driverType") var driverType: String? = null,
     @PropertyName("approvedAt") var approvedAt: Timestamp? = null,
     @PropertyName("approvalStatus") var approvalStatus: String = Constants.APPROVAL_STATUS_PENDING, // String 타입 및 상수 사용
-    @PropertyName("referralQrUrl") var referralQrUrl: String? = null // 추천 QR URL
+    @PropertyName("referralQrUrl") var referralQrUrl: String? = null, // 추천 QR URL
+    @PropertyName("lastLoginTime") var lastLoginTime: Timestamp? = null // 출근(로그인) 시간
 ) {
     constructor() : this(
         id = "",
@@ -37,6 +38,7 @@ data class DriverInfo(
         driverType = null,
         approvedAt = null,
         approvalStatus = Constants.APPROVAL_STATUS_PENDING,
-        referralQrUrl = null
+        referralQrUrl = null,
+        lastLoginTime = null
     )
 }

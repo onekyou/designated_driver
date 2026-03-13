@@ -992,6 +992,10 @@ class DriverViewModel @Inject constructor(
         _uiState.update { it.copy(navigateToHistorySettlement = false) }
     }
 
+    fun requestNavigateToSettlement() {
+        _uiState.update { it.copy(navigateToHistorySettlement = true) }
+    }
+
     fun onErrorMessageHandled() {
         _uiState.update { it.copy(errorMessage = null) }
     }

@@ -80,7 +80,8 @@ class DriverRepository(
                         authUid = data["authUid"] as? String,
                         status = data["status"] as? String ?: "OFFLINE",
                         createdAt = data["createdAt"] as? Timestamp,
-                        updatedAt = data["updatedAt"] as? Timestamp
+                        updatedAt = data["updatedAt"] as? Timestamp,
+                        lastLoginTime = data["lastLoginTime"] as? Timestamp
                     )
 
                     driverInfo.toLocalDriverInfo(provinceId, officeId)

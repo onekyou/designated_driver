@@ -4015,26 +4015,19 @@ exports.onDriverSettlementSubmitted = (0, firestore_1.onDocumentUpdated)({
             logger.warn(`[onDriverSettlementSubmitted] 유효한 매니저 토큰 없음`);
             return;
         }
-        // FCM 전송
+        // FCM 전송 (data-only: 백그라운드에서도 onMessageReceived 호출 보장)
         const payload = {
-            notification: {
-                title: "📋 업무마감 제출",
-                body: `${driverName}님이 업무마감을 제출했습니다. (${tripCount}건, 실납입: ${realDeposit.toLocaleString()}원)`,
-            },
             data: {
                 type: "SETTLEMENT_SUBMITTED",
                 driverId: driverId,
                 driverName: driverName,
                 tripCount: String(tripCount),
                 realDeposit: String(realDeposit),
+                title: "📋 업무마감 제출",
+                body: `${driverName}님이 업무마감을 제출했습니다. (${tripCount}건, 실납입: ${realDeposit.toLocaleString()}원)`,
             },
             android: {
                 priority: "high",
-                notification: {
-                    sound: "default",
-                    clickAction: "com.designated.callmanager.HOME",
-                    channelId: "status_change_fcm_channel_v2",
-                },
             },
         };
         for (const token of tokens) {

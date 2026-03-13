@@ -18,7 +18,7 @@ import android.content.Context
         LocalCallInfo::class,
         LocalDriverInfo::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -44,7 +44,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     DATABASE_NAME
                 )
-                .addMigrations(MIGRATION_1_2) // 향후 스키마 변경 시 사용
+                .addMigrations(MIGRATION_1_2, MIGRATION_3_4)
                 .fallbackToDestructiveMigration() // 개발 단계에서는 데이터 손실 허용
                 .build()
                 INSTANCE = instance
@@ -99,6 +99,15 @@ abstract class AppDatabase : RoomDatabase() {
                         lastUpdated INTEGER NOT NULL
                     )
                 """)
+            }
+        }
+
+        /**
+         * v3 → v4 마이그레이션: drivers 테이블에 lastLoginTime 컬럼 추가
+         */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE drivers ADD COLUMN lastLoginTime INTEGER")
             }
         }
 
