@@ -1174,34 +1174,48 @@ class DriverViewModel @Inject constructor(
                 val (provinceId, cityId, officeId) = getDriverLocationInfo()
                 val driverId = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
 
-                val assignedCallsQuery = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                val activeCallsQuery = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
                     .collection(Constants.COLLECTION_CITIES).document(cityId)
                     .collection(Constants.COLLECTION_OFFICES).document(officeId)
                     .collection(Constants.COLLECTION_CALLS)
                     .whereEqualTo(Constants.FIELD_ASSIGNED_DRIVER_ID, driverId)
-                    .whereEqualTo(Constants.FIELD_STATUS, Constants.STATUS_ASSIGNED)
+                    .whereIn(Constants.FIELD_STATUS, listOf(
+                        Constants.STATUS_ASSIGNED,
+                        Constants.STATUS_ACCEPTED,
+                        Constants.STATUS_IN_PROGRESS,
+                        Constants.STATUS_AWAITING_SETTLEMENT
+                    ))
                     .get()
                     .await()
 
-                val assignedCalls = assignedCallsQuery.documents.mapNotNull { doc ->
+                val activeCalls = activeCallsQuery.documents.mapNotNull { doc ->
                     doc.toObject(CallInfo::class.java)?.copy(id = doc.id)
                 }
 
-                if (assignedCalls.isNotEmpty()) {
-                    // 첫 번째 배정된 콜을 팝업으로 표시
-                    val firstCall = assignedCalls.first()
+                if (activeCalls.isNotEmpty()) {
+                    val activeCall = activeCalls.firstOrNull {
+                        it.statusEnum == CallStatus.ACCEPTED || it.statusEnum == CallStatus.IN_PROGRESS
+                    }
+                    val newCall = activeCalls.firstOrNull { it.statusEnum == CallStatus.ASSIGNED }
+                    val settlementCall = activeCalls.firstOrNull {
+                        it.statusEnum == CallStatus.AWAITING_SETTLEMENT
+                    }
+
                     _uiState.update { currentState ->
                         currentState.copy(
-                            newCallPopup = firstCall,
+                            activeCall = activeCall ?: currentState.activeCall,
+                            newCallPopup = newCall ?: currentState.newCallPopup,
+                            callForSettlement = settlementCall ?: currentState.callForSettlement,
                             navigateToHome = true
                         )
                     }
-                    Log.d(TAG, "checkForPendingDispatch: found ${assignedCalls.size} pending calls, showing first one")
+                    Log.d(TAG, "checkForPendingDispatch: found ${activeCalls.size} active calls")
                 } else {
-                    Log.d(TAG, "checkForPendingDispatch: no pending assigned calls found")
+                    Log.d(TAG, "checkForPendingDispatch: no active calls found")
+                    _uiState.update { it.copy(errorMessage = "현재 진행 중인 콜이 없습니다.") }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "checkForPendingDispatch: error checking for pending dispatch", e)
+                Log.e(TAG, "checkForPendingDispatch: error checking for active calls", e)
                 _uiState.update { it.copy(errorMessage = "배차 확인 중 오류 발생: ${e.message}") }
             }
         }

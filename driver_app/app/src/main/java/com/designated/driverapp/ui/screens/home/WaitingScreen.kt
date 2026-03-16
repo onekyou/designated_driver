@@ -22,7 +22,6 @@ fun WaitingScreen(
     driverStatus: DriverStatus,
     onGoOnline: () -> Unit,
     onCheckPendingDispatch: () -> Unit = {},
-    hasPendingDispatch: Boolean = false,
     onShowReferralQR: () -> Unit = {}
 ) {
     Column(
@@ -45,8 +44,7 @@ fun WaitingScreen(
                     Text("배차가 완료되면 알림으로 알려드립니다.")
                     Spacer(modifier = Modifier.height(24.dp))
                     Button(
-                        onClick = onCheckPendingDispatch,
-                        enabled = hasPendingDispatch
+                        onClick = onCheckPendingDispatch
                     ) {
                         Text("배차 확인")
                     }

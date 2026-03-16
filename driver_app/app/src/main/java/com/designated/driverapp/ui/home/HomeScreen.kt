@@ -289,7 +289,6 @@ fun HomeScreen(
                                 driverStatus = uiState.driverStatus,
                                 onGoOnline = { viewModel.updateDriverStatus(DriverStatus.ONLINE) },
                                 onCheckPendingDispatch = { viewModel.checkForPendingDispatch() },
-                                hasPendingDispatch = uiState.assignedCalls.any { it.statusEnum == CallStatus.ASSIGNED },
                                 onShowReferralQR = { navController.navigate(AppDestinations.REFERRAL_QR_ROUTE) }
                             )
                         }
@@ -309,7 +308,6 @@ fun HomeScreen(
                         driverStatus = uiState.driverStatus,
                         onGoOnline = { viewModel.updateDriverStatus(DriverStatus.ONLINE) },
                         onCheckPendingDispatch = { viewModel.checkForPendingDispatch() },
-                        hasPendingDispatch = uiState.assignedCalls.any { it.statusEnum == CallStatus.ASSIGNED },
                         onShowReferralQR = { navController.navigate(AppDestinations.REFERRAL_QR_ROUTE) }
                     )
                 }

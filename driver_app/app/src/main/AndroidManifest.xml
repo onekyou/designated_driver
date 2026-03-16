@@ -20,6 +20,8 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- 화면 깨우기 권한 (FCM 알림 수신 시) -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- 부팅 완료 시 자동 시작 (로그인 상태면 서비스 복구) -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- 다른 앱 위에 표시 권한 추가 -->
     <!-- <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" /> -->
 
@@ -56,6 +58,13 @@
             android:excludeFromRecents="true"
             android:taskAffinity=""
             android:theme="@style/Theme.DriverApp" />
+        <receiver
+            android:name=".receiver.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
         <service
             android:name=".service.DriverForegroundService"
             android:exported="false"
