@@ -81,7 +81,8 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
 
     // 기사별 settlementLastCleared 맵 (driverId → millis)
     // 개별 기사 정산 완료(퇴근) 시 갱신된 기사별 마감 시점
-    private var driverLastClearedMap: Map<String, Long> = emptyMap()
+    private val _driverLastClearedMap = MutableStateFlow<Map<String, Long>>(emptyMap())
+    val driverLastClearedMap: StateFlow<Map<String, Long>> = _driverLastClearedMap.asStateFlow()
 
     private val database = CallManagerDatabase.getInstance(getApplication())
     private val repository = SettlementRepository(database)
@@ -303,7 +304,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                     val driverCleared = doc.getTimestamp("settlementLastCleared")?.toDate()?.time ?: 0L
                     driverClearedMap[doc.id] = driverCleared
                 }
-                driverLastClearedMap = driverClearedMap
+                _driverLastClearedMap.value = driverClearedMap
                 Log.d("SettlementViewModel", "Driver settlementLastCleared map loaded: ${driverClearedMap.size} drivers")
 
                 // 2단계: COMPLETED 콜 조회
@@ -332,7 +333,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
 
                         // 기사별 settlementLastCleared와 office-level 중 더 큰 값으로 필터
                         val driverId = doc.getString("assignedDriverId") ?: ""
-                        val driverCleared = driverLastClearedMap[driverId] ?: 0L
+                        val driverCleared = _driverLastClearedMap.value[driverId] ?: 0L
                         val cutoff = maxOf(effectiveLastCleared, driverCleared)
 
                         if (completedTimestamp <= cutoff) return@mapNotNull null // 필터링
@@ -438,7 +439,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
 
                         // 기사별 settlementLastCleared 필터
                         val driverId = doc.getString("assignedDriverId") ?: ""
-                        val driverCleared = driverLastClearedMap[driverId] ?: 0L
+                        val driverCleared = _driverLastClearedMap.value[driverId] ?: 0L
                         if (completedTimestamp <= driverCleared) return@mapNotNull null
 
                         val fareAmount = doc.getLong("fareFinal")?.toInt() ?: doc.getLong("fare_set")?.toInt() ?: 0
@@ -496,7 +497,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
 
                         // 기사별 settlementLastCleared 필터
                         val driverId = doc.getString("assignedDriverId") ?: ""
-                        val driverCleared = driverLastClearedMap[driverId] ?: 0L
+                        val driverCleared = _driverLastClearedMap.value[driverId] ?: 0L
                         if (completedTimestamp <= driverCleared) return@mapNotNull null
 
                         val fareAmount = doc.getLong("fareFinal")?.toInt() ?: doc.getLong("fare_set")?.toInt() ?: 0
@@ -1361,10 +1362,15 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
 
                 val carryOvers = mutableListOf<DriverCarryOverSummary>()
                 val dailySettlements = mutableListOf<DriverDailySettlementSummary>()
+                val updatedClearedMap = mutableMapOf<String, Long>()
 
                 snapshots?.documents?.forEach { doc ->
                     val driverId = doc.id
                     val driverName = doc.getString("name") ?: "이름없음"
+
+                    // settlementLastCleared 실시간 갱신 (퇴근 시 즉시 반영)
+                    val clearedTs = doc.getTimestamp("settlementLastCleared")?.toDate()?.time ?: 0L
+                    updatedClearedMap[driverId] = clearedTs
 
                     // carryOver 파싱
                     val carryOverMap = doc.get("carryOver") as? Map<String, Any?>
@@ -1411,9 +1417,11 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
 
                 _carryOverList.value = carryOvers.sortedByDescending { it.balance }
                 _dailySettlementList.value = dailySettlements.sortedByDescending { it.dailySettlement?.submittedAt }
+                _driverLastClearedMap.value = updatedClearedMap
 
                 Log.d("SettlementViewModel", "CarryOver list updated: ${carryOvers.size} drivers")
                 Log.d("SettlementViewModel", "DailySettlement list updated: ${dailySettlements.size} drivers")
+                Log.d("SettlementViewModel", "DriverLastClearedMap updated: ${updatedClearedMap.size} drivers")
             }
     }
 

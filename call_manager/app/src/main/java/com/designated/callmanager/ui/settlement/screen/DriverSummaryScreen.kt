@@ -33,6 +33,15 @@ fun DriverSummaryScreen(vm: SettlementViewModel = viewModel()) {
     val context = LocalContext.current
     val trips by vm.settlementList.collectAsState()
     val ratio by vm.officeShareRatio.collectAsState()
+    val driverLastClearedMap by vm.driverLastClearedMap.collectAsState()
+
+    // 기사별 마감 시점 이후 콜만 필터 (1차 마감 콜 제외)
+    val filteredTrips = remember(trips, driverLastClearedMap) {
+        trips.filter { trip ->
+            val driverCleared = driverLastClearedMap[trip.driverId] ?: 0L
+            trip.completedAt > driverCleared
+        }
+    }
 
     // 이월 정산 (기사별 미지급금) 데이터
     val carryOverList by vm.carryOverList.collectAsState()
@@ -50,10 +59,10 @@ fun DriverSummaryScreen(vm: SettlementViewModel = viewModel()) {
         dailySettlementList.associateBy { it.driverId }
     }
 
-    // 기사별 오늘 미지급금 계산 (로컬 trips 기반) - 기사앱과 동일한 로직
+    // 기사별 오늘 미지급금 계산 (마감 이후 콜만) - 기사앱과 동일한 로직
     // rawFinalDeposit = deposit - totalCredit (사무실몫 - 외상)
-    val todayUnpaidByDriver = remember(trips, ratio) {
-        trips.groupBy { it.driverId }
+    val todayUnpaidByDriver = remember(filteredTrips, ratio) {
+        filteredTrips.groupBy { it.driverId }
             .filter { it.key.isNotBlank() }
             .mapValues { (_, driverTrips) ->
                 val fareSum = driverTrips.sumOf { it.fare }
@@ -74,8 +83,8 @@ fun DriverSummaryScreen(vm: SettlementViewModel = viewModel()) {
             }
     }
 
-    val driverStats = remember(trips, ratio) {
-        trips.groupBy { it.driverName.ifBlank { "미지정" } }
+    val driverStats = remember(filteredTrips, ratio) {
+        filteredTrips.groupBy { it.driverName.ifBlank { "미지정" } }
             .mapValues { (_, list) ->
                 val fareSum = list.sumOf { it.fare }
                 val totalCredit = list.sumOf { trip ->
@@ -98,8 +107,8 @@ fun DriverSummaryScreen(vm: SettlementViewModel = viewModel()) {
             .sortedByDescending { it.totalFare }
     }
 
-    val totalFare = trips.sumOf { it.fare }
-    val totalCredit = trips.sumOf { trip ->
+    val totalFare = filteredTrips.sumOf { it.fare }
+    val totalCredit = filteredTrips.sumOf { trip ->
         when {
             trip.paymentMethod == "현금" -> 0
             trip.paymentMethod == "현금+포인트" -> {
@@ -116,7 +125,7 @@ fun DriverSummaryScreen(vm: SettlementViewModel = viewModel()) {
     var selectedDriver by remember { mutableStateOf<Pair<String,List<SettlementData>>?>(null) }
 
     // 오늘 운행이 없지만 미지급금이 있는 기사 필터링
-    val driversWithTrips = remember(trips) { trips.map { it.driverId }.toSet() }
+    val driversWithTrips = remember(filteredTrips) { filteredTrips.map { it.driverId }.toSet() }
     val carryOverOnlyDrivers = remember(carryOverList, driversWithTrips) {
         carryOverList.filter { it.driverId !in driversWithTrips && it.balance > 0 }
     }
@@ -164,7 +173,7 @@ fun DriverSummaryScreen(vm: SettlementViewModel = viewModel()) {
                         }
                     }
                 ) {
-                    val list = trips.filter { (it.driverName.ifBlank { "미지정" }) == stat.name }
+                    val list = filteredTrips.filter { (it.driverName.ifBlank { "미지정" }) == stat.name }
                     selectedDriver = stat.name to list
                 }
             }
