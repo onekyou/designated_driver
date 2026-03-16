@@ -1566,7 +1566,7 @@ class DriverViewModel @Inject constructor(
             val officeDeposit = (totalFare * ratio / 100.0).toInt()        // 총 납입액 (사무실 몫)
             val driverShare = totalFare - officeDeposit                    // 내 수익 (기사몫 = 운행료 - 사무실몫)
             val realDeposit = totalCashReceived - driverShare              // 실 납부액
-            val totalCredit = totalFare - totalCashReceived - totalPointsUsed  // 총 외상 (현금·포인트 제외 금액)
+            val totalCredit = totalFare - totalCashReceived  // 총 외상 (현금 제외 금액 = 이체+외상+포인트)
 
             _todaySettlement.value = TodaySettlement(
                 totalFare = totalFare,
