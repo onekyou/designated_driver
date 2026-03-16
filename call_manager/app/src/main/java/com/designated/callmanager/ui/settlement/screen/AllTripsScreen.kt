@@ -8,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.font.FontWeight
@@ -18,6 +19,7 @@ import kotlin.math.roundToInt
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.designated.callmanager.data.SettlementData
 import com.designated.callmanager.ui.settlement.SettlementViewModel
+import com.designated.callmanager.ui.settlement.SettlementCalculator
 import com.designated.callmanager.ui.settlement.screen.CreditDialog
 import com.designated.callmanager.data.settlement.DriverCarryOverSummary
 import com.designated.callmanager.data.settlement.CarryOverStatus
@@ -44,27 +46,8 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel(), onHome: (() -> Unit)? 
     val dailySettlementList by vm.dailySettlementList.collectAsState()
 
     // 기사별 오늘 미지급금 계산 (로컬 trips 기반) - 기사앱과 동일한 로직
-    // rawFinalDeposit = deposit - totalCredit (사무실몫 - 외상)
     val todayUnpaidByDriver = remember(trips, ratio) {
-        trips.groupBy { it.driverId }
-            .filter { it.key.isNotBlank() }
-            .mapValues { (_, driverTrips) ->
-                val fareSum = driverTrips.sumOf { it.fare }
-                val totalCredit = driverTrips.sumOf { trip ->
-                    when {
-                        trip.paymentMethod == "현금" -> 0
-                        trip.paymentMethod == "현금+포인트" -> {
-                            val cash = trip.cashAmount ?: 0
-                            if (cash > 0) trip.fare - cash else trip.fare
-                        }
-                        else -> trip.fare // 이체, 외상은 전액 외상
-                    }
-                }
-                val deposit = (fareSum * ratio / 100.0).toInt()
-                val rawFinalDeposit = deposit - totalCredit
-                // 음수면 미지급금 발생 (사무실이 기사에게 줘야 할 돈)
-                if (rawFinalDeposit < 0) -rawFinalDeposit else 0
-            }
+        SettlementCalculator.calculateTodayUnpaidByDriver(trips, ratio)
     }
 
     // 기사별 통합 미지급 현황 (이월분 + 오늘분)
@@ -175,34 +158,21 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel(), onHome: (() -> Unit)? 
             }
         }
 
-        val totalFare = trips.sumOf { it.fare }
-        val cashTrips   = trips.filter { it.paymentMethod == "현금" }
-        val bankTrips   = trips.filter { it.paymentMethod == "이체" }
-        val creditTrips = trips.filter { it.paymentMethod == "외상" }
-        val cashPlusPointTrips = trips.filter { it.paymentMethod == "현금+포인트" }
-        val pointOnlyTrips = trips.filter { it.paymentMethod == "포인트" }
-
-        val cashSum   = cashTrips.sumOf { it.fare } +
-                        cashPlusPointTrips.sumOf { trip ->
-                            trip.cashAmount ?: 0  // 현금+포인트에서 현금 부분 추가
-                        }
-        val bankSum   = bankTrips.sumOf { it.fare }
-        val creditSum = creditTrips.sumOf { if(it.creditAmount>0) it.creditAmount else it.fare }
-        // 포인트 금액: 현금+포인트와 포인트 결제 모두 계산
-        val pointSum = cashPlusPointTrips.sumOf { trip ->
-            // cashAmount가 null이면 전액 포인트, 값이 있으면 차액이 포인트
-            val cashReceived = trip.cashAmount ?: 0
-            trip.fare - cashReceived
-        } + pointOnlyTrips.sumOf { it.fare }  // 포인트 결제는 전액
+        val breakdown = SettlementCalculator.calculatePaymentBreakdown(trips)
+        val totalFare = breakdown.totalFare
+        val cashSum = breakdown.cashSum
+        val bankSum = breakdown.bankSum
+        val creditSum = breakdown.creditSum
+        val pointSum = breakdown.pointSum
 
         Spacer(Modifier.height(8.dp))
 
         Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF424242))) {
             Column(Modifier.padding(16.dp)) {
                 // 총매출과 총수입 (사무실 비율)
-                val totalOfficeIncome = (totalFare * ratio / 100.0).toInt()
-                Text("총매출 ${"%,d".format(totalFare)}원", color = Color.White, style = MaterialTheme.typography.titleMedium)
-                Text("총수입 ${"%,d".format(totalOfficeIncome)}원", color = Color.White, style = MaterialTheme.typography.titleMedium)
+                val totalOfficeIncome = SettlementCalculator.calculateOfficeDeposit(totalFare, ratio)
+                Text("총매출 ${"%,d".format(totalFare)}원", color = Color.White, style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("settlement_all_totalFare"))
+                Text("총수입 ${"%,d".format(totalOfficeIncome)}원", color = Color.White, style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("settlement_all_officeIncome"))
 
                 HorizontalDivider(color = Color.Gray, thickness = 1.dp, modifier = Modifier.padding(vertical = 12.dp))
 
@@ -210,23 +180,10 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel(), onHome: (() -> Unit)? 
                 Text("수입내역", color = Color.White, style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
 
-                // 사무실 실수입 계산 및 검증
-                val totalDeposit = (totalFare * ratio / 100.0).toInt()
+                // 사무실 실수입 계산
+                val totalDeposit = totalOfficeIncome
                 val driverShare = totalFare - totalDeposit
-                val driverDeposit = cashSum - driverShare
-
-                // 검증 로직 - 계산 전 검산 (마이너스 허용)
-                val verifyDriverDeposit = cashSum - driverShare
-                val verifyRealIncome = verifyDriverDeposit + bankSum + creditSum - pointSum
-
-                // 교차 검증: 다른 방식으로 계산
-                val alternativeCalc = (cashSum - driverShare) + bankSum + creditSum - pointSum
-
-                // 검증된 값 사용
-                val finalDriverDeposit = if (verifyDriverDeposit == driverDeposit) driverDeposit else {
-                    android.util.Log.e("Settlement", "Driver deposit mismatch: $driverDeposit vs $verifyDriverDeposit")
-                    verifyDriverDeposit
-                }
+                val finalDriverDeposit = SettlementCalculator.calculateDriverDeposit(cashSum, driverShare)
 
                 // 기사 납입금 (마이너스도 표시)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -245,7 +202,7 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel(), onHome: (() -> Unit)? 
                 }
 
                 // 미수금
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(modifier = Modifier.fillMaxWidth().testTag("settlement_all_creditSum"), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("미수금", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
                     Text("${"%,d".format(creditSum)}원",
                         color = Color.White,
@@ -262,17 +219,12 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel(), onHome: (() -> Unit)? 
 
                 Spacer(Modifier.height(12.dp))
 
-                // 실수입 - 검증된 값 사용 (마이너스도 포함)
-                val realIncome = finalDriverDeposit + bankSum + creditSum - pointSum
-
-                // 최종 검증
-                if (realIncome != verifyRealIncome || realIncome != alternativeCalc) {
-                    android.util.Log.e("Settlement", "Income verification failed: calc=$realIncome, verify=$verifyRealIncome, alt=$alternativeCalc")
-                }
+                // 실수입 계산
+                val realIncome = SettlementCalculator.calculateRealIncome(finalDriverDeposit, bankSum, creditSum, pointSum)
 
                 HorizontalDivider(color = Color.Gray, thickness = 1.dp, modifier = Modifier.padding(vertical = 8.dp))
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(modifier = Modifier.fillMaxWidth().testTag("settlement_all_realIncome"), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("실수입", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text("${"%,d".format(realIncome)}원",
                         color = Color.White,

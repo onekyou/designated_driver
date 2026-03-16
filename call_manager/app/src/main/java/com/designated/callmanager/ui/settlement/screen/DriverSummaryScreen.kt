@@ -9,6 +9,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.layout.Arrangement
 import com.designated.callmanager.ui.settlement.screen.DateDetailDialog
+import com.designated.callmanager.ui.settlement.SettlementCalculator
 import java.text.SimpleDateFormat
 import java.util.Locale
 import android.widget.Toast
@@ -60,67 +62,18 @@ fun DriverSummaryScreen(vm: SettlementViewModel = viewModel()) {
     }
 
     // 기사별 오늘 미지급금 계산 (마감 이후 콜만) - 기사앱과 동일한 로직
-    // rawFinalDeposit = deposit - totalCredit (사무실몫 - 외상)
     val todayUnpaidByDriver = remember(filteredTrips, ratio) {
-        filteredTrips.groupBy { it.driverId }
-            .filter { it.key.isNotBlank() }
-            .mapValues { (_, driverTrips) ->
-                val fareSum = driverTrips.sumOf { it.fare }
-                val totalCredit = driverTrips.sumOf { trip ->
-                    when {
-                        trip.paymentMethod == "현금" -> 0
-                        trip.paymentMethod == "현금+포인트" -> {
-                            val cash = trip.cashAmount ?: 0
-                            if (cash > 0) trip.fare - cash else trip.fare
-                        }
-                        else -> trip.fare // 이체, 외상은 전액 외상
-                    }
-                }
-                val deposit = (fareSum * ratio / 100.0).toInt()
-                val rawFinalDeposit = deposit - totalCredit
-                // 음수면 미지급금 발생 (사무실이 기사에게 줘야 할 돈)
-                if (rawFinalDeposit < 0) -rawFinalDeposit else 0
-            }
+        SettlementCalculator.calculateTodayUnpaidByDriver(filteredTrips, ratio)
     }
 
     val driverStats = remember(filteredTrips, ratio) {
-        filteredTrips.groupBy { it.driverName.ifBlank { "미지정" } }
-            .mapValues { (_, list) ->
-                val fareSum = list.sumOf { it.fare }
-                val totalCredit = list.sumOf { trip ->
-                    when {
-                        trip.paymentMethod == "현금" -> 0
-                        trip.paymentMethod == "현금+포인트" -> {
-                            // 현금+포인트의 경우 포인트 부분만 외상
-                            val cashReceived = trip.cashAmount ?: 0
-                            if (cashReceived > 0) trip.fare - cashReceived else trip.fare
-                        }
-                        else -> trip.fare // 이체, 외상은 전액 외상
-                    }
-                }
-                val deposit = (fareSum * ratio / 100.0).toInt()
-                val realDeposit = deposit - totalCredit  // 올바른 계산: 총납입 - 총외상
-                val driverId = list.first().driverId
-                DriverStat(list.first().driverName.ifBlank { "미지정" }, list.size, fareSum, deposit, totalCredit, realDeposit, driverId)
-            }
-            .values
-            .sortedByDescending { it.totalFare }
+        SettlementCalculator.calculateDriverStats(filteredTrips, ratio)
     }
 
     val totalFare = filteredTrips.sumOf { it.fare }
-    val totalCredit = filteredTrips.sumOf { trip ->
-        when {
-            trip.paymentMethod == "현금" -> 0
-            trip.paymentMethod == "현금+포인트" -> {
-                // 현금+포인트의 경우 포인트 부분만 외상
-                val cashReceived = trip.cashAmount ?: 0
-                if (cashReceived > 0) trip.fare - cashReceived else trip.fare
-            }
-            else -> trip.fare // 이체, 외상은 전액 외상
-        }
-    }
-    val totalDeposit = (totalFare * ratio / 100.0).toInt()
-    val realDepositAll = totalDeposit - totalCredit  // 올바른 계산: 총납입 - 총외상
+    val totalCredit = SettlementCalculator.calculateTotalCredit(filteredTrips)
+    val totalDeposit = SettlementCalculator.calculateOfficeDeposit(totalFare, ratio)
+    val realDepositAll = totalDeposit - totalCredit
 
     var selectedDriver by remember { mutableStateOf<Pair<String,List<SettlementData>>?>(null) }
 
@@ -286,7 +239,7 @@ private fun DriverDetailCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(stat.name, color = Color.White, style = MaterialTheme.typography.titleMedium)
+                Text(stat.name, color = Color.White, style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("settlement_driver_name_${stat.driverId}"))
                 // 업무마감 상태 표시
                 if (hasSubmitted) {
                     Text(
@@ -311,10 +264,10 @@ private fun DriverDetailCard(
                 }
             }
             Divider(color = Color.DarkGray, thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
-            Text("총 운행 횟수 :  ${stat.count} 회", color = Color.White)
-            Text("총 운행료 : ${"%,d".format(stat.totalFare)}원", color = Color.White)
-            Text("수수료 : ${"%,d".format(stat.deposit)}원", color = Color.White)
-            Text("미수금 : ${"%,d".format(stat.totalCredit)}원", color = Color.White)
+            Text("총 운행 횟수 :  ${stat.count} 회", color = Color.White, modifier = Modifier.testTag("settlement_driver_count_${stat.driverId}"))
+            Text("총 운행료 : ${"%,d".format(stat.totalFare)}원", color = Color.White, modifier = Modifier.testTag("settlement_driver_totalFare_${stat.driverId}"))
+            Text("수수료 : ${"%,d".format(stat.deposit)}원", color = Color.White, modifier = Modifier.testTag("settlement_driver_deposit_${stat.driverId}"))
+            Text("미수금 : ${"%,d".format(stat.totalCredit)}원", color = Color.White, modifier = Modifier.testTag("settlement_driver_totalCredit_${stat.driverId}"))
             Divider(color = Color.DarkGray, thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
 
             // 업무마감 섹션 (마감 대기 또는 확인완료 상태인 경우)
@@ -437,7 +390,8 @@ private fun DriverDetailCard(
                             Text(
                                 "미지급 합계: ${"%,d".format(carryOverBalance)}원",
                                 color = if (carryOverBalance > 0) Color(0xFFFF6666) else Color.Gray,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.testTag("settlement_driver_carryOver_${stat.driverId}")
                             )
                             if (carryOver != null && carryOverBalance > 0) {
                                 when (carryOver.status) {
@@ -462,7 +416,8 @@ private fun DriverDetailCard(
                             Text(
                                 "미지급 합계: ${"%,d".format(carryOverBalance)}원",
                                 color = if (carryOverBalance > 0) Color(0xFFFF6666) else Color.Gray,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.testTag("settlement_driver_carryOver_${stat.driverId}")
                             )
 
                             // 상태

@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.designated.driverapp.model.CallInfo
 import androidx.compose.material.icons.Icons
@@ -63,6 +64,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import com.designated.driverapp.data.settlement.SettlementCalc
 
 @Composable
 fun HistorySettlementScreen(
@@ -465,50 +467,16 @@ fun HistorySettlementScreen(
             val carryOverStatus = carryOver?.status
 
             // 최종 납입액 계산 (사무실 몫 - 외상) - 미환급금 적용 전
-            val rawFinalDeposit = officeDeposit - totalCredit
-
-            // ========== 미환급금/미납금과 납입금 통합 계산 ==========
-            // carryOverBalance > 0 : 사무실이 기사에게 줄 돈 (미수령금)
-            // carryOverBalance < 0 : 기사가 사무실에 줄 돈 (미납금)
-            // rawFinalDeposit > 0 : 기사가 사무실에 낼 돈
-            // rawFinalDeposit < 0 : 사무실이 기사에게 줄 돈 (오늘 발생)
+            val rawFinalDeposit = SettlementCalc.calculateRawFinalDeposit(officeDeposit, totalCredit)
 
             // 미환급금/미납금에서 공제 후 실제 납입해야 할 금액
-            val adjustedDeposit = if (carryOverBalance >= 0) {
-                // 미수령금(양수): 납입액에서 미수령금 차감
-                if (rawFinalDeposit > 0) maxOf(0, rawFinalDeposit - carryOverBalance) else 0
-            } else {
-                // 미납금(음수): 납입액에 미납금 추가
-                if (rawFinalDeposit > 0) rawFinalDeposit + (-carryOverBalance) else (-carryOverBalance)
-            }
+            val adjustedDeposit = SettlementCalc.calculateAdjustedDeposit(rawFinalDeposit, carryOverBalance)
 
             // 오늘 운행 후 남은 이월금
-            val remainingCarryOver = if (carryOverBalance >= 0) {
-                // 미수령금(양수)
-                if (rawFinalDeposit > 0) {
-                    maxOf(0, carryOverBalance - rawFinalDeposit)
-                } else {
-                    carryOverBalance + (-rawFinalDeposit)
-                }
-            } else {
-                // 미납금(음수)
-                if (rawFinalDeposit > 0) {
-                    // 납입 후 미납금 상쇄 (rawFinalDeposit로 미납금 갚기)
-                    // 남은 이월 = carryOverBalance + rawFinalDeposit (음수 + 양수)
-                    val netBalance = carryOverBalance + rawFinalDeposit
-                    netBalance  // 음수면 미납 잔여, 양수면 미수령금 발생
-                } else {
-                    // 미납금 + 사무실이 줄 돈 → 미납 일부 상쇄
-                    carryOverBalance + (-rawFinalDeposit)
-                }
-            }
+            val remainingCarryOver = SettlementCalc.calculateRemainingCarryOver(rawFinalDeposit, carryOverBalance)
 
-            // 미환급금에서 공제된 금액 (양수 carryOver일 때만 의미 있음)
-            val usedFromCarryOver = if (rawFinalDeposit > 0 && carryOverBalance > 0) {
-                minOf(carryOverBalance, rawFinalDeposit)
-            } else {
-                0
-            }
+            // 미환급금에서 공제된 금액
+            val usedFromCarryOver = SettlementCalc.calculateUsedFromCarryOver(rawFinalDeposit, carryOverBalance)
 
             // 실납입 상태 (입력 필드 없이 기본값 표시 + 확인/정정)
             var isDepositEdited by remember { mutableStateOf(false) }
@@ -624,17 +592,17 @@ fun HistorySettlementScreen(
                             // 운행 정보
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("총 운행", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
-                        Text("${totalCount}건", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                        Text("${totalCount}건", color = Color.White, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("settlement_today_count"))
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("총 운임", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
-                        Text("%,d원".format(totalFare), color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                        Text("%,d원".format(totalFare), color = Color.White, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("settlement_today_totalFare"))
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("납입금", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
-                        Text("%,d원".format(officeDeposit), color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                        Text("%,d원".format(officeDeposit), color = Color.White, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("settlement_today_officeDeposit"))
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -644,7 +612,7 @@ fun HistorySettlementScreen(
                     // 현금/외상/납입금 정보
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("현금", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
-                        Text("%,d원".format(cashReceived), color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                        Text("%,d원".format(cashReceived), color = Color.White, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("settlement_today_cashReceived"))
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -652,7 +620,8 @@ fun HistorySettlementScreen(
                         Text(
                             if (totalCredit > 0) "%,d원".format(totalCredit) else "-",
                             color = if (totalCredit > 0) Color(0xFFFF6666) else Color.Gray,
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.testTag("settlement_today_totalCredit")
                         )
                     }
                     // 미환급금 공제 내역 표시 (최종납입금 표시 제거 - 로직은 유지)
@@ -689,7 +658,8 @@ fun HistorySettlementScreen(
                                     "%,d원".format(displayDeposit),
                                     color = if (isDepositConfirmed) Color(0xFF4CAF50) else Color.White,
                                     fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.bodyMedium
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.testTag("settlement_today_displayDeposit")
                                 )
 
                                 Spacer(modifier = Modifier.width(12.dp))
