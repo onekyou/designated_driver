@@ -204,17 +204,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // 기사 상태 업데이트 브로드캐스트 리시버
+    // 기사 상태 업데이트 브로드캐스트 리시버 (로그 용도, FCM 핸들러에서 Room DB 직접 업데이트)
     private val driverStatusUpdateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == "com.designated.callmanager.DRIVER_STATUS_UPDATE") {
-                val driverId = intent.getStringExtra("driverId")
                 val driverName = intent.getStringExtra("driverName")
                 val newStatus = intent.getStringExtra("newStatus")
                 Log.d("MainActivity", "📍 기사 상태 업데이트 브로드캐스트 수신 - $driverName: $newStatus")
-
-                // 기사 데이터 새로고침
-                dashboardViewModel.refreshDriverData()
             }
         }
     }

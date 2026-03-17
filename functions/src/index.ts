@@ -453,7 +453,7 @@ export const oncallassigned = onDocumentWritten(
                         callId: callId,
                         notificationId: notificationId,  // ACK용 ID 추가
                         type: "call_assigned",
-                        title: "🚨 새로운 콜 배정",
+                        title: "새로운 콜 배정",
                         body: "새로운 콜이 배정되었습니다. 즉시 확인해주세요!"
                     },
                     android: {
@@ -3350,8 +3350,8 @@ export const checkAssignedTimeout = onSchedule(
               const presenceStatus = await getDriverPresenceStatus(assignedDriverId);
               const isTimedOut = callData.assignedTimestamp && callData.assignedTimestamp.toMillis() < cutoff.toMillis();
 
-              // #1: ASSIGNED + offline → 즉시 WAITING 복귀 + 관리자 알림
-              if (presenceStatus === "offline") {
+              // #1: ASSIGNED + offline + 타임아웃 → WAITING 복귀 + 관리자 알림
+              if (presenceStatus === "offline" && isTimedOut) {
                 // 기사 이름 조회
                 const driversQuery = await officeDoc.ref
                   .collection("designated_drivers")
@@ -4610,6 +4610,7 @@ export const onDriverStatusChange = onDocumentUpdated(
           provinceId: provinceId,
           cityId: cityId,
           officeId: officeId,
+          lastLoginTime: afterData?.lastLoginTime ? afterData.lastLoginTime.toMillis().toString() : "",
           timestamp: Date.now().toString()
         },
         android: {

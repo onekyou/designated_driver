@@ -3769,6 +3769,7 @@ exports.onDriverStatusChange = (0, firestore_1.onDocumentUpdated)({
                 provinceId: provinceId,
                 cityId: cityId,
                 officeId: officeId,
+                lastLoginTime: (afterData === null || afterData === void 0 ? void 0 : afterData.lastLoginTime) ? afterData.lastLoginTime.toMillis().toString() : "",
                 timestamp: Date.now().toString()
             },
             android: {

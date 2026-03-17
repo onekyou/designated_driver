@@ -78,6 +78,24 @@ interface DriverDao {
     )
 
     /**
+     * 기사 상태 + lastLoginTime 업데이트 (FCM에서 lastLoginTime 포함 시)
+     */
+    @Query("""
+        UPDATE drivers
+        SET status = :status,
+            lastLoginTime = :lastLoginTime,
+            updatedAt = :now,
+            lastUpdated = :now
+        WHERE id = :driverId
+    """)
+    suspend fun updateDriverStatusWithLoginTime(
+        driverId: String,
+        status: String,
+        lastLoginTime: Long,
+        now: Long = System.currentTimeMillis()
+    )
+
+    /**
      * 기사 상태 업데이트 (AuthUid로)
      */
     @Query("""

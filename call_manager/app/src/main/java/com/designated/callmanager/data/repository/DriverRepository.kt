@@ -119,6 +119,22 @@ class DriverRepository(
     }
 
     /**
+     * FCM 메시지로부터 기사 상태 + lastLoginTime 업데이트
+     */
+    suspend fun updateDriverStatusWithLoginTimeFromFCM(
+        driverId: String,
+        newStatus: String,
+        lastLoginTime: Long
+    ) = withContext(Dispatchers.IO) {
+        try {
+            driverDao.updateDriverStatusWithLoginTime(driverId, newStatus, lastLoginTime)
+            Log.d(TAG, "[FCM] 기사 상태+로그인시간 업데이트: $driverId -> $newStatus, loginTime=$lastLoginTime")
+        } catch (e: Exception) {
+            Log.e(TAG, "[FCM] 기사 상태+로그인시간 업데이트 실패: $driverId", e)
+        }
+    }
+
+    /**
      * AuthUid로 기사 상태 업데이트
      */
     suspend fun updateDriverStatusByAuthUidFromFCM(

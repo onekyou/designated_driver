@@ -166,20 +166,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _callInfoForDialog = MutableStateFlow<CallInfo?>(null)
     val callInfoForDialog: StateFlow<CallInfo?> = _callInfoForDialog.asStateFlow()
 
-    private val _showDriverLoginPopup = MutableStateFlow(false)
-    val showDriverLoginPopup: StateFlow<Boolean> = _showDriverLoginPopup
-    private val _loggedInDriverName = MutableStateFlow<String?>(null)
-    val loggedInDriverName: StateFlow<String?> = _loggedInDriverName
     private val _showApprovalPopup = MutableStateFlow(false)
     val showApprovalPopup: StateFlow<Boolean> = _showApprovalPopup
     private val _driverForApproval = MutableStateFlow<DriverInfo?>(null)
     val driverForApproval: StateFlow<DriverInfo?> = _driverForApproval
     private val _approvalActionState = MutableStateFlow<DriverApprovalActionState>(DriverApprovalActionState.Idle)
     val approvalActionState: StateFlow<DriverApprovalActionState> = _approvalActionState
-    private val _showDriverLogoutPopup = MutableStateFlow(false)
-    val showDriverLogoutPopup: StateFlow<Boolean> = _showDriverLogoutPopup
-    private val _loggedOutDriverName = MutableStateFlow<String?>(null)
-    val loggedOutDriverName: StateFlow<String?> = _loggedOutDriverName
     private val _showTripStartedPopup = MutableStateFlow(false)
     val showTripStartedPopup: StateFlow<Boolean> = _showTripStartedPopup
     private val _tripStartedInfo = MutableStateFlow<Triple<String, String?, String>?>(null)
@@ -637,25 +629,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
-     * 기사 데이터 새로고침 (브로드캐스트 수신 시 호출)
-     */
-    fun refreshDriverData() {
-        val provinceId = _provinceId.value ?: return
-        val cityId = _cityId.value ?: return
-        val officeId = _officeId.value ?: return
-
-        viewModelScope.launch {
-            try {
-                Log.d(TAG, "📍 기사 데이터 새로고침 (브로드캐스트)")
-                driverRepository.refreshData(provinceId, cityId, officeId)
-                Log.d(TAG, "📍 기사 데이터 새로고침 완료")
-            } catch (e: Exception) {
-                Log.e(TAG, "기사 데이터 새로고침 실패", e)
-            }
-        }
-    }
-
-    /**
      * 콜 데이터 새로고침 (브로드캐스트 수신 시 호출)
      */
     fun refreshCallData() {
@@ -1075,16 +1048,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         _showApprovalPopup.value = false
         _driverForApproval.value = null
         _approvalActionState.value = DriverApprovalActionState.Idle
-    }
-
-    fun dismissDriverLoginPopup() {
-        _showDriverLoginPopup.value = false
-        _loggedInDriverName.value = null
-    }
-
-    fun dismissDriverLogoutPopup() {
-        _showDriverLogoutPopup.value = false
-        _loggedOutDriverName.value = null
     }
 
     fun dismissTripStartedPopup() {

@@ -887,16 +887,23 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val driverName = remoteMessage.data["driverName"] ?: "기사"
         val newStatus = remoteMessage.data["newStatus"] ?: "상태 변경"
         val statusMessage = remoteMessage.data["statusMessage"] ?: newStatus
+        val lastLoginTimeStr = remoteMessage.data["lastLoginTime"]
 
-        Log.d(TAG, "🔔 [DRIVER_STATUS] 기사 상태 업데이트 - driverId: $driverId, name: $driverName, status: $newStatus")
+        Log.d(TAG, "🔔 [DRIVER_STATUS] 기사 상태 업데이트 - driverId: $driverId, name: $driverName, status: $newStatus, lastLoginTime: $lastLoginTimeStr")
 
         // 로컬 DB 직접 업데이트 (Room Flow가 자동으로 UI 업데이트)
         val app = applicationContext as? com.designated.callmanager.CallManagerApplication
         if (app != null) {
             CoroutineScope(Dispatchers.IO).launch {
                 try {
-                    app.driverRepository.updateDriverStatusFromFCM(driverId, newStatus)
-                    Log.d(TAG, "🔔 [DRIVER_STATUS] 로컬 DB 업데이트 완료: $driverId -> $newStatus")
+                    val lastLoginTime = lastLoginTimeStr?.toLongOrNull()
+                    if (lastLoginTime != null && lastLoginTime > 0) {
+                        app.driverRepository.updateDriverStatusWithLoginTimeFromFCM(driverId, newStatus, lastLoginTime)
+                        Log.d(TAG, "🔔 [DRIVER_STATUS] 로컬 DB 업데이트 완료 (with loginTime): $driverId -> $newStatus")
+                    } else {
+                        app.driverRepository.updateDriverStatusFromFCM(driverId, newStatus)
+                        Log.d(TAG, "🔔 [DRIVER_STATUS] 로컬 DB 업데이트 완료: $driverId -> $newStatus")
+                    }
                 } catch (e: Exception) {
                     Log.e(TAG, "🔔 [DRIVER_STATUS] 로컬 DB 업데이트 실패: $driverId", e)
                 }
@@ -905,7 +912,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             Log.e(TAG, "🔔 [DRIVER_STATUS] CallManagerApplication을 가져올 수 없습니다")
         }
 
-        // 브로드캐스트도 유지 (팝업 표시 등)
+        // 브로드캐스트 유지 (로그 용도)
         val intent = Intent("com.designated.callmanager.DRIVER_STATUS_UPDATE")
         intent.putExtra("driverId", driverId)
         intent.putExtra("driverName", driverName)

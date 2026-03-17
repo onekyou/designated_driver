@@ -17,10 +17,15 @@ import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.lifecycle.lifecycleScope
 import com.designated.driverapp.data.Constants
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -52,6 +57,7 @@ class LockScreenActivity : ComponentActivity() {
 
     private var mediaPlayer: MediaPlayer? = null
     private var vibrator: Vibrator? = null
+    private var soundRepeatJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,20 +81,12 @@ class LockScreenActivity : ComponentActivity() {
             LockScreenContent(
                 title = title,
                 body = body,
-                onAccept = {
-                    Log.d(TAG, "수락 버튼 클릭")
+                onConfirm = {
+                    Log.d(TAG, "확인 버튼 클릭")
                     stopAlertSound()
                     stopVibration()
                     cancelNotification(notificationId)
                     openMainActivity(callId)
-                },
-                onReject = {
-                    Log.d(TAG, "거절 버튼 클릭")
-                    stopAlertSound()
-                    stopVibration()
-                    cancelNotification(notificationId)
-                    rejectCallDirectly(callId)
-                    finish()
                 }
             )
         }
@@ -129,17 +127,37 @@ class LockScreenActivity : ComponentActivity() {
                         .build()
                 )
                 setDataSource(this@LockScreenActivity, alarmUri)
-                isLooping = true  // 반복 재생
+                isLooping = false
                 prepare()
                 start()
             }
-            Log.d(TAG, "알림음 시작")
+
+            // 3초 간격 반복 재생
+            soundRepeatJob = lifecycleScope.launch {
+                delay(3000)
+                while (isActive) {
+                    try {
+                        mediaPlayer?.let {
+                            it.seekTo(0)
+                            it.start()
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "알림음 반복 재생 실패", e)
+                        break
+                    }
+                    delay(3000)
+                }
+            }
+
+            Log.d(TAG, "알림음 시작 (3초 간격 반복)")
         } catch (e: Exception) {
             Log.e(TAG, "알림음 재생 실패", e)
         }
     }
 
     private fun stopAlertSound() {
+        soundRepeatJob?.cancel()
+        soundRepeatJob = null
         mediaPlayer?.let {
             if (it.isPlaying) {
                 it.stop()
@@ -249,44 +267,35 @@ class LockScreenActivity : ComponentActivity() {
 fun LockScreenContent(
     title: String,
     body: String,
-    onAccept: () -> Unit,
-    onReject: () -> Unit
+    onConfirm: () -> Unit
 ) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF1A1A2E)),
+            .background(Color(0xFF121212)),
         contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp),
+                .padding(32.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 아이콘 영역
-            Text(
-                text = "🚗",
-                fontSize = 64.sp,
-                modifier = Modifier.padding(bottom = 24.dp)
-            )
-
             // 제목
             Text(
                 text = title,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = Color(0xFFFFB000),
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(bottom = 16.dp)
+                modifier = Modifier.padding(bottom = 20.dp)
             )
 
             // 본문
             Card(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF2D2D44)),
+                    .fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A)),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text(
@@ -296,50 +305,29 @@ fun LockScreenContent(
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(20.dp)
+                        .padding(24.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
-            // 버튼 영역
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
+            // 확인 버튼
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFFFB000),
+                    contentColor = Color.Black
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(12.dp)
             ) {
-                // 거절 버튼
-                Button(
-                    onClick = onReject,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE74C3C)),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(56.dp)
-                        .padding(horizontal = 8.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(
-                        text = "거절",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                // 수락 버튼
-                Button(
-                    onClick = onAccept,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF27AE60)),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(56.dp)
-                        .padding(horizontal = 8.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(
-                        text = "수락",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                Text(
+                    text = "확인",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }

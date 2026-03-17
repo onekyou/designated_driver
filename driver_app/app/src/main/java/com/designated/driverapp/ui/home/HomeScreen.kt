@@ -1,12 +1,17 @@
 package com.designated.driverapp.ui.home
 
 import android.util.Log
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavController
@@ -31,6 +36,7 @@ import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.History
 import com.designated.driverapp.navigation.AppDestinations
 import com.designated.driverapp.data.Constants
+import com.designated.driverapp.service.PresenceManager
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.CoroutineScope
 import com.designated.driverapp.ui.home.logoutUserAndExitApp
@@ -210,10 +216,40 @@ fun HomeScreen(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         containerColor = Color(0xFF121212)
     ) { paddingValues ->
+        val isConnected by PresenceManager.isConnected.collectAsState()
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            // 네트워크 끊김 배너
+            AnimatedVisibility(
+                visible = !isConnected,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFD32F2F))
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "네트워크 연결이 끊겼습니다",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues),
+                .weight(1f),
             contentAlignment = Alignment.Center
         ) {
             // 뒤로가기 버튼 처리
@@ -336,6 +372,7 @@ fun HomeScreen(
                 )
             }
         }
+        } // Column
     }
 
     // 로그아웃 확인 다이얼로그 (미저장 정산 데이터 있을 때)

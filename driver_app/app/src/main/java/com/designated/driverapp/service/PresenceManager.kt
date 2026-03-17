@@ -8,6 +8,9 @@ import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ServerValue
 import com.google.firebase.database.ValueEventListener
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Firebase Realtime Database를 사용한 Presence (온라인 상태) 관리
@@ -26,6 +29,10 @@ object PresenceManager {
     private var presenceRef: com.google.firebase.database.DatabaseReference? = null
     private var connectedRef: com.google.firebase.database.DatabaseReference? = null
     private var connectionListener: ValueEventListener? = null
+
+    // 네트워크 연결 상태 (UI 배너용)
+    private val _isConnected = MutableStateFlow(true)
+    val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
     enum class Status(val value: String) {
         ONLINE("online"),
@@ -51,6 +58,8 @@ object PresenceManager {
         connectionListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val connected = snapshot.getValue(Boolean::class.java) ?: false
+
+                _isConnected.value = connected
 
                 if (connected) {
                     Log.d(TAG, "Realtime DB 연결됨 - Presence 설정")

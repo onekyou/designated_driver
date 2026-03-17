@@ -147,13 +147,9 @@ fun DashboardScreen(
 
     val context = LocalContext.current
 
-    val showDriverLoginPopup by viewModel.showDriverLoginPopup.collectAsStateWithLifecycle()
-    val loggedInDriverName by viewModel.loggedInDriverName.collectAsStateWithLifecycle()
     val showApprovalPopup by viewModel.showApprovalPopup.collectAsStateWithLifecycle()
     val driverForApproval by viewModel.driverForApproval.collectAsStateWithLifecycle()
     val approvalActionState by viewModel.approvalActionState.collectAsStateWithLifecycle()
-    val showDriverLogoutPopup by viewModel.showDriverLogoutPopup.collectAsStateWithLifecycle()
-    val loggedOutDriverName by viewModel.loggedOutDriverName.collectAsStateWithLifecycle()
     val showTripStartedPopup by viewModel.showTripStartedPopup.collectAsStateWithLifecycle()
     val tripStartedInfo by viewModel.tripStartedInfo.collectAsStateWithLifecycle()
     val showTripCompletedPopup by viewModel.showTripCompletedPopup.collectAsStateWithLifecycle()
@@ -248,14 +244,8 @@ fun DashboardScreen(
                         if (showTripCompletedPopup) {
                             viewModel.dismissTripCompletedPopup()
                         }
-                        if (showDriverLoginPopup) {
-                            viewModel.dismissDriverLoginPopup()
-                        }
                         if (showApprovalPopup) {
                             viewModel.dismissApprovalPopup()
-                        }
-                        if (showDriverLogoutPopup) {
-                            viewModel.dismissDriverLogoutPopup()
                         }
                         if (showSharedCallCancelledDialog) {
                             viewModel.dismissSharedCallCancelledDialog()
@@ -296,8 +286,8 @@ fun DashboardScreen(
         }
     }
 
-    LaunchedEffect(showDriverLoginPopup, showApprovalPopup, showDriverLogoutPopup, showTripStartedPopup, showTripCompletedPopup, showCanceledCallPopup) {
-        if(showDriverLoginPopup || showApprovalPopup || showDriverLogoutPopup || showTripStartedPopup || showTripCompletedPopup || showCanceledCallPopup) {
+    LaunchedEffect(showApprovalPopup, showTripStartedPopup, showTripCompletedPopup, showCanceledCallPopup) {
+        if(showApprovalPopup || showTripStartedPopup || showTripCompletedPopup || showCanceledCallPopup) {
             val prefs = context.getSharedPreferences("call_manager_settings", Context.MODE_PRIVATE)
             val driverEventNotificationEnabled = prefs.getBoolean("driver_event_notification", true)
             if (driverEventNotificationEnabled) {
@@ -369,14 +359,6 @@ fun DashboardScreen(
         )
     }
 
-    if (showDriverLoginPopup && loggedInDriverName != null) {
-        InfoPopup(
-            title = "기사 로그인",
-            content = "$loggedInDriverName 기사님이 로그인했습니다.",
-            onDismiss = { viewModel.dismissDriverLoginPopup() }
-        )
-    }
-
     if (showApprovalPopup && driverForApproval != null) {
         ApprovalDialog(
             driverInfo = driverForApproval!!,
@@ -384,14 +366,6 @@ fun DashboardScreen(
             onApprove = { viewModel.approveDriver(driverForApproval!!.id) },
             onReject = { viewModel.rejectDriver(driverForApproval!!.id) },
             approvalActionState = approvalActionState
-        )
-    }
-
-    if (showDriverLogoutPopup && loggedOutDriverName != null) {
-        InfoPopup(
-            title = "기사 로그아웃",
-            content = "$loggedOutDriverName 기사님이 로그아웃했습니다.",
-            onDismiss = { viewModel.dismissDriverLogoutPopup() }
         )
     }
 
