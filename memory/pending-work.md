@@ -19,7 +19,7 @@
 ## 미개발
 - 픽업기사 앱 (CallStatus에 PICKUP_COMPLETE enum만 존재)
 - Customer App QR코드 고객정보 수집
-- Driver App 부팅 자동시작 (BootCompletedReceiver 미구현, 기사 수동 실행 필요)
+- ~~Driver App 부팅 자동시작~~ → BootReceiver 구현 완료 (`f5ab8ddc`), 실기기 테스트 필요
 
 ## 배포 상태
 - Cloud Functions: 3/12 전체 재배포 완료 (40개 함수)
