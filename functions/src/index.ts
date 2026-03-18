@@ -420,33 +420,11 @@ export const oncallassigned = onDocumentWritten(
             const driverPhone = driverData?.phoneNumber || "";
             const vehicleNumber = driverData?.vehicleNumber || "";
 
-            // 4. 기사에게 알림 전송 (Presence 확인 후)
+            // 4. 기사에게 FCM 알림 전송
+            // Note: 배차 직후 presence 즉시 체크 제거 — 도즈모드/화면꺼짐 시 오탐 발생
+            // (FCM high priority가 기기를 깨우기 전에 offline으로 판단하여 불필요한 경고 전송)
+            // 실제 오프라인 보호는 checkAssignedTimeout 스케줄러(1분 간격)가 담당
             if (driverFcmToken) {
-                // Presence 먼저 확인 (오프라인이면 즉시 콜매니저에 알림)
-                let presenceStatus = "unknown";
-                try {
-                    const presencePath = `presence/drivers/${driverId}`;
-                    const presenceSnapshot = await admin.database().ref(presencePath).get();
-                    presenceStatus = presenceSnapshot.val()?.status || "offline";
-                    logger.info(`[${callId}] 기사 [${driverId}] Presence 상태: ${presenceStatus}`);
-                } catch (e) {
-                    logger.warn(`[${callId}] Presence 조회 실패, FCM 전송 계속 진행`);
-                }
-
-                // 오프라인이면 즉시 콜매니저에 경고 (FCM 재전송 안 함)
-                if (presenceStatus === "offline") {
-                    logger.warn(`[${callId}] 기사 [${driverId}] 오프라인 상태 - 콜매니저에 즉시 알림`);
-                    await sendNotificationFailureAlert(
-                        provinceId,
-                        cityId,
-                        officeId,
-                        callId,
-                        driverId,
-                        presenceStatus
-                    );
-                    // FCM도 보내봄 (혹시 모르니)
-                }
-
                 const notificationId = `${callId}_${driverId}_${Date.now()}`;
                 const driverPayload = {
                     data: {
@@ -463,21 +441,19 @@ export const oncallassigned = onDocumentWritten(
                     token: driverFcmToken,
                 };
 
-                // 알림 상태 저장 (ACK 추적용) - 오프라인이 아닐 때만
-                if (presenceStatus !== "offline") {
-                    await saveNotificationStatus(
-                        notificationId,
-                        "call_assigned",
-                        driverId,
-                        "driver",
-                        officeId,
-                        provinceId,
-                        cityId,
-                        driverFcmToken,
-                        driverPayload,
-                        callId
-                    );
-                }
+                // 알림 상태 저장 (ACK 추적용)
+                await saveNotificationStatus(
+                    notificationId,
+                    "call_assigned",
+                    driverId,
+                    "driver",
+                    officeId,
+                    provinceId,
+                    cityId,
+                    driverFcmToken,
+                    driverPayload,
+                    callId
+                );
 
                 await admin.messaging().send(driverPayload);
                 logger.info(`[${callId}] 기사 [${driverId}]에게 성공적으로 알림을 보냈습니다. notificationId=${notificationId}`);
@@ -4592,6 +4568,9 @@ export const onDriverStatusChange = onDocumentUpdated(
           break;
         case "ASSIGNED":
           statusMessage = "배차됨";
+          break;
+        case "PENDING_CONFIRM":
+          statusMessage = "정산대기";
           break;
         default:
           statusMessage = newStatus;
