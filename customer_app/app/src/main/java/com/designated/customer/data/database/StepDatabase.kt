@@ -46,14 +46,5 @@ abstract class StepDatabase : RoomDatabase() {
             }
         }
 
-        /**
-         * 테스트용 인메모리 Database (선택사항)
-         */
-        fun getInMemoryDatabase(context: Context): StepDatabase {
-            return Room.inMemoryDatabaseBuilder(
-                context.applicationContext,
-                StepDatabase::class.java
-            ).build()
-        }
     }
 }

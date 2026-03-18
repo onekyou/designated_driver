@@ -91,11 +91,60 @@
 ### Customer App (`customer_app/`)
 고객용 (미배포)
 
+#### 인증/온보딩 흐름
+```
+QR 스캔 → Play Store(referrer 포함) → 앱 설치 → Install Referrer 자동 파싱 → 사무실 귀속
+화면: LOADING → OFFICE_SELECTION → TERMS_AGREEMENT → PHONE_AUTH → PROFILE_SETUP → MAIN
+```
+- QR 귀속 성공 시 OFFICE_SELECTION 자동 스킵
+- 인증: Firebase Phone Auth (SMS, +82 자동 변환)
+- 재방문: FirebaseAuth.currentUser + 프로필 존재 → 바로 MAIN
+
 | 기능 | 파일 | 위치 |
 |------|------|------|
+| **온보딩/귀속** | | |
+| Install Referrer 처리 | `MainActivity.kt` | checkInstallReferrer (L176, onCreate에서 호출) |
+| Referrer 파싱+저장 | `MainActivity.kt` | parseAndSaveReferrer (L241, p/c/o + 연락처 → SharedPrefs) |
+| 초기 화면 판단 | `MainActivity.kt` | LaunchedEffect (L449, SharedPrefs → 화면 분기) |
+| 사무실 선택 (수동) | `OfficeSelectionScreen.kt` | QR 없을 때 수동 선택 |
+| 약관 동의 | `TermsAgreementScreen.kt` | 필수/선택 약관 UI |
+| 개인정보처리방침 | `PrivacyPolicyScreen.kt` | 방침 열람 |
+| **인증** | | |
+| SMS 인증 | `PhoneAuthScreen.kt` | 전화번호 입력 → 인증코드 검증 |
+| Phone Auth 로직 | `PhoneAuthViewModel.kt` | Firebase Phone Auth (+82 변환) |
+| 익명 인증 (미사용) | `AnonymousAuthViewModel.kt` | 테스트용, 어디서도 호출 안 됨 |
+| **프로필/저장** | | |
+| 프로필 입력 | `ProfileSetupScreen.kt` | 닉네임, 주소 입력 |
+| Firestore 저장 | `ProfileSetupViewModel.kt` | offices/{o}/customers/{uid} + customerInfo/{phone} |
+| SharedPreferences | `PreferencesManager.kt` | officeId/provinceId/cityId + 연락처 + 기사추천 |
+| **핵심 기능** | | |
 | 콜 요청 | `CallService.kt` | requestCall (L18) |
 | 콜 취소 | `CallService.kt` | cancelCall (L33, runTransaction → CANCELLED_BY_CUSTOMER) |
 | 활성 콜 조회 | `CallService.kt` | getActiveCall (L73, FCM 미수신 시 fallback) |
+| FCM 토큰 저장 | `MainActivity.kt` | requestAndSaveFcmToken (L330, customers + customerInfo 이중 저장) |
+
+#### QR 귀속 파라미터 (Install Referrer)
+| 파라미터 | 용도 | 필수 |
+|----------|------|------|
+| `p` (또는 `r`) | provinceId | ✅ |
+| `c` | cityId | ✅ |
+| `o` | officeId | ✅ |
+| `phone` | 사무실 전화번호 | 선택 |
+| `bank` | 은행명 | 선택 |
+| `account` | 계좌번호 | 선택 |
+| `holder` | 예금주 | 선택 |
+| `driver` | 기사 ID | 선택 |
+| `driverName` | 기사 이름 | 선택 |
+
+- QR URL 생성: Call Manager `AttributionManagementViewModel.kt` (L252)
+- QR 설정 저장: Firestore `settings/attribution` 문서
+- 랜딩페이지: `customer_app/landing/app/download/page.tsx` (Next.js)
+- Remote Config `allowDirectInstall=false` → QR 없이 설치 차단
+
+#### 테스트 코드 잔존 (배포 전 제거 필요)
+- `OfficeSelectionScreen.kt` L76: VIP 사무실 테스트 버튼
+- `ProfileSetupViewModel.kt` L87: testOffice → VIP 등급 자동 부여
+- `AnonymousAuthViewModel.kt`: 미사용 익명 인증 클래스
 
 ### Cloud Functions (`functions/`)
 

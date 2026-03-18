@@ -84,8 +84,7 @@ class ProfileSetupViewModel : ViewModel() {
 
                 // Firestore에 고객 정보 저장
                 val now = Timestamp.now()
-                // 테스트 사무실은 VIP 등급으로 설정
-                val initialGrade = if (officeId == "testOffice") "vip" else "bronze"
+                val initialGrade = "bronze"
                 val customerData = hashMapOf(
                     "id" to userId,
                     "phoneNumber" to phoneNumber,

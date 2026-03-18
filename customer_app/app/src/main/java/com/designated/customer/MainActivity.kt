@@ -45,12 +45,7 @@ import com.android.installreferrer.api.InstallReferrerStateListener
 import com.android.installreferrer.api.ReferrerDetails
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
-import com.google.firebase.remoteconfig.FirebaseRemoteConfig
-import com.google.firebase.remoteconfig.remoteConfigSettings
-
 class MainActivity : ComponentActivity() {
-    private lateinit var remoteConfig: FirebaseRemoteConfig
-    private var allowDirectInstall by mutableStateOf(false)
 
     companion object {
         private const val NOTIFICATION_PERMISSION_REQUEST_CODE = 1001
@@ -74,34 +69,13 @@ class MainActivity : ComponentActivity() {
         // FCM 토큰 요청 및 저장
         requestAndSaveFcmToken()
 
-        // Remote Config 초기화
-        remoteConfig = FirebaseRemoteConfig.getInstance()
-        val configSettings = remoteConfigSettings {
-            minimumFetchIntervalInSeconds = 3600  // 1시간
-        }
-        remoteConfig.setConfigSettingsAsync(configSettings)
-
-        // 기본값 설정
-        remoteConfig.setDefaultsAsync(mapOf(
-            "allowDirectInstall" to true
-        ))
-
-        // Remote Config 가져오기
-        remoteConfig.fetchAndActivate().addOnCompleteListener { task ->
-            if (task.isSuccessful) {
-                allowDirectInstall = remoteConfig.getBoolean("allowDirectInstall")
-                android.util.Log.d("RemoteConfig", "allowDirectInstall = $allowDirectInstall")
-            }
-        }
-
         // StepCounterService 시작
         startStepCounterService()
 
         setContent {
             DesignatedCustomerTheme {
                 CustomerApp(
-                    initialIntent = intent,
-                    allowDirectInstall = allowDirectInstall
+                    initialIntent = intent
                 )
             }
         }
@@ -398,7 +372,7 @@ class MainActivity : ComponentActivity() {
 
 enum class AppScreen {
     LOADING,
-    OFFICE_SELECTION,
+    QR_REQUIRED,
     TERMS_AGREEMENT,
     TERMS_VIEWER,
     PRIVACY_VIEWER,
@@ -409,8 +383,7 @@ enum class AppScreen {
 
 @Composable
 fun CustomerApp(
-    initialIntent: Intent? = null,
-    allowDirectInstall: Boolean = false
+    initialIntent: Intent? = null
 ) {
     val context = LocalContext.current
     val preferencesManager = remember { PreferencesManager(context) }
@@ -514,12 +487,12 @@ fun CustomerApp(
             } else {
                 // Phone Auth 완료됐지만 사무실 정보 없음 (비정상 상태)
                 android.util.Log.w("PhoneAuth", "로그인됨이지만 사무실 정보 없음")
-                currentScreen = AppScreen.OFFICE_SELECTION
+                currentScreen = AppScreen.QR_REQUIRED
             }
         } else {
             // 미로그인 → 가입 흐름 시작
             if (prefsOfficeId == null || prefsProvinceId == null || prefsCityId == null) {
-                currentScreen = AppScreen.OFFICE_SELECTION
+                currentScreen = AppScreen.QR_REQUIRED
             } else if (!preferencesManager.isTermsAccepted()) {
                 currentScreen = AppScreen.TERMS_AGREEMENT
             } else {
@@ -551,60 +524,39 @@ fun CustomerApp(
                 }
             }
 
-            AppScreen.OFFICE_SELECTION -> {
-                if (allowDirectInstall) {
-                    com.designated.customer.ui.office.OfficeSelectionScreen(
-                        modifier = Modifier.padding(paddingValues),
-                        onOfficeSelected = { officeId, provinceId, cityId ->
-                            preferencesManager.saveOfficeInfo(officeId, provinceId, cityId)
-                            currentOfficeId = officeId
-                            currentProvinceId = provinceId
-                            currentCityId = cityId
-                            // 이미 Phone Auth 완료 상태면 프로필 입력으로 직행
-                            val user = auth.currentUser
-                            if (user != null && user.phoneNumber != null) {
-                                verifiedPhoneNumber = user.phoneNumber ?: ""
-                                currentUserId = user.uid
-                                currentScreen = AppScreen.PROFILE_SETUP
-                            } else {
-                                currentScreen = AppScreen.TERMS_AGREEMENT
-                            }
-                        }
-                    )
-                } else {
-                    // QR 코드 재설치 안내 화면
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(paddingValues),
-                        contentAlignment = Alignment.Center
+            AppScreen.QR_REQUIRED -> {
+                // QR 코드 재설치 안내 화면
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier.padding(32.dp)
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
-                            modifier = Modifier.padding(32.dp)
-                        ) {
-                            androidx.compose.material3.Icon(
-                                imageVector = Icons.Default.LocationOn,
-                                contentDescription = null,
-                                modifier = Modifier.size(72.dp),
-                                tint = androidx.compose.material3.MaterialTheme.colorScheme.error
-                            )
-                            Spacer(modifier = Modifier.height(24.dp))
-                            androidx.compose.material3.Text(
-                                text = "사무실 정보를 찾을 수 없습니다",
-                                style = androidx.compose.material3.MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            androidx.compose.material3.Text(
-                                text = "QR 코드를 통해 앱을 다시 설치해주세요.\n\n1. 사무실에서 받은 QR 코드를 스캔하세요\n2. 랜딩페이지에서 APK를 다운로드하세요\n3. 앱을 설치하고 실행하세요",
-                                style = androidx.compose.material3.MaterialTheme.typography.bodyLarge,
-                                textAlign = TextAlign.Center,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        androidx.compose.material3.Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = null,
+                            modifier = Modifier.size(72.dp),
+                            tint = androidx.compose.material3.MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.height(24.dp))
+                        androidx.compose.material3.Text(
+                            text = "사무실 정보를 찾을 수 없습니다",
+                            style = androidx.compose.material3.MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        androidx.compose.material3.Text(
+                            text = "QR 코드를 통해 앱을 다시 설치해주세요.\n\n1. 사무실에서 받은 QR 코드를 스캔하세요\n2. 플레이스토어에서 앱을 다운로드하세요\n3. 앱을 설치하고 실행하세요",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodyLarge,
+                            textAlign = TextAlign.Center,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
