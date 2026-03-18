@@ -1769,7 +1769,8 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                     "dailySettlement.confirmedBy" to adminId,
                     "carryOver.balance" to newBalance,
                     "carryOver.status" to newCarryOverStatus,
-                    "carryOver.lastUpdatedAt" to Timestamp.now()
+                    "carryOver.lastUpdatedAt" to Timestamp.now(),
+                    "status" to "WAITING"
                 )
 
                 transaction.update(driverRef, updateData)

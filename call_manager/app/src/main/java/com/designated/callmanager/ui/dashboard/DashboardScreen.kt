@@ -122,6 +122,7 @@ fun DriverStatus.getDisplayName(): String {
         DriverStatus.PREPARING -> "운행준비"
         DriverStatus.ONLINE -> "온라인"
         DriverStatus.OFFLINE -> "오프라인"
+        DriverStatus.PENDING_CONFIRM -> "정산대기"
         else -> "알수없음"
     }
 }

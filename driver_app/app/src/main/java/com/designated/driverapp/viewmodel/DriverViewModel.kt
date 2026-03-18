@@ -1426,12 +1426,16 @@ class DriverViewModel @Inject constructor(
                     originalRealDeposit = origRealDeposit
                 )
 
-                // dailySettlement 저장 (settlementLastCleared는 매니저 확인 후 퇴근 시 설정)
+                // dailySettlement 저장 + 기사 상태를 PENDING_CONFIRM으로 변경 (배차 차단)
                 driverRef.update(
                     mapOf(
-                        "dailySettlement" to dailySettlement.toMap()
+                        "dailySettlement" to dailySettlement.toMap(),
+                        "status" to DriverStatus.PENDING_CONFIRM.value
                     )
                 ).await()
+
+                // 로컬 상태도 즉시 반영
+                _uiState.update { it.copy(driverStatus = DriverStatus.PENDING_CONFIRM) }
 
                 val logMsg = if (isIntegration) {
                     "Daily settlement MERGED: prev=${prevSettlement.tripCount}건 + curr=${settlement.tripCount}건 = ${mergedTripCount}건, realDeposit=$mergedRealDeposit"

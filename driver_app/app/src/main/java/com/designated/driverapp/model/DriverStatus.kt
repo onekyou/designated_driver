@@ -8,6 +8,7 @@ enum class DriverStatus(val value: String) {
     ACCEPTED("ACCEPTED"),    // 기사가 콜 수락함
     PREPARING("PREPARING"),  // 운행 준비중
     ON_TRIP("ON_TRIP"),      // 운행중
+    PENDING_CONFIRM("PENDING_CONFIRM"), // 마감 제출 후 매니저 확인 대기
     UNKNOWN("UNKNOWN");      // 알수없음
 
     fun getDisplayName(): String {
@@ -19,6 +20,7 @@ enum class DriverStatus(val value: String) {
             ACCEPTED -> "수락함"
             PREPARING -> "운행준비"
             ON_TRIP -> "운행중"
+            PENDING_CONFIRM -> "정산대기"
             UNKNOWN -> "알수없음"
         }
     }

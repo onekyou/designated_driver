@@ -7,6 +7,7 @@ enum class DriverStatus(val value: String) {
     PREPARING("PREPARING"),
     ONLINE("ONLINE"),
     OFFLINE("OFFLINE"),
+    PENDING_CONFIRM("PENDING_CONFIRM"),
     UNKNOWN("UNKNOWN");
 
     companion object {
