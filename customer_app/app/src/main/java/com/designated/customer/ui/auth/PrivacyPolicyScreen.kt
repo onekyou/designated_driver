@@ -1,0 +1,159 @@
+package com.designated.customer.ui.auth
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DocumentViewerScreen(
+    title: String,
+    content: String,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(title) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "뒤로가기"
+                        )
+                    }
+                }
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = content,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+object LegalDocuments {
+    val termsOfService = """
+제1조 (목적)
+본 약관은 [회사명] (이하 "회사")가 제공하는 대리운전 중개 서비스(이하 "서비스")의 이용과 관련하여 회사와 이용자 간의 권리, 의무 및 책임사항을 규정함을 목적으로 합니다.
+
+제2조 (정의)
+1. "서비스"란 회사가 제공하는 대리운전 호출, 배차, 운행 관리 및 관련 부가서비스를 말합니다.
+2. "이용자"란 본 약관에 동의하고 서비스를 이용하는 고객을 말합니다.
+3. "기사"란 회사에 소속 또는 제휴된 대리운전 기사를 말합니다.
+4. "사무실"이란 대리운전 기사의 배차 및 관리를 담당하는 지역 사무실을 말합니다.
+
+제3조 (약관의 효력 및 변경)
+1. 본 약관은 이용자가 동의한 시점부터 효력이 발생합니다.
+2. 회사는 필요한 경우 관련 법령에 위배되지 않는 범위에서 약관을 변경할 수 있으며, 변경 시 앱 내 공지를 통해 안내합니다.
+3. 변경된 약관에 동의하지 않는 경우 서비스 이용을 중단하고 탈퇴할 수 있습니다.
+
+제4조 (서비스 이용)
+1. 이용자는 앱을 통해 대리운전을 호출할 수 있습니다.
+2. 배차는 사무실의 판단에 따라 이루어지며, 상황에 따라 배차가 지연되거나 불가할 수 있습니다.
+3. 이용자는 호출 시 정확한 출발지 정보를 제공해야 합니다.
+
+제5조 (요금 및 결제)
+1. 대리운전 요금은 사무실에서 정한 기준에 따릅니다.
+2. 결제는 현금, 카드 등 사무실에서 지원하는 결제 수단으로 이루어집니다.
+3. 요금에 대한 이의가 있는 경우 해당 사무실에 문의해야 합니다.
+
+제6조 (취소 및 환불)
+1. 이용자는 기사 배차 전까지 호출을 취소할 수 있습니다.
+2. 기사 배차 후 취소 시 사무실의 취소 정책에 따릅니다.
+3. 운행 중 취소는 이미 진행된 운행 구간에 대한 요금이 발생할 수 있습니다.
+
+제7조 (이용자의 의무)
+1. 이용자는 서비스 이용 시 타인의 정보를 도용하지 않아야 합니다.
+2. 이용자는 기사에게 폭언, 폭행 등 부당한 행위를 해서는 안 됩니다.
+3. 이용자는 차량 내에서 기물 파손, 오염 등의 행위를 해서는 안 됩니다.
+
+제8조 (회사의 의무)
+1. 회사는 안정적인 서비스 제공을 위해 노력합니다.
+2. 회사는 이용자의 개인정보를 관련 법령에 따라 보호합니다.
+3. 회사는 서비스 장애 발생 시 신속한 복구를 위해 노력합니다.
+
+제9조 (면책사항)
+1. 회사는 대리운전 중개 서비스를 제공하며, 운행 중 발생하는 사고에 대해서는 관련 법령 및 보험 약관에 따릅니다.
+2. 천재지변, 전쟁, 기타 불가항력적 사유로 서비스를 제공할 수 없는 경우 회사는 책임을 면합니다.
+3. 이용자의 귀책사유로 인한 서비스 이용 장애에 대해 회사는 책임을 지지 않습니다.
+
+제10조 (분쟁 해결)
+1. 서비스 이용과 관련하여 발생한 분쟁은 당사자 간 협의를 통해 해결합니다.
+2. 협의가 이루어지지 않는 경우 관할 법원에 소를 제기할 수 있습니다.
+
+제11조 (포인트 제도)
+1. 회사는 서비스 이용에 따른 포인트 적립 제도를 운영할 수 있습니다.
+2. 포인트의 적립 기준, 사용 방법, 유효기간 등은 별도 안내에 따릅니다.
+3. 부정한 방법으로 적립된 포인트는 회사의 판단에 따라 회수될 수 있습니다.
+
+제12조 (회원 탈퇴)
+1. 이용자는 언제든지 서비스 탈퇴를 요청할 수 있습니다.
+2. 탈퇴 시 잔여 포인트는 소멸되며, 이에 대한 보상은 제공되지 않습니다.
+3. 탈퇴 후 개인정보는 개인정보처리방침에 따라 처리됩니다.
+    """.trimIndent()
+
+    val privacyPolicy = """
+1. 개요
+[회사명] (이하 "회사")는 대리운전 서비스 제공을 위해 다음과 같은 개인정보를 수집하고 이용합니다.
+
+2. 수집하는 개인정보 항목
+- 전화번호 (필수): 회원 식별, 기사 연결
+- 위치 정보 (필수): 출발지 확인, 기사 배차
+- FCM 토큰 (필수): 푸시 알림 전송
+
+3. 개인정보의 이용 목적
+- 서비스 제공: 대리운전 배차, 운행 관리, 정산
+- 회원 관리: 본인 확인, 서비스 이용 기록 관리
+- 알림 서비스: 배차 알림, 운행 완료 알림, 포인트 적립 안내
+
+4. 개인정보의 보유 및 이용 기간
+- 회원 정보: 회원 탈퇴 시까지
+- 운행 기록: 정산 완료 후 90일
+- 위치 정보: 운행 완료 즉시 삭제
+
+5. 개인정보의 제3자 제공
+원칙적으로 외부에 제공하지 않습니다. 다만 다음의 경우 예외:
+- 이용자가 사전에 동의한 경우
+- 법령에 의거한 수사기관의 요구
+
+6. 이용자의 권리
+- 열람권: 본인의 개인정보 처리 현황 열람 요청
+- 정정권: 부정확한 개인정보의 정정 요청
+- 삭제권: 개인정보의 삭제 요청
+- 처리정지권: 개인정보 처리의 정지 요청
+
+7. 개인정보 보호를 위한 기술적 대책
+- 데이터 전송 시 SSL/TLS 암호화 적용
+- Firebase Security Rules를 통한 데이터 접근 제어
+
+8. 개인정보 처리 위탁
+- Google Firebase: 데이터 저장, 인증, 푸시 알림
+- Google Cloud Platform: 클라우드 서버 운영
+
+9. 회원 탈퇴
+앱 내 "설정 > 회원 탈퇴" 메뉴에서 직접 탈퇴 가능하며, 탈퇴 시 모든 개인정보가 즉시 삭제됩니다.
+
+10. 문의처
+개인정보와 관련한 문의사항이 있으시면 사무실로 연락 주시기 바랍니다.
+    """.trimIndent()
+}
