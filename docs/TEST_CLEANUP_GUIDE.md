@@ -84,6 +84,43 @@ Modifier.testTag("settlement_today_displayDeposit")
 
 ---
 
+## customer_app 테스트용 임시 변경 (원복 필수)
+
+### 1. 초기화 흐름 전체 교체 (`MainActivity.kt` LaunchedEffect 블록)
+테스트용 코드(익명인증+MAIN 직행)를 삭제하고, 주석 처리된 원본 코드의 주석을 해제.
+구체적으로:
+- `// 테스트용: 익명인증으로 바로 MAIN 진입` 블록 삭제
+- `/* 원본 코드 ... */` 주석 해제
+
+### 2. VIP 사무실 하드코딩 (`MainActivity.kt` LaunchedEffect 상단)
+아래 블록 전체 삭제:
+```kotlin
+if (preferencesManager.getOfficeId() == null) {
+    preferencesManager.saveOfficeInfo(
+        officeId = "nEkf0X9g3LZtRX94Mrzu",
+        provinceId = "gyeonggi",
+        cityId = "yangpyeong"
+    )
+    android.util.Log.d("TestMode", "테스트용 VIP 사무실 하드코딩 적용")
+}
+```
+
+### 3. 더미 customerInfo (`MainActivity.kt` 테스트 블록 내)
+아래 블록 삭제:
+```kotlin
+customerInfo = com.designated.customer.data.model.CustomerInfo(
+    id = auth.currentUser?.uid ?: "test_user",
+    phoneNumber = "01000000000",
+    name = "테스트고객",
+    linkedOfficeId = "nEkf0X9g3LZtRX94Mrzu"
+)
+```
+
+### 4. 익명인증 메서드 (`PhoneAuthViewModel.kt` 하단)
+`signInAnonymously()` 메서드 전체 삭제
+
+---
+
 ## 완전 원복하려면 (SettlementCalculator/SettlementCalc도 삭제)
 
 1. 테스트 파일 삭제 (위 명령)

@@ -168,9 +168,12 @@ Driver confirmReceiveCarryOver → SETTLED
 ```
 officeDeposit = totalFare × depositRatio / 100  (사무실 몫)
 driverShare = totalFare - officeDeposit          (기사 몫)
-realDeposit = cashReceived - driverShare         (실 납입액)
+finalDeposit = officeDeposit - totalCredit       (이체/포인트/외상 차감 후 실제 납입 대상)
+realDeposit = 기사가 UI에서 입력한 실 납입액     (기본값: cashReceived - driverShare)
 carryOver = originalCarryOver - finalDeposit + realDeposit
 ```
+- totalCredit = totalFare - totalCashReceived (현금으로 받지 않은 금액)
+- isIntegration: 이전 dailySettlement.status == PENDING_CONFIRM일 때만 통합 제출 발동
 
 ---
 
