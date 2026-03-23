@@ -1305,8 +1305,8 @@ export const onSharedCallClaimed = onDocumentUpdated(
             const copiedCallData = copiedCallSnap.data();
             logger.info(`[shared:${callId}] 복사된 콜 상태: ${copiedCallData?.status}`);
             
-            // HOLD 상태인 경우에만 삭제 (이미 진행 중인 콜은 건드리지 않음)
-            if (copiedCallData?.status === "HOLD") {
+            // HOLD 또는 CANCELLED_BY_DRIVER 상태인 경우 삭제 (이미 진행 중인 콜은 건드리지 않음)
+            if (copiedCallData?.status === "HOLD" || copiedCallData?.status === "CANCELLED_BY_DRIVER") {
               await copiedCallRef.delete();
               logger.info(`[shared:${callId}] HOLD 상태의 복사된 콜을 삭제했습니다.`);
             }
@@ -2886,6 +2886,49 @@ export const onCallCancelledByDriver = onDocumentUpdated(
 
     } catch (error) {
       logger.error(`[${callId}] 고객 취소 알림 전송 오류:`, error);
+    }
+
+    // 매니저에게 취소 알림 전송
+    try {
+      const managerTokensSnapshot = await admin.firestore()
+        .collection("provinces").doc(provinceId)
+        .collection("cities").doc(cityId)
+        .collection("offices").doc(officeId)
+        .collection("managerTokens")
+        .get();
+
+      if (!managerTokensSnapshot.empty) {
+        const tokens: string[] = [];
+        managerTokensSnapshot.forEach((doc) => {
+          const token = doc.data().fcmToken;
+          if (token) tokens.push(token);
+        });
+
+        if (tokens.length > 0) {
+          const cancelledBy = afterData.status === "CANCELLED_BY_CUSTOMER"
+            ? "고객"
+            : afterData.status === "CANCELLED_BY_DRIVER"
+            ? "기사"
+            : "관리자";
+
+          await admin.messaging().sendEachForMulticast({
+            data: {
+              type: "CALL_STATUS_UPDATE",
+              callId: callId,
+              status: afterData.status,
+              message: `${cancelledBy} 취소: ${afterData.cancelReason || "운행취소"}`
+            },
+            android: {
+              priority: "high" as const,
+              ttl: 60000
+            },
+            tokens: tokens
+          });
+          logger.info(`[${callId}] 매니저에게 취소 알림 전송 완료`);
+        }
+      }
+    } catch (managerError) {
+      logger.error(`[${callId}] 매니저 취소 알림 전송 오류:`, managerError);
     }
   }
 );

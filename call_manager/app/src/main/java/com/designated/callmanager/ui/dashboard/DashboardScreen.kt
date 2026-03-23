@@ -4,6 +4,8 @@ package com.designated.callmanager.ui.dashboard
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
@@ -304,7 +306,7 @@ fun DashboardScreen(
             // 콜디텍터/콜매니저에서 생성한 콜 또는 사용자가 콜 리스트 클릭으로 열었을 때는 무음
             // 그 외 (외부에서 오는 새 콜)만 알림음
             if (newCallNotificationEnabled && newCallInfo?.fromCallDetector != true && newCallInfo?.fromCallManager != true && !isUserClickedCall) {
-                playNotificationSound(context)
+                playNewCallAlertSound(context)
             }
         }
     }
@@ -649,6 +651,30 @@ fun playNotificationSound(context: Context) {
             fallbackR?.play()
         } catch (e2: Exception) {
         }
+    }
+}
+
+fun playNewCallAlertSound(context: Context) {
+    try {
+        val notificationUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        MediaPlayer().apply {
+            setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+            )
+            setDataSource(context, notificationUri)
+            setOnCompletionListener { it.release() }
+            prepare()
+            start()
+        }
+    } catch (e: Exception) {
+        // MediaPlayer 실패 시 Ringtone fallback
+        try {
+            val fallback = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            RingtoneManager.getRingtone(context.applicationContext, fallback)?.play()
+        } catch (_: Exception) {}
     }
 }
 

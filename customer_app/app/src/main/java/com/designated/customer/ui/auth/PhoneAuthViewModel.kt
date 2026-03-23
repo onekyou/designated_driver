@@ -10,7 +10,10 @@ import com.google.firebase.auth.PhoneAuthCredential
 import com.google.firebase.auth.PhoneAuthOptions
 import com.google.firebase.auth.PhoneAuthProvider
 import com.google.firebase.FirebaseException
+import android.util.Log
 import java.util.concurrent.TimeUnit
+
+private const val TAG = "PhoneAuthVM"
 
 data class PhoneAuthUiState(
     val isLoading: Boolean = false,
@@ -46,6 +49,7 @@ class PhoneAuthViewModel : ViewModel() {
         uiState = uiState.copy(isLoading = true, error = null)
 
         val formattedPhoneNumber = formatPhoneNumber(uiState.phoneNumber)
+        Log.d(TAG, "sendVerificationCode: $formattedPhoneNumber")
 
         val options = PhoneAuthOptions.newBuilder(auth)
             .setPhoneNumber(formattedPhoneNumber)
@@ -53,10 +57,12 @@ class PhoneAuthViewModel : ViewModel() {
             .setActivity(activity)
             .setCallbacks(object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
                 override fun onVerificationCompleted(credential: PhoneAuthCredential) {
+                    Log.d(TAG, "onVerificationCompleted: 자동 인증 성공! smsCode=${credential.smsCode}")
                     signInWithPhoneAuthCredential(credential)
                 }
 
                 override fun onVerificationFailed(e: FirebaseException) {
+                    Log.e(TAG, "onVerificationFailed: ${e.message}", e)
                     uiState = uiState.copy(
                         isLoading = false,
                         error = "인증 실패: ${e.message}"
@@ -67,6 +73,7 @@ class PhoneAuthViewModel : ViewModel() {
                     verificationId: String,
                     token: PhoneAuthProvider.ForceResendingToken
                 ) {
+                    Log.d(TAG, "onCodeSent: verificationId=$verificationId")
                     this@PhoneAuthViewModel.verificationId = verificationId
                     uiState = uiState.copy(
                         isLoading = false,
@@ -98,14 +105,17 @@ class PhoneAuthViewModel : ViewModel() {
     }
 
     private fun signInWithPhoneAuthCredential(credential: PhoneAuthCredential) {
+        Log.d(TAG, "signInWithCredential 시작")
         auth.signInWithCredential(credential)
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
+                    Log.d(TAG, "signInWithCredential 성공! uid=${auth.currentUser?.uid}, phone=${auth.currentUser?.phoneNumber}")
                     uiState = uiState.copy(
                         isLoading = false,
                         isVerified = true
                     )
                 } else {
+                    Log.e(TAG, "signInWithCredential 실패: ${task.exception?.message}", task.exception)
                     uiState = uiState.copy(
                         isLoading = false,
                         error = "인증 실패: ${task.exception?.message}"

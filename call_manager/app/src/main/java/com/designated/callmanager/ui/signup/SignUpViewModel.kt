@@ -293,7 +293,7 @@ class SignUpViewModel(application: Application) : AndroidViewModel(application) 
 
             // Play Store 링크 생성
             val playStoreUrl = "https://play.google.com/store/apps/details" +
-                    "?id=com.designated.customer" +
+                    "?id=com.designated.customer.app" +
                     "&referrer=${android.net.Uri.encode(referrerParams)}"
 
             // QR 코드 데이터 = Play Store URL

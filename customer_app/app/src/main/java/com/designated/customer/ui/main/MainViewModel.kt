@@ -220,7 +220,7 @@ class MainViewModel(
                 val callState = when (activeCall.status) {
                     "WAITING" -> CallState.REQUESTED
                     "ASSIGNED" -> CallState.ASSIGNED
-                    "ACCEPTED" -> CallState.DRIVER_ARRIVING
+                    "ACCEPTED", "PREPARING" -> CallState.DRIVER_ARRIVING
                     "IN_PROGRESS" -> CallState.IN_PROGRESS
                     else -> return@launch
                 }

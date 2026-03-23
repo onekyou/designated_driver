@@ -89,7 +89,7 @@ class DriverManagementViewModel : ViewModel() {
         val encodedName = URLEncoder.encode(driverName, "UTF-8")
         val referrerParams = "p=$provinceId&c=$cityId&o=$officeId&d=$driverId&dn=$encodedName"
         return "https://play.google.com/store/apps/details" +
-               "?id=com.designated.customer" +
+               "?id=com.designated.customer.app" +
                "&referrer=${URLEncoder.encode(referrerParams, "UTF-8")}"
     }
 

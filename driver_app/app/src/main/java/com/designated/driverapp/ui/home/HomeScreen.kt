@@ -590,8 +590,12 @@ fun SettlementSummaryPopup(
                             )
                         }
 
-                        val departure = callInfo.departure_set ?: "출발지"
-                        val destination = callInfo.destination_set ?: "도착지"
+                        val departure = callInfo.departure_set?.takeIf { it.isNotBlank() }
+                            ?: callInfo.customerAddress?.takeIf { it.isNotBlank() }
+                            ?: "출발지"
+                        val destination = callInfo.destination_set?.takeIf { it.isNotBlank() }
+                            ?: callInfo.destination?.takeIf { it.isNotBlank() }
+                            ?: "도착지"
                         Text(
                             "경로: $departure → $destination",
                             style = MaterialTheme.typography.bodyMedium,

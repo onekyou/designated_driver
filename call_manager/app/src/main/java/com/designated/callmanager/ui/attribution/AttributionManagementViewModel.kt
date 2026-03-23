@@ -262,7 +262,7 @@ class AttributionManagementViewModel(application: Application) : AndroidViewMode
                         "&holder=$encodedHolder"
 
                 val playStoreUrl = "https://play.google.com/store/apps/details" +
-                        "?id=com.designated.customer" +
+                        "?id=com.designated.customer.app" +
                         "&referrer=${android.net.Uri.encode(referrerParams)}"
 
                 android.util.Log.d(TAG, "Play Store URL 생성 완료")

@@ -50,8 +50,9 @@ class CallService(
                     throw IllegalStateException("ALREADY_CANCELLED")
                 }
 
-                // WAITING, ASSIGNED만 고객이 직접 취소 가능
-                if (currentStatus != "WAITING" && currentStatus != "ASSIGNED") {
+                // WAITING, ASSIGNED, ACCEPTED, PREPARING 상태에서 고객이 직접 취소 가능
+                if (currentStatus != "WAITING" && currentStatus != "ASSIGNED" &&
+                    currentStatus != "ACCEPTED" && currentStatus != "PREPARING") {
                     throw IllegalStateException("CANNOT_CANCEL: status=$currentStatus")
                 }
 
@@ -71,7 +72,7 @@ class CallService(
      * WAITING, ASSIGNED, ACCEPTED, IN_PROGRESS 상태의 최신 콜 반환
      */
     suspend fun getActiveCall(phoneNumber: String): CustomerCall? {
-        val activeStatuses = listOf("WAITING", "ASSIGNED", "ACCEPTED", "IN_PROGRESS")
+        val activeStatuses = listOf("WAITING", "ASSIGNED", "ACCEPTED", "PREPARING", "IN_PROGRESS")
         return try {
             for (status in activeStatuses) {
                 val snapshot = firestore

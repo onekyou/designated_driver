@@ -866,7 +866,9 @@ private fun CallStatusDialog(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // 버튼
-                if (status.state == CallState.REQUESTED) {
+                if (status.state == CallState.REQUESTED ||
+                    status.state == CallState.ASSIGNED ||
+                    status.state == CallState.DRIVER_ARRIVING) {
                     TextButton(
                         onClick = onCancelCall,
                         colors = ButtonDefaults.textButtonColors(

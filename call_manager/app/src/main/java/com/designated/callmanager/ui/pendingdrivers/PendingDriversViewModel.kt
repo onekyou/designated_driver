@@ -451,7 +451,7 @@ class PendingDriversViewModel(
                 "&phone=$encodedPhone&bank=$encodedBank&account=$encodedAccount&holder=$encodedHolder"
 
         val playStoreUrl = "https://play.google.com/store/apps/details" +
-                "?id=com.designated.customer" +
+                "?id=com.designated.customer.app" +
                 "&referrer=${java.net.URLEncoder.encode(referrerParams, "UTF-8")}"
 
         android.util.Log.d("PendingDriversViewModel", "기사 추천 Play Store URL 생성 완료 (기사: $driverName)")

@@ -519,9 +519,9 @@ class DriverViewModel @Inject constructor(
 
     /**
      * 운행 준비 단계에서 운행을 취소하는 함수
-     * - 콜 상태를 HOLD로 변경 (내부콜/공유콜 동일)
+     * - 콜 상태를 CANCELLED_BY_DRIVER로 변경 (내부콜/공유콜 동일)
      * - 기사 상태를 WAITING으로 변경
-     * - assignedDriverId를 null로 변경하여 다른 기사가 배정받을 수 있도록 함
+     * - assignedDriverId를 null로 변경
      */
     fun cancelTrip(callId: String, cancelReason: String = "운행취소") = performFirestoreUpdate {
         val (provinceId, cityId, officeId) = getDriverLocationInfo()
@@ -537,9 +537,9 @@ class DriverViewModel @Inject constructor(
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_DRIVERS).document(driverId)
 
-        // 내부콜/공유콜 모두 동일하게 HOLD로 처리 (다른 기사에게 재배차 가능)
+        // 내부콜/공유콜 모두 동일하게 CANCELLED_BY_DRIVER로 처리
         val callUpdates = mapOf(
-            Constants.FIELD_STATUS to "HOLD",
+            Constants.FIELD_STATUS to "CANCELLED_BY_DRIVER",
             "assignedDriverId" to null,
             "assignedDriverName" to null,
             "assignedDriverPhone" to null,
