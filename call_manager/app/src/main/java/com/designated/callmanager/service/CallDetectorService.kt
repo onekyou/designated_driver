@@ -96,8 +96,7 @@ class CallDetectorService : Service() {
             return
         }
 
-        // CallLogObserver는 READ_CALL_LOG 권한이 필요하므로 제거
-        // CallScreeningService와 CallReceiver가 전화를 감지하므로 더 이상 필요 없음
+        // CallLogObserver는 더 이상 사용하지 않음 (CallReceiver + EXTRA_INCOMING_NUMBER로 대체)
         // callLogObserver = CallLogObserver(Handler(mainLooper))
         // callLogObserver?.let { observer ->
         //     contentResolver.registerContentObserver(

@@ -44,18 +44,8 @@ class CallReceiver : BroadcastReceiver() {
         } else if (action == "android.intent.action.PHONE_STATE") {
             val stateStr = intent.getStringExtra(TelephonyManager.EXTRA_STATE)
 
-            // Android 버전에 따라 전화번호 가져오기
-            val numberFromIntentExtras = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                // Android 10+: CallScreeningService에서 가져오기
-                CallScreeningService.latestIncomingNumber
-            } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
-                // Android 8.1 이하: Intent에서 가져오기 (작동함)
-                intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER)
-            } else {
-                // Android 9 (API 28): 정책 공백 - 지원 불가
-                Log.w(tag, "⚠️ Android 9 detected - Phone number not available (policy gap)")
-                null
-            }
+            // READ_CALL_LOG 권한으로 모든 Android 버전에서 EXTRA_INCOMING_NUMBER 사용
+            val numberFromIntentExtras = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER)
 
             var callStateFromTelephony = TelephonyManager.CALL_STATE_IDLE // 현재 전화 상태
 
@@ -114,11 +104,6 @@ class CallReceiver : BroadcastReceiver() {
                     staticSavedNumber = null
                     staticIsIncoming = false
 
-                    // CallScreeningService 초기화 (Android 10+)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        CallScreeningService.clearIncomingNumber()
-                        Log.i(tag, "CallScreeningService phone number cleared")
-                    }
                 }
             }
         }

@@ -5,6 +5,8 @@
     <!-- 위험 권한 - 런타임 권한 요청 필요 -->
     <!-- 전화 상태 읽기 권한: 전화가 오는지, 끊겼는지 알기 위해 필요해요 -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!-- 통화 기록 읽기: Android 10+에서 수신 전화번호 확인에 필요 -->
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
 
     <!-- 연락처 읽기 권한: 전화번호로 저장된 이름을 찾기 위해 필요해요 -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
@@ -110,15 +112,6 @@
                 android:value="전화 감지 및 콜 생성 서비스" />
         </service>
 
-        <!-- CallScreeningService - 전화번호 확인 (스팸 차단 앱 권한) -->
-        <service
-            android:name=".CallScreeningService"
-            android:permission="android.permission.BIND_SCREENING_SERVICE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.telecom.CallScreeningService" />
-            </intent-filter>
-        </service>
 
         <!-- 부팅 완료 브로드캐스트 리시버 -->
         <receiver

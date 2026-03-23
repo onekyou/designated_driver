@@ -4,7 +4,6 @@ import android.Manifest
 import android.app.AlertDialog
 import android.app.Application
 import android.app.NotificationManager
-import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -146,19 +145,6 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) {
         permissionManager.onOverlayPermissionResult()
-    }
-
-    private val callScreeningRoleLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val roleManager = getSystemService(Context.ROLE_SERVICE) as? RoleManager
-            if (roleManager?.isRoleHeld(RoleManager.ROLE_CALL_SCREENING) == true) {
-                Toast.makeText(this, "스팸 차단 앱으로 설정되었습니다", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, "스팸 차단 앱 설정이 취소되었습니다", Toast.LENGTH_SHORT).show()
-            }
-        }
     }
 
     private val _screenState = mutableStateOf(Screen.Login)
@@ -368,7 +354,6 @@ class MainActivity : ComponentActivity() {
                             val callId = callIdToShow!!
                             if (!showNewCallPopup) {
                                 dashboardViewModel.showCallDialog(callId)
-                            } else {
                             }
                             _pendingCallDialogId.value = null
                         }
@@ -1221,43 +1206,6 @@ class MainActivity : ComponentActivity() {
             }
     }
 
-    /**
-     * CallScreeningService (ROLE_CALL_SCREENING) 권한 요청
-     * Android 10+ (API 29) 전용
-     */
-    fun requestCallScreeningRole() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val roleManager = getSystemService(Context.ROLE_SERVICE) as? RoleManager
-            if (roleManager?.isRoleHeld(RoleManager.ROLE_CALL_SCREENING) != true) {
-                try {
-                    val intent = roleManager?.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING)
-                    if (intent != null) {
-                        callScreeningRoleLauncher.launch(intent)
-                    }
-                } catch (e: Exception) {
-                    Log.e("MainActivity", "CallScreeningRole 요청 실패", e)
-                    Toast.makeText(this, "스팸 차단 앱 권한 요청에 실패했습니다", Toast.LENGTH_SHORT).show()
-                }
-            } else {
-                Toast.makeText(this, "이미 스팸 차단 앱으로 설정되어 있습니다", Toast.LENGTH_SHORT).show()
-            }
-        } else {
-            Toast.makeText(this, "Android 10 이상에서만 지원됩니다", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    /**
-     * CallScreeningService 권한이 설정되어 있는지 확인
-     */
-    fun isCallScreeningRoleHeld(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val roleManager = getSystemService(Context.ROLE_SERVICE) as? RoleManager
-            roleManager?.isRoleHeld(RoleManager.ROLE_CALL_SCREENING) == true
-        } else {
-            // Android 9 이하는 지원하지 않으므로 true 반환 (경고 표시 안 함)
-            true
-        }
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

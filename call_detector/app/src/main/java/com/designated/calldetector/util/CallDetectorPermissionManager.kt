@@ -45,6 +45,12 @@ class CallDetectorPermissionManager(
             required = true
         ),
         PermissionInfo(
+            permission = Manifest.permission.READ_CALL_LOG,
+            title = "통화 기록 읽기",
+            description = "수신 전화번호 확인에 필요합니다.",
+            required = true
+        ),
+        PermissionInfo(
             permission = Manifest.permission.READ_CONTACTS,
             title = "연락처 읽기",
             description = "전화번호로 저장된 고객명을 찾기 위해 필요합니다.",

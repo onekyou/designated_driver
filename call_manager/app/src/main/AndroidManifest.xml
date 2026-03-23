@@ -26,6 +26,7 @@
 
     <!-- 전화 감지 권한 (콜 디텍터 기능) -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
 
     <!-- 음성 인식 권한 (음성 입력 기능) -->
@@ -155,15 +156,6 @@
                 android:value="전화 감지 및 콜 생성 서비스" />
         </service>
 
-        <!-- CallScreeningService - 전화번호 확인 (스팸 차단 앱 권한) -->
-        <service
-            android:name=".service.CallScreeningService"
-            android:permission="android.permission.BIND_SCREENING_SERVICE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.telecom.CallScreeningService" />
-            </intent-filter>
-        </service>
 
 
 
