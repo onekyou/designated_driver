@@ -85,14 +85,17 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             }
 
             "CALL_CANCELLED" -> {
-                // 기사가 운행 취소
+                // 콜 취소 알림
                 val callId = message.data["callId"]
                 val cancelReason = message.data["cancelReason"] ?: "운행취소"
 
-                Log.d(TAG, "기사 취소 알림 수신 - callId: $callId, cancelReason: $cancelReason")
+                Log.d(TAG, "취소 알림 수신 - callId: $callId, cancelReason: $cancelReason")
 
                 // 취소 브로드캐스트 전송 (팝업 제거용)
                 sendCallCancelledBroadcast(callId, cancelReason)
+
+                // 일반 알림 표시
+                showCallCancelledNotification(callId, cancelReason)
             }
 
             "call_status_update" -> {
@@ -349,6 +352,32 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(1000, notification)
+    }
+
+    private fun showCallCancelledNotification(callId: String?, cancelReason: String) {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra("callId", callId)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            System.currentTimeMillis().toInt(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID_CALL_RECEIVED)
+            .setContentTitle("콜 취소")
+            .setContentText(cancelReason)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .build()
+
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(1004, notification)
     }
 
     private fun saveFcmTokenToFirestore(token: String) {

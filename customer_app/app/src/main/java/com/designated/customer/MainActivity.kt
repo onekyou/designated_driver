@@ -418,7 +418,7 @@ fun CustomerApp(
     // CustomerInfo 상태 (사무실 연락처 포함)
     var customerInfo by remember { mutableStateOf<com.designated.customer.data.model.CustomerInfo?>(null) }
 
-    // 초기화: Phone Auth 상태 + 사무실 정보 + 프로필 확인
+    // 초기화: 익명인증 + 사무실 정보 + 프로필 확인
     LaunchedEffect(Unit) {
         val prefsOfficeId = preferencesManager.getOfficeId()
         val prefsProvinceId = preferencesManager.getProvinceId()
@@ -428,75 +428,90 @@ fun CustomerApp(
         currentProvinceId = prefsProvinceId
         currentCityId = prefsCityId
 
-        val currentUser = auth.currentUser
-        if (currentUser != null && currentUser.phoneNumber != null) {
-            // Phone Auth로 로그인된 사용자 (재방문)
-            android.util.Log.d("PhoneAuth", "이미 로그인됨: ${currentUser.uid}, phone: ${currentUser.phoneNumber}")
-            currentUserId = currentUser.uid
-            verifiedPhoneNumber = currentUser.phoneNumber ?: ""
+        // 사무실 정보 없으면 QR 필요
+        if (prefsOfficeId == null || prefsProvinceId == null || prefsCityId == null) {
+            currentScreen = AppScreen.QR_REQUIRED
+            return@LaunchedEffect
+        }
 
-            // 프로필 존재 여부 확인
-            if (prefsOfficeId != null && prefsProvinceId != null && prefsCityId != null) {
+        // 익명인증: 로그인 안 되어 있으면 자동 수행
+        var currentUser = auth.currentUser
+        if (currentUser == null) {
+            try {
+                val result = auth.signInAnonymously().await()
+                currentUser = result.user
+                android.util.Log.d("AnonymousAuth", "익명 로그인 완료: ${currentUser?.uid}")
+            } catch (e: Exception) {
+                android.util.Log.e("AnonymousAuth", "익명 로그인 실패", e)
+                currentScreen = AppScreen.QR_REQUIRED
+                return@LaunchedEffect
+            }
+        } else {
+            android.util.Log.d("AnonymousAuth", "이미 로그인됨: ${currentUser.uid}")
+        }
+
+        if (currentUser == null) {
+            currentScreen = AppScreen.QR_REQUIRED
+            return@LaunchedEffect
+        }
+
+        currentUserId = currentUser.uid
+        verifiedPhoneNumber = currentUser.phoneNumber ?: preferencesManager.getPhoneNumber() ?: ""
+
+        // 프로필 존재 여부 확인
+        try {
+            val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            val doc = firestore
+                .collection("provinces").document(prefsProvinceId)
+                .collection("cities").document(prefsCityId)
+                .collection("offices").document(prefsOfficeId)
+                .collection("customers").document(currentUser.uid)
+                .get()
+                .await()
+
+            if (doc.exists()) {
+                android.util.Log.d("ProfileCheck", "프로필 발견: ${currentUser.uid}")
+                customerInfo = com.designated.customer.data.model.CustomerInfo.fromMap(doc.data ?: emptyMap())
+
+                // 전화번호를 SharedPreferences에 저장 (FCM 토큰 저장에 필요)
+                customerInfo?.phoneNumber?.let { phone ->
+                    preferencesManager.savePhoneNumber(phone)
+                }
+
+                // lastActiveAt 업데이트 (앱 실행 시마다)
                 try {
-                    val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                    val doc = firestore
+                    firestore
                         .collection("provinces").document(prefsProvinceId)
                         .collection("cities").document(prefsCityId)
                         .collection("offices").document(prefsOfficeId)
                         .collection("customers").document(currentUser.uid)
-                        .get()
+                        .update("lastActiveAt", com.google.firebase.Timestamp.now())
                         .await()
-
-                    if (doc.exists()) {
-                        android.util.Log.d("ProfileCheck", "프로필 발견: ${currentUser.uid}")
-                        customerInfo = com.designated.customer.data.model.CustomerInfo.fromMap(doc.data ?: emptyMap())
-
-                        // 전화번호를 SharedPreferences에 저장 (FCM 토큰 저장에 필요)
-                        customerInfo?.phoneNumber?.let { phone ->
-                            preferencesManager.savePhoneNumber(phone)
-                        }
-
-                        // lastActiveAt 업데이트 (앱 실행 시마다)
-                        try {
-                            firestore
-                                .collection("provinces").document(prefsProvinceId)
-                                .collection("cities").document(prefsCityId)
-                                .collection("offices").document(prefsOfficeId)
-                                .collection("customers").document(currentUser.uid)
-                                .update("lastActiveAt", com.google.firebase.Timestamp.now())
-                                .await()
-                            android.util.Log.d("ProfileCheck", "lastActiveAt 업데이트 완료")
-                        } catch (e: Exception) {
-                            android.util.Log.e("ProfileCheck", "lastActiveAt 업데이트 실패", e)
-                        }
-
-                        currentScreen = AppScreen.MAIN
-                    } else {
-                        // 로그인은 됐지만 프로필 없음 (가입 중단된 경우)
-                        android.util.Log.d("ProfileCheck", "프로필 없음, 프로필 입력 화면 표시")
-                        currentScreen = AppScreen.PROFILE_SETUP
-                    }
+                    android.util.Log.d("ProfileCheck", "lastActiveAt 업데이트 완료")
                 } catch (e: Exception) {
-                    if (e::class.simpleName?.contains("LeftCompositionCancellationException") == true ||
-                        e.message?.contains("left the composition") == true) {
-                        return@LaunchedEffect
-                    }
-                    android.util.Log.e("ProfileCheck", "프로필 확인 실패", e)
+                    android.util.Log.e("ProfileCheck", "lastActiveAt 업데이트 실패", e)
+                }
+
+                currentScreen = AppScreen.MAIN
+            } else {
+                // 로그인은 됐지만 프로필 없음
+                android.util.Log.d("ProfileCheck", "프로필 없음, 약관/프로필 확인")
+                if (!preferencesManager.isTermsAccepted()) {
+                    currentScreen = AppScreen.TERMS_AGREEMENT
+                } else {
                     currentScreen = AppScreen.PROFILE_SETUP
                 }
-            } else {
-                // Phone Auth 완료됐지만 사무실 정보 없음 (비정상 상태)
-                android.util.Log.w("PhoneAuth", "로그인됨이지만 사무실 정보 없음")
-                currentScreen = AppScreen.QR_REQUIRED
             }
-        } else {
-            // 미로그인 → 가입 흐름 시작
-            if (prefsOfficeId == null || prefsProvinceId == null || prefsCityId == null) {
-                currentScreen = AppScreen.QR_REQUIRED
-            } else if (!preferencesManager.isTermsAccepted()) {
+        } catch (e: Exception) {
+            if (e::class.simpleName?.contains("LeftCompositionCancellationException") == true ||
+                e.message?.contains("left the composition") == true) {
+                return@LaunchedEffect
+            }
+            android.util.Log.e("ProfileCheck", "프로필 확인 실패", e)
+            if (!preferencesManager.isTermsAccepted()) {
                 currentScreen = AppScreen.TERMS_AGREEMENT
             } else {
-                currentScreen = AppScreen.PHONE_AUTH
+                currentScreen = AppScreen.PROFILE_SETUP
             }
         }
     }

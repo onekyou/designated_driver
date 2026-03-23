@@ -125,10 +125,10 @@ shared_calls/{callId}            공유콜 (영업시간 외)
 - **FCM 메시지 타입**: call_assigned, call_cancelled, SETTLEMENT_FINALIZED
 
 ## Customer App (고객용, 미배포)
-- **인증**: Phone Auth (SMS 인증)
+- **인증**: Anonymous Auth (익명인증, 자동 로그인)
 - **프로필 저장**: offices/{o}/customers/{uid} + customerInfo/{phone}
 - **사무실 매칭**: QR → Play Store → Install Referrer 자동 매칭 (핵심 온보딩 흐름)
-- **플로우**: QR스캔 → 플레이스토어 → 앱설치 → Install Referrer → 약관동의 → SMS인증 → 프로필설정
+- **플로우**: QR스캔 → 플레이스토어 → 앱설치 → Install Referrer → 약관동의 → 프로필설정
 
 ## Cloud Functions (41개)
 - **트리거**: onDocumentWritten (배차 FCM `oncallassigned`, 상태변경 FCM, 공유콜 알림 등)

@@ -759,6 +759,27 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val driverName = data["assignedDriverName"] ?: "기사"
         val customerName = data["customerName"] ?: "고객"
 
+        // 취소 상태일 때 일반 알림 표시
+        if (status == "CANCELLED_BY_CUSTOMER" || status == "CANCELLED_BY_DRIVER" || status == "CANCELED") {
+            val cancelledBy = when (status) {
+                "CANCELLED_BY_CUSTOMER" -> "고객"
+                "CANCELLED_BY_DRIVER" -> "기사"
+                else -> "관리자"
+            }
+            val message = data["message"] ?: "${cancelledBy} 취소"
+            showNotification(
+                channelId = STATUS_CHANGE_CHANNEL_ID,
+                notificationId = "call_cancelled_$callId".hashCode(),
+                title = "콜 취소",
+                content = message,
+                bigText = message,
+                callId = callId,
+                color = android.graphics.Color.RED,
+                autoCancel = true
+            )
+            Log.d(TAG, "[CALL_STATUS_UPDATE] 취소 알림 표시: $callId, $message")
+        }
+
         // COMPLETED 상태일 때 바로 팝업 표시 (Flow 필터링 전에)
         if (status == "COMPLETED") {
             Log.d(TAG, "[CALL_STATUS_UPDATE] 운행완료 - 팝업 브로드캐스트 전송: callId=$callId, driverName=$driverName, customerName=$customerName")

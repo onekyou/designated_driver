@@ -915,7 +915,8 @@ class DriverViewModel @Inject constructor(
                 assignedCalls = updatedCalls,
                 newCallPopup = if (clearPopup) null else currentState.newCallPopup,
                 activeCall = if (clearActive) null else currentState.activeCall,
-                driverStatus = if (clearActive || clearPopup) DriverStatus.WAITING else currentState.driverStatus
+                driverStatus = if (clearActive || clearPopup) DriverStatus.WAITING else currentState.driverStatus,
+                errorMessage = "고객이 콜을 취소했습니다"
             )
         }
     }
@@ -1152,9 +1153,16 @@ class DriverViewModel @Inject constructor(
                     }
                     Log.d(TAG, "handleNotificationCallId: processed assigned call")
                 } else if (callInfo != null) {
-                    // 다른 상태의 콜이면 콜 상세 화면으로 이동
-                    _callDetailsState.value = callInfo
-                    Log.d(TAG, "handleNotificationCallId: loaded call details for status ${callInfo.status}")
+                    // 취소된 콜이면 무시하고 홈으로
+                    val cancelStatuses = listOf("CANCELED", "CANCELLED_BY_CUSTOMER", "CANCELLED_BY_DRIVER")
+                    if (callInfo.status in cancelStatuses) {
+                        Log.d(TAG, "handleNotificationCallId: cancelled call, navigating home")
+                        _uiState.update { it.copy(navigateToHome = true) }
+                    } else {
+                        // 다른 상태의 콜이면 콜 상세 화면으로 이동
+                        _callDetailsState.value = callInfo
+                        Log.d(TAG, "handleNotificationCallId: loaded call details for status ${callInfo.status}")
+                    }
                 } else {
                     Log.w(TAG, "handleNotificationCallId: call not found or invalid")
                 }

@@ -87,10 +87,13 @@ class CallService(
                     .get()
                     .await()
 
-                val call = snapshot.documents.firstOrNull()?.data?.let { CustomerCall.fromMap(it) }
-                if (call != null) {
-                    android.util.Log.d("CallService", "활성 콜 발견: ${call.id}, status=$status")
-                    return call
+                val doc = snapshot.documents.firstOrNull()
+                if (doc != null) {
+                    val call = doc.data?.let { CustomerCall.fromMap(it).copy(id = doc.id) }
+                    if (call != null) {
+                        android.util.Log.d("CallService", "활성 콜 발견: ${call.id}, status=$status")
+                        return call
+                    }
                 }
             }
             android.util.Log.d("CallService", "활성 콜 없음")

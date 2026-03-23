@@ -143,10 +143,12 @@ service cloud.firestore {
         // 관리자, 배정된 기사, 또는 고객 본인이 업데이트 가능
         allow update: if
           isOfficeAdmin(provinceId, cityId, officeId) ||
-          // 고객이 자신의 WAITING 또는 REQUESTED 콜을 취소하는 경우
+          // 고객이 자신의 콜을 취소하는 경우 (WAITING/ASSIGNED/ACCEPTED/PREPARING)
           (isAuthenticated() &&
-           (resource.data.status == "WAITING" || resource.data.status == "REQUESTED") &&
-           request.resource.data.status == "CANCELLED") ||
+           (resource.data.status == "WAITING" || resource.data.status == "REQUESTED" ||
+            resource.data.status == "ASSIGNED" || resource.data.status == "ACCEPTED" ||
+            resource.data.status == "PREPARING") &&
+           request.resource.data.status == "CANCELLED_BY_CUSTOMER") ||
           (
             // 업데이트 요청자가 해당 콜에 배정된 기사인지 확인
             isAuthenticated() && resource.data.assignedDriverId == request.auth.uid &&
@@ -158,8 +160,9 @@ service cloud.firestore {
               (resource.data.status == "ACCEPTED" && request.resource.data.status == "IN_PROGRESS") ||
               (resource.data.status == "IN_PROGRESS" && request.resource.data.status == "AWAITING_SETTLEMENT") ||
               (resource.data.status == "AWAITING_SETTLEMENT" && request.resource.data.status == "COMPLETED") ||
-              // 기사가 운행 취소할 때: ACCEPTED → HOLD 허용
-              (resource.data.status == "ACCEPTED" && request.resource.data.status == "HOLD") ||
+              // 기사가 운행 취소할 때: ACCEPTED/PREPARING/IN_PROGRESS → CANCELLED_BY_DRIVER 허용
+              ((resource.data.status == "ACCEPTED" || resource.data.status == "PREPARING" || resource.data.status == "IN_PROGRESS") &&
+               request.resource.data.status == "CANCELLED_BY_DRIVER") ||
               // 기사가 공유콜을 취소할 때: ASSIGNED/ACCEPTED → CANCELLED_BY_DRIVER 허용
               ((resource.data.status == "ASSIGNED" || resource.data.status == "ACCEPTED") &&
                request.resource.data.status == "CANCELLED_BY_DRIVER" &&

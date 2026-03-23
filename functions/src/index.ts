@@ -2796,6 +2796,8 @@ export const onCallCancelledByDriver = onDocumentUpdated(
               data: {
                 type: "call_cancelled",
                 callId: callId,
+                title: "콜 취소",
+                body: "고객이 콜을 취소했습니다",
                 cancelReason: "고객이 콜을 취소했습니다"
               },
               android: {
