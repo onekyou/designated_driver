@@ -72,6 +72,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.designated.callmanager.service.CallManagerService
 import com.designated.callmanager.ui.dashboard.DashboardScreen
 import com.designated.callmanager.ui.dashboard.DashboardViewModel
+import com.designated.callmanager.ui.dashboard.NewCallAssignmentDialog
+import com.designated.callmanager.data.DriverStatus
 import com.designated.callmanager.ui.drivermanagement.DriverManagementScreen
 import com.designated.callmanager.ui.customer.CustomerManagementScreen
 import com.designated.callmanager.ui.attribution.AttributionManagementScreen
@@ -555,6 +557,36 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+
+                    // 배차 팝업 — 어느 화면에서든 표시
+                    val newCallInfo by dashboardViewModel.newCallInfo.collectAsState()
+                    val drivers by dashboardViewModel.drivers.collectAsState()
+
+                    if (showNewCallPopup && newCallInfo != null) {
+                        val waitingDrivers = drivers.filter { driver ->
+                            val statusString = driver.status?.trim() ?: ""
+                            val statusEnum = DriverStatus.fromString(statusString)
+                            statusEnum == DriverStatus.WAITING || statusEnum == DriverStatus.ONLINE
+                        }.sortedBy { it.lastLoginTime?.seconds ?: Long.MAX_VALUE }
+
+                        NewCallAssignmentDialog(
+                            callInfo = newCallInfo!!,
+                            availableDrivers = waitingDrivers,
+                            onDismiss = { dashboardViewModel.dismissNewCallPopup() },
+                            onDriverSelect = { driver ->
+                                dashboardViewModel.assignNewCall(driver.id)
+                            },
+                            onDriverSelectWithInfo = { driver, departure, destination, fare ->
+                                dashboardViewModel.assignNewCallWithInfo(driver.id, departure, destination, fare)
+                            },
+                            onDelete = {
+                                dashboardViewModel.deleteCall(newCallInfo!!.id)
+                            },
+                            onShare = { departure, destination, fare ->
+                                dashboardViewModel.shareCall(newCallInfo!!, departure, destination, fare)
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -610,11 +642,7 @@ class MainActivity : ComponentActivity() {
                     if (!isPopupAlreadyShown(popupId)) {
                         lifecycleScope.launch {
                             markPopupAsShown(popupId)
-                            if (_screenState.value == Screen.Dashboard) {
-                                dashboardViewModel.showCallDialog(callId)
-                            } else {
-                                _pendingCallDialogId.value = callId
-                            }
+                            dashboardViewModel.showCallDialog(callId)
                         }
                     }
                 } else {

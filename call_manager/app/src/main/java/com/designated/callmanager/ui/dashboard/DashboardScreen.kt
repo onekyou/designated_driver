@@ -407,32 +407,7 @@ fun DashboardScreen(
         )
     }
 
-    if (showNewCallPopup && newCallInfo != null) {
-
-        val waitingDrivers = drivers.filter { driver ->
-            val statusString = driver.status?.trim() ?: ""
-            val statusEnum = DriverStatus.fromString(statusString)
-            statusEnum == DriverStatus.WAITING || statusEnum == DriverStatus.ONLINE
-        }.sortedBy { it.lastLoginTime?.seconds ?: Long.MAX_VALUE }
-
-        NewCallAssignmentDialog(
-            callInfo = newCallInfo!!,
-            availableDrivers = waitingDrivers,
-            onDismiss = { viewModel.dismissNewCallPopup() },
-            onDriverSelect = { driver ->
-                viewModel.assignNewCall(driver.id)
-            },
-            onDriverSelectWithInfo = { driver, departure, destination, fare ->
-                viewModel.assignNewCallWithInfo(driver.id, departure, destination, fare)
-            },
-            onDelete = {
-                viewModel.deleteCall(newCallInfo!!.id)
-            },
-            onShare = { departure, destination, fare ->
-                viewModel.shareCall(newCallInfo!!, departure, destination, fare)
-            }
-        )
-    }
+    // NewCallAssignmentDialog는 MainActivity에서 렌더링 (어느 화면에서든 표시)
 
     if (showSharedCallCancelledDialog && sharedCancelledCallInfo != null) {
         SharedCallCancelledDialog(
