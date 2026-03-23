@@ -17,7 +17,7 @@
 
     <!-- Foreground Service 및 백그라운드 작업 권한 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -84,8 +84,12 @@
             android:name=".service.CallManagerService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
-            
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="실시간 콜 데이터 수신 및 관리 서비스" />
+        </service>
+
 
         <!-- FCM 메시징 서비스 등록 -->
         <service
@@ -145,7 +149,11 @@
             android:name=".service.CallDetectorService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="전화 감지 및 콜 생성 서비스" />
+        </service>
 
         <!-- CallScreeningService - 전화번호 확인 (스팸 차단 앱 권한) -->
         <service

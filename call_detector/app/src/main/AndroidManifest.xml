@@ -13,7 +13,7 @@
     <!-- 포그라운드 서비스 권한: 앱이 꺼져도 계속 전화 감지를 하기 위해 필요해요 (안드로이드 최신 버전 필수) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <!-- 안드로이드 14 이상 대응: 포그라운드 서비스 유형 지정 필요 -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
     
     <!-- 배터리 최적화 예외 권한 -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
@@ -104,7 +104,11 @@
             android:name=".CallDetectorService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="전화 감지 및 콜 생성 서비스" />
+        </service>
 
         <!-- CallScreeningService - 전화번호 확인 (스팸 차단 앱 권한) -->
         <service

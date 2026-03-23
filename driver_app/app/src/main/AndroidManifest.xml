@@ -9,7 +9,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
     <!-- Full Screen Intent Permission -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <!-- 위치 권한 추가 -->
@@ -69,7 +69,11 @@
         <service
             android:name=".service.DriverForegroundService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="기사 운행 상태 관리 및 콜 수신 서비스" />
+        </service>
         <service
             android:name=".MyFirebaseMessagingService"
             android:exported="false">
