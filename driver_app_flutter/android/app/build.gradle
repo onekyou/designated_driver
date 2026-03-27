@@ -1,17 +1,19 @@
 plugins {
     id "com.android.application"
     id "kotlin-android"
+    id "org.jetbrains.kotlin.plugin.compose"
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id "dev.flutter.flutter-gradle-plugin"
     id "com.google.gms.google-services"
 }
 
 android {
-    namespace = "com.designated.driverapp"
-    compileSdk = 34
-    ndkVersion = "25.1.8937393"
+    namespace = "com.designated.driverapp.app"
+    compileSdk = 36
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
+        coreLibraryDesugaringEnabled true
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
     }
@@ -21,7 +23,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.designated.driverapp"
+        applicationId = "com.designated.driverapp.app"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
@@ -29,13 +31,26 @@ android {
         multiDexEnabled true
     }
 
+    buildFeatures {
+        compose true
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.debug
         }
     }
+}
+
+dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
+
+    // LockScreenActivity Compose UI
+    implementation platform('androidx.compose:compose-bom:2024.02.00')
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.activity:activity-compose:1.8.2'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
 }
 
 flutter {

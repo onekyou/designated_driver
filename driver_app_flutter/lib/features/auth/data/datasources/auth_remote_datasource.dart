@@ -7,27 +7,23 @@ import '../models/user_session_model.dart';
 
 /// 인증 관련 원격 데이터 소스 (Firebase)
 abstract class AuthRemoteDataSource {
-  /// Firebase 로그인
   Future<UserSessionModel> login({
     required String email,
     required String password,
   });
 
-  /// Firebase 로그아웃
   Future<void> logout();
 
-  /// 현재 Firebase 사용자
   User? getCurrentUser();
 
-  /// FCM 토큰 업데이트
   Future<void> updateFcmToken({
     required String driverId,
-    required String regionId,
+    required String provinceId,
+    required String cityId,
     required String officeId,
     required String token,
   });
 
-  /// 비밀번호 재설정
   Future<void> resetPassword(String email);
 }
 
@@ -70,7 +66,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         throw AuthException('관리자 승인 대기 중인 계정입니다.');
       }
 
-      // 3. designated_drivers에서 기사 정보 찾기
+      // 3. designated_drivers에서 기사 정보 찾기 (collectionGroup)
       final driversQuery = await firestore
           .collectionGroup(AppConstants.collectionDrivers)
           .where(AppConstants.fieldAuthUid, isEqualTo: userId)
@@ -96,15 +92,13 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         }
       }
 
-      // 5. 기사 정보 추출
-      final regionId = driverData[AppConstants.fieldRegionId] as String?;
-      final officeId = driverData[AppConstants.fieldOfficeId] as String?;
+      // 5. 기사 정보 추출 — Firestore 경로에서 provinceId/cityId/officeId 파싱
+      // 경로: provinces/{p}/cities/{c}/offices/{o}/designated_drivers/{uid}
+      final pathSegments = driverDoc.reference.path.split('/');
+      final provinceId = pathSegments[1];
+      final cityId = pathSegments[3];
+      final officeId = pathSegments[5];
       final driverName = driverData[AppConstants.fieldName] as String? ?? '기사님';
-
-      if (regionId == null || officeId == null) {
-        await firebaseAuth.signOut();
-        throw AuthException('기사 정보(지역/사무실)가 누락되었습니다.');
-      }
 
       // 6. FCM 토큰 가져오기
       String? fcmToken;
@@ -127,7 +121,8 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       return UserSessionModel(
         userId: userId,
         email: email,
-        regionId: regionId,
+        provinceId: provinceId,
+        cityId: cityId,
         officeId: officeId,
         driverId: userId,
         driverName: driverName,
@@ -160,14 +155,17 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   @override
   Future<void> updateFcmToken({
     required String driverId,
-    required String regionId,
+    required String provinceId,
+    required String cityId,
     required String officeId,
     required String token,
   }) async {
     try {
       await firestore
-          .collection(AppConstants.collectionRegions)
-          .doc(regionId)
+          .collection(AppConstants.collectionProvinces)
+          .doc(provinceId)
+          .collection(AppConstants.collectionCities)
+          .doc(cityId)
           .collection(AppConstants.collectionOffices)
           .doc(officeId)
           .collection(AppConstants.collectionDrivers)

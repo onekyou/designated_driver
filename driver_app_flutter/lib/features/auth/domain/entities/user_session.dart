@@ -8,7 +8,8 @@ class UserSession with _$UserSession {
   const factory UserSession({
     required String userId,
     required String email,
-    required String regionId,
+    required String provinceId,
+    required String cityId,
     required String officeId,
     required String driverId,
     required String driverName,

@@ -2,19 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:driver_app_flutter/core/theme.dart';
 import 'package:driver_app_flutter/core/routes.dart';
-import 'package:driver_app_flutter/core/di/injection.dart' as di;
+import 'package:driver_app_flutter/core/providers.dart';
 import 'firebase_options.dart';
 
 /// FCM Background Message Handler
-/// 앱이 백그라운드/종료 상태일 때 메시지 수신
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   debugPrint('[FCM Background] 메시지 수신: ${message.messageId}');
-  debugPrint('[FCM Background] 제목: ${message.notification?.title}');
-  debugPrint('[FCM Background] 내용: ${message.notification?.body}');
   debugPrint('[FCM Background] 데이터: ${message.data}');
 }
 
@@ -29,12 +27,15 @@ void main() async {
   // FCM Background Handler 등록
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-  // Dependency Injection 초기화
-  await di.initializeDependencies();
+  // SharedPreferences 초기화
+  final sharedPreferences = await SharedPreferences.getInstance();
 
   runApp(
-    const ProviderScope(
-      child: DriverApp(),
+    ProviderScope(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(sharedPreferences),
+      ],
+      child: const DriverApp(),
     ),
   );
 }

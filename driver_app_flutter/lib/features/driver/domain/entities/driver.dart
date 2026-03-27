@@ -2,13 +2,15 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'driver.freezed.dart';
 
-/// 기사 상태 Enum
+/// 기사 상태 Enum (Kotlin DriverStatus와 일치)
 enum DriverStatus {
   offline('OFFLINE', '오프라인'),
   online('ONLINE', '온라인'),
   waiting('WAITING', '대기중'),
   assigned('ASSIGNED', '배정됨'),
   accepted('ACCEPTED', '수락'),
+  preparing('PREPARING', '준비중'),
+  onTrip('ON_TRIP', '운행중'),
   inProgress('IN_PROGRESS', '운행중'),
   awaitingSettlement('AWAITING_SETTLEMENT', '정산대기'),
   completed('COMPLETED', '완료');
@@ -56,7 +58,8 @@ class Driver with _$Driver {
     required String name,
     required String email,
     required String phoneNumber,
-    required String regionId,
+    required String provinceId,
+    required String cityId,
     required String officeId,
     required DriverStatus status,
     required DriverApprovalStatus approvalStatus,

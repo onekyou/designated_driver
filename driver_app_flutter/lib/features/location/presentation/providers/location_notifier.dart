@@ -1,34 +1,25 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/di/injection.dart';
-import '../../../../core/usecases/usecase.dart';
-import '../../domain/entities/position.dart';
-import '../../domain/usecases/get_current_location_usecase.dart';
+import '../../domain/entities/location.dart';
+import '../../domain/repositories/location_repository.dart';
 import 'location_state.dart';
 
+/// LocationNotifier — Repository 직접 사용 (UseCase 제거, Either 제거)
 class LocationNotifier extends StateNotifier<LocationState> {
-  final GetCurrentLocationUseCase _getCurrentLocationUseCase;
+  final LocationRepository _repository;
 
-  LocationNotifier({
-    required GetCurrentLocationUseCase getCurrentLocationUseCase,
-  })  : _getCurrentLocationUseCase = getCurrentLocationUseCase,
+  LocationNotifier({required LocationRepository repository})
+      : _repository = repository,
         super(const LocationState.initial());
 
   /// 현재 위치 조회
-  Future<Position?> getCurrentPosition() async {
+  Future<void> getCurrentPosition() async {
     state = const LocationState.loading();
-
-    final result = await _getCurrentLocationUseCase(NoParams());
-
-    return result.fold(
-      (failure) {
-        state = LocationState.error(failure.message);
-        return null;
-      },
-      (position) {
-        state = LocationState.loaded(position);
-        return position;
-      },
-    );
+    try {
+      final location = await _repository.getCurrentLocation();
+      state = LocationState.loaded(location);
+    } catch (e) {
+      state = LocationState.error(e.toString());
+    }
   }
 
   /// 상태 초기화
@@ -37,19 +28,8 @@ class LocationNotifier extends StateNotifier<LocationState> {
   }
 }
 
-/// LocationNotifier Provider
+/// LocationNotifier Provider — Phase 1.4에서 실제 DI 연결 예정
 final locationNotifierProvider =
     StateNotifierProvider<LocationNotifier, LocationState>((ref) {
-  return LocationNotifier(
-    getCurrentLocationUseCase: sl(),
-  );
-});
-
-/// Current Position Provider (편의성)
-final currentPositionProvider = Provider<Position?>((ref) {
-  final locationState = ref.watch(locationNotifierProvider);
-  return locationState.maybeWhen(
-    loaded: (position) => position,
-    orElse: () => null,
-  );
+  throw UnimplementedError('Phase 1.4에서 providers.dart로 이동 예정');
 });

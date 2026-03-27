@@ -18,7 +18,8 @@ final _privateConstructorUsedError = UnsupportedError(
 mixin _$UserSession {
   String get userId => throw _privateConstructorUsedError;
   String get email => throw _privateConstructorUsedError;
-  String get regionId => throw _privateConstructorUsedError;
+  String get provinceId => throw _privateConstructorUsedError;
+  String get cityId => throw _privateConstructorUsedError;
   String get officeId => throw _privateConstructorUsedError;
   String get driverId => throw _privateConstructorUsedError;
   String get driverName => throw _privateConstructorUsedError;
@@ -42,7 +43,8 @@ abstract class $UserSessionCopyWith<$Res> {
   $Res call(
       {String userId,
       String email,
-      String regionId,
+      String provinceId,
+      String cityId,
       String officeId,
       String driverId,
       String driverName,
@@ -68,7 +70,8 @@ class _$UserSessionCopyWithImpl<$Res, $Val extends UserSession>
   $Res call({
     Object? userId = null,
     Object? email = null,
-    Object? regionId = null,
+    Object? provinceId = null,
+    Object? cityId = null,
     Object? officeId = null,
     Object? driverId = null,
     Object? driverName = null,
@@ -85,9 +88,13 @@ class _$UserSessionCopyWithImpl<$Res, $Val extends UserSession>
           ? _value.email
           : email // ignore: cast_nullable_to_non_nullable
               as String,
-      regionId: null == regionId
-          ? _value.regionId
-          : regionId // ignore: cast_nullable_to_non_nullable
+      provinceId: null == provinceId
+          ? _value.provinceId
+          : provinceId // ignore: cast_nullable_to_non_nullable
+              as String,
+      cityId: null == cityId
+          ? _value.cityId
+          : cityId // ignore: cast_nullable_to_non_nullable
               as String,
       officeId: null == officeId
           ? _value.officeId
@@ -128,7 +135,8 @@ abstract class _$$UserSessionImplCopyWith<$Res>
   $Res call(
       {String userId,
       String email,
-      String regionId,
+      String provinceId,
+      String cityId,
       String officeId,
       String driverId,
       String driverName,
@@ -152,7 +160,8 @@ class __$$UserSessionImplCopyWithImpl<$Res>
   $Res call({
     Object? userId = null,
     Object? email = null,
-    Object? regionId = null,
+    Object? provinceId = null,
+    Object? cityId = null,
     Object? officeId = null,
     Object? driverId = null,
     Object? driverName = null,
@@ -169,9 +178,13 @@ class __$$UserSessionImplCopyWithImpl<$Res>
           ? _value.email
           : email // ignore: cast_nullable_to_non_nullable
               as String,
-      regionId: null == regionId
-          ? _value.regionId
-          : regionId // ignore: cast_nullable_to_non_nullable
+      provinceId: null == provinceId
+          ? _value.provinceId
+          : provinceId // ignore: cast_nullable_to_non_nullable
+              as String,
+      cityId: null == cityId
+          ? _value.cityId
+          : cityId // ignore: cast_nullable_to_non_nullable
               as String,
       officeId: null == officeId
           ? _value.officeId
@@ -207,7 +220,8 @@ class _$UserSessionImpl extends _UserSession {
   const _$UserSessionImpl(
       {required this.userId,
       required this.email,
-      required this.regionId,
+      required this.provinceId,
+      required this.cityId,
       required this.officeId,
       required this.driverId,
       required this.driverName,
@@ -221,7 +235,9 @@ class _$UserSessionImpl extends _UserSession {
   @override
   final String email;
   @override
-  final String regionId;
+  final String provinceId;
+  @override
+  final String cityId;
   @override
   final String officeId;
   @override
@@ -238,7 +254,7 @@ class _$UserSessionImpl extends _UserSession {
 
   @override
   String toString() {
-    return 'UserSession(userId: $userId, email: $email, regionId: $regionId, officeId: $officeId, driverId: $driverId, driverName: $driverName, fcmToken: $fcmToken, lastLoginTime: $lastLoginTime, isOnline: $isOnline)';
+    return 'UserSession(userId: $userId, email: $email, provinceId: $provinceId, cityId: $cityId, officeId: $officeId, driverId: $driverId, driverName: $driverName, fcmToken: $fcmToken, lastLoginTime: $lastLoginTime, isOnline: $isOnline)';
   }
 
   @override
@@ -248,8 +264,9 @@ class _$UserSessionImpl extends _UserSession {
             other is _$UserSessionImpl &&
             (identical(other.userId, userId) || other.userId == userId) &&
             (identical(other.email, email) || other.email == email) &&
-            (identical(other.regionId, regionId) ||
-                other.regionId == regionId) &&
+            (identical(other.provinceId, provinceId) ||
+                other.provinceId == provinceId) &&
+            (identical(other.cityId, cityId) || other.cityId == cityId) &&
             (identical(other.officeId, officeId) ||
                 other.officeId == officeId) &&
             (identical(other.driverId, driverId) ||
@@ -265,8 +282,18 @@ class _$UserSessionImpl extends _UserSession {
   }
 
   @override
-  int get hashCode => Object.hash(runtimeType, userId, email, regionId,
-      officeId, driverId, driverName, fcmToken, lastLoginTime, isOnline);
+  int get hashCode => Object.hash(
+      runtimeType,
+      userId,
+      email,
+      provinceId,
+      cityId,
+      officeId,
+      driverId,
+      driverName,
+      fcmToken,
+      lastLoginTime,
+      isOnline);
 
   /// Create a copy of UserSession
   /// with the given fields replaced by the non-null parameter values.
@@ -281,7 +308,8 @@ abstract class _UserSession extends UserSession {
   const factory _UserSession(
       {required final String userId,
       required final String email,
-      required final String regionId,
+      required final String provinceId,
+      required final String cityId,
       required final String officeId,
       required final String driverId,
       required final String driverName,
@@ -295,7 +323,9 @@ abstract class _UserSession extends UserSession {
   @override
   String get email;
   @override
-  String get regionId;
+  String get provinceId;
+  @override
+  String get cityId;
   @override
   String get officeId;
   @override

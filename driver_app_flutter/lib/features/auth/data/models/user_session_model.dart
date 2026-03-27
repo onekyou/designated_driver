@@ -5,7 +5,8 @@ import '../../domain/entities/user_session.dart';
 class UserSessionModel {
   final String userId;
   final String email;
-  final String regionId;
+  final String provinceId;
+  final String cityId;
   final String officeId;
   final String driverId;
   final String driverName;
@@ -16,7 +17,8 @@ class UserSessionModel {
   const UserSessionModel({
     required this.userId,
     required this.email,
-    required this.regionId,
+    required this.provinceId,
+    required this.cityId,
     required this.officeId,
     required this.driverId,
     required this.driverName,
@@ -30,7 +32,8 @@ class UserSessionModel {
     return UserSessionModel(
       userId: session.userId,
       email: session.email,
-      regionId: session.regionId,
+      provinceId: session.provinceId,
+      cityId: session.cityId,
       officeId: session.officeId,
       driverId: session.driverId,
       driverName: session.driverName,
@@ -45,7 +48,8 @@ class UserSessionModel {
     return UserSessionModel(
       userId: json['userId'] as String,
       email: json['email'] as String,
-      regionId: json['regionId'] as String,
+      provinceId: json['provinceId'] as String,
+      cityId: json['cityId'] as String,
       officeId: json['officeId'] as String,
       driverId: json['driverId'] as String,
       driverName: json['driverName'] as String,
@@ -62,7 +66,8 @@ class UserSessionModel {
     return {
       'userId': userId,
       'email': email,
-      'regionId': regionId,
+      'provinceId': provinceId,
+      'cityId': cityId,
       'officeId': officeId,
       'driverId': driverId,
       'driverName': driverName,
@@ -72,23 +77,13 @@ class UserSessionModel {
     };
   }
 
-  /// Firestore에서 변환
-  factory UserSessionModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    return UserSessionModel.fromJson(data);
-  }
-
-  /// Firestore에 저장할 Map
-  Map<String, dynamic> toFirestore() {
-    return toJson();
-  }
-
   /// Model을 Entity로 변환
   UserSession toEntity() {
     return UserSession(
       userId: userId,
       email: email,
-      regionId: regionId,
+      provinceId: provinceId,
+      cityId: cityId,
       officeId: officeId,
       driverId: driverId,
       driverName: driverName,
@@ -102,7 +97,8 @@ class UserSessionModel {
   UserSessionModel copyWith({
     String? userId,
     String? email,
-    String? regionId,
+    String? provinceId,
+    String? cityId,
     String? officeId,
     String? driverId,
     String? driverName,
@@ -113,7 +109,8 @@ class UserSessionModel {
     return UserSessionModel(
       userId: userId ?? this.userId,
       email: email ?? this.email,
-      regionId: regionId ?? this.regionId,
+      provinceId: provinceId ?? this.provinceId,
+      cityId: cityId ?? this.cityId,
       officeId: officeId ?? this.officeId,
       driverId: driverId ?? this.driverId,
       driverName: driverName ?? this.driverName,

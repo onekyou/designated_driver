@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:driver_app_flutter/core/routes.dart';
 import 'package:driver_app_flutter/core/theme.dart';
-import 'package:driver_app_flutter/features/auth/presentation/providers/auth_notifier.dart';
+import 'package:driver_app_flutter/core/providers.dart';
 import 'package:driver_app_flutter/features/auth/presentation/providers/auth_state.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {

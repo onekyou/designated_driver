@@ -17,7 +17,8 @@ final _privateConstructorUsedError = UnsupportedError(
 /// @nodoc
 mixin _$Call {
   String get id => throw _privateConstructorUsedError;
-  String get regionId => throw _privateConstructorUsedError;
+  String get provinceId => throw _privateConstructorUsedError;
+  String get cityId => throw _privateConstructorUsedError;
   String get officeId => throw _privateConstructorUsedError;
   String get phoneNumber => throw _privateConstructorUsedError;
   String? get customerName => throw _privateConstructorUsedError;
@@ -29,9 +30,11 @@ mixin _$Call {
   DateTime? get callTime => throw _privateConstructorUsedError;
   DateTime? get assignedTime => throw _privateConstructorUsedError;
   DateTime? get acceptedTime => throw _privateConstructorUsedError;
-  DateTime? get pickedUpTime => throw _privateConstructorUsedError;
+  DateTime? get startedTime => throw _privateConstructorUsedError;
   DateTime? get completedTime => throw _privateConstructorUsedError;
   int? get fare => throw _privateConstructorUsedError;
+  int? get cashReceived => throw _privateConstructorUsedError;
+  String? get paymentMethod => throw _privateConstructorUsedError;
   int? get pointsUsed => throw _privateConstructorUsedError;
   int? get pointsEarned => throw _privateConstructorUsedError;
   String? get notes => throw _privateConstructorUsedError;
@@ -49,7 +52,8 @@ abstract class $CallCopyWith<$Res> {
   @useResult
   $Res call(
       {String id,
-      String regionId,
+      String provinceId,
+      String cityId,
       String officeId,
       String phoneNumber,
       String? customerName,
@@ -61,9 +65,11 @@ abstract class $CallCopyWith<$Res> {
       DateTime? callTime,
       DateTime? assignedTime,
       DateTime? acceptedTime,
-      DateTime? pickedUpTime,
+      DateTime? startedTime,
       DateTime? completedTime,
       int? fare,
+      int? cashReceived,
+      String? paymentMethod,
       int? pointsUsed,
       int? pointsEarned,
       String? notes});
@@ -85,7 +91,8 @@ class _$CallCopyWithImpl<$Res, $Val extends Call>
   @override
   $Res call({
     Object? id = null,
-    Object? regionId = null,
+    Object? provinceId = null,
+    Object? cityId = null,
     Object? officeId = null,
     Object? phoneNumber = null,
     Object? customerName = freezed,
@@ -97,9 +104,11 @@ class _$CallCopyWithImpl<$Res, $Val extends Call>
     Object? callTime = freezed,
     Object? assignedTime = freezed,
     Object? acceptedTime = freezed,
-    Object? pickedUpTime = freezed,
+    Object? startedTime = freezed,
     Object? completedTime = freezed,
     Object? fare = freezed,
+    Object? cashReceived = freezed,
+    Object? paymentMethod = freezed,
     Object? pointsUsed = freezed,
     Object? pointsEarned = freezed,
     Object? notes = freezed,
@@ -109,9 +118,13 @@ class _$CallCopyWithImpl<$Res, $Val extends Call>
           ? _value.id
           : id // ignore: cast_nullable_to_non_nullable
               as String,
-      regionId: null == regionId
-          ? _value.regionId
-          : regionId // ignore: cast_nullable_to_non_nullable
+      provinceId: null == provinceId
+          ? _value.provinceId
+          : provinceId // ignore: cast_nullable_to_non_nullable
+              as String,
+      cityId: null == cityId
+          ? _value.cityId
+          : cityId // ignore: cast_nullable_to_non_nullable
               as String,
       officeId: null == officeId
           ? _value.officeId
@@ -157,9 +170,9 @@ class _$CallCopyWithImpl<$Res, $Val extends Call>
           ? _value.acceptedTime
           : acceptedTime // ignore: cast_nullable_to_non_nullable
               as DateTime?,
-      pickedUpTime: freezed == pickedUpTime
-          ? _value.pickedUpTime
-          : pickedUpTime // ignore: cast_nullable_to_non_nullable
+      startedTime: freezed == startedTime
+          ? _value.startedTime
+          : startedTime // ignore: cast_nullable_to_non_nullable
               as DateTime?,
       completedTime: freezed == completedTime
           ? _value.completedTime
@@ -169,6 +182,14 @@ class _$CallCopyWithImpl<$Res, $Val extends Call>
           ? _value.fare
           : fare // ignore: cast_nullable_to_non_nullable
               as int?,
+      cashReceived: freezed == cashReceived
+          ? _value.cashReceived
+          : cashReceived // ignore: cast_nullable_to_non_nullable
+              as int?,
+      paymentMethod: freezed == paymentMethod
+          ? _value.paymentMethod
+          : paymentMethod // ignore: cast_nullable_to_non_nullable
+              as String?,
       pointsUsed: freezed == pointsUsed
           ? _value.pointsUsed
           : pointsUsed // ignore: cast_nullable_to_non_nullable
@@ -194,7 +215,8 @@ abstract class _$$CallImplCopyWith<$Res> implements $CallCopyWith<$Res> {
   @useResult
   $Res call(
       {String id,
-      String regionId,
+      String provinceId,
+      String cityId,
       String officeId,
       String phoneNumber,
       String? customerName,
@@ -206,9 +228,11 @@ abstract class _$$CallImplCopyWith<$Res> implements $CallCopyWith<$Res> {
       DateTime? callTime,
       DateTime? assignedTime,
       DateTime? acceptedTime,
-      DateTime? pickedUpTime,
+      DateTime? startedTime,
       DateTime? completedTime,
       int? fare,
+      int? cashReceived,
+      String? paymentMethod,
       int? pointsUsed,
       int? pointsEarned,
       String? notes});
@@ -227,7 +251,8 @@ class __$$CallImplCopyWithImpl<$Res>
   @override
   $Res call({
     Object? id = null,
-    Object? regionId = null,
+    Object? provinceId = null,
+    Object? cityId = null,
     Object? officeId = null,
     Object? phoneNumber = null,
     Object? customerName = freezed,
@@ -239,9 +264,11 @@ class __$$CallImplCopyWithImpl<$Res>
     Object? callTime = freezed,
     Object? assignedTime = freezed,
     Object? acceptedTime = freezed,
-    Object? pickedUpTime = freezed,
+    Object? startedTime = freezed,
     Object? completedTime = freezed,
     Object? fare = freezed,
+    Object? cashReceived = freezed,
+    Object? paymentMethod = freezed,
     Object? pointsUsed = freezed,
     Object? pointsEarned = freezed,
     Object? notes = freezed,
@@ -251,9 +278,13 @@ class __$$CallImplCopyWithImpl<$Res>
           ? _value.id
           : id // ignore: cast_nullable_to_non_nullable
               as String,
-      regionId: null == regionId
-          ? _value.regionId
-          : regionId // ignore: cast_nullable_to_non_nullable
+      provinceId: null == provinceId
+          ? _value.provinceId
+          : provinceId // ignore: cast_nullable_to_non_nullable
+              as String,
+      cityId: null == cityId
+          ? _value.cityId
+          : cityId // ignore: cast_nullable_to_non_nullable
               as String,
       officeId: null == officeId
           ? _value.officeId
@@ -299,9 +330,9 @@ class __$$CallImplCopyWithImpl<$Res>
           ? _value.acceptedTime
           : acceptedTime // ignore: cast_nullable_to_non_nullable
               as DateTime?,
-      pickedUpTime: freezed == pickedUpTime
-          ? _value.pickedUpTime
-          : pickedUpTime // ignore: cast_nullable_to_non_nullable
+      startedTime: freezed == startedTime
+          ? _value.startedTime
+          : startedTime // ignore: cast_nullable_to_non_nullable
               as DateTime?,
       completedTime: freezed == completedTime
           ? _value.completedTime
@@ -311,6 +342,14 @@ class __$$CallImplCopyWithImpl<$Res>
           ? _value.fare
           : fare // ignore: cast_nullable_to_non_nullable
               as int?,
+      cashReceived: freezed == cashReceived
+          ? _value.cashReceived
+          : cashReceived // ignore: cast_nullable_to_non_nullable
+              as int?,
+      paymentMethod: freezed == paymentMethod
+          ? _value.paymentMethod
+          : paymentMethod // ignore: cast_nullable_to_non_nullable
+              as String?,
       pointsUsed: freezed == pointsUsed
           ? _value.pointsUsed
           : pointsUsed // ignore: cast_nullable_to_non_nullable
@@ -332,7 +371,8 @@ class __$$CallImplCopyWithImpl<$Res>
 class _$CallImpl extends _Call {
   const _$CallImpl(
       {required this.id,
-      required this.regionId,
+      required this.provinceId,
+      required this.cityId,
       required this.officeId,
       required this.phoneNumber,
       this.customerName,
@@ -344,9 +384,11 @@ class _$CallImpl extends _Call {
       this.callTime,
       this.assignedTime,
       this.acceptedTime,
-      this.pickedUpTime,
+      this.startedTime,
       this.completedTime,
       this.fare,
+      this.cashReceived,
+      this.paymentMethod,
       this.pointsUsed,
       this.pointsEarned,
       this.notes})
@@ -355,7 +397,9 @@ class _$CallImpl extends _Call {
   @override
   final String id;
   @override
-  final String regionId;
+  final String provinceId;
+  @override
+  final String cityId;
   @override
   final String officeId;
   @override
@@ -379,11 +423,15 @@ class _$CallImpl extends _Call {
   @override
   final DateTime? acceptedTime;
   @override
-  final DateTime? pickedUpTime;
+  final DateTime? startedTime;
   @override
   final DateTime? completedTime;
   @override
   final int? fare;
+  @override
+  final int? cashReceived;
+  @override
+  final String? paymentMethod;
   @override
   final int? pointsUsed;
   @override
@@ -393,7 +441,7 @@ class _$CallImpl extends _Call {
 
   @override
   String toString() {
-    return 'Call(id: $id, regionId: $regionId, officeId: $officeId, phoneNumber: $phoneNumber, customerName: $customerName, pickupLocation: $pickupLocation, destination: $destination, status: $status, assignedDriverId: $assignedDriverId, assignedDriverName: $assignedDriverName, callTime: $callTime, assignedTime: $assignedTime, acceptedTime: $acceptedTime, pickedUpTime: $pickedUpTime, completedTime: $completedTime, fare: $fare, pointsUsed: $pointsUsed, pointsEarned: $pointsEarned, notes: $notes)';
+    return 'Call(id: $id, provinceId: $provinceId, cityId: $cityId, officeId: $officeId, phoneNumber: $phoneNumber, customerName: $customerName, pickupLocation: $pickupLocation, destination: $destination, status: $status, assignedDriverId: $assignedDriverId, assignedDriverName: $assignedDriverName, callTime: $callTime, assignedTime: $assignedTime, acceptedTime: $acceptedTime, startedTime: $startedTime, completedTime: $completedTime, fare: $fare, cashReceived: $cashReceived, paymentMethod: $paymentMethod, pointsUsed: $pointsUsed, pointsEarned: $pointsEarned, notes: $notes)';
   }
 
   @override
@@ -402,8 +450,9 @@ class _$CallImpl extends _Call {
         (other.runtimeType == runtimeType &&
             other is _$CallImpl &&
             (identical(other.id, id) || other.id == id) &&
-            (identical(other.regionId, regionId) ||
-                other.regionId == regionId) &&
+            (identical(other.provinceId, provinceId) ||
+                other.provinceId == provinceId) &&
+            (identical(other.cityId, cityId) || other.cityId == cityId) &&
             (identical(other.officeId, officeId) ||
                 other.officeId == officeId) &&
             (identical(other.phoneNumber, phoneNumber) ||
@@ -425,11 +474,15 @@ class _$CallImpl extends _Call {
                 other.assignedTime == assignedTime) &&
             (identical(other.acceptedTime, acceptedTime) ||
                 other.acceptedTime == acceptedTime) &&
-            (identical(other.pickedUpTime, pickedUpTime) ||
-                other.pickedUpTime == pickedUpTime) &&
+            (identical(other.startedTime, startedTime) ||
+                other.startedTime == startedTime) &&
             (identical(other.completedTime, completedTime) ||
                 other.completedTime == completedTime) &&
             (identical(other.fare, fare) || other.fare == fare) &&
+            (identical(other.cashReceived, cashReceived) ||
+                other.cashReceived == cashReceived) &&
+            (identical(other.paymentMethod, paymentMethod) ||
+                other.paymentMethod == paymentMethod) &&
             (identical(other.pointsUsed, pointsUsed) ||
                 other.pointsUsed == pointsUsed) &&
             (identical(other.pointsEarned, pointsEarned) ||
@@ -441,7 +494,8 @@ class _$CallImpl extends _Call {
   int get hashCode => Object.hashAll([
         runtimeType,
         id,
-        regionId,
+        provinceId,
+        cityId,
         officeId,
         phoneNumber,
         customerName,
@@ -453,9 +507,11 @@ class _$CallImpl extends _Call {
         callTime,
         assignedTime,
         acceptedTime,
-        pickedUpTime,
+        startedTime,
         completedTime,
         fare,
+        cashReceived,
+        paymentMethod,
         pointsUsed,
         pointsEarned,
         notes
@@ -473,7 +529,8 @@ class _$CallImpl extends _Call {
 abstract class _Call extends Call {
   const factory _Call(
       {required final String id,
-      required final String regionId,
+      required final String provinceId,
+      required final String cityId,
       required final String officeId,
       required final String phoneNumber,
       final String? customerName,
@@ -485,9 +542,11 @@ abstract class _Call extends Call {
       final DateTime? callTime,
       final DateTime? assignedTime,
       final DateTime? acceptedTime,
-      final DateTime? pickedUpTime,
+      final DateTime? startedTime,
       final DateTime? completedTime,
       final int? fare,
+      final int? cashReceived,
+      final String? paymentMethod,
       final int? pointsUsed,
       final int? pointsEarned,
       final String? notes}) = _$CallImpl;
@@ -496,7 +555,9 @@ abstract class _Call extends Call {
   @override
   String get id;
   @override
-  String get regionId;
+  String get provinceId;
+  @override
+  String get cityId;
   @override
   String get officeId;
   @override
@@ -520,11 +581,15 @@ abstract class _Call extends Call {
   @override
   DateTime? get acceptedTime;
   @override
-  DateTime? get pickedUpTime;
+  DateTime? get startedTime;
   @override
   DateTime? get completedTime;
   @override
   int? get fare;
+  @override
+  int? get cashReceived;
+  @override
+  String? get paymentMethod;
   @override
   int? get pointsUsed;
   @override

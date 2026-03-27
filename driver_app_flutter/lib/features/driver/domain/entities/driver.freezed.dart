@@ -21,7 +21,8 @@ mixin _$Driver {
   String get name => throw _privateConstructorUsedError;
   String get email => throw _privateConstructorUsedError;
   String get phoneNumber => throw _privateConstructorUsedError;
-  String get regionId => throw _privateConstructorUsedError;
+  String get provinceId => throw _privateConstructorUsedError;
+  String get cityId => throw _privateConstructorUsedError;
   String get officeId => throw _privateConstructorUsedError;
   DriverStatus get status => throw _privateConstructorUsedError;
   DriverApprovalStatus get approvalStatus => throw _privateConstructorUsedError;
@@ -47,7 +48,8 @@ abstract class $DriverCopyWith<$Res> {
       String name,
       String email,
       String phoneNumber,
-      String regionId,
+      String provinceId,
+      String cityId,
       String officeId,
       DriverStatus status,
       DriverApprovalStatus approvalStatus,
@@ -77,7 +79,8 @@ class _$DriverCopyWithImpl<$Res, $Val extends Driver>
     Object? name = null,
     Object? email = null,
     Object? phoneNumber = null,
-    Object? regionId = null,
+    Object? provinceId = null,
+    Object? cityId = null,
     Object? officeId = null,
     Object? status = null,
     Object? approvalStatus = null,
@@ -107,9 +110,13 @@ class _$DriverCopyWithImpl<$Res, $Val extends Driver>
           ? _value.phoneNumber
           : phoneNumber // ignore: cast_nullable_to_non_nullable
               as String,
-      regionId: null == regionId
-          ? _value.regionId
-          : regionId // ignore: cast_nullable_to_non_nullable
+      provinceId: null == provinceId
+          ? _value.provinceId
+          : provinceId // ignore: cast_nullable_to_non_nullable
+              as String,
+      cityId: null == cityId
+          ? _value.cityId
+          : cityId // ignore: cast_nullable_to_non_nullable
               as String,
       officeId: null == officeId
           ? _value.officeId
@@ -156,7 +163,8 @@ abstract class _$$DriverImplCopyWith<$Res> implements $DriverCopyWith<$Res> {
       String name,
       String email,
       String phoneNumber,
-      String regionId,
+      String provinceId,
+      String cityId,
       String officeId,
       DriverStatus status,
       DriverApprovalStatus approvalStatus,
@@ -184,7 +192,8 @@ class __$$DriverImplCopyWithImpl<$Res>
     Object? name = null,
     Object? email = null,
     Object? phoneNumber = null,
-    Object? regionId = null,
+    Object? provinceId = null,
+    Object? cityId = null,
     Object? officeId = null,
     Object? status = null,
     Object? approvalStatus = null,
@@ -214,9 +223,13 @@ class __$$DriverImplCopyWithImpl<$Res>
           ? _value.phoneNumber
           : phoneNumber // ignore: cast_nullable_to_non_nullable
               as String,
-      regionId: null == regionId
-          ? _value.regionId
-          : regionId // ignore: cast_nullable_to_non_nullable
+      provinceId: null == provinceId
+          ? _value.provinceId
+          : provinceId // ignore: cast_nullable_to_non_nullable
+              as String,
+      cityId: null == cityId
+          ? _value.cityId
+          : cityId // ignore: cast_nullable_to_non_nullable
               as String,
       officeId: null == officeId
           ? _value.officeId
@@ -259,7 +272,8 @@ class _$DriverImpl extends _Driver {
       required this.name,
       required this.email,
       required this.phoneNumber,
-      required this.regionId,
+      required this.provinceId,
+      required this.cityId,
       required this.officeId,
       required this.status,
       required this.approvalStatus,
@@ -280,7 +294,9 @@ class _$DriverImpl extends _Driver {
   @override
   final String phoneNumber;
   @override
-  final String regionId;
+  final String provinceId;
+  @override
+  final String cityId;
   @override
   final String officeId;
   @override
@@ -298,7 +314,7 @@ class _$DriverImpl extends _Driver {
 
   @override
   String toString() {
-    return 'Driver(id: $id, authUid: $authUid, name: $name, email: $email, phoneNumber: $phoneNumber, regionId: $regionId, officeId: $officeId, status: $status, approvalStatus: $approvalStatus, fcmToken: $fcmToken, currentCallId: $currentCallId, createdAt: $createdAt, updatedAt: $updatedAt)';
+    return 'Driver(id: $id, authUid: $authUid, name: $name, email: $email, phoneNumber: $phoneNumber, provinceId: $provinceId, cityId: $cityId, officeId: $officeId, status: $status, approvalStatus: $approvalStatus, fcmToken: $fcmToken, currentCallId: $currentCallId, createdAt: $createdAt, updatedAt: $updatedAt)';
   }
 
   @override
@@ -312,8 +328,9 @@ class _$DriverImpl extends _Driver {
             (identical(other.email, email) || other.email == email) &&
             (identical(other.phoneNumber, phoneNumber) ||
                 other.phoneNumber == phoneNumber) &&
-            (identical(other.regionId, regionId) ||
-                other.regionId == regionId) &&
+            (identical(other.provinceId, provinceId) ||
+                other.provinceId == provinceId) &&
+            (identical(other.cityId, cityId) || other.cityId == cityId) &&
             (identical(other.officeId, officeId) ||
                 other.officeId == officeId) &&
             (identical(other.status, status) || other.status == status) &&
@@ -337,7 +354,8 @@ class _$DriverImpl extends _Driver {
       name,
       email,
       phoneNumber,
-      regionId,
+      provinceId,
+      cityId,
       officeId,
       status,
       approvalStatus,
@@ -362,7 +380,8 @@ abstract class _Driver extends Driver {
       required final String name,
       required final String email,
       required final String phoneNumber,
-      required final String regionId,
+      required final String provinceId,
+      required final String cityId,
       required final String officeId,
       required final DriverStatus status,
       required final DriverApprovalStatus approvalStatus,
@@ -383,7 +402,9 @@ abstract class _Driver extends Driver {
   @override
   String get phoneNumber;
   @override
-  String get regionId;
+  String get provinceId;
+  @override
+  String get cityId;
   @override
   String get officeId;
   @override

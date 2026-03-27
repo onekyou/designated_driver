@@ -1,14 +1,13 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
-import '../../../../core/constants/app_constants.dart';
 
 part 'customer_points.freezed.dart';
 
 /// 고객 등급 Enum
 enum CustomerGrade {
-  bronze('BRONZE', '브론즈', AppConstants.bronzeEarningRate),
-  silver('SILVER', '실버', AppConstants.silverEarningRate),
-  gold('GOLD', '골드', AppConstants.goldEarningRate),
-  vip('VIP', 'VIP', AppConstants.vipEarningRate);
+  bronze('BRONZE', '브론즈', 0.03),
+  silver('SILVER', '실버', 0.05),
+  gold('GOLD', '골드', 0.07),
+  vip('VIP', 'VIP', 0.09);
 
   final String value;
   final String displayName;
@@ -49,19 +48,5 @@ class CustomerPoints with _$CustomerPoints {
   /// 포인트 적립 계산
   int calculateEarnedPoints(int fare) {
     return (fare * grade.earningRate).round();
-  }
-
-  /// 다음 등급까지 필요한 콜 수
-  int? callsToNextGrade() {
-    switch (grade) {
-      case CustomerGrade.bronze:
-        return 10 - totalCalls; // 10번이면 실버
-      case CustomerGrade.silver:
-        return 30 - totalCalls; // 30번이면 골드
-      case CustomerGrade.gold:
-        return 100 - totalCalls; // 100번이면 VIP
-      case CustomerGrade.vip:
-        return null; // 최고 등급
-    }
   }
 }

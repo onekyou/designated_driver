@@ -1,28 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/di/injection.dart';
-import '../../../../core/usecases/usecase.dart';
-import '../../domain/entities/user_session.dart';
-import '../../domain/usecases/login_usecase.dart';
-import '../../domain/usecases/logout_usecase.dart';
-import '../../domain/usecases/auto_login_usecase.dart';
-import '../../domain/usecases/get_current_session_usecase.dart';
+import '../../domain/repositories/auth_repository.dart';
 import 'auth_state.dart';
 
+/// AuthNotifier — Repository 직접 사용 (UseCase 제거, Either 제거)
 class AuthNotifier extends StateNotifier<AuthState> {
-  final LoginUseCase _loginUseCase;
-  final LogoutUseCase _logoutUseCase;
-  final AutoLoginUseCase _autoLoginUseCase;
-  final GetCurrentSessionUseCase _getCurrentSessionUseCase;
+  final AuthRepository _repository;
 
-  AuthNotifier({
-    required LoginUseCase loginUseCase,
-    required LogoutUseCase logoutUseCase,
-    required AutoLoginUseCase autoLoginUseCase,
-    required GetCurrentSessionUseCase getCurrentSessionUseCase,
-  })  : _loginUseCase = loginUseCase,
-        _logoutUseCase = logoutUseCase,
-        _autoLoginUseCase = autoLoginUseCase,
-        _getCurrentSessionUseCase = getCurrentSessionUseCase,
+  AuthNotifier({required AuthRepository repository})
+      : _repository = repository,
         super(const AuthState.initial());
 
   /// 로그인
@@ -32,89 +17,52 @@ class AuthNotifier extends StateNotifier<AuthState> {
     bool saveCredentials = false,
   }) async {
     state = const AuthState.loading();
-
-    final result = await _loginUseCase(
-      LoginParams(
+    try {
+      final session = await _repository.login(
         email: email,
         password: password,
         saveCredentials: saveCredentials,
-      ),
-    );
-
-    result.fold(
-      (failure) => state = AuthState.error(failure.message),
-      (session) => state = AuthState.authenticated(session),
-    );
+      );
+      state = AuthState.authenticated(session);
+    } catch (e) {
+      state = AuthState.error(e.toString());
+    }
   }
 
   /// 로그아웃
   Future<void> logout() async {
     state = const AuthState.loading();
-
-    final result = await _logoutUseCase(NoParams());
-
-    result.fold(
-      (failure) => state = AuthState.error(failure.message),
-      (_) => state = const AuthState.unauthenticated(),
-    );
+    try {
+      await _repository.logout();
+      state = const AuthState.unauthenticated();
+    } catch (e) {
+      state = AuthState.error(e.toString());
+    }
   }
 
   /// 자동 로그인
   Future<void> autoLogin() async {
     state = const AuthState.loading();
-
-    final result = await _autoLoginUseCase(NoParams());
-
-    result.fold(
-      (failure) => state = const AuthState.unauthenticated(),
-      (session) => state = AuthState.authenticated(session),
-    );
+    try {
+      final session = await _repository.autoLogin();
+      state = AuthState.authenticated(session);
+    } catch (e) {
+      state = const AuthState.unauthenticated();
+    }
   }
 
   /// 현재 세션 확인
   Future<void> checkCurrentSession() async {
     state = const AuthState.loading();
-
-    final result = await _getCurrentSessionUseCase(NoParams());
-
-    result.fold(
-      (failure) => state = const AuthState.unauthenticated(),
-      (session) {
-        if (session != null) {
-          state = AuthState.authenticated(session);
-        } else {
-          state = const AuthState.unauthenticated();
-        }
-      },
-    );
+    try {
+      final session = await _repository.getCurrentSession();
+      if (session != null) {
+        state = AuthState.authenticated(session);
+      } else {
+        state = const AuthState.unauthenticated();
+      }
+    } catch (e) {
+      state = const AuthState.unauthenticated();
+    }
   }
 }
-
-/// AuthNotifier Provider
-final authNotifierProvider =
-    StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier(
-    loginUseCase: sl(),
-    logoutUseCase: sl(),
-    autoLoginUseCase: sl(),
-    getCurrentSessionUseCase: sl(),
-  );
-});
-
-/// Current Session Provider (편의성)
-final currentSessionProvider = Provider<UserSession?>((ref) {
-  final authState = ref.watch(authNotifierProvider);
-  return authState.maybeWhen(
-    authenticated: (session) => session,
-    orElse: () => null,
-  );
-});
-
-/// Is Authenticated Provider (편의성)
-final isAuthenticatedProvider = Provider<bool>((ref) {
-  final authState = ref.watch(authNotifierProvider);
-  return authState.maybeWhen(
-    authenticated: (_) => true,
-    orElse: () => false,
-  );
-});

@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import '../features/auth/presentation/providers/auth_notifier.dart';
-import '../features/driver/presentation/providers/driver_notifier.dart';
-import '../features/driver/domain/entities/driver.dart';
-import '../features/call/presentation/providers/call_notifier.dart';
-import '../services/fcm_service.dart';
-import '../core/routes.dart';
 
-/// HomeScreen - Riverpod 기반 완전 재구현
+import '../core/providers.dart';
+import '../core/routes.dart';
+import '../core/theme.dart';
+import '../features/auth/presentation/providers/auth_state.dart';
+import '../features/driver/domain/entities/driver.dart';
+import '../features/driver/presentation/state/driver_screen_ui_state.dart';
+import '../features/call/domain/entities/call.dart';
+import '../services/fcm_service.dart';
+
+/// HomeScreen — DriverWorkflowNotifier 기반
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -16,147 +19,128 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObserver {
   final FcmService _fcmService = FcmService();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeFcm();
+      _initializeWorkflow();
       _setupFcmListeners();
     });
   }
 
-  /// FCM 초기화
-  Future<void> _initializeFcm() async {
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// AppLifecycleObserver (Phase 1.10)
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.read(driverWorkflowProvider.notifier).refreshActiveCallStatus();
+    }
+  }
+
+  /// WorkflowNotifier 초기화
+  Future<void> _initializeWorkflow() async {
     final session = ref.read(currentSessionProvider);
     if (session == null) return;
 
+    // WorkflowNotifier에 위치 정보 전달
+    await ref.read(driverWorkflowProvider.notifier).initialize(
+      session.provinceId,
+      session.cityId,
+      session.officeId,
+    );
+
+    // FCM 초기화
     try {
       await _fcmService.initialize(
-        regionId: session.regionId,
+        provinceId: session.provinceId,
+        cityId: session.cityId,
         officeId: session.officeId,
         driverId: session.driverId,
       );
-      debugPrint('[HomeScreen] FCM 초기화 완료');
     } catch (e) {
       debugPrint('[HomeScreen] FCM 초기화 실패: $e');
     }
   }
 
-  /// FCM 메시지 리스너 설정
+  /// FCM 리스너
   void _setupFcmListeners() {
-    // Foreground 메시지
-    _fcmService.listenToForegroundMessages((message) {
-      _handleFcmMessage(message);
-    });
-
-    // Background/Terminated에서 앱 열림
-    _fcmService.listenToMessageOpenedApp((message) {
-      _handleFcmMessage(message);
-    });
+    _fcmService.listenToForegroundMessages(_handleFcmMessage);
+    _fcmService.listenToMessageOpenedApp(_handleFcmMessage);
   }
 
-  /// FCM 메시지 처리
   void _handleFcmMessage(RemoteMessage message) {
-    final notificationType = message.data['type'] as String?;
+    final type = message.data['type'] as String?;
+    final callId = message.data['callId'] as String?;
+    final workflow = ref.read(driverWorkflowProvider.notifier);
 
-    switch (notificationType) {
-      case FcmService.notificationTypeCallAssigned:
-        // 새 콜 배정 - 콜 정보 새로고침
-        ref.read(callNotifierProvider.notifier).fetchAssignedCall();
-        _showCallAssignedDialog(message.data);
+    switch (type) {
+      case FcmService.typeCallAssigned:
+        if (callId != null) workflow.handleNotificationCallId(callId);
+        // Delivery ACK
+        if (message.messageId != null) _fcmService.sendDeliveryAck(message.messageId!);
         break;
-
-      case FcmService.notificationTypeCallCancelled:
-        // 콜 취소
-        ref.read(callNotifierProvider.notifier).reset();
-        _showSnackBar('콜이 취소되었습니다');
+      case FcmService.typeCallCancelled:
+        if (callId != null) workflow.handleCallCancelled(callId);
         break;
-
-      case FcmService.notificationTypeCallUpdated:
-        // 콜 업데이트
-        ref.read(callNotifierProvider.notifier).fetchAssignedCall();
-        _showSnackBar('콜 정보가 업데이트되었습니다');
+      case FcmService.typeSettlementFinalized:
+      case FcmService.typeSettlementConfirmed:
+      case FcmService.typeSettlementRejected:
+        // 정산 상태 변경 → CarryOverListener가 자동 감지
+        workflow.refreshSettlementData();
         break;
-
+      case FcmService.typeCarryoverTransferred:
+        // 이월금 이체 → CarryOverListener가 자동 감지
+        break;
       default:
-        debugPrint('[FCM] 알 수 없는 알림 타입: $notificationType');
+        debugPrint('[FCM] 알 수 없는 타입: $type');
     }
   }
 
-  /// 콜 배정 다이얼로그
-  void _showCallAssignedDialog(Map<String, dynamic> data) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('🚕 신규 콜 배정'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('고객: ${data['customerName'] ?? '알 수 없음'}'),
-            Text('전화: ${data['phoneNumber'] ?? '-'}'),
-            Text('목적지: ${data['destination'] ?? '-'}'),
-            const SizedBox(height: 8),
-            const Text(
-              '콜 목록에서 확인하세요',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('확인'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showSnackBar(String message) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
-    }
-  }
-
-  /// 로그아웃
   Future<void> _logout() async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('로그아웃'),
         content: const Text('로그아웃 하시겠습니까?'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('취소'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('로그아웃'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('로그아웃')),
         ],
       ),
     );
-
     if (confirm == true) {
       await ref.read(authNotifierProvider.notifier).logout();
-      if (mounted) {
-        Navigator.pushReplacementNamed(context, AppRoutes.login);
-      }
+      if (mounted) Navigator.pushReplacementNamed(context, AppRoutes.login);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authNotifierProvider);
-    final driverState = ref.watch(driverNotifierProvider);
+    final uiState = ref.watch(driverWorkflowProvider);
+
+    // 에러 메시지 Snackbar
+    ref.listen<DriverScreenUiState>(driverWorkflowProvider, (prev, next) {
+      if (next.errorMessage != null && prev?.errorMessage != next.errorMessage) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(next.errorMessage!)),
+        );
+        ref.read(driverWorkflowProvider.notifier).clearError();
+      }
+      if (next.navigateToHistorySettlement && !(prev?.navigateToHistorySettlement ?? false)) {
+        Navigator.pushNamed(context, AppRoutes.historySettlement);
+        ref.read(driverWorkflowProvider.notifier).clearNavigationFlags();
+      }
+    });
 
     return authState.when(
       initial: () => const _LoadingScreen(),
@@ -165,131 +149,109 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         return Scaffold(
           appBar: AppBar(
             backgroundColor: Colors.black,
-            title: const Text(
-              '기사앱',
-              style: TextStyle(color: Colors.white),
+            title: Text(
+              '기사앱 · ${uiState.driverStatus.displayName}',
+              style: const TextStyle(color: Colors.white, fontSize: 18),
             ),
             leading: IconButton(
               icon: const Icon(Icons.exit_to_app, color: Colors.white),
               onPressed: _logout,
-              tooltip: '로그아웃',
             ),
             actions: [
               IconButton(
                 icon: const Icon(Icons.history, color: Colors.white),
-                onPressed: () {
-                  Navigator.pushNamed(context, AppRoutes.historySettlement);
-                },
-                tooltip: '운행내역',
+                onPressed: () => Navigator.pushNamed(context, AppRoutes.historySettlement),
               ),
             ],
           ),
-          body: driverState.when(
-            initial: () => _WaitingScreen(session: session),
-            loading: () => const Center(child: CircularProgressIndicator()),
-            loaded: (driver) => _buildBodyByDriverStatus(driver, session),
-            error: (message) => Center(child: Text('에러: $message')),
+          body: Stack(
+            children: [
+              _buildBodyByStatus(uiState),
+              // 신규 콜 팝업 오버레이
+              if (uiState.newCallPopup != null)
+                _NewCallPopup(
+                  call: uiState.newCallPopup!,
+                  onAccept: () => ref.read(driverWorkflowProvider.notifier).acceptCall(uiState.newCallPopup!.id),
+                  onReject: () => ref.read(driverWorkflowProvider.notifier).rejectCall(uiState.newCallPopup!.id),
+                ),
+            ],
           ),
         );
       },
       unauthenticated: () {
-        Future.microtask(() {
-          Navigator.pushReplacementNamed(context, AppRoutes.login);
-        });
+        Future.microtask(() => Navigator.pushReplacementNamed(context, AppRoutes.login));
         return const _LoadingScreen();
       },
-      error: (message) => Scaffold(
-        body: Center(child: Text('에러: $message')),
-      ),
+      error: (msg) => Scaffold(body: Center(child: Text('에러: $msg'))),
     );
   }
 
-  /// 기사 상태별 화면 빌드
-  Widget _buildBodyByDriverStatus(Driver driver, session) {
-    switch (driver.status) {
-      case DriverStatus.online:
-      case DriverStatus.waiting:
-        return _WaitingScreen(session: session);
-      case DriverStatus.assigned:
-      case DriverStatus.accepted:
-        return _CallAssignedScreen();
-      case DriverStatus.inProgress:
-        return _OnTripScreen();
-      case DriverStatus.offline:
-      default:
-        return _WaitingScreen(session: session);
+  Widget _buildBodyByStatus(DriverScreenUiState uiState) {
+    // 정산 대기 콜이 있으면 정산 화면
+    if (uiState.callForSettlement != null) {
+      return _SettlementPendingView(call: uiState.callForSettlement!);
     }
+
+    // 활성 콜이 있으면 운행 화면
+    if (uiState.activeCall != null) {
+      return _InProgressView(call: uiState.activeCall!);
+    }
+
+    // 기본: 대기 화면
+    return const _WaitingView();
   }
 }
 
-/// 로딩 화면
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 로딩
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 class _LoadingScreen extends StatelessWidget {
   const _LoadingScreen();
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
-    );
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }
 
-/// 대기 화면
-class _WaitingScreen extends ConsumerWidget {
-  final dynamic session;
-
-  const _WaitingScreen({required this.session});
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 대기 화면
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+class _WaitingView extends ConsumerWidget {
+  const _WaitingView();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Container(
-      color: const Color(0xFF121212),
+      color: AppTheme.background,
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.access_time,
-              size: 80,
-              color: Color(0xFFFFB000),
-            ),
+            const Icon(Icons.access_time, size: 80, color: AppTheme.primaryColor),
             const SizedBox(height: 24),
             const Text(
               '새로운 콜을 기다리고 있습니다...',
-              style: TextStyle(
-                fontSize: 20,
-                color: Colors.white70,
-              ),
+              style: TextStyle(fontSize: 20, color: Colors.white70),
             ),
             const SizedBox(height: 40),
             ElevatedButton.icon(
-              onPressed: () {
-                // 배차 확인 - 콜 새로고침
-                ref.read(callNotifierProvider.notifier).fetchAssignedCall();
-              },
+              onPressed: () => ref.read(driverWorkflowProvider.notifier).refreshActiveCallStatus(),
               icon: const Icon(Icons.refresh),
               label: const Text('배차 확인'),
               style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 16,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
               ),
             ),
             const SizedBox(height: 16),
             OutlinedButton.icon(
-              onPressed: () {
-                Navigator.pushNamed(context, AppRoutes.referralQR);
-              },
+              onPressed: () => Navigator.pushNamed(context, AppRoutes.referralQR),
               icon: const Icon(Icons.qr_code),
               label: const Text('고객 추천하기'),
               style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFFFFB000),
-                side: const BorderSide(color: Color(0xFFFFB000)),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 16,
-                ),
+                foregroundColor: AppTheme.primaryColor,
+                side: const BorderSide(color: AppTheme.primaryColor),
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
               ),
             ),
           ],
@@ -299,219 +261,117 @@ class _WaitingScreen extends ConsumerWidget {
   }
 }
 
-/// 콜 배정됨 화면
-class _CallAssignedScreen extends ConsumerWidget {
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 신규 콜 팝업 오버레이
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+class _NewCallPopup extends StatelessWidget {
+  final Call call;
+  final VoidCallback onAccept;
+  final VoidCallback onReject;
+
+  const _NewCallPopup({
+    required this.call,
+    required this.onAccept,
+    required this.onReject,
+  });
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final callState = ref.watch(callNotifierProvider);
-
-    return callState.when(
-      initial: () => const Center(child: Text('콜 정보를 불러오는 중...')),
-      loading: () => const Center(child: CircularProgressIndicator()),
-      loaded: (assignedCall) {
-        if (assignedCall == null) {
-          return const Center(child: Text('배정된 콜이 없습니다.'));
-        }
-
-        return Container(
-          color: const Color(0xFF121212),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.black87,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                '새로운 콜 배정',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppTheme.primaryColor),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppTheme.primaryColor, width: 2),
+                  ),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _infoRow(Icons.person, '고객명', call.customerName ?? '정보 없음'),
+                        const SizedBox(height: 20),
+                        _infoRow(Icons.phone, '전화번호', call.phoneNumber),
+                        const SizedBox(height: 20),
+                        _infoRow(Icons.location_on, '출발지', call.pickupLocation ?? '정보 없음'),
+                        const SizedBox(height: 20),
+                        _infoRow(Icons.flag, '목적지', call.destination ?? '정보 없음'),
+                        const SizedBox(height: 20),
+                        _infoRow(Icons.attach_money, '예상 요금', call.fare != null ? '${call.fare}원' : '미정'),
+                        if (call.notes != null && call.notes!.isNotEmpty) ...[
+                          const SizedBox(height: 20),
+                          _infoRow(Icons.note, '메모', call.notes!),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
                 children: [
-                  // 헤더
-                  const Text(
-                    '🚕 새로운 콜 배정',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFFFFB000),
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 32),
-
-                  // 콜 정보 카드
                   Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E1E1E),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: const Color(0xFFFFB000),
-                          width: 2,
-                        ),
+                    child: ElevatedButton(
+                      onPressed: onReject,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.grey[800],
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildInfoRow(
-                              icon: Icons.person,
-                              label: '고객명',
-                              value: assignedCall.customerName ?? '정보 없음',
-                            ),
-                            const SizedBox(height: 20),
-                            _buildInfoRow(
-                              icon: Icons.phone,
-                              label: '전화번호',
-                              value: assignedCall.phoneNumber ?? '정보 없음',
-                            ),
-                            const SizedBox(height: 20),
-                            _buildInfoRow(
-                              icon: Icons.location_on,
-                              label: '출발지',
-                              value: assignedCall.pickupLocation ?? '정보 없음',
-                            ),
-                            const SizedBox(height: 20),
-                            _buildInfoRow(
-                              icon: Icons.flag,
-                              label: '목적지',
-                              value: assignedCall.destination ?? '정보 없음',
-                            ),
-                            const SizedBox(height: 20),
-                            _buildInfoRow(
-                              icon: Icons.attach_money,
-                              label: '예상 요금',
-                              value: assignedCall.fare != null
-                                  ? '${assignedCall.fare}원'
-                                  : '미정',
-                            ),
-                            if (assignedCall.notes != null &&
-                                assignedCall.notes!.isNotEmpty) ...[
-                              const SizedBox(height: 20),
-                              _buildInfoRow(
-                                icon: Icons.note,
-                                label: '메모',
-                                value: assignedCall.notes!,
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
+                      child: const Text('거부', style: TextStyle(fontSize: 18)),
                     ),
                   ),
-
-                  const SizedBox(height: 24),
-
-                  // 버튼
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            await ref
-                                .read(callNotifierProvider.notifier)
-                                .rejectCall(assignedCall.id, '기사가 거부');
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('콜을 거부했습니다')),
-                              );
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.grey[800],
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text(
-                            '거부',
-                            style: TextStyle(fontSize: 18),
-                          ),
-                        ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      onPressed: onAccept,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryColor,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        flex: 2,
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            await ref
-                                .read(callNotifierProvider.notifier)
-                                .acceptCall(assignedCall.id);
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('콜을 수락했습니다')),
-                              );
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFFFB000),
-                            foregroundColor: Colors.black,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text(
-                            '수락하고 운행 시작',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                      child: const Text('확인', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    ),
                   ),
                 ],
               ),
-            ),
+            ],
           ),
-        );
-      },
-      error: (message) => Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
-            const SizedBox(height: 16),
-            Text(
-              '에러: $message',
-              style: const TextStyle(fontSize: 16, color: Colors.white),
-              textAlign: TextAlign.center,
-            ),
-          ],
         ),
       ),
     );
   }
 
-  Widget _buildInfoRow({
-    required IconData icon,
-    required String label,
-    required String value,
-  }) {
+  Widget _infoRow(IconData icon, String label, String value) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, color: const Color(0xFFFFB000), size: 24),
+        Icon(icon, color: AppTheme.primaryColor, size: 24),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey,
-                ),
-              ),
+              Text(label, style: const TextStyle(fontSize: 14, color: Colors.grey)),
               const SizedBox(height: 4),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 18,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+              Text(value, style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.w500)),
             ],
           ),
         ),
@@ -520,173 +380,112 @@ class _CallAssignedScreen extends ConsumerWidget {
   }
 }
 
-/// 운행 중 화면
-class _OnTripScreen extends ConsumerWidget {
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 운행 중 화면
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+class _InProgressView extends ConsumerWidget {
+  final Call call;
+  const _InProgressView({required this.call});
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final callState = ref.watch(callNotifierProvider);
-
     return Container(
-      color: const Color(0xFF121212),
+      color: AppTheme.background,
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 헤더
               Row(
                 children: [
-                  Container(
-                    width: 12,
-                    height: 12,
-                    decoration: const BoxDecoration(
-                      color: Colors.green,
-                      shape: BoxShape.circle,
+                  Container(width: 12, height: 12, decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle)),
+                  const SizedBox(width: 12),
+                  Text('운행 중 · ${call.status.displayName}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      _card('고객 정보', Icons.person, [
+                        _detailRow('이름', call.customerName ?? '정보 없음'),
+                        _detailRow('전화', call.phoneNumber),
+                      ]),
+                      const SizedBox(height: 16),
+                      _card('경로 정보', Icons.directions, [
+                        _detailRow('출발지', call.pickupLocation ?? '정보 없음'),
+                        _detailRow('목적지', call.destination ?? '정보 없음'),
+                      ]),
+                      const SizedBox(height: 16),
+                      _card('요금 정보', Icons.attach_money, [
+                        _detailRow('예상 요금', call.fare != null ? '${call.fare}원' : '미정'),
+                      ]),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () async {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('운행 취소'),
+                            content: const Text('운행을 취소하시겠습니까?'),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('아니오')),
+                              TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('취소하기')),
+                            ],
+                          ),
+                        );
+                        if (confirm == true) {
+                          ref.read(driverWorkflowProvider.notifier).cancelTrip(call.id);
+                        }
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red,
+                        side: const BorderSide(color: Colors.red),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('취소', style: TextStyle(fontSize: 16)),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    '운행 중',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                  const SizedBox(width: 16),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('운행 완료'),
+                            content: const Text('운행을 완료하시겠습니까?'),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
+                              TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('완료')),
+                            ],
+                          ),
+                        );
+                        if (confirm == true) {
+                          ref.read(driverWorkflowProvider.notifier).completeCall(call.id);
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryColor,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('운행 완료', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],
-              ),
-              const SizedBox(height: 32),
-
-              // 콜 정보
-              callState.when(
-                loaded: (assignedCall) {
-                  if (assignedCall == null) {
-                    return const Center(child: Text('콜 정보를 불러올 수 없습니다.'));
-                  }
-
-                  return Expanded(
-                    child: SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // 고객 정보 카드
-                          _buildCard(
-                            title: '고객 정보',
-                            icon: Icons.person,
-                            children: [
-                              _buildDetailRow('이름', assignedCall.customerName ?? '정보 없음'),
-                              const Divider(height: 24, color: Colors.grey),
-                              _buildDetailRow('전화', assignedCall.phoneNumber ?? '정보 없음'),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-
-                          // 경로 정보 카드
-                          _buildCard(
-                            title: '경로 정보',
-                            icon: Icons.directions,
-                            children: [
-                              _buildDetailRow('출발지', assignedCall.pickupLocation ?? '정보 없음'),
-                              const Divider(height: 24, color: Colors.grey),
-                              _buildDetailRow('목적지', assignedCall.destination ?? '정보 없음'),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-
-                          // 요금 정보 카드
-                          _buildCard(
-                            title: '요금 정보',
-                            icon: Icons.attach_money,
-                            children: [
-                              _buildDetailRow(
-                                '예상 요금',
-                                assignedCall.fare != null
-                                    ? '${assignedCall.fare}원'
-                                    : '미정',
-                              ),
-                            ],
-                          ),
-
-                          if (assignedCall.notes != null && assignedCall.notes!.isNotEmpty) ...[
-                            const SizedBox(height: 16),
-                            _buildCard(
-                              title: '메모',
-                              icon: Icons.note,
-                              children: [
-                                Text(
-                                  assignedCall.notes!,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.white70,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  );
-                },
-                initial: () => const Center(child: Text('정보를 불러오는 중...')),
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (message) => Center(child: Text('에러: $message')),
-              ),
-
-              const SizedBox(height: 24),
-
-              // 운행 완료 버튼
-              ElevatedButton(
-                onPressed: () async {
-                  final confirm = await showDialog<bool>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('운행 완료'),
-                      content: const Text('운행을 완료하시겠습니까?\n정산 화면으로 이동합니다.'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          child: const Text('취소'),
-                        ),
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, true),
-                          child: const Text('완료'),
-                        ),
-                      ],
-                    ),
-                  );
-
-                  if (confirm == true && context.mounted) {
-                    final currentCall = ref.read(currentCallProvider);
-                    if (currentCall != null) {
-                      await ref
-                          .read(callNotifierProvider.notifier)
-                          .completeCall(currentCall.id);
-                      if (context.mounted) {
-                        // TODO: Navigate to settlement screen
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('운행이 완료되었습니다')),
-                        );
-                      }
-                    }
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFFB000),
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  '운행 완료',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
               ),
             ],
           ),
@@ -695,35 +494,22 @@ class _OnTripScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildCard({
-    required String title,
-    required IconData icon,
-    required List<Widget> children,
-  }) {
+  Widget _card(String title, IconData icon, List<Widget> children) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E),
+        color: AppTheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[800]!),
+        border: Border.all(color: Colors.grey.shade800),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(icon, color: const Color(0xFFFFB000), size: 24),
-              const SizedBox(width: 12),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFFFFB000),
-                ),
-              ),
-            ],
-          ),
+          Row(children: [
+            Icon(icon, color: AppTheme.primaryColor, size: 24),
+            const SizedBox(width: 12),
+            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
+          ]),
           const SizedBox(height: 16),
           ...children,
         ],
@@ -731,31 +517,52 @@ class _OnTripScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 80,
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.grey,
-            ),
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 80, child: Text(label, style: const TextStyle(fontSize: 14, color: Colors.grey))),
+          Expanded(child: Text(value, style: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500))),
+        ],
+      ),
+    );
+  }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 정산 대기 화면 (간략)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+class _SettlementPendingView extends ConsumerWidget {
+  final Call call;
+  const _SettlementPendingView({required this.call});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Container(
+      color: AppTheme.background,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.receipt_long, size: 64, color: AppTheme.primaryColor),
+              const SizedBox(height: 24),
+              const Text('정산 대기 중', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+              const SizedBox(height: 8),
+              Text('${call.customerName ?? "고객"} · ${call.destination ?? ""}',
+                style: const TextStyle(fontSize: 16, color: Colors.white70)),
+              const SizedBox(height: 32),
+              const Text(
+                'Phase 2 정산 시스템에서 상세 구현 예정',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
           ),
         ),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(
-              fontSize: 16,
-              color: Colors.white,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
