@@ -165,8 +165,8 @@ fun HistorySettlementScreen(
         val history: List<String>,
         val summary: Map<String, Any>
     )
-    fun loadSessions(context: Context): MutableList<SessionData> {
-        val prefs = context.getSharedPreferences("trip_sessions", Context.MODE_PRIVATE)
+    fun loadSessions(ctx: Context): MutableList<SessionData> {
+        val prefs = ctx.getSharedPreferences("trip_sessions", Context.MODE_PRIVATE)
         val sessionsJson = prefs.getString("sessions", "[]")
         val arr = JSONArray(sessionsJson)
         val list = mutableListOf<SessionData>()
@@ -195,9 +195,6 @@ fun HistorySettlementScreen(
         prefs.edit().putString("sessions", arr.toString()).apply()
     }
     var sessionList by remember { mutableStateOf(loadSessions(context)) }
-    var showHistoryDialog by remember { mutableStateOf(false) }
-    var showSessionDetail by remember { mutableStateOf(false) }
-    var selectedSession: SessionData? by remember { mutableStateOf(null) }
 
     Scaffold(
         topBar = {
@@ -239,7 +236,7 @@ fun HistorySettlementScreen(
                     }
 
                     IconButton(
-                        onClick = { showHistoryDialog = true },
+                        onClick = { navController.navigate(com.designated.driverapp.navigation.AppDestinations.SETTINGS_ROUTE) },
                         modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
@@ -259,144 +256,6 @@ fun HistorySettlementScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            if (showHistoryDialog) {
-                AlertDialog(
-                    onDismissRequest = { showHistoryDialog = false },
-                    title = {
-                        Text(
-                            "이전 운행/정산 기록",
-                            color = Color.White
-                        )
-                    },
-                    text = {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(400.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A)),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Column {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "저장된 기록",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White
-                                    )
-                                }
-                                if (sessionList.isEmpty()) {
-                                    Box(
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            "이전 기록이 없습니다.",
-                                            color = Color.Gray
-                                        )
-                                    }
-                                } else {
-                                    LazyColumn(
-                                        modifier = Modifier.fillMaxSize(),
-                                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                                        contentPadding = PaddingValues(bottom = 16.dp)
-                                    ) {
-                                        items(sessionList) { session ->
-                                            Card(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clickable {
-                                                        selectedSession = session
-                                                        showSessionDetail = true
-                                                    },
-                                                colors = CardDefaults.cardColors(containerColor = Color(0xFF3A3A3A)),
-                                                shape = RoundedCornerShape(0.dp)
-                                            ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                                                ) {
-                                                    Row(
-                                                        modifier = Modifier.fillMaxWidth(),
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.SpaceBetween
-                                                    ) {
-                                                        Column(modifier = Modifier.weight(1f)) {
-                                                            Text(
-                                                                text = "기록일: ${session.date}",
-                                                                style = MaterialTheme.typography.bodyMedium,
-                                                                fontWeight = FontWeight.Bold,
-                                                                color = Color.White
-                                                            )
-                                                            Text(
-                                                                text = "운행내역: ${session.history.size}건",
-                                                                style = MaterialTheme.typography.bodySmall,
-                                                                color = Color.LightGray
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    confirmButton = {
-                        Button(
-                            onClick = { showHistoryDialog = false },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFFFB000),
-                                contentColor = Color.Black
-                            )
-                        ) {
-                            Text("닫기")
-                        }
-                    },
-                    containerColor = Color(0xFF1A1A1A)
-                )
-            }
-            if (showSessionDetail && selectedSession != null) {
-                val s = selectedSession!!
-                AlertDialog(
-                    onDismissRequest = { showSessionDetail = false },
-                    title = { Text("기록일: ${s.date}") },
-                    text = {
-                        Column {
-                            Text("[운행내역]", fontWeight = FontWeight.Bold)
-                            if (s.history.isEmpty()) {
-                                Text("운행내역이 없습니다.", color = Color.Gray)
-                            } else {
-                                s.history.forEach { h ->
-                                    val parts = h.split("|timestamp=")
-                                    val displaySummary = parts[0]
-                                    Text(displaySummary, color = Color.White)
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text("[총 정산내역]", fontWeight = FontWeight.Bold)
-                            val sm = s.summary
-                            Text("총 운행 횟수: ${sm["totalCount"] ?: "-"}")
-                            Text("총 수입: ${sm["totalFare"] ?: "-"}원")
-                            Text("총 납입: ${sm["totalDeposit"] ?: "-"}원")
-                            Text("총 외상: ${sm["totalCredit"] ?: "-"}원")
-                            Text("실 납입: ${sm["realDeposit"] ?: "-"}원")
-                            Text("실 수입: ${sm["realIncome"] ?: "-"}원")
-                        }
-                    },
-                    confirmButton = {
-                        Button(onClick = { showSessionDetail = false }) { Text("닫기") }
-                    }
-                )
-            }
             Card(
                 modifier = Modifier
                     .fillMaxWidth()

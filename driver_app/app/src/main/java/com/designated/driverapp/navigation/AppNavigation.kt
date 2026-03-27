@@ -14,6 +14,7 @@ import com.designated.driverapp.ui.home.HomeScreen
 import com.designated.driverapp.ui.login.SignUpScreen
 import com.designated.driverapp.viewmodel.DriverViewModel
 import com.designated.driverapp.ui.home.HistorySettlementScreen
+import com.designated.driverapp.ui.home.SettingsScreen
 import com.designated.driverapp.ui.details.CallDetailsScreen
 import com.designated.driverapp.ui.screens.home.ReferralQRScreen
 import com.designated.driverapp.data.Constants
@@ -30,6 +31,7 @@ object AppDestinations {
     const val HISTORY_SETTLEMENT_ROUTE = "history_settlement"
     const val CALL_DETAILS_ROUTE = "call_details"
     const val REFERRAL_QR_ROUTE = "referral_qr"
+    const val SETTINGS_ROUTE = "settings"
 }
 
 @Composable
@@ -109,6 +111,14 @@ fun AppNavigation(
             }
 
             HistorySettlementScreen(
+                navController = navController,
+                viewModel = driverViewModel,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(AppDestinations.SETTINGS_ROUTE) {
+            SettingsScreen(
                 navController = navController,
                 viewModel = driverViewModel,
                 onNavigateBack = { navController.popBackStack() }
