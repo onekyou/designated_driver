@@ -36,6 +36,14 @@ service cloud.firestore {
              && get(adminPath).data.role in ['HEAD_MANAGER', 'SUPER_ADMIN'];
     }
 
+    // Checks if the currently authenticated user is an OFFICE_OWNER
+    function isOfficeOwner() {
+      let adminPath = /databases/$(database)/documents/admins/$(request.auth.uid);
+      return isAuthenticated()
+             && exists(adminPath)
+             && get(adminPath).data.role == 'OFFICE_OWNER';
+    }
+
     // --- Top-Level Collections ---
 
     // 🔥 회원가입 시 도/광역시 목록 조회를 위한 provinces 컬렉션 읽기 허용
@@ -419,6 +427,29 @@ service cloud.firestore {
       allow update: if isHeadManager();
       // 삭제 불가 (감사 로그 보존)
       allow delete: if false;
+    }
+
+    // =============================
+    //  사무실 신청 (office_applications)
+    //  • Cloud Functions(서버)가 생성
+    //  • 총관리자만 읽기/수정 가능
+    // =============================
+    match /office_applications/{appId} {
+      allow read: if isHeadManager();
+      allow update: if isHeadManager();
+      // Cloud Functions(서버)만 생성 가능
+      allow create: if request.auth == null;
+      allow delete: if false;
+    }
+
+    // =============================
+    //  APK 릴리즈 (apk_releases)
+    //  • 총관리자: 전체 권한
+    //  • 사장님(OFFICE_OWNER): 읽기만
+    // =============================
+    match /apk_releases/{releaseId} {
+      allow read: if isHeadManager() || isOfficeOwner();
+      allow write: if isHeadManager();
     }
   }
 }

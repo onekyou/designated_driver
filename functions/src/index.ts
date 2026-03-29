@@ -19,6 +19,7 @@ import { addCallToSettlementSession, autoFinalizeSettlementSessions, checkSettle
 // Firebase Admin SDK 초기화
 admin.initializeApp({
   databaseURL: "https://calldetector-5d61e-default-rtdb.firebaseio.com",
+  storageBucket: "calldetector-5d61e.firebasestorage.app",
 });
 
 // 데이터 구조를 명확히 하기 위한 인터페이스 정의
@@ -5150,5 +5151,292 @@ export const onDriverSettlementSubmitted = onDocumentUpdated(
     } catch (error) {
       logger.error(`[onDriverSettlementSubmitted] 오류:`, error);
     }
+  }
+);
+
+// ========================================
+// 사무실 신청 관리 시스템
+// ========================================
+
+/**
+ * submitOfficeApplication - 홈페이지 신청 폼에서 호출하는 HTTP 엔드포인트
+ * office_applications 컬렉션에 신청 데이터를 저장합니다.
+ */
+export const submitOfficeApplication = onRequest(
+  { region: "asia-northeast3", cors: true },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.status(405).json({ error: "Method not allowed" });
+      return;
+    }
+
+    try {
+      const data = req.body;
+
+      // 필수 필드 검증
+      if (!data.officeName || !data.ownerName || !data.phone) {
+        res.status(400).json({ error: "필수 항목이 누락되었습니다 (사무실명, 대표자, 연락처)" });
+        return;
+      }
+
+      // 전화번호 정규화 (하이픈 제거)
+      const normalizedPhone = data.phone.replace(/-/g, "").trim();
+
+      // 중복 신청 확인 (같은 전화번호로 pending 상태인 신청이 있는지)
+      const existingQuery = await admin.firestore()
+        .collection("office_applications")
+        .where("phone", "==", normalizedPhone)
+        .where("status", "==", "pending")
+        .get();
+
+      if (!existingQuery.empty) {
+        res.status(409).json({ error: "이미 접수된 신청이 있습니다. 승인 대기 중입니다." });
+        return;
+      }
+
+      const applicationDoc = {
+        officeName: data.officeName.trim(),
+        ownerName: data.ownerName.trim(),
+        phone: normalizedPhone,
+        gmail: data.gmail?.trim() || "",
+        region: data.region?.trim() || "",
+        dailyCalls: data.dailyCalls || "",
+        message: data.message?.trim() || "",
+        ref: data.ref || "direct",
+        status: "pending",
+        createdAt: FieldValue.serverTimestamp(),
+      };
+
+      const docRef = await admin.firestore()
+        .collection("office_applications")
+        .add(applicationDoc);
+
+      logger.info(`[submitOfficeApplication] 신청 저장 완료 - docId: ${docRef.id}, office: ${data.officeName}`);
+
+      res.status(200).json({ success: true, applicationId: docRef.id });
+    } catch (error) {
+      logger.error("[submitOfficeApplication] 오류:", error);
+      res.status(500).json({ error: "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요." });
+    }
+  }
+);
+
+/**
+ * approveOfficeApplication - 총관리자가 신청을 승인
+ * Firebase Auth 계정 생성 + admins 문서 생성 + 사무실 문서 생성
+ */
+export const approveOfficeApplication = onCall(
+  { region: "asia-northeast3" },
+  async (request) => {
+    // 인증 확인
+    if (!request.auth) {
+      throw new Error("인증이 필요합니다.");
+    }
+
+    // HEAD_MANAGER 권한 확인
+    const callerDoc = await admin.firestore().doc(`admins/${request.auth.uid}`).get();
+    if (!callerDoc.exists || !["HEAD_MANAGER", "SUPER_ADMIN"].includes(callerDoc.data()?.role)) {
+      throw new Error("총관리자 권한이 필요합니다.");
+    }
+
+    const { applicationId, provinceId, cityId, officeName } = request.data;
+    if (!applicationId || !provinceId || !cityId) {
+      throw new Error("필수 항목이 누락되었습니다 (applicationId, provinceId, cityId)");
+    }
+
+    const appRef = admin.firestore().doc(`office_applications/${applicationId}`);
+    const appDoc = await appRef.get();
+
+    if (!appDoc.exists) {
+      throw new Error("신청서를 찾을 수 없습니다.");
+    }
+
+    const appData = appDoc.data()!;
+    if (appData.status !== "pending") {
+      throw new Error(`이미 처리된 신청입니다 (상태: ${appData.status})`);
+    }
+
+    // 1. Firebase Auth 계정 생성
+    const email = `${appData.phone}@callmadang.internal`;
+    const tempPassword = `cm${appData.phone.slice(-4)}!${Date.now().toString(36).slice(-4)}`;
+
+    let userRecord;
+    try {
+      userRecord = await admin.auth().createUser({
+        email,
+        password: tempPassword,
+        displayName: appData.ownerName,
+      });
+      logger.info(`[approveOfficeApplication] Auth 계정 생성 - uid: ${userRecord.uid}, email: ${email}`);
+    } catch (authError: any) {
+      if (authError.code === "auth/email-already-exists") {
+        // 이미 존재하는 계정이면 가져오기
+        userRecord = await admin.auth().getUserByEmail(email);
+        logger.info(`[approveOfficeApplication] 기존 Auth 계정 사용 - uid: ${userRecord.uid}`);
+      } else {
+        throw authError;
+      }
+    }
+
+    // 2. 사무실 문서 생성
+    const officeRef = admin.firestore()
+      .collection(`provinces/${provinceId}/cities/${cityId}/offices`)
+      .doc();
+
+    await officeRef.set({
+      name: officeName || appData.officeName,
+      ownerName: appData.ownerName,
+      phone: appData.phone,
+      region: appData.region,
+      status: "active",
+      createdAt: FieldValue.serverTimestamp(),
+      createdBy: userRecord.uid,
+    });
+
+    logger.info(`[approveOfficeApplication] 사무실 생성 - officeId: ${officeRef.id}`);
+
+    // 3. admins 문서 생성 (OFFICE_OWNER 역할)
+    await admin.firestore().doc(`admins/${userRecord.uid}`).set({
+      email,
+      name: appData.ownerName,
+      phoneNumber: appData.phone,
+      role: "OFFICE_OWNER",
+      associatedProvinceId: provinceId,
+      associatedCityId: cityId,
+      associatedOfficeId: officeRef.id,
+      applicationId,
+      apkDownloadEnabled: true,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    // 4. 신청 상태 업데이트
+    await appRef.update({
+      status: "approved",
+      reviewedAt: FieldValue.serverTimestamp(),
+      reviewedBy: request.auth.uid,
+      ownerAuthUid: userRecord.uid,
+      officeRef: `provinces/${provinceId}/cities/${cityId}/offices/${officeRef.id}`,
+    });
+
+    logger.info(`[approveOfficeApplication] 승인 완료 - applicationId: ${applicationId}`);
+
+    return {
+      success: true,
+      ownerUid: userRecord.uid,
+      officeId: officeRef.id,
+      loginEmail: email,
+      tempPassword,
+      officePath: `provinces/${provinceId}/cities/${cityId}/offices/${officeRef.id}`,
+    };
+  }
+);
+
+/**
+ * rejectOfficeApplication - 총관리자가 신청을 거부
+ */
+export const rejectOfficeApplication = onCall(
+  { region: "asia-northeast3" },
+  async (request) => {
+    if (!request.auth) {
+      throw new Error("인증이 필요합니다.");
+    }
+
+    const callerDoc = await admin.firestore().doc(`admins/${request.auth.uid}`).get();
+    if (!callerDoc.exists || !["HEAD_MANAGER", "SUPER_ADMIN"].includes(callerDoc.data()?.role)) {
+      throw new Error("총관리자 권한이 필요합니다.");
+    }
+
+    const { applicationId, reason } = request.data;
+    if (!applicationId) {
+      throw new Error("applicationId가 필요합니다.");
+    }
+
+    const appRef = admin.firestore().doc(`office_applications/${applicationId}`);
+    const appDoc = await appRef.get();
+
+    if (!appDoc.exists) {
+      throw new Error("신청서를 찾을 수 없습니다.");
+    }
+
+    if (appDoc.data()?.status !== "pending") {
+      throw new Error(`이미 처리된 신청입니다 (상태: ${appDoc.data()?.status})`);
+    }
+
+    await appRef.update({
+      status: "rejected",
+      rejectedReason: reason || "",
+      reviewedAt: FieldValue.serverTimestamp(),
+      reviewedBy: request.auth.uid,
+    });
+
+    logger.info(`[rejectOfficeApplication] 거부 완료 - applicationId: ${applicationId}`);
+
+    return { success: true };
+  }
+);
+
+/**
+ * getApkDownloadUrl - 승인된 사장님이 APK 다운로드 URL을 요청
+ */
+export const getApkDownloadUrl = onCall(
+  { region: "asia-northeast3" },
+  async (request) => {
+    if (!request.auth) {
+      throw new Error("인증이 필요합니다.");
+    }
+
+    // OFFICE_OWNER 또는 HEAD_MANAGER 권한 확인
+    const callerDoc = await admin.firestore().doc(`admins/${request.auth.uid}`).get();
+    if (!callerDoc.exists) {
+      throw new Error("권한이 없습니다.");
+    }
+
+    const callerData = callerDoc.data()!;
+    if (!["OFFICE_OWNER", "HEAD_MANAGER", "SUPER_ADMIN"].includes(callerData.role)) {
+      throw new Error("APK 다운로드 권한이 없습니다.");
+    }
+
+    // OFFICE_OWNER인 경우 다운로드 권한 확인
+    if (callerData.role === "OFFICE_OWNER" && !callerData.apkDownloadEnabled) {
+      throw new Error("APK 다운로드가 비활성화되어 있습니다. 관리자에게 문의하세요.");
+    }
+
+    const { appName } = request.data;
+    if (!appName || !["call_detector", "call_manager"].includes(appName)) {
+      throw new Error("유효한 앱 이름이 필요합니다 (call_detector 또는 call_manager)");
+    }
+
+    // 최신 릴리즈 조회
+    const releaseQuery = await admin.firestore()
+      .collection("apk_releases")
+      .where("appName", "==", appName)
+      .where("isLatest", "==", true)
+      .limit(1)
+      .get();
+
+    if (releaseQuery.empty) {
+      throw new Error(`${appName}의 릴리즈를 찾을 수 없습니다.`);
+    }
+
+    const releaseData = releaseQuery.docs[0].data();
+    const bucket = admin.storage().bucket();
+    const file = bucket.file(releaseData.storagePath);
+
+    // 1시간 유효한 signed URL 생성
+    const [url] = await file.getSignedUrl({
+      action: "read",
+      expires: Date.now() + 60 * 60 * 1000,
+    });
+
+    logger.info(`[getApkDownloadUrl] URL 생성 - app: ${appName}, user: ${request.auth.uid}`);
+
+    return {
+      success: true,
+      downloadUrl: url,
+      version: releaseData.version,
+      releaseNotes: releaseData.releaseNotes,
+      fileSize: releaseData.fileSize,
+    };
   }
 );

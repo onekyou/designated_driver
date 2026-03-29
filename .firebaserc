@@ -10,6 +10,9 @@
         ],
         "callmadang-web": [
           "callmadang-web"
+        ],
+        "head-manager": [
+          "head-manager-web"
         ]
       }
     }

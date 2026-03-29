@@ -12,7 +12,9 @@ import {
   Monitor,
   Archive,
   Search,
-  FileText
+  FileText,
+  ClipboardList,
+  Package
 } from 'lucide-react';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
@@ -25,9 +27,19 @@ const menuItems = [
     icon: LayoutDashboard
   },
   {
+    title: '신청 관리',
+    href: '/applications',
+    icon: ClipboardList
+  },
+  {
     title: '사무실 관리',
     href: '/offices',
     icon: Building2
+  },
+  {
+    title: 'APK 관리',
+    href: '/apk-management',
+    icon: Package
   },
   {
     title: '락인 모니터링',

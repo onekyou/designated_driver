@@ -37,6 +37,21 @@
         "**/.*",
         "**/node_modules/**"
       ]
+    },
+    {
+      "target": "head-manager",
+      "public": "head_manager_web/out",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
     }
   ],
   "emulators": {

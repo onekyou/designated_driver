@@ -139,6 +139,14 @@
       font-weight: 300;
     }
 
+    .nav-login {
+      color: var(--primary);
+      font-weight: 500;
+      font-size: 0.9rem;
+      transition: opacity 0.2s;
+    }
+    .nav-login:hover { opacity: 0.7; }
+
     .nav-cta {
       padding: 10px 24px;
       background: var(--primary);
@@ -652,9 +660,39 @@
       font-size: 0.78rem;
     }
 
+    .footer-legal {
+      margin-top: 32px;
+      padding-top: 28px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      gap: 40px;
+      flex-wrap: wrap;
+    }
+    .footer-legal-section {
+      flex: 1;
+      min-width: 280px;
+    }
+    .footer-legal-section h3 {
+      color: var(--primary);
+      font-weight: 700;
+      font-size: 0.9rem;
+      margin: 0 0 12px 0;
+    }
+    .footer-legal .legal-content {
+      color: rgba(255,255,255,0.5);
+      line-height: 1.8;
+      font-size: 0.8rem;
+    }
+    .footer-legal .legal-content h4 {
+      color: rgba(255,255,255,0.65);
+      font-size: 0.82rem;
+      margin: 14px 0 4px;
+    }
+
     @media (max-width: 639px) {
       .footer-inner { flex-direction: column; gap: 16px; }
       .footer-contact { text-align: left; }
+      .footer-legal { flex-direction: column; gap: 24px; }
     }
 
     /* ── APPS ──────────────────────────────────── */
@@ -767,7 +805,7 @@
         <span class="nav-logo-text">콜마당</span>
         <span class="nav-logo-sub">지역대리운전 관리 플랫폼</span>
       </a>
-      <a href="#signup" class="nav-cta">무료 신청하기</a>
+      <a href="https://head-manager-web.web.app/owner/login" class="nav-cta">관리자 로그인</a>
     </div>
   </nav>
 
@@ -813,8 +851,8 @@
   <!-- ════════════ PAIN ════════════ -->
   <section class="pain section-padding">
     <div class="container">
-      <h2 class="section-heading">이런 불편함, 지금도 겪고 계신가요?</h2>
-      <p class="section-sub">대리운전 사무실이라면 공감하실 이야기입니다</p>
+      <h2 class="section-heading">운전 중 배차, 도로 위 수많은 위험들</h2>
+      <p class="section-sub" style="font-weight:900; color:var(--primary);">원클릭이면 배차 끝 — 콜마당이 만드는 달리는 사무실</p>
       <div class="card-grid">
         <div class="card animate">
           <div class="card-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></div>
@@ -932,23 +970,6 @@
 
         <div class="app-card animate">
           <div class="app-card-header">
-            <div class="app-card-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M22 8c0-2.3-.8-4.3-2-6"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/><path d="M4 2C2.8 3.7 2 5.7 2 8"/></svg></div>
-            <div>
-              <div class="app-card-title">콜 디텍터</div>
-              <div class="app-card-sub">서브 전화기 설치</div>
-            </div>
-          </div>
-          <ul>
-            <li>수신 전화 자동 감지 및 기록</li>
-            <li>개인·업무 전화 지능형 필터링</li>
-            <li>통화 종료 후 자동 배차 팝업</li>
-            <li>데이터 실시간 동기화</li>
-          </ul>
-          <div class="app-card-highlight">전화벨이 울리면 기록은 시스템이 책임집니다</div>
-        </div>
-
-        <div class="app-card animate">
-          <div class="app-card-header">
             <div class="app-card-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg></div>
             <div>
               <div class="app-card-title">콜 매니저</div>
@@ -962,6 +983,23 @@
             <li>사무실 간 공유콜 네트워크</li>
           </ul>
           <div class="app-card-highlight">수기 정산의 스트레스에서 벗어나 운영에만 집중하세요</div>
+        </div>
+
+        <div class="app-card animate">
+          <div class="app-card-header">
+            <div class="app-card-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M22 8c0-2.3-.8-4.3-2-6"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/><path d="M4 2C2.8 3.7 2 5.7 2 8"/></svg></div>
+            <div>
+              <div class="app-card-title">콜 디텍터</div>
+              <div class="app-card-sub">서브 전화기 설치</div>
+            </div>
+          </div>
+          <ul>
+            <li>수신 전화 자동 감지 및 기록</li>
+            <li>개인·업무 전화 지능형 필터링</li>
+            <li>통화 종료 후 자동 배차 팝업</li>
+            <li>데이터 실시간 동기화</li>
+          </ul>
+          <div class="app-card-highlight">전화벨이 울리면 기록은 시스템이 책임집니다</div>
         </div>
 
         <div class="app-card animate">
@@ -1026,6 +1064,11 @@
             <input type="tel" id="phone" name="phone" required placeholder="010-0000-0000">
           </div>
           <div class="form-group">
+            <label for="gmail">Gmail 주소</label>
+            <input type="email" id="gmail" name="gmail" placeholder="example@gmail.com">
+            <small style="color: rgba(255,255,255,0.5); font-size: 0.78rem;">Play Store에 로그인된 Gmail을 입력해주세요 (Play Store 앱 → 우측 상단 프로필 아이콘에서 확인)</small>
+          </div>
+          <div class="form-group">
             <label for="region">운영 지역</label>
             <input type="text" id="region" name="region" value="양평" placeholder="예: 양평 용문읍">
           </div>
@@ -1064,14 +1107,81 @@
         <div class="footer-brand">
           <div class="footer-logo">콜마당 · 콜링크</div>
           <div class="footer-info">
+            상호: 콜링크 (callLink)<br>
+            주소: 경기도 양평군 용문면 두담길 10, 12519<br>
             사업자등록번호: 460-08-03296<br>
-            경기도 양평군
+            전화: +82 10 3670 2011
           </div>
         </div>
         <div class="footer-contact">
-          <p><a href="mailto:contact@calllink.io.kr">contact@calllink.io.kr</a></p>
+          <p><a href="mailto:calllinkdrive@gmail.com">calllinkdrive@gmail.com</a></p>
         </div>
       </div>
+
+      <!-- 개인정보처리방침 + 계정삭제 안내 -->
+      <div class="footer-legal">
+        <div class="footer-legal-section">
+          <h3>개인정보처리방침</h3>
+          <div class="legal-content">
+            <h4>1. 개요</h4>
+            <p>콜링크 (이하 "회사")는 대리운전 서비스 제공을 위해 다음과 같은 개인정보를 수집하고 이용합니다.</p>
+
+            <h4>2. 수집하는 개인정보 항목</h4>
+            <p>- 전화번호 (필수): 회원 식별, 기사 연결<br>
+            - 위치 정보 (필수): 출발지 확인, 기사 배차<br>
+            - FCM 토큰 (필수): 푸시 알림 전송</p>
+
+            <h4>3. 개인정보의 이용 목적</h4>
+            <p>- 서비스 제공: 대리운전 배차, 운행 관리, 정산<br>
+            - 회원 관리: 본인 확인, 서비스 이용 기록 관리<br>
+            - 알림 서비스: 배차 알림, 운행 완료 알림, 포인트 적립 안내</p>
+
+            <h4>4. 개인정보의 보유 및 이용 기간</h4>
+            <p>- 회원 정보: 회원 탈퇴 시까지<br>
+            - 운행 기록: 정산 완료 후 90일<br>
+            - 위치 정보: 운행 완료 즉시 삭제</p>
+
+            <h4>5. 개인정보의 제3자 제공</h4>
+            <p>원칙적으로 외부에 제공하지 않습니다. 다만 다음의 경우 예외:<br>
+            - 이용자가 사전에 동의한 경우<br>
+            - 법령에 의거한 수사기관의 요구</p>
+
+            <h4>6. 이용자의 권리</h4>
+            <p>- 열람권: 본인의 개인정보 처리 현황 열람 요청<br>
+            - 정정권: 부정확한 개인정보의 정정 요청<br>
+            - 삭제권: 개인정보의 삭제 요청<br>
+            - 처리정지권: 개인정보 처리의 정지 요청</p>
+
+            <h4>7. 개인정보 보호를 위한 기술적 대책</h4>
+            <p>- 데이터 전송 시 SSL/TLS 암호화 적용<br>
+            - Firebase Security Rules를 통한 데이터 접근 제어</p>
+
+            <h4>8. 개인정보 처리 위탁</h4>
+            <p>- Google Firebase: 데이터 저장, 인증, 푸시 알림<br>
+            - Google Cloud Platform: 클라우드 서버 운영</p>
+
+            <h4>9. 문의처</h4>
+            <p>개인정보와 관련한 문의사항: <a href="mailto:calllinkdrive@gmail.com">calllinkdrive@gmail.com</a></p>
+          </div>
+        </div>
+
+        <div class="footer-legal-section">
+          <h3>계정삭제 안내</h3>
+          <div class="legal-content">
+            <h4>탈퇴 방법</h4>
+            <p>앱 내 "설정 > 회원 탈퇴" 메뉴에서 직접 탈퇴할 수 있습니다.</p>
+
+            <h4>탈퇴 시 처리</h4>
+            <p>- 모든 개인정보가 즉시 삭제됩니다.<br>
+            - 잔여 포인트는 소멸되며, 이에 대한 보상은 제공되지 않습니다.<br>
+            - 삭제된 정보는 복구할 수 없습니다.</p>
+
+            <h4>문의</h4>
+            <p>계정삭제 관련 문의: <a href="mailto:calllinkdrive@gmail.com">calllinkdrive@gmail.com</a></p>
+          </div>
+        </div>
+      </div>
+
       <div class="footer-bottom">
         &copy; 2025 콜링크. All rights reserved.
       </div>
@@ -1083,7 +1193,7 @@
     // ═══════════════════════════════════════
     // 설정값 (나중에 실제 값으로 교체)
     // ═══════════════════════════════════════
-    var FORM_ENDPOINT = 'https://script.google.com/macros/s/AKfycbx5CpDFBSmkavN6sMQUqTj_ZXoaX4JC7m1TJkAF01s_jd1KveUyKlr4_DxtEweRSa1J/exec';
+    var FORM_ENDPOINT = 'https://asia-northeast3-calldetector-5d61e.cloudfunctions.net/submitOfficeApplication';
     var CONTACT_PHONE = '010-8145-2011';
 
     // ═══════════════════════════════════════
@@ -1113,6 +1223,7 @@
         officeName: e.target.officeName.value.trim(),
         ownerName:  e.target.ownerName.value.trim(),
         phone:      e.target.phone.value.trim(),
+        gmail:      e.target.gmail.value.trim(),
         region:     e.target.region.value.trim(),
         dailyCalls: e.target.dailyCalls.value,
         message:    e.target.message.value.trim(),
@@ -1121,14 +1232,21 @@
       };
 
       try {
-        await fetch(FORM_ENDPOINT, {
+        var response = await fetch(FORM_ENDPOINT, {
           method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data),
         });
-        document.getElementById('signup-form').style.display = 'none';
-        document.getElementById('signup-success').style.display = 'block';
+        var result = await response.json();
+        if (response.ok && result.success) {
+          document.getElementById('signup-form').style.display = 'none';
+          document.getElementById('signup-success').style.display = 'block';
+        } else {
+          var msg = result.error || '신청 중 오류가 발생했습니다.';
+          alert(msg);
+          btn.textContent = '신청하기';
+          btn.disabled = false;
+        }
       } catch (err) {
         var errorEl = document.getElementById('signup-error');
         errorEl.style.display = 'block';
