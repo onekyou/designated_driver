@@ -32,6 +32,7 @@
     {
       "target": "callmadang-web",
       "public": "homepage/public",
+      "cleanUrls": true,
       "ignore": [
         "firebase.json",
         "**/.*",
