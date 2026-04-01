@@ -412,8 +412,10 @@ fun CustomerApp(
     var currentCityId by remember { mutableStateOf<String?>(null) }
     var currentUserId by remember { mutableStateOf<String?>(null) }
 
-    // 인증된 전화번호 (Phone Auth에서 전달)
+    // 인증된 전화번호 (재설치 시 SMS 인증 후 전달)
     var verifiedPhoneNumber by remember { mutableStateOf("") }
+    // 재설치 복구용: 중복 감지된 전화번호 임시 저장
+    var duplicatePhoneNumber by remember { mutableStateOf("") }
 
     // CustomerInfo 상태 (사무실 연락처 포함)
     var customerInfo by remember { mutableStateOf<com.designated.customer.data.model.CustomerInfo?>(null) }
@@ -456,7 +458,6 @@ fun CustomerApp(
         }
 
         currentUserId = currentUser.uid
-        verifiedPhoneNumber = currentUser.phoneNumber ?: preferencesManager.getPhoneNumber() ?: ""
 
         // 프로필 존재 여부 확인
         try {
@@ -580,15 +581,9 @@ fun CustomerApp(
                 TermsAgreementScreen(
                     onTermsAgreed = { termsVersion, marketingConsent ->
                         preferencesManager.saveTermsAcceptance(termsVersion, marketingConsent)
-                        // 이미 Phone Auth 완료 상태면 프로필 입력으로 직행
-                        val user = auth.currentUser
-                        if (user != null && user.phoneNumber != null) {
-                            verifiedPhoneNumber = user.phoneNumber ?: ""
-                            currentUserId = user.uid
-                            currentScreen = AppScreen.PROFILE_SETUP
-                        } else {
-                            currentScreen = AppScreen.PHONE_AUTH
-                        }
+                        // 약관 동의 후 바로 프로필 설정으로 이동 (SMS 인증 단계 제거)
+                        currentUserId = auth.currentUser?.uid
+                        currentScreen = AppScreen.PROFILE_SETUP
                     },
                     onViewTerms = { currentScreen = AppScreen.TERMS_VIEWER },
                     onViewPrivacy = { currentScreen = AppScreen.PRIVACY_VIEWER },
@@ -613,14 +608,59 @@ fun CustomerApp(
             }
 
             AppScreen.PHONE_AUTH -> {
+                // 재설치 복구용: 중복 전화번호 감지 시 SMS 인증 후 기존 계정 복구
                 PhoneAuthScreen(
                     onAuthSuccess = { phoneNumber ->
                         verifiedPhoneNumber = phoneNumber
                         currentUserId = auth.currentUser?.uid
                         preferencesManager.savePhoneNumber(phoneNumber)
-                        currentScreen = AppScreen.PROFILE_SETUP
+                        // SMS 인증 성공 → Cloud Function으로 기존 계정 복구
+                        coroutineScope.launch {
+                            try {
+                                val newUid = auth.currentUser?.uid ?: return@launch
+                                val fcmToken = try {
+                                    com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
+                                } catch (e: Exception) { null }
+
+                                // CF 호출: 계정 복구
+                                val functions = com.google.firebase.functions.FirebaseFunctions.getInstance("asia-northeast3")
+                                val result = functions.getHttpsCallable("recoverCustomerAccount")
+                                    .call(hashMapOf(
+                                        "phoneNumber" to phoneNumber,
+                                        "newUid" to newUid,
+                                        "provinceId" to currentProvinceId!!,
+                                        "cityId" to currentCityId!!,
+                                        "officeId" to currentOfficeId!!,
+                                        "fcmToken" to (fcmToken ?: "")
+                                    ))
+                                    .await()
+
+                                val data = result.getData() as? Map<*, *>
+                                val recovered = data?.get("recovered") as? Boolean ?: false
+                                android.util.Log.d("AccountRecovery", "CF 복구 결과: recovered=$recovered")
+
+                                // 복구 완료 → CustomerInfo 로드 후 메인으로
+                                val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                                val doc = firestore
+                                    .collection("provinces").document(currentProvinceId!!)
+                                    .collection("cities").document(currentCityId!!)
+                                    .collection("offices").document(currentOfficeId!!)
+                                    .collection("customers").document(newUid)
+                                    .get()
+                                    .await()
+
+                                if (doc.exists()) {
+                                    customerInfo = com.designated.customer.data.model.CustomerInfo.fromMap(doc.data ?: emptyMap())
+                                }
+
+                                currentScreen = AppScreen.MAIN
+                            } catch (e: Exception) {
+                                android.util.Log.e("AccountRecovery", "계정 복구 실패", e)
+                                currentScreen = AppScreen.PROFILE_SETUP
+                            }
+                        }
                     },
-                    onBack = { currentScreen = AppScreen.TERMS_AGREEMENT },
+                    onBack = { currentScreen = AppScreen.PROFILE_SETUP },
                     modifier = Modifier.padding(paddingValues)
                 )
             }
@@ -631,9 +671,13 @@ fun CustomerApp(
                         provinceId = currentProvinceId!!,
                         cityId = currentCityId!!,
                         officeId = currentOfficeId!!,
-                        verifiedPhoneNumber = verifiedPhoneNumber,
                         termsVersion = preferencesManager.getTermsVersion() ?: "1.0.0",
                         marketingConsent = preferencesManager.getMarketingConsent(),
+                        onPhoneNumberDuplicate = { phone ->
+                            // 중복 전화번호 감지 → SMS 인증 화면으로 전환
+                            duplicatePhoneNumber = phone
+                            currentScreen = AppScreen.PHONE_AUTH
+                        },
                         onProfileComplete = {
                             android.util.Log.d("ProfileSetup", "프로필 입력 완료")
 

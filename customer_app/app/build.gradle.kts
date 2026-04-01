@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
     id("kotlin-kapt")
 }
 
@@ -24,8 +25,8 @@ android {
         applicationId = "com.designated.customer.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.0.6"
+        versionCode = 10
+        versionName = "1.0.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -106,6 +107,7 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging-ktx")
     implementation("com.google.firebase:firebase-config-ktx")
     implementation("com.google.firebase:firebase-database-ktx") // Realtime Database (Presence)
+    implementation("com.google.firebase:firebase-crashlytics-ktx") // Crashlytics
 
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.7.5")

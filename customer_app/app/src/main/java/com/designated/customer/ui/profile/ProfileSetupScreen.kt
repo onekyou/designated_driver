@@ -1,8 +1,7 @@
 package com.designated.customer.ui.profile
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,9 +18,9 @@ fun ProfileSetupScreen(
     provinceId: String,
     cityId: String,
     officeId: String,
-    verifiedPhoneNumber: String,
     termsVersion: String,
     marketingConsent: Boolean,
+    onPhoneNumberDuplicate: (String) -> Unit,
     onProfileComplete: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ProfileSetupViewModel = viewModel()
@@ -36,6 +35,14 @@ fun ProfileSetupScreen(
     LaunchedEffect(uiState.isSaveSuccess) {
         if (uiState.isSaveSuccess) {
             onProfileComplete()
+        }
+    }
+
+    // 전화번호 중복 감지 시 SMS 인증 화면으로 전환
+    LaunchedEffect(uiState.isDuplicate) {
+        if (uiState.isDuplicate) {
+            onPhoneNumberDuplicate(uiState.phoneNumber)
+            viewModel.clearDuplicate()
         }
     }
 
@@ -86,11 +93,11 @@ fun ProfileSetupScreen(
 
             Spacer(modifier = Modifier.height(48.dp))
 
-            // 닉네임 입력
+            // 이름 입력
             OutlinedTextField(
                 value = uiState.nickname,
                 onValueChange = { viewModel.updateNickname(it) },
-                label = { Text("닉네임") },
+                label = { Text("이름") },
                 placeholder = { Text("예: 홍길동") },
                 singleLine = true,
                 enabled = !uiState.isLoading,
@@ -99,20 +106,15 @@ fun ProfileSetupScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 인증된 전화번호 (읽기전용)
+            // 전화번호 입력
             OutlinedTextField(
-                value = verifiedPhoneNumber,
-                onValueChange = {},
-                label = { Text("전화번호 (인증완료)") },
+                value = uiState.phoneNumber,
+                onValueChange = { viewModel.updatePhoneNumber(it) },
+                label = { Text("전화번호") },
+                placeholder = { Text("01012345678") },
                 singleLine = true,
-                enabled = false,
-                trailingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.CheckCircle,
-                        contentDescription = "인증완료",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                },
+                enabled = !uiState.isLoading,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -136,13 +138,14 @@ fun ProfileSetupScreen(
                 onClick = {
                     viewModel.saveProfile(
                         provinceId, cityId, officeId,
-                        verifiedPhoneNumber, termsVersion, marketingConsent,
+                        termsVersion, marketingConsent,
                         driverId, driverName
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !uiState.isLoading &&
-                         uiState.nickname.isNotBlank()
+                         uiState.nickname.isNotBlank() &&
+                         uiState.phoneNumber.isNotBlank()
             ) {
                 if (uiState.isLoading) {
                     CircularProgressIndicator(
@@ -160,7 +163,7 @@ fun ProfileSetupScreen(
 
             // 안내 문구
             Text(
-                "* 닉네임은 필수입니다",
+                "* 이름과 전화번호는 필수입니다",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

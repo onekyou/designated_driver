@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,10 +16,12 @@ import kotlinx.coroutines.tasks.await
 
 data class ProfileSetupState(
     val nickname: String = "",
+    val phoneNumber: String = "",
     val address: String = "",
     val isLoading: Boolean = false,
     val error: String? = null,
-    val isSaveSuccess: Boolean = false
+    val isSaveSuccess: Boolean = false,
+    val isDuplicate: Boolean = false
 )
 
 class ProfileSetupViewModel : ViewModel() {
@@ -34,8 +37,16 @@ class ProfileSetupViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(nickname = nickname, error = null)
     }
 
+    fun updatePhoneNumber(phoneNumber: String) {
+        _uiState.value = _uiState.value.copy(phoneNumber = phoneNumber, error = null)
+    }
+
     fun updateAddress(address: String) {
         _uiState.value = _uiState.value.copy(address = address, error = null)
+    }
+
+    fun clearDuplicate() {
+        _uiState.value = _uiState.value.copy(isDuplicate = false)
     }
 
     /**
@@ -45,22 +56,22 @@ class ProfileSetupViewModel : ViewModel() {
         provinceId: String,
         cityId: String,
         officeId: String,
-        phoneNumber: String,
         termsVersion: String,
         marketingConsent: Boolean,
         driverId: String? = null,
         driverName: String? = null
     ) {
         val state = _uiState.value
+        val phoneNumber = state.phoneNumber.trim()
 
         // 유효성 검사
         if (state.nickname.isBlank()) {
-            _uiState.value = state.copy(error = "닉네임을 입력해주세요")
+            _uiState.value = state.copy(error = "이름을 입력해주세요")
             return
         }
 
         if (phoneNumber.isBlank()) {
-            _uiState.value = state.copy(error = "전화번호 인증이 필요합니다")
+            _uiState.value = state.copy(error = "전화번호를 입력해주세요")
             return
         }
 
@@ -74,6 +85,26 @@ class ProfileSetupViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
+                // 전화번호 중복 체크 (Cloud Function 호출)
+                val functions = FirebaseFunctions.getInstance("asia-northeast3")
+                val result = functions.getHttpsCallable("checkPhoneNumberDuplicate")
+                    .call(hashMapOf(
+                        "phoneNumber" to phoneNumber,
+                        "provinceId" to provinceId,
+                        "cityId" to cityId,
+                        "officeId" to officeId,
+                        "currentUid" to userId
+                    ))
+                    .await()
+
+                val data = result.getData() as? Map<*, *>
+                val isDuplicate = data?.get("isDuplicate") as? Boolean ?: false
+                if (isDuplicate) {
+                    Log.d(TAG, "전화번호 중복 감지 (CF): $phoneNumber")
+                    _uiState.value = state.copy(isLoading = false, isDuplicate = true)
+                    return@launch
+                }
+
                 // FCM 토큰 가져오기
                 val fcmToken = try {
                     FirebaseMessaging.getInstance().token.await()
@@ -108,7 +139,7 @@ class ProfileSetupViewModel : ViewModel() {
                     "termsAcceptedAt" to now,
                     "termsVersion" to termsVersion,
                     "marketingConsent" to marketingConsent,
-                    "authProvider" to "phone"
+                    "authProvider" to "anonymous"
                 )
 
                 // 기사 추천 정보가 있으면 추가

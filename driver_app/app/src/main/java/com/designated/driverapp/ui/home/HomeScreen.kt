@@ -901,8 +901,14 @@ fun SettlementSummaryPopup(
                 val requiredPoints = when (paymentMethod) {
                     "포인트" -> totalFare
                     "현금+포인트" -> {
-                        val cash = cashAmount.toIntOrNull() ?: 0
-                        totalFare - cash
+                        if (isActuallyAppCustomer && customerPointInfo != null) {
+                            // 앱회원: 사용할 포인트를 직접 입력
+                            rewardPointsToUse.toIntOrNull() ?: 0
+                        } else {
+                            // 비앱회원: 요금 - 받은현금
+                            val cash = cashAmount.toIntOrNull() ?: 0
+                            totalFare - cash
+                        }
                     }
                     else -> 0
                 }
@@ -961,7 +967,9 @@ fun SettlementSummaryPopup(
                 }
 
                 val confirmEnabled = when {
-                    paymentMethod == "현금+포인트" && cashAmount.isBlank() -> false
+                    // 현금+포인트: 비앱회원은 현금 입력 필수, 앱회원은 포인트 입력 필수
+                    paymentMethod == "현금+포인트" && !(isActuallyAppCustomer && customerPointInfo != null) && cashAmount.isBlank() -> false
+                    paymentMethod == "현금+포인트" && isActuallyAppCustomer && customerPointInfo != null && rewardPointsToUse.isBlank() -> false
                     isPointPayment && !isActuallyAppCustomer -> false  // 비앱 회원 포인트 결제 차단
                     isPointPayment && !hasEnoughPoints -> false  // 포인트 부족 시 차단
                     else -> true
@@ -984,19 +992,32 @@ fun SettlementSummaryPopup(
                         onClick = {
                             if (!confirmEnabled) return@Button
                             val finalFare = editableFare.toIntOrNull() ?: (callInfo.fare_set ?: 0)
-                            val amount = when (paymentMethod) {
-                                "현금" -> finalFare
-                                "현금+포인트" -> cashAmount.toIntOrNull()
-                                else -> null
-                            }
                             // ✅ 포인트 사용액 계산
                             val pointsToUse = when (paymentMethod) {
-                                "포인트" -> finalFare  // 포인트 전액 사용
+                                "포인트" -> finalFare
                                 "현금+포인트" -> {
-                                    val cash = cashAmount.toIntOrNull() ?: 0
-                                    finalFare - cash  // 요금 - 현금 = 포인트 사용액
+                                    if (isActuallyAppCustomer && customerPointInfo != null) {
+                                        // 앱회원: 직접 입력한 포인트
+                                        rewardPointsToUse.toIntOrNull() ?: 0
+                                    } else {
+                                        // 비앱회원: 요금 - 받은현금
+                                        val cash = cashAmount.toIntOrNull() ?: 0
+                                        finalFare - cash
+                                    }
                                 }
-                                else -> 0  // 다른 결제 방법은 포인트 미사용
+                                else -> 0
+                            }
+                            val amount = when (paymentMethod) {
+                                "현금" -> finalFare
+                                "현금+포인트" -> {
+                                    if (isActuallyAppCustomer && customerPointInfo != null) {
+                                        // 앱회원: 요금 - 포인트 = 현금 결제액
+                                        finalFare - pointsToUse
+                                    } else {
+                                        cashAmount.toIntOrNull()
+                                    }
+                                }
+                                else -> null
                             }
                             onConfirm(paymentMethod, amount, finalFare, pointsToUse)
                         },

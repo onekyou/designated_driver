@@ -41,7 +41,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getApkDownloadUrl = exports.rejectOfficeApplication = exports.approveOfficeApplication = exports.submitOfficeApplication = exports.onDriverSettlementSubmitted = exports.notifyDriverSettlementResult = exports.sendDriverNotification = exports.finalizeSettlementAndNotifyDrivers = exports.notifyDriverCancellation = exports.notifyDriverAssignment = exports.manualCheckSettlementDiscrepancy = exports.autoFinalizeSettlements = exports.onCallCompletedUpdateSettlement = exports.onDriverStatusChange = exports.getOfficeReport = exports.searchArchivedCalls = exports.getArchivedStats = exports.archiveOldCalls = exports.scheduledDataCleanup = exports.checkAssignedTimeout = exports.onCallDetectorCrash = exports.onCustomerCountChange = exports.onDriverCountChange = exports.onNewCustomerRegistered = exports.onCallCancelledByDriver = exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.notifyCustomerOnComplete = exports.notifyCustomerOnPhoneCall = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.notifyCustomerOnOfficeClosed = exports.onSharedCallCreated = exports.sendNewCallNotification = exports.oncallassigned = exports.handleFailedNotifications = exports.retryPendingNotifications = exports.acknowledgeNotification = void 0;
+exports.getApkDownloadUrl = exports.rejectOfficeApplication = exports.approveOfficeApplication = exports.submitOfficeApplication = exports.onDriverSettlementSubmitted = exports.notifyDriverSettlementResult = exports.sendDriverNotification = exports.finalizeSettlementAndNotifyDrivers = exports.notifyDriverCancellation = exports.notifyDriverAssignment = exports.manualCheckSettlementDiscrepancy = exports.autoFinalizeSettlements = exports.onCallCompletedUpdateSettlement = exports.onDriverStatusChange = exports.getOfficeReport = exports.searchArchivedCalls = exports.getArchivedStats = exports.archiveOldCalls = exports.scheduledDataCleanup = exports.checkAssignedTimeout = exports.onCallDetectorCrash = exports.onCustomerCountChange = exports.onDriverCountChange = exports.onNewCustomerRegistered = exports.onCallCancelledByDriver = exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.notifyCustomerOnComplete = exports.notifyCustomerOnPhoneCall = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.notifyCustomerOnOfficeClosed = exports.onSharedCallCreated = exports.sendNewCallNotification = exports.oncallassigned = exports.handleFailedNotifications = exports.retryPendingNotifications = exports.acknowledgeNotification = exports.recoverCustomerAccount = exports.checkPhoneNumberDuplicate = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -86,6 +86,100 @@ async function saveNotificationStatus(notificationId, type, targetId, targetType
         logger.error(`[ACK] 알림 상태 저장 실패: ${notificationId}`, error);
     }
 }
+/**
+ * 전화번호 중복 체크 (손님앱 프로필 설정 시 호출)
+ * - 해당 사무실의 customers 컬렉션에서 동일 전화번호 존재 여부 확인
+ * - 재설치 시 기존 계정 복구를 위한 SMS 인증 트리거용
+ */
+exports.checkPhoneNumberDuplicate = (0, https_1.onCall)({ region: "asia-northeast3" }, async (request) => {
+    const { phoneNumber, provinceId, cityId, officeId, currentUid } = request.data;
+    if (!phoneNumber || !provinceId || !cityId || !officeId) {
+        logger.error("[checkPhoneNumberDuplicate] 필수 파라미터 누락", request.data);
+        return { success: false, error: "Missing required parameters" };
+    }
+    try {
+        const customersRef = admin.firestore()
+            .collection("provinces").doc(provinceId)
+            .collection("cities").doc(cityId)
+            .collection("offices").doc(officeId)
+            .collection("customers");
+        const snapshot = await customersRef
+            .where("phoneNumber", "==", phoneNumber)
+            .limit(1)
+            .get();
+        if (!snapshot.empty) {
+            const existingUid = snapshot.docs[0].data().id;
+            if (existingUid !== currentUid) {
+                logger.info(`[checkPhoneNumberDuplicate] 중복 감지: ${phoneNumber} (기존 UID: ${existingUid}, 현재 UID: ${currentUid})`);
+                return { success: true, isDuplicate: true };
+            }
+        }
+        return { success: true, isDuplicate: false };
+    }
+    catch (error) {
+        logger.error("[checkPhoneNumberDuplicate] 오류:", error);
+        return { success: false, error: String(error) };
+    }
+});
+/**
+ * 계정 복구 (재설치 후 SMS 인증 성공 시 호출)
+ * - 기존 customers 문서를 새 UID로 이관
+ * - 기존 문서 삭제 + customerInfo FCM 토큰 갱신
+ */
+exports.recoverCustomerAccount = (0, https_1.onCall)({ region: "asia-northeast3" }, async (request) => {
+    const { phoneNumber, newUid, provinceId, cityId, officeId, fcmToken } = request.data;
+    if (!phoneNumber || !newUid || !provinceId || !cityId || !officeId) {
+        logger.error("[recoverCustomerAccount] 필수 파라미터 누락", request.data);
+        return { success: false, error: "Missing required parameters" };
+    }
+    try {
+        const customersRef = admin.firestore()
+            .collection("provinces").doc(provinceId)
+            .collection("cities").doc(cityId)
+            .collection("offices").doc(officeId)
+            .collection("customers");
+        // 기존 계정 찾기
+        const snapshot = await customersRef
+            .where("phoneNumber", "==", phoneNumber)
+            .limit(1)
+            .get();
+        if (snapshot.empty) {
+            logger.warn(`[recoverCustomerAccount] 기존 계정 없음: ${phoneNumber}`);
+            return { success: false, error: "No existing account found" };
+        }
+        const oldDoc = snapshot.docs[0];
+        const oldData = oldDoc.data();
+        const oldUid = oldData.id;
+        if (oldUid === newUid) {
+            logger.info(`[recoverCustomerAccount] 동일 UID, 복구 불필요: ${newUid}`);
+            return { success: true, recovered: false };
+        }
+        // 기존 데이터를 새 UID 문서로 복사
+        const updatedData = Object.assign(Object.assign({}, oldData), { id: newUid, authProvider: "phone", lastActiveAt: firestore_2.Timestamp.now() });
+        await customersRef.doc(newUid).set(updatedData);
+        await oldDoc.ref.delete();
+        logger.info(`[recoverCustomerAccount] 계정 복구 완료: ${oldUid} → ${newUid}`);
+        // customerInfo FCM 토큰 갱신
+        if (fcmToken) {
+            await admin.firestore()
+                .collection("provinces").doc(provinceId)
+                .collection("cities").doc(cityId)
+                .collection("offices").doc(officeId)
+                .collection("customerInfo").doc(phoneNumber)
+                .set({
+                fcmToken: fcmToken,
+                phoneNumber: phoneNumber,
+                updatedAt: firestore_2.Timestamp.now(),
+            }, { merge: true });
+            logger.info(`[recoverCustomerAccount] FCM 토큰 갱신 완료: ${phoneNumber}`);
+        }
+        return { success: true, recovered: true };
+    }
+    catch (error) {
+        logger.error("[recoverCustomerAccount] 오류:", error);
+        return { success: false, error: String(error) };
+    }
+});
 /**
  * 알림 도착 ACK 처리 (앱에서 호출)
  */
