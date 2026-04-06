@@ -49,7 +49,6 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val NOTIFICATION_PERMISSION_REQUEST_CODE = 1001
-        private const val ACTIVITY_RECOGNITION_PERMISSION_REQUEST_CODE = 1002
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -63,14 +62,8 @@ class MainActivity : ComponentActivity() {
         // 알림 권한 요청 (Android 13+)
         requestNotificationPermission()
 
-        // 만보기 권한 요청 (Android 10+)
-        requestActivityRecognitionPermission()
-
         // FCM 토큰 요청 및 저장
         requestAndSaveFcmToken()
-
-        // StepCounterService 시작
-        startStepCounterService()
 
         setContent {
             DesignatedCustomerTheme {
@@ -279,26 +272,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * 만보기 권한 요청 (Android 10+)
-     */
-    private fun requestActivityRecognitionPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.ACTIVITY_RECOGNITION
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.ACTIVITY_RECOGNITION),
-                    ACTIVITY_RECOGNITION_PERMISSION_REQUEST_CODE
-                )
-            }
-        }
-    }
-
-    /**
+/**
      * FCM 토큰 요청 및 Firestore에 저장
      */
     private fun requestAndSaveFcmToken() {
@@ -352,22 +326,6 @@ class MainActivity : ComponentActivity() {
             }
     }
 
-    /**
-     * StepCounterService 시작
-     */
-    private fun startStepCounterService() {
-        val intent = Intent(this, com.designated.customer.service.StepCounterService::class.java)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        // 앱 종료 시 서비스는 유지 (백그라운드에서 계속 실행)
-    }
 }
 
 enum class AppScreen {

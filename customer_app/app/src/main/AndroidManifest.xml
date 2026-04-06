@@ -6,11 +6,7 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
-    <!-- 만보기를 위한 활동 인식 권한 (Android 10+) -->
-    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
-    <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false" />
-
-    <!-- 위치 권한 (현재 위치 사용) -->
+<!-- 위치 권한 (현재 위치 사용) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
@@ -21,9 +17,6 @@
     <!-- 진동 알람 권한 (기사 배정 알림) -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- Foreground Service 권한 (Android 9+) -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!-- 알림 권한 (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -51,20 +44,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Activity Recognition을 위한 BroadcastReceiver -->
-        <receiver
-            android:name=".service.ActivityRecognitionReceiver"
-            android:exported="false">
-        </receiver>
-
-        <!-- 만보기 Foreground Service -->
-        <service
-            android:name=".service.StepCounterService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-
-        <!-- Firebase Cloud Messaging Service -->
+<!-- Firebase Cloud Messaging Service -->
         <service
             android:name=".service.MyFirebaseMessagingService"
             android:exported="false">

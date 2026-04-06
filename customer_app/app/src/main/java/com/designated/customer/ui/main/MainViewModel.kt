@@ -22,13 +22,8 @@ import com.designated.customer.data.model.CustomerPoints
 import com.designated.customer.service.CallService
 import com.designated.customer.service.LocationService
 import com.designated.customer.service.PointService
-import com.designated.customer.service.StepCounterService
-import com.designated.customer.data.repository.StepRepository
-import com.designated.customer.data.model.DailyStepData
-import com.designated.customer.data.model.WeeklyStepSummary
 import com.designated.customer.data.model.BannerAdData
 import com.designated.customer.service.BannerAdService
-import com.designated.customer.data.model.MonthlyStepSummary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.StateFlow
@@ -50,14 +45,6 @@ data class MainUiState(
     val isLoadingPoints: Boolean = false,
     val usePoints: Boolean = false,
     val pointsToUse: Int = 0,
-    // 만보기 관련 상태
-    val currentStepsRealtime: Int = 0, // 실시간 걸음수 (센서에서 직접)
-    val currentSessionSteps: Int = 0, // 세션 걸음수 (리셋 가능한 임시 카운터)
-    val isSessionActive: Boolean = false, // 세션 활성화 여부
-    val stepData: DailyStepData? = null,
-    val weeklyStepData: WeeklyStepSummary? = null,
-    val monthlyStepData: MonthlyStepSummary? = null,
-    val showStepDetail: Boolean = false,
     // 앱호출 버튼 상태
     val showLocationCard: Boolean = false,
     // 집주소 관련 상태
@@ -93,10 +80,7 @@ class MainViewModel(
     private val officeId: String,
     private val phoneNumber: String,
     private val customerInfo: com.designated.customer.data.model.CustomerInfo?,
-    private val context: Context? = null,
-    // 만보기 관련 서비스
-    private val stepRepository: StepRepository? = null,
-    private val stepService: StepCounterService? = null
+    private val context: Context? = null
 ) : ViewModel() {
 
     var uiState by mutableStateOf(MainUiState())
@@ -133,8 +117,6 @@ class MainViewModel(
         loadOfficeInfo()
         // 포인트 정보 로드
         loadCustomerPoints()
-        // 만보기 서비스 시작
-        initStepCounter()
         // 로컬 저장된 집주소/즐겨찾기 로드
         loadLocalAddresses()
         // FCM 브로드캐스트 리스너 등록
@@ -853,75 +835,6 @@ class MainViewModel(
         )
     }
 
-    // ========== 만보기 관련 메서드 ==========
-
-    /**
-     * 만보기 초기화 및 데이터 모니터링 시작
-     */
-    private fun initStepCounter() {
-        // Service는 이미 onCreate에서 startListening을 호출하므로 여기서는 호출하지 않음
-
-        // ✅ 센서의 실시간 걸음수 모니터링 (즉각 반응용)
-        stepService?.let { service ->
-            viewModelScope.launch {
-                service.currentSteps.collectLatest { realtimeSteps ->
-                    uiState = uiState.copy(currentStepsRealtime = realtimeSteps)
-                }
-            }
-
-            // 세션 걸음수 모니터링
-            viewModelScope.launch {
-                service.sessionSteps.collectLatest { sessionSteps ->
-                    uiState = uiState.copy(currentSessionSteps = sessionSteps)
-                }
-            }
-
-            // 세션 활성화 상태 모니터링
-            viewModelScope.launch {
-                service.isSessionActive.collectLatest { isActive ->
-                    uiState = uiState.copy(isSessionActive = isActive)
-                }
-            }
-        }
-
-        // 일일 걸음 수 모니터링 (DB 기반 - 상세 정보용)
-        stepRepository?.let { repo ->
-            viewModelScope.launch {
-                repo.getTodayStepsFlow().collectLatest { stepData ->
-                    uiState = uiState.copy(stepData = stepData)
-                }
-            }
-
-            // 주간 집계 모니터링
-            viewModelScope.launch {
-                repo.getThisWeekSummaryFlow().collectLatest { weeklyData ->
-                    uiState = uiState.copy(weeklyStepData = weeklyData)
-                }
-            }
-
-            // 월간 집계 모니터링
-            viewModelScope.launch {
-                repo.getThisMonthSummaryFlow().collectLatest { monthlyData ->
-                    uiState = uiState.copy(monthlyStepData = monthlyData)
-                }
-            }
-        }
-    }
-
-    /**
-     * 만보기 상세 정보 표시 토글
-     */
-    fun toggleStepDetail() {
-        uiState = uiState.copy(showStepDetail = !uiState.showStepDetail)
-    }
-
-    /**
-     * 만보기 상세 정보 닫기
-     */
-    fun closeStepDetail() {
-        uiState = uiState.copy(showStepDetail = false)
-    }
-
     /**
      * 위치 카드 표시 토글
      */
@@ -1022,31 +935,6 @@ class MainViewModel(
 
     // ========== 세션 관련 메서드 ==========
 
-    /**
-     * 새로운 걸음 세션 시작
-     */
-    fun startNewSession() {
-        stepService?.startNewSession()
-    }
-
-    /**
-     * 세션 리셋 (0부터 다시 시작)
-     */
-    fun resetSession() {
-        stepService?.resetSession()
-    }
-
-    /**
-     * 세션 종료
-     */
-    fun endSession() {
-        stepService?.endSession()
-    }
-
-    /**
-     * ViewModel 종료 시 처리
-     * Service는 백그라운드에서 계속 실행되므로 stopListening을 호출하지 않음
-     */
     /**
      * 배너 광고 로드
      * Firebase Firestore에서 활성화된 배너를 실시간으로 모니터링

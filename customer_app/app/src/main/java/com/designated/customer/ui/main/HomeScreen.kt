@@ -39,12 +39,8 @@ import java.text.NumberFormat
 import com.designated.customer.service.CallService
 import com.designated.customer.service.LocationService
 import com.designated.customer.service.PointService
-import com.designated.customer.service.StepCounterService
-import com.designated.customer.data.repository.StepRepository
-import com.designated.customer.data.database.StepDatabase
-import com.designated.customer.ui.components.StepCounterCard
-import com.designated.customer.ui.components.StepDetailBottomSheet
 import com.designated.customer.ui.components.BannerAd
+import com.designated.customer.data.model.CustomerGrade
 import androidx.compose.ui.graphics.Color
 import com.designated.customer.util.VoiceInputHelper
 
@@ -61,13 +57,6 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
 
-    // Android 10 (Q) 이상에서만 ACTIVITY_RECOGNITION 권한 필요
-    val activityRecognitionPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        rememberPermissionState(android.Manifest.permission.ACTIVITY_RECOGNITION)
-    } else {
-        null
-    }
-
     // 위치 권한 (현재 위치 사용)
     val locationPermission = rememberPermissionState(android.Manifest.permission.ACCESS_FINE_LOCATION)
 
@@ -77,15 +66,8 @@ fun HomeScreen(
     // VoiceInputHelper 초기화
     val voiceInputHelper = remember { VoiceInputHelper(context) }
 
-    // Service 바인딩 상태
-    var stepService by remember { mutableStateOf<StepCounterService?>(null) }
-
     // ViewModel 생성
-    val viewModel = remember(customerInfo, stepService) {
-        // 만보기 관련 초기화
-        val stepDatabase = StepDatabase.getInstance(context)
-        val stepRepository = StepRepository(stepDatabase.stepDao())
-
+    val viewModel = remember(customerInfo) {
         MainViewModel(
             callService = CallService(provinceId = provinceId, cityId = cityId, officeId = officeId),
             locationService = LocationService(context),
@@ -95,44 +77,10 @@ fun HomeScreen(
             officeId = officeId,
             phoneNumber = phoneNumber,
             customerInfo = customerInfo,
-            context = context,
-            stepRepository = stepRepository,
-            stepService = stepService
+            context = context
         )
     }
     val uiState = viewModel.uiState
-
-    // Service 바인딩
-    DisposableEffect(Unit) {
-        val serviceConnection = object : android.content.ServiceConnection {
-            override fun onServiceConnected(name: android.content.ComponentName?, binder: android.os.IBinder?) {
-                val localBinder = binder as? StepCounterService.LocalBinder
-                stepService = localBinder?.getService()
-                android.util.Log.d("HomeScreen", "StepCounterService 바인딩 성공")
-            }
-
-            override fun onServiceDisconnected(name: android.content.ComponentName?) {
-                stepService = null
-                android.util.Log.d("HomeScreen", "StepCounterService 바인딩 해제")
-            }
-        }
-
-        val intent = android.content.Intent(context, StepCounterService::class.java)
-        context.bindService(intent, serviceConnection, android.content.Context.BIND_AUTO_CREATE)
-
-        onDispose {
-            context.unbindService(serviceConnection)
-        }
-    }
-
-    // 권한 요청
-    LaunchedEffect(Unit) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            if (activityRecognitionPermission?.status?.isGranted == false) {
-                activityRecognitionPermission.launchPermissionRequest()
-            }
-        }
-    }
 
     // customerInfo가 변경될 때 homeAddress 로그 출력
     LaunchedEffect(customerInfo) {
@@ -158,44 +106,28 @@ fun HomeScreen(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 상단 헤더 - 사무실명과 포인트 한 줄 배치
+            // 상단 헤더 - 사무실명
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 24.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text(
-                        text = uiState.officeName.ifEmpty { officeId },
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "${NumberFormat.getNumberInstance(java.util.Locale.KOREA).format(uiState.customerPoints?.currentPoints ?: 0)}P",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFFFAB00)
-                    )
-                }
+                Text(
+                    text = uiState.officeName.ifEmpty { officeId },
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
 
-            // 상단: 만보기 카드 (좌우 여백 없음, 크게)
-            StepCounterCard(
-                stepData = uiState.stepData?.copy(steps = uiState.currentStepsRealtime),
-                sessionSteps = uiState.currentSessionSteps,
-                isSessionActive = uiState.isSessionActive,
-                onSettingsClick = viewModel::toggleStepDetail,
-                onStartSession = viewModel::startNewSession,
-                onResetSession = viewModel::resetSession,
-                modifier = Modifier.fillMaxWidth()
+            // 포인트/등급 카드
+            PointGradeCard(
+                grade = customerInfo?.grade ?: "bronze",
+                currentPoints = uiState.customerPoints?.currentPoints ?: 0,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -280,19 +212,6 @@ fun HomeScreen(
             )
         }
 
-        // 만보기 상세 정보 바텀시트
-        if (uiState.showStepDetail) {
-            StepDetailBottomSheet(
-                dailyData = uiState.stepData,
-                weeklyData = uiState.weeklyStepData,
-                monthlyData = uiState.monthlyStepData,
-                sessionSteps = uiState.currentSessionSteps,
-                isSessionActive = uiState.isSessionActive,
-                onDismiss = viewModel::closeStepDetail,
-                onResetSession = viewModel::resetSession
-            )
-        }
-
         // 앱호출 바텀시트
         if (uiState.showLocationCard) {
             LocationBottomSheet(
@@ -367,77 +286,64 @@ fun HomeScreen(
 }
 
 @Composable
-private fun StepCounterButton(
-    steps: Int,
-    onClick: () -> Unit,
+private fun PointGradeCard(
+    grade: String,
+    currentPoints: Int,
     modifier: Modifier = Modifier
 ) {
-    // 목표 걸음수 (10000보)
-    val targetSteps = 10000
-    val progress = (steps.toFloat() / targetSteps).coerceIn(0f, 1f)
+    val customerGrade = CustomerGrade.fromString(grade)
+    val nextGrade = customerGrade.nextGrade()
+    val mainColor = Color(0xFFFFAB00)
 
-    // 메인 컬러 사용
-    val mainColor = MaterialTheme.colorScheme.primary
-    val lightColor = MaterialTheme.colorScheme.primaryContainer
-
-    Box(
-        modifier = modifier
-            .size(160.dp)
-            .aspectRatio(1f),
-        contentAlignment = Alignment.Center
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        shape = RoundedCornerShape(16.dp)
     ) {
-        OutlinedButton(
-            onClick = onClick,
-            modifier = Modifier.fillMaxSize(),
-            shape = CircleShape,
-            colors = ButtonDefaults.outlinedButtonColors(
-                containerColor = lightColor.copy(alpha = 0.3f),
-                contentColor = mainColor
-            ),
-            border = BorderStroke(0.dp, mainColor),
-            contentPadding = PaddingValues(0.dp)
+        Column(
+            modifier = Modifier.padding(20.dp)
         ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+            // 등급 + 포인트
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // 배경 원형 진행바 (회색)
-                CircularProgressIndicator(
-                    progress = { 1f },
-                    modifier = Modifier.size(145.dp),
-                    strokeWidth = 10.dp,
-                    color = Color.LightGray,
-                    trackColor = Color.LightGray
-                )
-
-                // 진행률 원형 진행바
-                CircularProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier.size(145.dp),
-                    strokeWidth = 10.dp,
-                    color = mainColor
-                )
-
-                // 중앙 내용
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(
-                        Icons.Default.Settings,
-                        contentDescription = "만보기",
-                        modifier = Modifier.size(40.dp),
-                        tint = mainColor
+                        Icons.Default.Star,
+                        contentDescription = null,
+                        tint = mainColor,
+                        modifier = Modifier.size(24.dp)
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = NumberFormat.getNumberInstance(java.util.Locale.KOREA).format(steps),
-                        fontSize = 24.sp,
+                        text = customerGrade.displayName,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = mainColor
                     )
                 }
+                Text(
+                    text = "${NumberFormat.getNumberInstance(java.util.Locale.KOREA).format(currentPoints)}P",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = mainColor
+                )
             }
+
+            // 적립률 안내
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "적립률 ${(customerGrade.pointRate * 100).toInt()}%" +
+                    if (nextGrade != null) " · ${nextGrade.displayName} 승급 시 ${(nextGrade.pointRate * 100).toInt()}%" else " · 최고 등급",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
         }
     }
 }

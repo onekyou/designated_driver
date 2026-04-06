@@ -67,16 +67,23 @@ enum class CustomerGrade(
     }
 
     /**
-     * 다음 등급까지 필요한 콜 수
+     * 다음 등급 반환 (최고 등급이면 null)
      */
-    fun getCallsToNextGrade(currentCalls: Int): Int? {
-        val nextGrade = when(this) {
+    fun nextGrade(): CustomerGrade? {
+        return when(this) {
             BRONZE -> SILVER
             SILVER -> GOLD
             GOLD -> VIP
-            VIP -> return null // 최고 등급
+            VIP -> null
         }
-        return nextGrade.minCalls - currentCalls
+    }
+
+    /**
+     * 다음 등급까지 필요한 콜 수
+     */
+    fun getCallsToNextGrade(currentCalls: Int): Int? {
+        val next = nextGrade() ?: return null
+        return next.minCalls - currentCalls
     }
 
     /**
