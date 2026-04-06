@@ -20,6 +20,7 @@ espressoCore = "3.5.1"
 accompanist = "0.32.0"
 hiltNavigationCompose = "1.2.0"
 room = "2.6.1"
+firebaseCrashlytics = "2.9.9"
 workManager = "2.9.0"
 
 [libraries]
@@ -55,6 +56,7 @@ firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.r
 firebase-auth-ktx = { group = "com.google.firebase", name = "firebase-auth-ktx" }
 firebase-firestore-ktx = { group = "com.google.firebase", name = "firebase-firestore-ktx" }
 firebase-messaging-ktx = { group = "com.google.firebase", name = "firebase-messaging-ktx" }
+firebase-crashlytics-ktx = { group = "com.google.firebase", name = "firebase-crashlytics-ktx" }
 
 # Google Play Services
 play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
@@ -86,4 +88,5 @@ hilt-work-compiler = { group = "androidx.hilt", name = "hilt-compiler", version.
 android-application = { id = "com.android.application", version.ref = "androidApplication" }
 jetbrains-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "jetbrainsKotlinAndroid" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
-gms = { id = "com.google.gms.google-services", version.ref = "gms" } 
+gms = { id = "com.google.gms.google-services", version.ref = "gms" }
+firebase-crashlytics = { id = "com.google.firebase.crashlytics", version.ref = "firebaseCrashlytics" } 

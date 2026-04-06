@@ -54,7 +54,7 @@ fun ProfileScreen(
                 officeName = officeDoc.getString("name") ?: officeId
             }
 
-            // 고객 정보 로드 (닉네임)
+            // 고객 정보 로드 (이름)
             if (userId != null) {
                 val customerDoc = firestore
                     .collection("provinces")

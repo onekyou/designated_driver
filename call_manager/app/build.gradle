@@ -3,6 +3,7 @@ plugins {
     id 'org.jetbrains.kotlin.android'
     id 'kotlin-kapt' // Room kapt plugin
     id 'com.google.gms.google-services' // Firebase
+    id 'com.google.firebase.crashlytics'
 }
 
 android {
@@ -33,11 +34,11 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.designated.callmanager"
+        applicationId "com.designated.callmanager.app"
         minSdk 24
         targetSdk 36
-        versionCode 2
-        versionName "1.0.1"
+        versionCode 1
+        versionName "1.0.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -118,6 +119,8 @@ dependencies {
     implementation 'com.google.firebase:firebase-messaging-ktx'
     // Cloud Functions
     implementation 'com.google.firebase:firebase-functions-ktx'
+    // Crashlytics
+    implementation 'com.google.firebase:firebase-crashlytics-ktx'
     
     // 기본 라이브러리 지원
     implementation 'androidx.annotation:annotation:1.7.1'

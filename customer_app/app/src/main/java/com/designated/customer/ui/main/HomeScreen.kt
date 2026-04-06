@@ -57,7 +57,7 @@ fun HomeScreen(
     officeId: String,
     phoneNumber: String,
     customerInfo: com.designated.customer.data.model.CustomerInfo?,
-    onNavigateToDrinkingGame: () -> Unit = {}
+
 ) {
     val context = LocalContext.current
 
