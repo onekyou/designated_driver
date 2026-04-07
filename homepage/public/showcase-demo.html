@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>앱 쇼케이스 데모</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{--primary:#FFAB00;--navy:#0f1a2e;--white:#fff}
+    body{font-family:'Noto Sans KR',sans-serif;background:var(--navy);color:var(--white);
+      min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden}
+
+    .wrap{width:100%;max-width:500px;padding:12px}
+
+    .hdr{text-align:center;margin-bottom:16px;padding:0;min-height:auto;display:flex;flex-direction:column;align-items:center;justify-content:center}
+    .hdr-badge{display:inline-block;background:rgba(255,171,0,.15);color:var(--primary);
+      font-weight:900;font-size:.6rem;padding:2px 10px;border-radius:50px;margin-bottom:4px}
+    .hdr-title{font-size:1.1rem;font-weight:900;transition:opacity .3s,font-size .3s,color .3s;white-space:pre-line}
+    .hdr-title.emphasis{font-size:1.4rem;color:var(--white)}
+
+    /* 아이콘 바 */
+    .icons{display:flex;justify-content:center;gap:16px;padding:16px 0 0;position:relative;z-index:1}
+    .ic{display:flex;flex-direction:column;align-items:center;gap:2px;transition:transform .3s,opacity .3s}
+    .ic.on{transform:scale(1.15)}.ic.off{opacity:.25}
+    .ic-circle{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;
+      justify-content:center;font-size:1.2rem;border:2px solid transparent;transition:border-color .3s,box-shadow .3s}
+    .ic.on .ic-circle{border-color:var(--primary);box-shadow:0 0 10px rgba(255,171,0,.3)}
+    .ic-name{font-size:.5rem;color:rgba(255,255,255,.35);font-weight:500;white-space:nowrap;transition:color .3s}
+    .ic.on .ic-name{color:var(--primary)}
+    .bg-cust{background:#2e7d32}.bg-det{background:#c62828}.bg-mgr{background:#1565c0}.bg-drv{background:#e65100}
+
+    /* 스테이지 */
+    .stage{position:relative;width:100%;height:368px;overflow:visible}
+
+    .phone{
+      position:absolute;width:170px;height:368px;border-radius:22px;overflow:hidden;
+      background:#000;border:3px solid rgba(255,255,255,.1);
+      box-shadow:0 10px 40px rgba(0,0,0,.5);
+      top:0;opacity:0;
+      transition:opacity .5s ease, left .5s ease, box-shadow .3s, border-color .3s;
+      z-index:2;
+    }
+    .phone img{width:100%;height:100%;object-fit:cover;display:block}
+    .phone .scr{position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;transition:opacity .25s}
+    .phone .scr.vis{opacity:1}
+    .phone.glow{box-shadow:0 0 30px rgba(255,171,0,.5),0 10px 40px rgba(0,0,0,.5);border-color:var(--primary)}
+
+    /* 커서 */
+    .cur{position:absolute;width:24px;height:24px;z-index:20;opacity:0;pointer-events:none;
+      transition:left .6s cubic-bezier(.4,0,.2,1),top .6s cubic-bezier(.4,0,.2,1),opacity .25s;
+      filter:drop-shadow(1px 2px 2px rgba(0,0,0,.6))}
+    .cur.vis{opacity:1}
+    .cur.click{animation:ck .2s ease}
+    @keyframes ck{0%{transform:scale(1)}50%{transform:scale(.75)}100%{transform:scale(1)}}
+
+    .rip{position:absolute;width:30px;height:30px;border-radius:50%;border:2px solid var(--primary);
+      opacity:0;z-index:19;pointer-events:none;transform:translate(-50%,-50%) scale(0)}
+    .rip.go{animation:rp .35s ease-out forwards}
+    @keyframes rp{0%{opacity:1;transform:translate(-50%,-50%) scale(0)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.5)}}
+
+    /* 캡션 */
+    /* 엔딩 문구 (스테이지 중앙) */
+    .ending{position:absolute;top:0;left:0;right:0;bottom:0;
+      display:flex;align-items:center;justify-content:center;
+      text-align:center;z-index:15;pointer-events:none;
+      opacity:0;transition:opacity .5s}
+    .ending.vis{opacity:1}
+    .ending-text{font-size:1.2rem;font-weight:900;color:var(--white);line-height:1.8;white-space:pre-line}
+
+    .cap{position:absolute;top:8px;left:50%;transform:translateX(-50%);
+      background:rgba(0,0,0,.7);color:var(--primary);font-size:.7rem;font-weight:700;
+      padding:4px 14px;border-radius:50px;opacity:0;transition:opacity .3s;
+      z-index:15;white-space:nowrap}
+    .cap.vis{opacity:1}
+
+    /* 컨트롤 */
+    .ctrls{display:flex;align-items:center;justify-content:center;gap:12px;padding-top:8px}
+    .cbtn{background:none;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.6);
+      width:28px;height:28px;border-radius:50%;cursor:pointer;display:flex;align-items:center;
+      justify-content:center;font-size:.6rem;transition:border-color .2s,color .2s}
+    .cbtn:hover,.cbtn.active{border-color:var(--primary);color:var(--primary)}
+
+    /* 시작 오버레이 */
+    .start-overlay{
+      position:absolute;top:0;left:0;right:0;bottom:0;z-index:30;
+      display:flex;align-items:center;justify-content:center;
+      background:rgba(15,26,46,.85);cursor:pointer;transition:opacity .4s;
+    }
+    .start-overlay.hidden{opacity:0;pointer-events:none}
+    .start-btn{
+      width:72px;height:72px;border-radius:50%;
+      background:rgba(255,171,0,.15);border:2px solid var(--primary);
+      display:flex;align-items:center;justify-content:center;
+      transition:transform .2s,background .2s;
+    }
+    .start-btn:hover{transform:scale(1.1);background:rgba(255,171,0,.25)}
+    .start-btn svg{width:28px;height:28px;margin-left:4px}
+
+    @media(min-width:640px){
+      .phone{width:200px;height:434px}
+      .stage{height:438px}
+      .ic-circle{width:50px;height:50px;font-size:1.3rem}
+      .icons{gap:20px}
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hdr">
+    <div class="hdr-badge" id="badge">SCENE 1</div>
+    <div class="hdr-title" id="title">전화가 온다</div>
+  </div>
+
+  <div class="stage" id="stage">
+    <svg class="cur" id="cur" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M2 2L10 20L13 13L20 16L2 2Z" fill="#fff" stroke="#222" stroke-width="1.2" stroke-linejoin="round"/>
+    </svg>
+    <div class="rip" id="rip"></div>
+    <div class="cap" id="cap"></div>
+    <div class="ending" id="ending"><div class="ending-text" id="endingText"></div></div>
+
+    <div class="phone" id="pMgr">
+      <div class="scr vis" data-s="ring"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%801.jpg"></div>
+      <div class="scr" data-s="call"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%802.jpg"></div>
+      <div class="scr" data-s="dispatch"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%803.jpg"></div>
+      <div class="scr" data-s="done"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%804.jpg"></div>
+    </div>
+    <div class="phone" id="pDrv">
+      <div class="scr vis" data-s="noti"><img src="sourc/%EA%B8%B0%EC%82%AC%EC%95%B11.jpg"></div>
+    </div>
+  </div>
+
+  <div class="icons">
+    <div class="ic" data-n="cust"><div class="ic-circle bg-cust">👤</div><div class="ic-name">손님앱</div></div>
+    <div class="ic" data-n="det"><div class="ic-circle bg-det">📡</div><div class="ic-name">콜디텍터</div></div>
+    <div class="ic" data-n="mgr"><div class="ic-circle bg-mgr">📋</div><div class="ic-name">콜매니저</div></div>
+    <div class="ic" data-n="drv"><div class="ic-circle bg-drv">🚗</div><div class="ic-name">기사앱</div></div>
+  </div>
+
+  <div class="ctrls">
+    <button class="cbtn" id="btnPlay">&#10074;&#10074;</button>
+  </div>
+</div>
+
+<audio id="bgm" preload="auto" src="sourc/Seamless_Flow.mp3"></audio>
+
+<script>
+(function(){
+  var stage=document.getElementById('stage');
+  var cur=document.getElementById('cur');
+  var rip=document.getElementById('rip');
+  var capEl=document.getElementById('cap');
+  var badgeEl=document.getElementById('badge');
+  var titleEl=document.getElementById('title');
+  var pMgr=document.getElementById('pMgr');
+  var pDrv=document.getElementById('pDrv');
+  var bgm=document.getElementById('bgm');
+  var btnPlay=document.getElementById('btnPlay');
+  var endingEl=document.getElementById('ending');
+  var endingText=document.getElementById('endingText');
+  var allIcons=document.querySelectorAll('.ic');
+
+  var playing=true, pool=[], fadeInt=null;
+  var VOL=0.3;
+
+  function w(fn,ms){var t=setTimeout(fn,ms);pool.push(t)}
+  function stopAll(){pool.forEach(clearTimeout);pool=[];if(fadeInt){clearInterval(fadeInt);fadeInt=null}}
+
+  // 음악
+  function bgmStart(){bgm.currentTime=0;bgm.volume=VOL;bgm.play().catch(function(){})}
+  function bgmStop(){bgm.pause();bgm.currentTime=0}
+  function bgmFadeOut(ms,cb){
+    var steps=20,step=0,iv=ms/steps,startVol=bgm.volume;
+    fadeInt=setInterval(function(){
+      step++;bgm.volume=Math.max(0,startVol*(1-step/steps));
+      if(step>=steps){clearInterval(fadeInt);fadeInt=null;bgm.pause();if(cb)cb()}
+    },iv);
+  }
+
+  function setT(b,t,emph){
+    badgeEl.textContent=b;badgeEl.style.display=b?'':'none';
+    titleEl.style.opacity='0';titleEl.classList.remove('emphasis');
+    w(function(){titleEl.textContent=t;titleEl.style.opacity='1';if(emph)titleEl.classList.add('emphasis')},180);
+  }
+  function cap(t){capEl.textContent=t;capEl.classList.add('vis')}
+  function capOff(){capEl.classList.remove('vis')}
+  function showEnding(t){endingText.textContent=t;endingEl.classList.add('vis')}
+  function hideEnding(){endingEl.classList.remove('vis')}
+  function hl(names){allIcons.forEach(function(i){var n=i.getAttribute('data-n');i.classList.toggle('on',names.indexOf(n)>=0);i.classList.toggle('off',names.indexOf(n)<0)})}
+  function hlOff(){allIcons.forEach(function(i){i.classList.remove('on','off')})}
+  function scr(phone,name){phone.querySelectorAll('.scr').forEach(function(s){s.classList.toggle('vis',s.getAttribute('data-s')===name)})}
+
+  function curTo(x,y){cur.classList.add('vis');cur.style.left=x+'px';cur.style.top=y+'px'}
+  function curOff(){cur.classList.remove('vis')}
+  function clickFx(x,y){
+    cur.classList.add('click');
+    rip.style.left=x+'px';rip.style.top=y+'px';
+    rip.classList.remove('go');void rip.offsetWidth;rip.classList.add('go');
+    w(function(){cur.classList.remove('click')},200);
+  }
+
+  function pp(phone,xp,yp){
+    var r=phone.getBoundingClientRect(),s=stage.getBoundingClientRect();
+    return{x:r.left-s.left+r.width*xp,y:r.top-s.top+r.height*yp};
+  }
+
+  // 폰 위치 계산
+  function centerL(){return(stage.offsetWidth-pMgr.offsetWidth)/2}
+  function leftL(){return stage.offsetWidth/2-pMgr.offsetWidth-6}
+  function rightL(){return stage.offsetWidth/2+6}
+
+  // 페이드인 (그 자리에서)
+  function fadeIn(phone,leftPx){
+    phone.style.left=leftPx+'px';
+    phone.style.opacity='1';
+  }
+  // 페이드아웃
+  function fadeOut(phone){
+    phone.style.opacity='0';
+  }
+  // 위치 이동 (페이드 없이)
+  function moveTo(phone,leftPx){
+    phone.style.left=leftPx+'px';
+  }
+
+  function reset(){
+    pMgr.style.transition='none';pDrv.style.transition='none';
+    pMgr.style.opacity='0';pDrv.style.opacity='0';
+    pMgr.style.left=centerL()+'px';pDrv.style.left=rightL()+'px';
+    void pMgr.offsetWidth;void pDrv.offsetWidth;
+    pMgr.style.transition='';pDrv.style.transition='';
+    scr(pMgr,'ring');scr(pDrv,'noti');
+    curOff();capOff();hlOff();hideEnding();
+    pMgr.classList.remove('glow');
+    titleEl.classList.remove('emphasis');
+  }
+
+  // ── 시나리오 ──
+  function go(){
+    if(!playing)return;
+    reset();
+    bgmStart();
+
+    // 1) 콜매니저 수신전화 — 페이드인
+    setT('SCENE 1','전화가 온다');
+    hl(['mgr']);
+
+    w(function(){
+      if(!playing)return;
+      fadeIn(pMgr,centerL());
+
+      // 수락 클릭
+      w(function(){
+        if(!playing)return;
+        var p=pp(pMgr,0.22,0.80);
+        curTo(p.x+25,p.y-35);
+        w(function(){
+          if(!playing)return;
+          curTo(p.x,p.y);
+          w(function(){
+            if(!playing)return;
+            clickFx(p.x,p.y);
+            w(function(){
+              if(!playing)return;
+              scr(pMgr,'call');
+              setT('SCENE 2','통화중');
+              curOff();
+
+              // 2) 통화종료
+              w(function(){
+                if(!playing)return;
+                var e=pp(pMgr,0.50,0.84);
+                curTo(e.x+20,e.y-30);
+                w(function(){
+                  if(!playing)return;
+                  curTo(e.x,e.y);
+                  w(function(){
+                    if(!playing)return;
+                    clickFx(e.x,e.y);
+                    w(function(){
+                      if(!playing)return;
+                      scr(pMgr,'dispatch');
+                      curOff();
+                      pMgr.classList.add('glow');
+                      setT('','통화 종료 → 즉시 배차',true);
+
+                      // 3초 강조
+                      w(function(){
+                        if(!playing)return;
+                        pMgr.classList.remove('glow');
+
+                        // 3) 기사 선택
+                        var d=pp(pMgr,0.35,0.45);
+                        curTo(d.x+20,d.y-20);
+                        w(function(){
+                          if(!playing)return;
+                          curTo(d.x,d.y);
+                          w(function(){
+                            if(!playing)return;
+                            clickFx(d.x,d.y);
+                            w(function(){
+                              if(!playing)return;
+                              curOff();
+                              setT('SCENE 3','기사가 배차를 받는다');
+                              hl(['mgr','drv']);
+
+                              // 콜매니저4로 교체 + 왼쪽으로, 기사앱 페이드인
+                              scr(pMgr,'done');
+                              moveTo(pMgr,leftL());
+                              w(function(){
+                                if(!playing)return;
+                                fadeIn(pDrv,rightL());
+
+                                // 확인 클릭
+                                w(function(){
+                                  if(!playing)return;
+                                  var c=pp(pDrv,0.50,0.58);
+                                  curTo(c.x+15,c.y-15);
+                                  w(function(){
+                                    if(!playing)return;
+                                    curTo(c.x,c.y);
+                                    w(function(){
+                                      if(!playing)return;
+                                      clickFx(c.x,c.y);
+                                      w(function(){
+                                        if(!playing)return;
+                                        curOff();
+                                        // 폰 사라지고 문구 (스테이지 중앙)
+                                        fadeOut(pMgr);
+                                        fadeOut(pDrv);
+                                        setT('','');
+                                        showEnding('기존 기사배차까지 7번의 클릭,\n콜마당은 원클릭 배차 끝.');
+
+                                        w(function(){
+                                          if(!playing)return;
+                                          bgmFadeOut(800,function(){
+                                            if(!playing)return;
+                                            w(function(){go()},600);
+                                          });
+                                        },3000);
+                                      },400);
+                                    },450);
+                                  },500);
+                                },900);
+                              },350);
+                            },400);
+                          },450);
+                        },500);
+                      },3000);
+                    },350);
+                  },450);
+                },500);
+              },1800);
+            },350);
+          },450);
+        },500);
+      },1200);
+    },300);
+  }
+
+  // 컨트롤: 재생/멈춤 (음악도 함께)
+  btnPlay.addEventListener('click',function(){
+    if(!playing){
+      playing=true;
+      this.innerHTML='&#10074;&#10074;';
+      go();
+    }else{
+      playing=false;
+      this.innerHTML='&#9654;';
+      stopAll();
+      bgmStop();
+    }
+  });
+
+  // 자동 시작 (음악은 index.html 통합 시 웰컴 영상 클릭으로 해결)
+  go();
+})();
+</script>
+</body>
+</html>
