@@ -22,10 +22,7 @@ import com.designated.customer.data.model.CustomerPoints
 import com.designated.customer.service.CallService
 import com.designated.customer.service.LocationService
 import com.designated.customer.service.PointService
-import com.designated.customer.data.model.BannerAdData
-import com.designated.customer.service.BannerAdService
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -58,8 +55,8 @@ data class MainUiState(
     val earnedPoints: Int = 0,
     val usedPoints: Int = 0,  // ✅ 추가: 사용한 포인트
     val rideCompletedFare: Int = 0,
-    // 배너 광고 관련 상태
-    val currentBanner: BannerAdData? = null
+    // 슬로건 문구 (Firestore settings/branding에서 로드, 없으면 기본값)
+    val slogan: String = "당신만의 기사가 모십니다"
 ) {
     val canRequestCall: Boolean
         get() = !isLoadingCall &&
@@ -95,9 +92,6 @@ class MainViewModel(
     private var callCancelledReceiver: BroadcastReceiver? = null
     private var callReceivedReceiver: BroadcastReceiver? = null
     private var callStatusUpdateReceiver: BroadcastReceiver? = null
-    // 배너 광고 서비스
-    private val bannerAdService = BannerAdService(provinceId = provinceId, cityId = cityId, officeId = officeId)
-
     // 사무실 연락처 정보 (customerInfo에서 추출, 없으면 SharedPreferences에서)
     val officePhone: String get() {
         val phone = customerInfo?.officePhone?.takeIf { it.isNotEmpty() }
@@ -123,8 +117,8 @@ class MainViewModel(
         registerRideCompletedReceiver()
         // 활성 콜 복구 (FCM 미수신 시 fallback)
         restoreActiveCall()
-        // 배너 광고 로드
-        loadBannerAds()
+        // 슬로건 로드
+        loadSlogan()
 
         android.util.Log.d("MainViewModel", "Init - customerInfo.homeAddress: ${customerInfo?.homeAddress}")
     }
@@ -415,8 +409,6 @@ class MainViewModel(
      * FCM 브로드캐스트 리스너 등록
      */
     private fun registerRideCompletedReceiver() {
-        // 배너 광고 로드
-        loadBannerAds()
         context?.let { ctx ->
             // 운행 완료 브로드캐스트 수신
             val completedFilter = IntentFilter("com.designated.customer.RIDE_COMPLETED")
@@ -936,21 +928,29 @@ class MainViewModel(
     // ========== 세션 관련 메서드 ==========
 
     /**
-     * 배너 광고 로드
-     * Firebase Firestore에서 활성화된 배너를 실시간으로 모니터링
+     * 슬로건 로드
+     * Firestore settings/branding 문서에서 1회 조회, 없으면 기본값 유지
      */
-    private fun loadBannerAds() {
+    private fun loadSlogan() {
         viewModelScope.launch {
             try {
-                bannerAdService.observeActiveBanners().collectLatest { banners ->
-                    android.util.Log.d("MainViewModel", "배너 광고 로드: ${banners.size}개")
-                    // 우선순위가 가장 높은 배너 1개만 표시
-                    uiState = uiState.copy(
-                        currentBanner = banners.firstOrNull()
-                    )
+                val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                val doc = firestore
+                    .collection("provinces").document(provinceId)
+                    .collection("cities").document(cityId)
+                    .collection("offices").document(officeId)
+                    .collection("settings").document("branding")
+                    .get()
+                    .await()
+
+                if (doc.exists()) {
+                    val slogan = doc.getString("slogan")
+                    if (!slogan.isNullOrEmpty()) {
+                        uiState = uiState.copy(slogan = slogan)
+                    }
                 }
             } catch (e: Exception) {
-                android.util.Log.e("MainViewModel", "배너 광고 로드 실패", e)
+                android.util.Log.e("MainViewModel", "슬로건 로드 실패, 기본값 사용", e)
             }
         }
     }

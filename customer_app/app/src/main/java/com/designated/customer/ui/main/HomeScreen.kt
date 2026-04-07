@@ -8,6 +8,7 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -29,17 +30,22 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import com.designated.customer.R
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.animation.core.*
 import java.text.NumberFormat
 import com.designated.customer.service.CallService
 import com.designated.customer.service.LocationService
 import com.designated.customer.service.PointService
-import com.designated.customer.ui.components.BannerAd
 import com.designated.customer.data.model.CustomerGrade
 import androidx.compose.ui.graphics.Color
 import com.designated.customer.util.VoiceInputHelper
@@ -127,7 +133,6 @@ fun HomeScreen(
                 currentPoints = uiState.customerPoints?.currentPoints ?: 0,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -164,14 +169,8 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 배너 광고
-            BannerAd(
-                bannerData = uiState.currentBanner,
-                onClick = { linkUrl ->
-                    // 추후 WebView나 외부 브라우저로 연결
-                    android.util.Log.d("HomeScreen", "배너 클릭: $linkUrl")
-                }
-            )
+            // 슬로건
+            SloganBanner(slogan = uiState.slogan)
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -286,6 +285,36 @@ fun HomeScreen(
 }
 
 @Composable
+private fun SloganBanner(
+    slogan: String,
+    modifier: Modifier = Modifier
+) {
+    val pretendard = FontFamily(Font(R.font.pretendard_bold, FontWeight.Bold))
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(76.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.bg_point_card),
+            contentDescription = null,
+            modifier = Modifier.matchParentSize(),
+            contentScale = ContentScale.Crop
+        )
+        Text(
+            text = slogan,
+            fontFamily = pretendard,
+            fontWeight = FontWeight.Bold,
+            fontSize = 18.sp,
+            color = Color(0xFFF5F5F5),
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
 private fun PointGradeCard(
     grade: String,
     currentPoints: Int,
@@ -300,7 +329,7 @@ private fun PointGradeCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         ),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(0.dp)
     ) {
         Column(
             modifier = Modifier.padding(20.dp)
