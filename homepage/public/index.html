@@ -155,9 +155,15 @@
       background: rgba(26,38,64,0.85);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
-      transition: box-shadow 0.3s;
+      transition: box-shadow 0.3s, background 0.3s;
     }
     nav.scrolled { box-shadow: 0 4px 24px rgba(0,0,0,0.3); }
+    nav:hover { background: rgba(255,255,255,0.97); }
+    nav:hover .nav-logo-text { color: var(--navy); }
+    nav:hover .nav-link { color: rgba(26,38,64,0.7); }
+    nav:hover .nav-link:hover { color: var(--navy); }
+    nav:hover .nav-cta { background: var(--navy); color: var(--white); }
+    nav:hover .nav-hamburger span { background: var(--navy); }
 
     .nav-inner {
       display: flex;
@@ -225,64 +231,100 @@
     /* ── HERO ──────────────────────────────────── */
     .hero {
       background: var(--navy);
-      padding: 140px 0 100px;
-      position: relative;
-      overflow: hidden;
+      padding: 140px 0 80px;
     }
-    .hero::after {
-      content: '';
-      position: absolute;
-      bottom: -140px; right: -140px;
-      width: 500px; height: 500px;
-      background: radial-gradient(circle, rgba(255,171,0,0.12) 0%, transparent 70%);
-      pointer-events: none;
+    .hero-split {
+      display: grid;
+      grid-template-columns: 5fr 4fr;
+      gap: 48px;
+      align-items: start;
+    }
+    .hero-demo { min-height: 540px; }
+    .hero-text { padding-top: 80px; }
+    .hero-text .hero-label {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(255,171,0,0.12); color: var(--primary);
+      font-weight: 700; font-size: 0.85rem;
+      padding: 8px 18px; border-radius: 50px;
+      margin-bottom: 28px;
+    }
+    .hero-text h1 {
+      font-size: 2.8rem; font-weight: 900; color: var(--white);
+      line-height: 1.3; margin-bottom: 24px;
+    }
+    .hero-text h1 strong { color: var(--primary); }
+    .hero-text .hero-desc {
+      color: rgba(255,255,255,0.55); font-size: 1rem;
+      line-height: 1.9; margin-bottom: 36px;
+    }
+    .hero-buttons { display: flex; gap: 14px; flex-wrap: wrap; }
+    .hero-buttons .btn-primary { padding: 16px 32px; font-size: 1rem; }
+    .hero-buttons .btn-outline {
+      display: inline-block; padding: 16px 32px; border-radius: 50px;
+      font-size: 1rem; font-weight: 700; cursor: pointer;
+      background: transparent; color: rgba(255,255,255,0.7);
+      border: 1px solid rgba(255,255,255,0.25);
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .hero-buttons .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+
+    @media (max-width: 768px) {
+      .hero-split { grid-template-columns: 1fr; gap: 32px; }
+      .hero-text h1 { font-size: 2rem; }
     }
 
-    .hero-content {
-      text-align: center;
-      max-width: 720px;
-      margin: 0 auto;
-    }
-
-    .hero h1 {
-      font-size: 3rem;
-      color: var(--white);
-      margin-bottom: 24px;
-    }
-
-    .hero-sub {
-      font-size: 1.25rem;
-      color: rgba(255,255,255,0.65);
-      margin-bottom: 44px;
-      line-height: 1.8;
-    }
-    .hero-sub strong { color: var(--primary); }
-
-    .hero-cta {
-      display: flex;
-      gap: 16px;
-      justify-content: center;
-      flex-wrap: wrap;
-      margin-bottom: 40px;
-    }
-
-    .hero-replay {
-      display: inline-flex;
-      align-items: center; gap: 8px;
-      color: rgba(255,255,255,0.45);
-      font-size: 0.9rem; cursor: pointer;
-      transition: color 0.2s;
-    }
-    .hero-replay:hover { color: rgba(255,255,255,0.7); }
-    .hero-replay svg {
-      width: 18px; height: 18px;
-      stroke: currentColor; fill: none; stroke-width: 2;
-    }
-
-    @media (max-width: 639px) {
-      .hero { padding: 120px 0 72px; }
-      .hero h1 { font-size: 2rem; }
-      .hero-sub { font-size: 1.05rem; }
+    /* ── SHOWCASE DEMO (인라인) ──────────────── */
+    .demo-wrap{width:100%;max-width:500px;padding:12px;margin:0 auto}
+    .demo-hdr{text-align:center;margin-bottom:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:44px}
+    .demo-title{font-size:1.1rem;font-weight:900;color:var(--white);transition:opacity .3s,color .3s;white-space:pre-line;line-height:1.4}
+    .demo-title.emphasis{color:var(--white)}
+    .demo-icons{display:flex;justify-content:center;gap:16px;padding:16px 0 0;position:relative;z-index:1}
+    .demo-ic{display:flex;flex-direction:column;align-items:center;gap:2px;transition:transform .3s,opacity .3s}
+    .demo-ic.on{transform:scale(1.1)}.demo-ic.off{opacity:.25}
+    .demo-ic-circle{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;border:2px solid transparent;transition:border-color .3s,box-shadow .3s;overflow:hidden;background:transparent}
+    .demo-ic.on .demo-ic-circle{border-color:var(--primary);box-shadow:0 0 10px rgba(255,171,0,.3)}
+    .demo-ic-circle img{width:100%;height:100%;object-fit:cover;display:block}
+    .demo-ic-name{font-size:.5rem;color:rgba(255,255,255,.35);font-weight:500;white-space:nowrap;transition:color .3s}
+    .demo-ic.on .demo-ic-name{color:var(--primary)}
+    .demo-stage{position:relative;width:100%;height:368px;overflow:visible}
+    .demo-phone{position:absolute;width:170px;height:368px;border-radius:22px;overflow:hidden;background:#000;border:3px solid rgba(255,255,255,.1);box-shadow:0 10px 40px rgba(0,0,0,.5);top:0;opacity:0;transition:opacity .5s ease,left .5s ease,box-shadow .3s,border-color .3s;z-index:2}
+    .demo-phone img{width:100%;height:100%;object-fit:cover;display:block}
+    .demo-phone .scr{position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;transition:opacity .25s}
+    .demo-phone .scr.vis{opacity:1}
+    .demo-phone.glow{box-shadow:0 0 30px rgba(255,171,0,.5),0 10px 40px rgba(0,0,0,.5);border-color:var(--primary)}
+    .demo-cur{position:absolute;width:24px;height:24px;z-index:20;opacity:0;pointer-events:none;transition:left .6s cubic-bezier(.4,0,.2,1),top .6s cubic-bezier(.4,0,.2,1),opacity .25s;filter:drop-shadow(1px 2px 2px rgba(0,0,0,.6))}
+    .demo-cur.vis{opacity:1}
+    .demo-cur.click{animation:dck .2s ease}
+    @keyframes dck{0%{transform:scale(1)}50%{transform:scale(.75)}100%{transform:scale(1)}}
+    .demo-rip{position:absolute;width:30px;height:30px;border-radius:50%;border:2px solid var(--primary);opacity:0;z-index:19;pointer-events:none;transform:translate(-50%,-50%) scale(0)}
+    .demo-rip.go{animation:drp .35s ease-out forwards}
+    @keyframes drp{0%{opacity:1;transform:translate(-50%,-50%) scale(0)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.5)}}
+    .demo-midtext{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;text-align:center;z-index:15;pointer-events:none;opacity:0;transition:opacity .6s}
+    .demo-midtext.vis{opacity:1}
+    .demo-midtext-inner{font-size:1rem;font-weight:800;color:var(--white);line-height:2}
+    .demo-ending{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;text-align:center;z-index:15;pointer-events:none;opacity:0;transition:opacity .6s}
+    .demo-ending.vis{opacity:1}
+    .demo-ending-inner{width:100%}
+    .demo-ending-top{font-size:.85rem;font-weight:800;color:rgba(255,255,255,.7);margin-bottom:16px}
+    .demo-ending-main{font-size:2rem;font-weight:900;margin-bottom:8px;letter-spacing:-1.5px;line-height:1.2}
+    .demo-ending-main .demo-hl{color:#FFD400}
+    .demo-ending-sub{font-size:1rem;font-weight:700;color:#eee;margin-bottom:32px}
+    .demo-ending-url{font-size:.8rem;color:#666;border-top:1px solid #222;padding-top:16px;display:inline-block}
+    .demo-ending-url span{color:#FFD400;font-weight:800}
+    .demo-start-overlay{position:absolute;top:0;left:0;right:0;bottom:0;z-index:30;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.7);border-radius:16px;cursor:pointer;transition:opacity .4s}
+    .demo-start-overlay.hidden{opacity:0;pointer-events:none}
+    .demo-start-overlay .demo-start-title{color:var(--white);font-size:1.1rem;font-weight:700;margin-bottom:16px}
+    .demo-start-overlay .demo-start-btn{width:64px;height:64px;border-radius:50%;background:rgba(255,171,0,0.15);border:2px solid var(--primary);display:flex;align-items:center;justify-content:center;transition:transform .2s,background .2s}
+    .demo-start-overlay .demo-start-btn:hover{transform:scale(1.1);background:rgba(255,171,0,0.25)}
+    .demo-start-overlay .demo-start-btn svg{width:24px;height:24px;margin-left:3px}
+    .demo-ctrls{display:flex;align-items:center;justify-content:center;gap:12px;padding-top:8px}
+    .demo-cbtn{background:none;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.6);width:28px;height:28px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.6rem;transition:border-color .2s,color .2s}
+    .demo-cbtn:hover,.demo-cbtn.active{border-color:var(--primary);color:var(--primary)}
+    @media(min-width:640px){
+      .demo-phone{width:200px;height:434px}
+      .demo-stage{height:438px}
+      .demo-ic-circle{width:50px;height:50px}
+      .demo-icons{gap:20px}
     }
 
     /* ── SCENE THEATER ─────────────────────────── */
@@ -869,11 +911,12 @@
     <div class="container nav-inner">
       <a href="/" class="nav-logo">
         <span class="nav-logo-text">콜마당</span>
+        <span style="color:rgba(255,255,255,0.4);font-size:0.8rem;font-weight:400;margin-left:4px">지역대리운전 관리 플랫폼</span>
       </a>
       <div class="nav-links">
         <a href="/" class="nav-link">서비스 소개</a>
         <a href="/features" class="nav-link">기술 상세</a>
-        <a href="#signup" class="nav-cta">무료 신청</a>
+        <!-- 무료 신청 삭제 -->
         <a href="https://head-manager-web.web.app/owner/login" class="nav-link">관리자 로그인</a>
       </div>
       <div class="nav-hamburger" onclick="toggleMobileNav()">
@@ -891,15 +934,81 @@
   <!-- ════════════ 섹션 1: HERO ════════════ -->
   <section class="hero">
     <div class="container">
-      <div class="hero-content">
-        <h1 class="animate">당신의 사무실을 무장하세요</h1>
-        <p class="hero-sub animate animate-d1">명함도 쿠폰도 아닌, <strong>QR 하나로</strong></p>
-        <div class="hero-cta animate animate-d2">
-          <a href="#signup" class="btn btn-primary">무료 파일럿 신청하기</a>
+      <div class="hero-split">
+        <!-- 왼쪽 텍스트 -->
+        <div class="hero-text">
+          <div class="hero-label animate">&#10024; 양평 지역 사무실 무료 파일럿 신청중</div>
+          <h1 class="animate animate-d1">통화가 끝나면<br><strong>바로 배차가 시작됩니다</strong></h1>
+          <p class="hero-desc animate animate-d2">
+            통화 후 기사배차까지 <strong style="color:var(--primary)">7번의 클릭</strong>,<br>
+            콜마당은 <strong style="color:var(--primary)">단 1번</strong>에 해결합니다.
+          </p>
+          <p class="hero-desc animate animate-d2" style="margin-bottom:36px">
+            중간 플랫폼 없이, 사무실과 손님을 다이렉트로 연결합니다.
+          </p>
+          <div class="hero-buttons animate animate-d3">
+            <a href="#signup" class="btn btn-primary">지금 무료 신청하기</a>
+            <a href="#theater" class="btn-outline">서비스 알아보기</a>
+          </div>
         </div>
-        <div class="hero-replay animate animate-d3" onclick="openVideoModal()">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          소개 영상 보기
+
+        <!-- 오른쪽 showcase-demo -->
+        <div class="hero-demo">
+          <div class="demo-wrap">
+            <div class="demo-hdr">
+              <div class="demo-title" id="demoTitle"></div>
+            </div>
+            <div class="demo-stage" id="demoStage">
+              <div class="demo-start-overlay" id="demoStartOverlay">
+                <div class="demo-start-title">시연영상</div>
+                <div class="demo-start-btn">
+                  <svg viewBox="0 0 24 24" fill="var(--primary)" xmlns="http://www.w3.org/2000/svg"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                </div>
+              </div>
+              <svg class="demo-cur" id="demoCur" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M2 2L10 20L13 13L20 16L2 2Z" fill="#fff" stroke="#222" stroke-width="1.2" stroke-linejoin="round"/>
+              </svg>
+              <div class="demo-rip" id="demoRip"></div>
+              <div class="demo-midtext" id="demoMidtext">
+                <div class="demo-midtext-inner">일반전화콜은 물론<br>가입한 손님의 앱호출 전화호출<br>모두 <span style="color:#FFD400">원클릭배차</span></div>
+              </div>
+              <div class="demo-ending" id="demoEnding">
+                <div class="demo-ending-inner">
+                  <div class="demo-ending-top">운전 중 배차, 도로 위 수많은 위험들</div>
+                  <div class="demo-ending-main"><span class="demo-hl">원클릭</span>이면 배차 끝</div>
+                  <div class="demo-ending-sub">콜마당이 만드는 달리는 사무실</div>
+                  <div class="demo-ending-url"><span>calllink.io.kr</span></div>
+                </div>
+              </div>
+              <div class="demo-phone" id="dpCust">
+                <div class="scr vis" data-s="call"><img src="sourc/%EC%9D%BC%EB%B0%98%EC%BD%9C.jpg"></div>
+                <div class="scr" data-s="home"><img src="sourc/%EC%86%90%EB%8B%98%EC%95%B11.jpg"></div>
+                <div class="scr" data-s="appcall"><img src="sourc/%EC%86%90%EB%8B%98%EC%95%B12.jpg"></div>
+                <div class="scr" data-s="requested"><img src="sourc/%EC%86%90%EB%8B%98%EC%95%B13.jpg"></div>
+              </div>
+              <div class="demo-phone" id="dpMgr">
+                <div class="scr vis" data-s="ring"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%801.jpg"></div>
+                <div class="scr" data-s="call"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%802.jpg"></div>
+                <div class="scr" data-s="dispatch"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%803.jpg"></div>
+                <div class="scr" data-s="done"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%804.jpg"></div>
+              </div>
+              <div class="demo-phone" id="dpDrv">
+                <div class="scr vis" data-s="noti"><img src="sourc/%EA%B8%B0%EC%82%AC%EC%95%B11.jpg"></div>
+                <div class="scr" data-s="prepare"><img src="sourc/%EA%B8%B0%EC%82%AC%EC%95%B13.jpg"></div>
+                <div class="scr" data-s="driving"><img src="sourc/%EA%B8%B0%EC%82%AC%EC%95%B14.jpg"></div>
+              </div>
+            </div>
+            <div class="demo-icons">
+              <div class="demo-ic" data-n="cust"><div class="demo-ic-circle"><img src="sourc/%EC%86%90%EB%8B%98%EC%95%B1.png" alt="손님앱"></div><div class="demo-ic-name">손님앱</div></div>
+              <div class="demo-ic" data-n="det"><div class="demo-ic-circle"><img src="sourc/%EC%BD%9C%EB%94%94%ED%85%8D%ED%84%B0.png" alt="콜디텍터"></div><div class="demo-ic-name">콜디텍터</div></div>
+              <div class="demo-ic" data-n="mgr"><div class="demo-ic-circle"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%80.png" alt="콜매니저"></div><div class="demo-ic-name">콜매니저</div></div>
+              <div class="demo-ic" data-n="drv"><div class="demo-ic-circle"><img src="sourc/%EB%93%9C%EB%9D%BC%EC%9D%B4%EB%B2%84.png" alt="기사앱"></div><div class="demo-ic-name">기사앱</div></div>
+            </div>
+            <div class="demo-ctrls">
+              <button class="demo-cbtn" id="demoBtnPlay">&#10074;&#10074;</button>
+            </div>
+          </div>
+          <audio id="demoBgm" preload="auto" src="sourc/Seamless_Flow.mp3"></audio>
         </div>
       </div>
     </div>
@@ -1487,6 +1596,63 @@
     window.addEventListener('scroll', function() {
       document.querySelector('nav').classList.toggle('scrolled', window.scrollY > 50);
     });
+
+    // ═══════════════════════════════════════
+    // Showcase Demo (히어로 인라인)
+    // ═══════════════════════════════════════
+    (function(){
+      var stage=document.getElementById('demoStage');
+      if(!stage)return;
+      var cur=document.getElementById('demoCur');
+      var rip=document.getElementById('demoRip');
+      var titleEl=document.getElementById('demoTitle');
+      var pCust=document.getElementById('dpCust');
+      var pMgr=document.getElementById('dpMgr');
+      var pDrv=document.getElementById('dpDrv');
+      var bgm=document.getElementById('demoBgm');
+      var btnPlay=document.getElementById('demoBtnPlay');
+      var endingEl=document.getElementById('demoEnding');
+      var midtextEl=document.getElementById('demoMidtext');
+      var allIcons=document.querySelectorAll('.demo-ic');
+      var playing=true,pool=[],fadeInt=null,glowInt=null,VOL=0.3;
+      function w(fn,ms){var t=setTimeout(fn,ms);pool.push(t)}
+      function stopAll(){pool.forEach(clearTimeout);pool=[];if(fadeInt){clearInterval(fadeInt);fadeInt=null}if(glowInt){clearInterval(glowInt);glowInt=null}}
+      function bgmStart(){bgm.currentTime=0;bgm.volume=VOL;bgm.play().catch(function(){})}
+      function bgmStop(){bgm.pause();bgm.currentTime=0}
+      function bgmFadeOut(ms,cb){var steps=20,step=0,iv=ms/steps,sv=bgm.volume;fadeInt=setInterval(function(){step++;bgm.volume=Math.max(0,sv*(1-step/steps));if(step>=steps){clearInterval(fadeInt);fadeInt=null;bgm.pause();if(cb)cb()}},iv)}
+      function setT(b,t){titleEl.style.opacity='0';w(function(){titleEl.textContent=t;titleEl.style.opacity='1'},180)}
+      function showMid(){midtextEl.classList.add('vis')}
+      function hideMid(){midtextEl.classList.remove('vis')}
+      function showEnding(){endingEl.classList.add('vis')}
+      function hideEnding(){endingEl.classList.remove('vis')}
+      function hl(n){allIcons.forEach(function(i){var d=i.getAttribute('data-n');i.classList.toggle('on',n.indexOf(d)>=0);i.classList.toggle('off',n.indexOf(d)<0)})}
+      function hlOff(){allIcons.forEach(function(i){i.classList.remove('on','off')})}
+      function scr(p,n){p.querySelectorAll('.scr').forEach(function(s){s.classList.toggle('vis',s.getAttribute('data-s')===n)})}
+      function curTo(x,y){cur.classList.add('vis');cur.style.left=x+'px';cur.style.top=y+'px'}
+      function curOff(){cur.classList.remove('vis')}
+      function clickFx(x,y){cur.classList.add('click');rip.style.left=x+'px';rip.style.top=y+'px';rip.classList.remove('go');void rip.offsetWidth;rip.classList.add('go');w(function(){cur.classList.remove('click')},200)}
+      function pp(p,xp,yp){var r=p.getBoundingClientRect(),s=stage.getBoundingClientRect();return{x:r.left-s.left+r.width*xp,y:r.top-s.top+r.height*yp}}
+      function centerL(){return(stage.offsetWidth-pMgr.offsetWidth)/2}
+      function leftL(){return stage.offsetWidth/2-pMgr.offsetWidth-6}
+      function rightL(){return stage.offsetWidth/2+6}
+      function fadeIn(p,l){p.style.left=l+'px';p.style.opacity='1'}
+      function fadeOut(p){p.style.opacity='0'}
+      function moveTo(p,l){p.style.left=l+'px'}
+      function blinkGlow(p,iv,cnt,cb){var step=0;p.classList.add('glow');glowInt=setInterval(function(){step++;if(step>=cnt*2){clearInterval(glowInt);glowInt=null;p.classList.remove('glow');if(cb)cb();return}p.classList.toggle('glow')},iv);pool.push(glowInt)}
+      function reset(){[pCust,pMgr,pDrv].forEach(function(p){p.style.transition='none';p.style.opacity='0'});pCust.style.left=leftL()+'px';pMgr.style.left=centerL()+'px';pDrv.style.left=rightL()+'px';void pCust.offsetWidth;void pMgr.offsetWidth;void pDrv.offsetWidth;[pCust,pMgr,pDrv].forEach(function(p){p.style.transition=''});scr(pCust,'call');scr(pMgr,'ring');scr(pDrv,'noti');curOff();hlOff();hideEnding();hideMid();if(glowInt){clearInterval(glowInt);glowInt=null}pMgr.classList.remove('glow');pCust.classList.remove('glow');pDrv.classList.remove('glow')}
+      function go(){if(!playing)return;reset();bgmStart();setT('','고객이 전화한다');hl(['cust','mgr']);w(function(){if(!playing)return;fadeIn(pCust,leftL());fadeIn(pMgr,rightL());w(function(){if(!playing)return;var p=pp(pMgr,0.22,0.80);curTo(p.x+25,p.y-35);w(function(){if(!playing)return;curTo(p.x,p.y);w(function(){if(!playing)return;clickFx(p.x,p.y);w(function(){if(!playing)return;sc2()},350)},450)},500)},800)},300)}
+      function sc2(){scr(pMgr,'call');setT('','고객과 통화중');hl(['mgr']);fadeOut(pCust);moveTo(pMgr,centerL());curOff();w(function(){if(!playing)return;var e=pp(pMgr,0.50,0.84);curTo(e.x+20,e.y-30);w(function(){if(!playing)return;curTo(e.x,e.y);w(function(){if(!playing)return;clickFx(e.x,e.y);w(function(){if(!playing)return;scr(pMgr,'dispatch');curOff();setT('','통화 종료 → 즉시 배차');blinkGlow(pMgr,500,3,function(){if(!playing)return;var d=pp(pMgr,0.35,0.45);curTo(d.x+20,d.y-20);w(function(){if(!playing)return;curTo(d.x,d.y);w(function(){if(!playing)return;clickFx(d.x,d.y);w(function(){if(!playing)return;sc3()},400)},450)},500)})},350)},450)},500)},1000)}
+      function sc3(){curOff();setT('','기사가 배차를 받는다');hl(['mgr','drv']);scr(pMgr,'done');moveTo(pMgr,leftL());w(function(){if(!playing)return;fadeIn(pDrv,rightL());w(function(){if(!playing)return;var c=pp(pDrv,0.50,0.58);curTo(c.x+15,c.y-15);w(function(){if(!playing)return;curTo(c.x,c.y);w(function(){if(!playing)return;clickFx(c.x,c.y);w(function(){if(!playing)return;sc4()},400)},450)},500)},600)},350)}
+      function sc4(){curOff();setT('','기사 운행 준비');hl(['drv']);fadeOut(pMgr);scr(pDrv,'prepare');moveTo(pDrv,centerL());w(function(){if(!playing)return;var s=pp(pDrv,0.65,0.72);curTo(s.x+15,s.y-15);w(function(){if(!playing)return;curTo(s.x,s.y);w(function(){if(!playing)return;clickFx(s.x,s.y);w(function(){if(!playing)return;scr(pDrv,'driving');curOff();setT('','운행 중');w(function(){if(!playing)return;sc5()},2000)},400)},450)},500)},600)}
+      function sc5(){fadeOut(pDrv);setT('','앱으로 호출시');hl(['cust']);scr(pCust,'home');w(function(){if(!playing)return;fadeIn(pCust,centerL());w(function(){if(!playing)return;var h=pp(pCust,0.50,0.68);curTo(h.x+15,h.y-15);w(function(){if(!playing)return;curTo(h.x,h.y);w(function(){if(!playing)return;clickFx(h.x,h.y);w(function(){if(!playing)return;scr(pCust,'appcall');curOff();w(function(){if(!playing)return;var b=pp(pCust,0.50,0.88);curTo(b.x+15,b.y-15);w(function(){if(!playing)return;curTo(b.x,b.y);w(function(){if(!playing)return;clickFx(b.x,b.y);w(function(){if(!playing)return;curOff();scr(pCust,'requested');moveTo(pCust,leftL());setT('','앱 호출도 바로 배차');hl(['cust','mgr']);scr(pMgr,'dispatch');fadeIn(pMgr,rightL());w(function(){if(!playing)return;blinkGlow(pMgr,500,3,function(){if(!playing)return;fadeOut(pCust);fadeOut(pMgr);setT('','');hlOff();w(function(){if(!playing)return;showMid();w(function(){if(!playing)return;hideMid();w(function(){if(!playing)return;showEnding();w(function(){if(!playing)return;bgmFadeOut(800,function(){if(!playing)return;w(function(){go()},1200)})},3000)},500)},2500)},600)})},300)},400)},450)},500)},700)},400)},450)},500)},800)},400)}
+      var startOverlay=document.getElementById('demoStartOverlay');
+      startOverlay.addEventListener('click',function(){
+        startOverlay.classList.add('hidden');
+        playing=true;
+        go();
+      });
+      btnPlay.addEventListener('click',function(){if(!playing){playing=true;this.innerHTML='&#10074;&#10074;';go()}else{playing=false;this.innerHTML='&#9654;';stopAll();bgmStop()}});
+    })();
 
     // ═══════════════════════════════════════
     // 장면 자동 전환 (Scene Theater)
