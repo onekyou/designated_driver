@@ -7,7 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    :root{--primary:#FFAB00;--navy:#0f1a2e;--white:#fff}
+    :root{--primary:#FFAB00;--navy:#0f1a2e;--white:#fff;--yellow:#FFD400}
     body{font-family:'Noto Sans KR',sans-serif;background:var(--navy);color:var(--white);
       min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden}
 
@@ -24,11 +24,12 @@
     .ic{display:flex;flex-direction:column;align-items:center;gap:2px;transition:transform .3s,opacity .3s}
     .ic.on{transform:scale(1.15)}.ic.off{opacity:.25}
     .ic-circle{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;
-      justify-content:center;font-size:1.2rem;border:2px solid transparent;transition:border-color .3s,box-shadow .3s}
+      justify-content:center;font-size:1.2rem;border:2px solid transparent;transition:border-color .3s,box-shadow .3s;
+      overflow:hidden;background:transparent}
     .ic.on .ic-circle{border-color:var(--primary);box-shadow:0 0 10px rgba(255,171,0,.3)}
+    .ic-circle img{width:100%;height:100%;object-fit:cover;display:block}
     .ic-name{font-size:.5rem;color:rgba(255,255,255,.35);font-weight:500;white-space:nowrap;transition:color .3s}
     .ic.on .ic-name{color:var(--primary)}
-    .bg-cust{background:#2e7d32}.bg-det{background:#c62828}.bg-mgr{background:#1565c0}.bg-drv{background:#e65100}
 
     /* 스테이지 */
     .stage{position:relative;width:100%;height:368px;overflow:visible}
@@ -59,14 +60,27 @@
     .rip.go{animation:rp .35s ease-out forwards}
     @keyframes rp{0%{opacity:1;transform:translate(-50%,-50%) scale(0)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.5)}}
 
-    /* 캡션 */
-    /* 엔딩 문구 (스테이지 중앙) */
+    /* 중간 문구 (엔딩 전) */
+    .midtext{position:absolute;top:0;left:0;right:0;bottom:0;
+      display:flex;align-items:center;justify-content:center;
+      text-align:center;z-index:15;pointer-events:none;
+      opacity:0;transition:opacity .6s}
+    .midtext.vis{opacity:1}
+    .midtext-inner{font-size:1rem;font-weight:800;color:var(--white);line-height:2;white-space:pre-line}
+
+    /* 엔딩 카드 */
     .ending{position:absolute;top:0;left:0;right:0;bottom:0;
       display:flex;align-items:center;justify-content:center;
       text-align:center;z-index:15;pointer-events:none;
-      opacity:0;transition:opacity .5s}
+      opacity:0;transition:opacity .6s}
     .ending.vis{opacity:1}
-    .ending-text{font-size:1.2rem;font-weight:900;color:var(--white);line-height:1.8;white-space:pre-line}
+    .ending-inner{width:100%}
+    .ending-top{font-size:.85rem;font-weight:800;color:rgba(255,255,255,.7);margin-bottom:16px;letter-spacing:-0.5px}
+    .ending-main{font-size:2rem;font-weight:900;margin-bottom:8px;letter-spacing:-1.5px;line-height:1.2}
+    .ending-main .hl{color:var(--yellow)}
+    .ending-sub{font-size:1rem;font-weight:700;color:#eee;margin-bottom:32px}
+    .ending-url{font-size:.8rem;color:#666;border-top:1px solid #222;padding-top:16px;display:inline-block}
+    .ending-url span{color:var(--yellow);font-weight:800}
 
     .cap{position:absolute;top:8px;left:50%;transform:translateX(-50%);
       background:rgba(0,0,0,.7);color:var(--primary);font-size:.7rem;font-weight:700;
@@ -102,6 +116,10 @@
       .stage{height:438px}
       .ic-circle{width:50px;height:50px;font-size:1.3rem}
       .icons{gap:20px}
+      .ending-main{font-size:2.5rem}
+      .ending-top{font-size:1rem}
+      .ending-sub{font-size:1.2rem}
+      .midtext-inner{font-size:1.15rem}
     }
   </style>
 </head>
@@ -109,7 +127,7 @@
 <div class="wrap">
   <div class="hdr">
     <div class="hdr-badge" id="badge">SCENE 1</div>
-    <div class="hdr-title" id="title">전화가 온다</div>
+    <div class="hdr-title" id="title">고객이 전화한다</div>
   </div>
 
   <div class="stage" id="stage">
@@ -118,24 +136,51 @@
     </svg>
     <div class="rip" id="rip"></div>
     <div class="cap" id="cap"></div>
-    <div class="ending" id="ending"><div class="ending-text" id="endingText"></div></div>
 
+    <!-- 중간 문구 (엔딩 전) -->
+    <div class="midtext" id="midtext">
+      <div class="midtext-inner">일반전화콜은 물론<br>가입한 손님의 앱호출 전화호출<br>모두 <span style="color:var(--yellow)">원클릭배차</span></div>
+    </div>
+
+    <!-- 엔딩 카드 -->
+    <div class="ending" id="ending">
+      <div class="ending-inner">
+        <div class="ending-top">운전 중 배차, 도로 위 수많은 위험들</div>
+        <div class="ending-main"><span class="hl">원클릭</span>이면 배차 끝</div>
+        <div class="ending-sub">콜마당이 만드는 달리는 사무실</div>
+        <div class="ending-url"><span>calllink.io.kr</span></div>
+      </div>
+    </div>
+
+    <!-- 고객/손님 폰 -->
+    <div class="phone" id="pCust">
+      <div class="scr vis" data-s="call"><img src="sourc/%EC%9D%BC%EB%B0%98%EC%BD%9C.jpg"></div>
+      <div class="scr" data-s="home"><img src="sourc/%EC%86%90%EB%8B%98%EC%95%B11.jpg"></div>
+      <div class="scr" data-s="appcall"><img src="sourc/%EC%86%90%EB%8B%98%EC%95%B12.jpg"></div>
+      <div class="scr" data-s="requested"><img src="sourc/%EC%86%90%EB%8B%98%EC%95%B13.jpg"></div>
+    </div>
+
+    <!-- 콜매니저 폰 -->
     <div class="phone" id="pMgr">
       <div class="scr vis" data-s="ring"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%801.jpg"></div>
       <div class="scr" data-s="call"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%802.jpg"></div>
       <div class="scr" data-s="dispatch"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%803.jpg"></div>
       <div class="scr" data-s="done"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%804.jpg"></div>
     </div>
+
+    <!-- 기사 폰 -->
     <div class="phone" id="pDrv">
       <div class="scr vis" data-s="noti"><img src="sourc/%EA%B8%B0%EC%82%AC%EC%95%B11.jpg"></div>
+      <div class="scr" data-s="prepare"><img src="sourc/%EA%B8%B0%EC%82%AC%EC%95%B13.jpg"></div>
+      <div class="scr" data-s="driving"><img src="sourc/%EA%B8%B0%EC%82%AC%EC%95%B14.jpg"></div>
     </div>
   </div>
 
   <div class="icons">
-    <div class="ic" data-n="cust"><div class="ic-circle bg-cust">👤</div><div class="ic-name">손님앱</div></div>
-    <div class="ic" data-n="det"><div class="ic-circle bg-det">📡</div><div class="ic-name">콜디텍터</div></div>
-    <div class="ic" data-n="mgr"><div class="ic-circle bg-mgr">📋</div><div class="ic-name">콜매니저</div></div>
-    <div class="ic" data-n="drv"><div class="ic-circle bg-drv">🚗</div><div class="ic-name">기사앱</div></div>
+    <div class="ic" data-n="cust"><div class="ic-circle"><img src="sourc/%EC%86%90%EB%8B%98%EC%95%B1.png" alt="손님앱"></div><div class="ic-name">손님앱</div></div>
+    <div class="ic" data-n="det"><div class="ic-circle"><img src="sourc/%EC%BD%9C%EB%94%94%ED%85%8D%ED%84%B0.png" alt="콜디텍터"></div><div class="ic-name">콜디텍터</div></div>
+    <div class="ic" data-n="mgr"><div class="ic-circle"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%80.png" alt="콜매니저"></div><div class="ic-name">콜매니저</div></div>
+    <div class="ic" data-n="drv"><div class="ic-circle"><img src="sourc/%EB%93%9C%EB%9D%BC%EC%9D%B4%EB%B2%84.png" alt="기사앱"></div><div class="ic-name">기사앱</div></div>
   </div>
 
   <div class="ctrls">
@@ -153,12 +198,13 @@
   var capEl=document.getElementById('cap');
   var badgeEl=document.getElementById('badge');
   var titleEl=document.getElementById('title');
+  var pCust=document.getElementById('pCust');
   var pMgr=document.getElementById('pMgr');
   var pDrv=document.getElementById('pDrv');
   var bgm=document.getElementById('bgm');
   var btnPlay=document.getElementById('btnPlay');
   var endingEl=document.getElementById('ending');
-  var endingText=document.getElementById('endingText');
+  var midtextEl=document.getElementById('midtext');
   var allIcons=document.querySelectorAll('.ic');
 
   var playing=true, pool=[], fadeInt=null;
@@ -167,7 +213,6 @@
   function w(fn,ms){var t=setTimeout(fn,ms);pool.push(t)}
   function stopAll(){pool.forEach(clearTimeout);pool=[];if(fadeInt){clearInterval(fadeInt);fadeInt=null}}
 
-  // 음악
   function bgmStart(){bgm.currentTime=0;bgm.volume=VOL;bgm.play().catch(function(){})}
   function bgmStop(){bgm.pause();bgm.currentTime=0}
   function bgmFadeOut(ms,cb){
@@ -183,9 +228,9 @@
     titleEl.style.opacity='0';titleEl.classList.remove('emphasis');
     w(function(){titleEl.textContent=t;titleEl.style.opacity='1';if(emph)titleEl.classList.add('emphasis')},180);
   }
-  function cap(t){capEl.textContent=t;capEl.classList.add('vis')}
-  function capOff(){capEl.classList.remove('vis')}
-  function showEnding(t){endingText.textContent=t;endingEl.classList.add('vis')}
+  function showMid(){midtextEl.classList.add('vis')}
+  function hideMid(){midtextEl.classList.remove('vis')}
+  function showEnding(){endingEl.classList.add('vis')}
   function hideEnding(){endingEl.classList.remove('vis')}
   function hl(names){allIcons.forEach(function(i){var n=i.getAttribute('data-n');i.classList.toggle('on',names.indexOf(n)>=0);i.classList.toggle('off',names.indexOf(n)<0)})}
   function hlOff(){allIcons.forEach(function(i){i.classList.remove('on','off')})}
@@ -205,34 +250,60 @@
     return{x:r.left-s.left+r.width*xp,y:r.top-s.top+r.height*yp};
   }
 
-  // 폰 위치 계산
   function centerL(){return(stage.offsetWidth-pMgr.offsetWidth)/2}
   function leftL(){return stage.offsetWidth/2-pMgr.offsetWidth-6}
   function rightL(){return stage.offsetWidth/2+6}
 
-  // 페이드인 (그 자리에서)
-  function fadeIn(phone,leftPx){
-    phone.style.left=leftPx+'px';
-    phone.style.opacity='1';
+  function fadeIn(phone,leftPx){phone.style.left=leftPx+'px';phone.style.opacity='1'}
+  function fadeOut(phone){phone.style.opacity='0'}
+  function moveTo(phone,leftPx){phone.style.left=leftPx+'px'}
+
+  // 교대 glow 반짝이 효과
+  var glowInt=null;
+  function alternateGlow(a,b,interval,count,cb){
+    var step=0;
+    a.classList.add('glow');b.classList.remove('glow');
+    glowInt=setInterval(function(){
+      step++;
+      if(step>=count*2){
+        clearInterval(glowInt);glowInt=null;
+        a.classList.remove('glow');b.classList.remove('glow');
+        if(cb)cb();return;
+      }
+      if(step%2===1){a.classList.remove('glow');b.classList.add('glow')}
+      else{a.classList.add('glow');b.classList.remove('glow')}
+    },interval);
+    pool.push(glowInt);
   }
-  // 페이드아웃
-  function fadeOut(phone){
-    phone.style.opacity='0';
-  }
-  // 위치 이동 (페이드 없이)
-  function moveTo(phone,leftPx){
-    phone.style.left=leftPx+'px';
+  // 단일 폰 반짝이
+  function blinkGlow(phone,interval,count,cb){
+    var step=0;
+    phone.classList.add('glow');
+    glowInt=setInterval(function(){
+      step++;
+      if(step>=count*2){
+        clearInterval(glowInt);glowInt=null;
+        phone.classList.remove('glow');
+        if(cb)cb();return;
+      }
+      phone.classList.toggle('glow');
+    },interval);
+    pool.push(glowInt);
   }
 
   function reset(){
-    pMgr.style.transition='none';pDrv.style.transition='none';
-    pMgr.style.opacity='0';pDrv.style.opacity='0';
-    pMgr.style.left=centerL()+'px';pDrv.style.left=rightL()+'px';
-    void pMgr.offsetWidth;void pDrv.offsetWidth;
-    pMgr.style.transition='';pDrv.style.transition='';
-    scr(pMgr,'ring');scr(pDrv,'noti');
-    curOff();capOff();hlOff();hideEnding();
-    pMgr.classList.remove('glow');
+    [pCust,pMgr,pDrv].forEach(function(p){
+      p.style.transition='none';p.style.opacity='0';
+    });
+    pCust.style.left=leftL()+'px';
+    pMgr.style.left=centerL()+'px';
+    pDrv.style.left=rightL()+'px';
+    void pCust.offsetWidth;void pMgr.offsetWidth;void pDrv.offsetWidth;
+    [pCust,pMgr,pDrv].forEach(function(p){p.style.transition=''});
+    scr(pCust,'call');scr(pMgr,'ring');scr(pDrv,'noti');
+    curOff();hlOff();hideEnding();hideMid();
+    if(glowInt){clearInterval(glowInt);glowInt=null}
+    pMgr.classList.remove('glow');pCust.classList.remove('glow');pDrv.classList.remove('glow');
     titleEl.classList.remove('emphasis');
   }
 
@@ -242,15 +313,16 @@
     reset();
     bgmStart();
 
-    // 1) 콜매니저 수신전화 — 페이드인
-    setT('SCENE 1','전화가 온다');
-    hl(['mgr']);
+    // ===== SCENE 1: 고객이 전화한다 =====
+    setT('SCENE 1','고객이 전화한다');
+    hl(['cust','mgr']);
 
     w(function(){
       if(!playing)return;
-      fadeIn(pMgr,centerL());
+      fadeIn(pCust,leftL());
+      fadeIn(pMgr,rightL());
 
-      // 수락 클릭
+      // 콜매니저 수락 클릭
       w(function(){
         if(!playing)return;
         var p=pp(pMgr,0.22,0.80);
@@ -261,105 +333,220 @@
           w(function(){
             if(!playing)return;
             clickFx(p.x,p.y);
-            w(function(){
-              if(!playing)return;
-              scr(pMgr,'call');
-              setT('SCENE 2','통화중');
-              curOff();
-
-              // 2) 통화종료
-              w(function(){
-                if(!playing)return;
-                var e=pp(pMgr,0.50,0.84);
-                curTo(e.x+20,e.y-30);
-                w(function(){
-                  if(!playing)return;
-                  curTo(e.x,e.y);
-                  w(function(){
-                    if(!playing)return;
-                    clickFx(e.x,e.y);
-                    w(function(){
-                      if(!playing)return;
-                      scr(pMgr,'dispatch');
-                      curOff();
-                      pMgr.classList.add('glow');
-                      setT('','통화 종료 → 즉시 배차',true);
-
-                      // 3초 강조
-                      w(function(){
-                        if(!playing)return;
-                        pMgr.classList.remove('glow');
-
-                        // 3) 기사 선택
-                        var d=pp(pMgr,0.35,0.45);
-                        curTo(d.x+20,d.y-20);
-                        w(function(){
-                          if(!playing)return;
-                          curTo(d.x,d.y);
-                          w(function(){
-                            if(!playing)return;
-                            clickFx(d.x,d.y);
-                            w(function(){
-                              if(!playing)return;
-                              curOff();
-                              setT('SCENE 3','기사가 배차를 받는다');
-                              hl(['mgr','drv']);
-
-                              // 콜매니저4로 교체 + 왼쪽으로, 기사앱 페이드인
-                              scr(pMgr,'done');
-                              moveTo(pMgr,leftL());
-                              w(function(){
-                                if(!playing)return;
-                                fadeIn(pDrv,rightL());
-
-                                // 확인 클릭
-                                w(function(){
-                                  if(!playing)return;
-                                  var c=pp(pDrv,0.50,0.58);
-                                  curTo(c.x+15,c.y-15);
-                                  w(function(){
-                                    if(!playing)return;
-                                    curTo(c.x,c.y);
-                                    w(function(){
-                                      if(!playing)return;
-                                      clickFx(c.x,c.y);
-                                      w(function(){
-                                        if(!playing)return;
-                                        curOff();
-                                        // 폰 사라지고 문구 (스테이지 중앙)
-                                        fadeOut(pMgr);
-                                        fadeOut(pDrv);
-                                        setT('','');
-                                        showEnding('기존 기사배차까지 7번의 클릭,\n콜마당은 원클릭 배차 끝.');
-
-                                        w(function(){
-                                          if(!playing)return;
-                                          bgmFadeOut(800,function(){
-                                            if(!playing)return;
-                                            w(function(){go()},600);
-                                          });
-                                        },3000);
-                                      },400);
-                                    },450);
-                                  },500);
-                                },900);
-                              },350);
-                            },400);
-                          },450);
-                        },500);
-                      },3000);
-                    },350);
-                  },450);
-                },500);
-              },1800);
-            },350);
+            w(function(){if(!playing)return; scene2()},350);
           },450);
         },500);
-      },1200);
+      },800);
     },300);
   }
 
-  // 컨트롤: 재생/멈춤 (음악도 함께)
+  // ===== SCENE 2: 고객과 통화중 → 배차 =====
+  function scene2(){
+    scr(pMgr,'call');
+    setT('SCENE 2','고객과 통화중');
+    hl(['mgr']);
+    fadeOut(pCust);
+    moveTo(pMgr,centerL());
+    curOff();
+
+    // 통화 종료 클릭
+    w(function(){
+      if(!playing)return;
+      var e=pp(pMgr,0.50,0.84);
+      curTo(e.x+20,e.y-30);
+      w(function(){
+        if(!playing)return;
+        curTo(e.x,e.y);
+        w(function(){
+          if(!playing)return;
+          clickFx(e.x,e.y);
+          w(function(){
+            if(!playing)return;
+            scr(pMgr,'dispatch');
+            curOff();
+            setT('','통화 종료 → 즉시 배차',true);
+
+            // 반짝이 glow 효과
+            blinkGlow(pMgr,500,3,function(){
+              if(!playing)return;
+              // 기사 선택 클릭
+              var d=pp(pMgr,0.35,0.45);
+              curTo(d.x+20,d.y-20);
+              w(function(){
+                if(!playing)return;
+                curTo(d.x,d.y);
+                w(function(){
+                  if(!playing)return;
+                  clickFx(d.x,d.y);
+                  w(function(){if(!playing)return; scene3()},400);
+                },450);
+              },500);
+            });
+          },350);
+        },450);
+      },500);
+    },1000);
+  }
+
+  // ===== SCENE 3: 기사가 배차를 받는다 =====
+  function scene3(){
+    curOff();
+    setT('SCENE 3','기사가 배차를 받는다');
+    hl(['mgr','drv']);
+    scr(pMgr,'done');
+    moveTo(pMgr,leftL());
+
+    w(function(){
+      if(!playing)return;
+      fadeIn(pDrv,rightL());
+
+      // 기사 확인 클릭
+      w(function(){
+        if(!playing)return;
+        var c=pp(pDrv,0.50,0.58);
+        curTo(c.x+15,c.y-15);
+        w(function(){
+          if(!playing)return;
+          curTo(c.x,c.y);
+          w(function(){
+            if(!playing)return;
+            clickFx(c.x,c.y);
+            w(function(){if(!playing)return; scene4()},400);
+          },450);
+        },500);
+      },600);
+    },350);
+  }
+
+  // ===== SCENE 4: 기사 운행 준비 =====
+  function scene4(){
+    curOff();
+    setT('SCENE 4','기사 운행 준비');
+    hl(['drv']);
+    fadeOut(pMgr);
+    scr(pDrv,'prepare');
+    moveTo(pDrv,centerL());
+
+    // 운행 시작 버튼 클릭
+    w(function(){
+      if(!playing)return;
+      var s=pp(pDrv,0.65,0.72);
+      curTo(s.x+15,s.y-15);
+      w(function(){
+        if(!playing)return;
+        curTo(s.x,s.y);
+        w(function(){
+          if(!playing)return;
+          clickFx(s.x,s.y);
+          w(function(){
+            if(!playing)return;
+            scr(pDrv,'driving');
+            curOff();
+            setT('','운행 중',true);
+            w(function(){if(!playing)return; scene5()},1000);
+          },400);
+        },450);
+      },500);
+    },600);
+  }
+
+  // ===== SCENE 5: 앱으로 호출시 =====
+  function scene5(){
+    fadeOut(pDrv);
+    setT('SCENE 5','앱으로 호출시');
+    hl(['cust']);
+    scr(pCust,'home');
+
+    w(function(){
+      if(!playing)return;
+      fadeIn(pCust,centerL());
+
+      // 앱호출 버튼 클릭
+      w(function(){
+        if(!playing)return;
+        var h=pp(pCust,0.50,0.68);
+        curTo(h.x+15,h.y-15);
+        w(function(){
+          if(!playing)return;
+          curTo(h.x,h.y);
+          w(function(){
+            if(!playing)return;
+            clickFx(h.x,h.y);
+            w(function(){
+              if(!playing)return;
+              scr(pCust,'appcall');
+              curOff();
+
+              // 대리운전 호출 버튼 클릭
+              w(function(){
+                if(!playing)return;
+                var b=pp(pCust,0.50,0.88);
+                curTo(b.x+15,b.y-15);
+                w(function(){
+                  if(!playing)return;
+                  curTo(b.x,b.y);
+                  w(function(){
+                    if(!playing)return;
+                    clickFx(b.x,b.y);
+                    w(function(){
+                      if(!playing)return;
+                      curOff();
+                      // 동시에: 손님앱3 전환 + 왼쪽 이동 + 콜매니저3 오른쪽 페이드인
+                      scr(pCust,'requested');
+                      moveTo(pCust,leftL());
+                      setT('SCENE 6','앱 호출도 바로 배차',true);
+                      hl(['cust','mgr']);
+                      scr(pMgr,'dispatch');
+                      fadeIn(pMgr,rightL());
+
+                      // 콜매니저3만 반짝이
+                      w(function(){
+                        if(!playing)return;
+                        blinkGlow(pMgr,500,3,function(){
+                          if(!playing)return;
+                          fadeOut(pCust);
+                          fadeOut(pMgr);
+                          setT('','');
+                          hlOff();
+
+                          // 중간 문구 표시
+                          w(function(){
+                            if(!playing)return;
+                            showMid();
+
+                            // 중간 문구 → 엔딩 카드
+                            w(function(){
+                              if(!playing)return;
+                              hideMid();
+
+                              w(function(){
+                                if(!playing)return;
+                                showEnding();
+
+                                w(function(){
+                                  if(!playing)return;
+                                  bgmFadeOut(800,function(){
+                                    if(!playing)return;
+                                    w(function(){go()},1200);
+                                  });
+                                },3000);
+                              },500);
+                            },2500);
+                          },600);
+                        });
+                      },300);
+                    },400);
+                  },450);
+                },500);
+              },700);
+            },400);
+          },450);
+        },500);
+      },800);
+    },400);
+  }
+
+  // 컨트롤
   btnPlay.addEventListener('click',function(){
     if(!playing){
       playing=true;
@@ -373,7 +560,6 @@
     }
   });
 
-  // 자동 시작 (음악은 index.html 통합 시 웰컴 영상 클릭으로 해결)
   go();
 })();
 </script>
