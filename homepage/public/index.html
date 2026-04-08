@@ -6,6 +6,7 @@
   <title>콜마당 - 당신의 사무실을 무장하세요</title>
   <meta name="description" content="콜마당은 지방 대리운전 사무실을 위한 올인원 관리 플랫폼입니다. QR 하나로 손님을 내 사무실에 각인시키세요.">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/gh/fonts-archive/KakaoBigSans/KakaoBigSans.css" rel="stylesheet">
   <style>
     /* ── Reset & Variables ─────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -90,6 +91,32 @@
       box-shadow: var(--shadow-gold);
     }
     .btn-primary:hover { background: var(--primary-dark); }
+
+    /* ── NEW MAIN HERO ────────────────────────── */
+    .main-hero{background:#fff;padding:128px 0 112px}
+    .main-hero-split{display:grid;grid-template-columns:2fr 3fr;gap:40px;align-items:center}
+    .main-hero-text{text-align:right}
+    .main-hero-text h1{font-family:'KakaoBigSans',sans-serif;font-size:2.4rem;font-weight:700;color:#111;line-height:1.3;margin-bottom:16px;letter-spacing:-1px}
+    .main-hero-text .main-sub{font-family:'KakaoBigSans',sans-serif;font-size:1.05rem;color:#555;line-height:1.8;margin-bottom:0;font-weight:400}
+    .main-hero-text .main-sub strong{color:#111;font-weight:800}
+    .main-video{width:100%;display:block;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.06)}
+    .main-apps{margin-top:80px;text-align:center}
+    .main-apps-title{font-family:'KakaoBigSans',sans-serif;font-size:1.6rem;font-weight:700;color:#111;margin-top:36px;margin-bottom:8px}
+    .main-apps-sub{font-size:.95rem;color:#888;margin-bottom:0}
+    .main-apps-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
+    .main-app-card{background:#eef0f4;border-radius:14px;padding:28px 16px;text-align:center;transition:transform .2s,box-shadow .2s}
+    .main-app-card:hover{transform:translateY(-4px);box-shadow:0 6px 24px rgba(0,0,0,.08)}
+    .main-app-card h3{font-size:.95rem;font-weight:700;color:#222;margin-bottom:4px}
+    .main-app-card .main-app-role{font-size:.72rem;color:#aaa;font-weight:500;margin-bottom:12px}
+    .main-app-card p{font-size:.8rem;color:#666;line-height:1.6}
+    .main-app-img{width:52px;height:52px;border-radius:14px;margin-bottom:12px}
+    @media(max-width:768px){
+      .main-hero{padding:48px 0 40px}
+      .main-hero-split{grid-template-columns:1fr;gap:24px}
+      .main-hero-text{text-align:center}
+      .main-hero-text h1{font-size:1.8rem}
+      .main-apps-grid{grid-template-columns:repeat(2,1fr)}
+    }
 
     /* ── Scroll Animation ─────────────────────── */
     .animate {
@@ -254,14 +281,14 @@
     }
     .hero-text h1 strong { color: var(--primary); }
     .hero-text .hero-desc {
-      color: rgba(255,255,255,0.55); font-size: 1rem;
+      color: #fff; font-size: 1.15rem;
       line-height: 1.9; margin-bottom: 36px;
     }
     .hero-buttons { display: flex; gap: 14px; flex-wrap: wrap; }
-    .hero-buttons .btn-primary { padding: 16px 32px; font-size: 1rem; }
+    .hero-buttons .btn-primary { padding: 10px 24px; font-size: .85rem; }
     .hero-buttons .btn-outline {
-      display: inline-block; padding: 16px 32px; border-radius: 50px;
-      font-size: 1rem; font-weight: 700; cursor: pointer;
+      display: inline-block; padding: 10px 24px; border-radius: 50px;
+      font-size: .85rem; font-weight: 700; cursor: pointer;
       background: transparent; color: rgba(255,255,255,0.7);
       border: 1px solid rgba(255,255,255,0.25);
       transition: border-color 0.2s, color 0.2s;
@@ -273,40 +300,38 @@
       .hero-text h1 { font-size: 2rem; }
     }
 
-    /* ── SHOWCASE DEMO (인라인) ──────────────── */
+    /* ── SHOWCASE COMPARE (인라인) ──────────────── */
     .demo-wrap{width:100%;max-width:500px;padding:12px;margin:0 auto}
-    .demo-hdr{text-align:center;margin-bottom:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:44px}
-    .demo-title{font-size:1.1rem;font-weight:900;color:var(--white);transition:opacity .3s,color .3s;white-space:pre-line;line-height:1.4}
-    .demo-title.emphasis{color:var(--white)}
-    .demo-icons{display:flex;justify-content:center;gap:16px;padding:16px 0 0;position:relative;z-index:1}
-    .demo-ic{display:flex;flex-direction:column;align-items:center;gap:2px;transition:transform .3s,opacity .3s}
-    .demo-ic.on{transform:scale(1.1)}.demo-ic.off{opacity:.25}
-    .demo-ic-circle{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;border:2px solid transparent;transition:border-color .3s,box-shadow .3s;overflow:hidden;background:transparent}
-    .demo-ic.on .demo-ic-circle{border-color:var(--primary);box-shadow:0 0 10px rgba(255,171,0,.3)}
-    .demo-ic-circle img{width:100%;height:100%;object-fit:cover;display:block}
-    .demo-ic-name{font-size:.5rem;color:rgba(255,255,255,.35);font-weight:500;white-space:nowrap;transition:color .3s}
-    .demo-ic.on .demo-ic-name{color:var(--primary)}
-    .demo-stage{position:relative;width:100%;height:368px;overflow:visible}
-    .demo-phone{position:absolute;width:170px;height:368px;border-radius:22px;overflow:hidden;background:#000;border:3px solid rgba(255,255,255,.1);box-shadow:0 10px 40px rgba(0,0,0,.5);top:0;opacity:0;transition:opacity .5s ease,left .5s ease,box-shadow .3s,border-color .3s;z-index:2}
+    .demo-hdr{text-align:center;margin-bottom:16px;padding:0;min-height:28px;display:flex;align-items:center;justify-content:center;position:relative}
+    .demo-title{font-size:1.1rem;font-weight:900;color:var(--white);transition:opacity .3s;white-space:pre-line;line-height:1.4}
+    .demo-lbl{position:absolute;top:50%;transform:translate(-50%,-50%);font-size:1.1rem;font-weight:900;color:var(--white);white-space:nowrap;opacity:0;transition:opacity .4s;pointer-events:none}
+    .demo-lbl.vis{opacity:1}
+    .demo-pic{position:absolute;z-index:15;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:4px;opacity:0;transition:opacity .4s,left .5s ease}
+    .demo-pic.vis{opacity:1}
+    .demo-pic .dp-img{width:44px;height:44px;border-radius:12px;overflow:hidden;border:2px solid transparent;transition:border-color .3s,box-shadow .3s}
+    .demo-pic.on .dp-img{border-color:var(--primary);box-shadow:0 0 10px rgba(255,171,0,.3)}
+    .demo-pic .dp-img img{width:100%;height:100%;object-fit:cover;display:block}
+    .demo-pic .dp-img svg{width:100%;height:100%;display:block}
+    .demo-pic .dp-name{font-size:.5rem;color:rgba(255,255,255,.35);font-weight:500;white-space:nowrap;transition:color .3s}
+    .demo-pic.on .dp-name{color:var(--primary)}
+    .demo-stage{position:relative;width:100%;height:378px;overflow:visible}
+    .demo-phone{position:absolute;width:170px;height:378px;border-radius:22px;overflow:hidden;background:#000;border:3px solid rgba(255,255,255,.1);box-shadow:0 10px 40px rgba(0,0,0,.5);top:0;opacity:0;transition:opacity .5s ease,left .5s ease,box-shadow .3s,border-color .3s;z-index:2}
     .demo-phone img{width:100%;height:100%;object-fit:cover;display:block}
     .demo-phone .scr{position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;transition:opacity .25s}
     .demo-phone .scr.vis{opacity:1}
     .demo-phone.glow{box-shadow:0 0 30px rgba(255,171,0,.5),0 10px 40px rgba(0,0,0,.5);border-color:var(--primary)}
-    .demo-cur{position:absolute;width:24px;height:24px;z-index:20;opacity:0;pointer-events:none;transition:left .6s cubic-bezier(.4,0,.2,1),top .6s cubic-bezier(.4,0,.2,1),opacity .25s;filter:drop-shadow(1px 2px 2px rgba(0,0,0,.6))}
+    .demo-cur{position:absolute;width:48px;height:48px;z-index:20;opacity:0;pointer-events:none;transition:left .6s cubic-bezier(.4,0,.2,1),top .6s cubic-bezier(.4,0,.2,1),opacity .25s;filter:drop-shadow(1px 2px 2px rgba(0,0,0,.6))}
     .demo-cur.vis{opacity:1}
     .demo-cur.click{animation:dck .2s ease}
     @keyframes dck{0%{transform:scale(1)}50%{transform:scale(.75)}100%{transform:scale(1)}}
     .demo-rip{position:absolute;width:30px;height:30px;border-radius:50%;border:2px solid var(--primary);opacity:0;z-index:19;pointer-events:none;transform:translate(-50%,-50%) scale(0)}
     .demo-rip.go{animation:drp .35s ease-out forwards}
     @keyframes drp{0%{opacity:1;transform:translate(-50%,-50%) scale(0)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.5)}}
-    .demo-midtext{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;text-align:center;z-index:15;pointer-events:none;opacity:0;transition:opacity .6s}
-    .demo-midtext.vis{opacity:1}
-    .demo-midtext-inner{font-size:1rem;font-weight:800;color:var(--white);line-height:2}
     .demo-ending{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;text-align:center;z-index:15;pointer-events:none;opacity:0;transition:opacity .6s}
     .demo-ending.vis{opacity:1}
     .demo-ending-inner{width:100%}
     .demo-ending-top{font-size:.85rem;font-weight:800;color:rgba(255,255,255,.7);margin-bottom:16px}
-    .demo-ending-main{font-size:2rem;font-weight:900;margin-bottom:8px;letter-spacing:-1.5px;line-height:1.2}
+    .demo-ending-main{font-size:2rem;font-weight:900;margin-bottom:8px;letter-spacing:-1.5px;line-height:1.2;color:#fff}
     .demo-ending-main .demo-hl{color:#FFD400}
     .demo-ending-sub{font-size:1rem;font-weight:700;color:#eee;margin-bottom:32px}
     .demo-ending-url{font-size:.8rem;color:#666;border-top:1px solid #222;padding-top:16px;display:inline-block}
@@ -321,10 +346,10 @@
     .demo-cbtn{background:none;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.6);width:28px;height:28px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.6rem;transition:border-color .2s,color .2s}
     .demo-cbtn:hover,.demo-cbtn.active{border-color:var(--primary);color:var(--primary)}
     @media(min-width:640px){
-      .demo-phone{width:200px;height:434px}
-      .demo-stage{height:438px}
-      .demo-ic-circle{width:50px;height:50px}
-      .demo-icons{gap:20px}
+      .demo-phone{width:200px;height:444px}
+      .demo-stage{height:444px}
+      .demo-pic .dp-img{width:50px;height:50px}
+      .demo-lbl{font-size:1.3rem}
     }
 
     /* ── SCENE THEATER ─────────────────────────── */
@@ -554,92 +579,31 @@
 
     /* ── STRUCTURE COMPARE ─────────────────────── */
     .compare {
-      background: var(--bg-light);
-      color: var(--text-dark);
+      background: var(--navy);
+      color: var(--white);
     }
-    .compare .section-heading { color: var(--text-dark); }
-    .compare .section-sub { color: var(--text-muted); }
+    .compare .section-heading { color: var(--white); }
+    .compare .section-sub { color: rgba(255,255,255,.55); }
 
-    .compare-grid {
-      display: grid;
-      grid-template-columns: 1fr auto 1fr;
-      gap: 32px;
-      align-items: stretch;
-      max-width: 900px;
-      margin: 0 auto;
-    }
+    .compare-table-wrap{max-width:800px;margin:0 auto;overflow-x:auto}
+    .compare-table{width:100%;border-collapse:collapse;font-size:.88rem}
+    .compare-table th,.compare-table td{padding:14px 16px;text-align:center;border-bottom:1px solid rgba(255,255,255,.08)}
+    .compare-table thead th{font-weight:700;font-size:.85rem;padding-bottom:18px;border-bottom:2px solid rgba(255,255,255,.15)}
+    .compare-table .col-old{color:rgba(255,255,255,.45)}
+    .compare-table .col-new{color:var(--primary);font-weight:800}
+    .compare-table .row-label{text-align:left;color:rgba(255,255,255,.55);font-weight:600}
+    .compare-table td{color:rgba(255,255,255,.5)}
+    .compare-table .val-new{color:var(--primary);font-weight:700}
+    .compare-table tbody tr:last-child td{border-bottom:none}
+    .compare-msg{text-align:center;margin-top:40px;font-size:1.05rem;color:rgba(255,255,255,.7);font-weight:600}
 
-    @media (max-width: 768px) {
-      .compare-grid {
-        grid-template-columns: 1fr;
-        gap: 20px;
-      }
-      .compare-vs { display: none; }
-    }
+    .hurry{background:var(--navy);padding:80px 0}
+    .hurry-title{font-family:'KakaoBigSans',sans-serif;font-size:2.4rem;font-weight:700;color:var(--white);letter-spacing:-1px}
 
-    .compare-box {
-      border-radius: var(--radius);
-      padding: 36px 28px;
-    }
-    .compare-box-old {
-      background: rgba(0,0,0,0.03);
-      border: 1px solid rgba(0,0,0,0.08);
-    }
-    .compare-box-new {
-      background: rgba(255,171,0,0.06);
-      border: 2px solid rgba(255,171,0,0.3);
-      box-shadow: var(--shadow-gold);
-    }
-    .compare-box h3 {
-      font-size: 1.1rem;
-      margin-bottom: 20px;
-      text-align: center;
-    }
-    .compare-box-old h3 { color: var(--text-muted); }
-    .compare-box-new h3 { color: var(--primary-dark); }
-
-    .compare-flow {
-      text-align: center;
-      font-size: 1rem;
-      margin-bottom: 24px;
-      padding: 16px;
-      border-radius: var(--radius-sm);
-      font-weight: 500;
-      line-height: 1.6;
-    }
-    .compare-box-old .compare-flow {
-      background: rgba(0,0,0,0.04);
-      color: var(--text-muted);
-    }
-    .compare-box-new .compare-flow {
-      background: rgba(255,171,0,0.08);
-      color: var(--primary-dark);
-    }
-
-    .compare-list {
-      list-style: none; padding: 0;
-    }
-    .compare-list li {
-      padding: 10px 0;
-      border-bottom: 1px solid rgba(0,0,0,0.05);
-      display: flex; justify-content: space-between;
-      font-size: 0.92rem;
-    }
-    .compare-list li:last-child { border-bottom: none; }
-    .compare-list .label { color: var(--text-muted); }
-    .compare-box-old .compare-list .val { color: var(--text-dark); }
-    .compare-box-new .compare-list .val { color: var(--primary-dark); font-weight: 700; }
-
-    .compare-vs {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .compare-vs span {
-      font-size: 1.5rem;
-      font-weight: 900;
-      color: var(--text-muted);
-      opacity: 0.4;
+    @media(max-width:768px){
+      .compare-table{font-size:.78rem}
+      .compare-table th,.compare-table td{padding:10px 8px}
+      .hurry-title{font-size:1.8rem}
     }
 
     /* ── APPS ──────────────────────────────────── */
@@ -938,13 +902,13 @@
         <!-- 왼쪽 텍스트 -->
         <div class="hero-text">
           <div class="hero-label animate">&#10024; 양평 지역 사무실 무료 파일럿 신청중</div>
-          <h1 class="animate animate-d1">통화가 끝나면<br><strong>바로 배차가 시작됩니다</strong></h1>
+          <h1 class="animate animate-d1">통화가 끝나면<br><strong>배차가 시작됩니다</strong></h1>
           <p class="hero-desc animate animate-d2">
-            통화 후 기사배차까지 <strong style="color:var(--primary)">7번의 클릭</strong>,<br>
+            통화 후 기사배차까지 <strong style="color:var(--primary)">8번의 클릭</strong>,<br>
             콜마당은 <strong style="color:var(--primary)">단 1번</strong>에 해결합니다.
           </p>
           <p class="hero-desc animate animate-d2" style="margin-bottom:36px">
-            중간 플랫폼 없이, 사무실과 손님을 다이렉트로 연결합니다.
+            플랫폼 종속이 아닌, 독립된 사무실로 손님과 연결
           </p>
           <div class="hero-buttons animate animate-d3">
             <a href="#signup" class="btn btn-primary">지금 무료 신청하기</a>
@@ -952,11 +916,13 @@
           </div>
         </div>
 
-        <!-- 오른쪽 showcase-demo -->
+        <!-- 오른쪽 showcase-compare -->
         <div class="hero-demo">
           <div class="demo-wrap">
-            <div class="demo-hdr">
+            <div class="demo-hdr" id="demoHdr">
               <div class="demo-title" id="demoTitle"></div>
+              <div class="demo-lbl" id="demoLblMgr">원클릭 배차끝</div>
+              <div class="demo-lbl" id="demoLblOld">1/8</div>
             </div>
             <div class="demo-stage" id="demoStage">
               <div class="demo-start-overlay" id="demoStartOverlay">
@@ -969,9 +935,6 @@
                 <path d="M2 2L10 20L13 13L20 16L2 2Z" fill="#fff" stroke="#222" stroke-width="1.2" stroke-linejoin="round"/>
               </svg>
               <div class="demo-rip" id="demoRip"></div>
-              <div class="demo-midtext" id="demoMidtext">
-                <div class="demo-midtext-inner">일반전화콜은 물론<br>가입한 손님의 앱호출 전화호출<br>모두 <span style="color:#FFD400">원클릭배차</span></div>
-              </div>
               <div class="demo-ending" id="demoEnding">
                 <div class="demo-ending-inner">
                   <div class="demo-ending-top">운전 중 배차, 도로 위 수많은 위험들</div>
@@ -980,30 +943,42 @@
                   <div class="demo-ending-url"><span>calllink.io.kr</span></div>
                 </div>
               </div>
+              <!-- 폰 아래 아이콘 -->
+              <div class="demo-pic" id="demoIcMgr">
+                <div class="dp-img"><img src="sourc/%EC%86%90%EB%8B%98%EC%95%B1.png" alt="콜마당"></div>
+                <div class="dp-name">콜마당</div>
+              </div>
+              <div class="demo-pic" id="demoIcOld">
+                <div class="dp-img">
+                  <svg viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="44" height="44" rx="12" fill="#2e7d32"/>
+                    <path d="M10 16c0-1.7 1.3-3 3-3h2c1.2 0 2.2.7 2.6 1.8l1 2.5c.3.8.1 1.8-.5 2.4l-1 1c1.2 2.4 3.2 4.4 5.6 5.6l1-1c.6-.6 1.6-.8 2.4-.5l2.5 1c1.1.4 1.8 1.4 1.8 2.6v2c0 1.7-1.3 3-3 3C17.8 30.4 10 22.6 10 16z" fill="#fff"/>
+                  </svg>
+                </div>
+                <div class="dp-name">일반전화</div>
+              </div>
+              <!-- 고객 폰 (Scene 1-2) -->
               <div class="demo-phone" id="dpCust">
                 <div class="scr vis" data-s="call"><img src="sourc/%EC%9D%BC%EB%B0%98%EC%BD%9C.jpg"></div>
-                <div class="scr" data-s="home"><img src="sourc/%EC%86%90%EB%8B%98%EC%95%B11.jpg"></div>
-                <div class="scr" data-s="appcall"><img src="sourc/%EC%86%90%EB%8B%98%EC%95%B12.jpg"></div>
-                <div class="scr" data-s="requested"><img src="sourc/%EC%86%90%EB%8B%98%EC%95%B13.jpg"></div>
               </div>
+              <!-- 콜매니저 폰 -->
               <div class="demo-phone" id="dpMgr">
                 <div class="scr vis" data-s="ring"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%801.jpg"></div>
                 <div class="scr" data-s="call"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%802.jpg"></div>
                 <div class="scr" data-s="dispatch"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%803.jpg"></div>
-                <div class="scr" data-s="done"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%804.jpg"></div>
               </div>
-              <div class="demo-phone" id="dpDrv">
-                <div class="scr vis" data-s="noti"><img src="sourc/%EA%B8%B0%EC%82%AC%EC%95%B11.jpg"></div>
-                <div class="scr" data-s="prepare"><img src="sourc/%EA%B8%B0%EC%82%AC%EC%95%B13.jpg"></div>
-                <div class="scr" data-s="driving"><img src="sourc/%EA%B8%B0%EC%82%AC%EC%95%B14.jpg"></div>
+              <!-- 일반 방식 폰 (Scene 3) -->
+              <div class="demo-phone" id="dpOld">
+                <div class="scr vis" data-s="s1"><img src="sourc/%EC%9D%BC%EB%B0%98%ED%81%B4%EB%A6%AD/%EC%9D%BC%EB%B0%981.jpg"></div>
+                <div class="scr" data-s="s2"><img src="sourc/%EC%9D%BC%EB%B0%98%ED%81%B4%EB%A6%AD/%EC%9D%BC%EB%B0%982.jpg"></div>
+                <div class="scr" data-s="s3"><img src="sourc/%EC%9D%BC%EB%B0%98%ED%81%B4%EB%A6%AD/%EC%9D%BC%EB%B0%983.jpg"></div>
+                <div class="scr" data-s="s4"><img src="sourc/%EC%9D%BC%EB%B0%98%ED%81%B4%EB%A6%AD/%EC%9D%BC%EB%B0%984.jpg"></div>
+                <div class="scr" data-s="s5"><img src="sourc/%EC%9D%BC%EB%B0%98%ED%81%B4%EB%A6%AD/%EC%9D%BC%EB%B0%985.jpg"></div>
+                <div class="scr" data-s="s6"><img src="sourc/%EC%9D%BC%EB%B0%98%ED%81%B4%EB%A6%AD/%EC%9D%BC%EB%B0%986.jpg"></div>
+                <div class="scr" data-s="s7"><img src="sourc/%EC%9D%BC%EB%B0%98%ED%81%B4%EB%A6%AD/%EC%9D%BC%EB%B0%987.jpg"></div>
               </div>
             </div>
-            <div class="demo-icons">
-              <div class="demo-ic" data-n="cust"><div class="demo-ic-circle"><img src="sourc/%EC%86%90%EB%8B%98%EC%95%B1.png" alt="손님앱"></div><div class="demo-ic-name">손님앱</div></div>
-              <div class="demo-ic" data-n="det"><div class="demo-ic-circle"><img src="sourc/%EC%BD%9C%EB%94%94%ED%85%8D%ED%84%B0.png" alt="콜디텍터"></div><div class="demo-ic-name">콜디텍터</div></div>
-              <div class="demo-ic" data-n="mgr"><div class="demo-ic-circle"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%80.png" alt="콜매니저"></div><div class="demo-ic-name">콜매니저</div></div>
-              <div class="demo-ic" data-n="drv"><div class="demo-ic-circle"><img src="sourc/%EB%93%9C%EB%9D%BC%EC%9D%B4%EB%B2%84.png" alt="기사앱"></div><div class="demo-ic-name">기사앱</div></div>
-            </div>
+            <div style="height:68px"></div>
             <div class="demo-ctrls">
               <button class="demo-cbtn" id="demoBtnPlay">&#10074;&#10074;</button>
             </div>
@@ -1014,291 +989,98 @@
     </div>
   </section>
 
-  <!-- ════════════ 섹션 2: SCENE THEATER ════════════ -->
-  <section class="theater">
-    <div class="theater-container">
-
-      <div class="scene-header">
-        <div class="scene-badge" id="sceneBadge">SCENE 1</div>
-        <div class="scene-title-text" id="sceneTitle">전화가 온다</div>
-      </div>
-
-      <div class="scene-frame">
-
-        <!-- ═══ 왼쪽 슬롯 ═══ -->
-        <div class="scene-slot" id="slotLeft">
-          <div class="scene-content active" data-scene="0">
-            <div class="float-card">
-              <div class="float-card-tag">고객 자동 조회</div>
-              <h4>김영희 님</h4>
-              <ul class="mini-list">
-                <li><span class="dot dot-gold"></span> 골드 등급</li>
-                <li><span class="dot dot-green"></span> 3회째 호출</li>
-                <li><span class="dot dot-blue"></span> 최근: 3일 전</li>
-              </ul>
-              <p style="margin-top:12px; font-size:0.78rem; color:rgba(255,255,255,0.35);">전화번호만으로 자동 매칭</p>
-            </div>
-          </div>
-          <div class="scene-content" data-scene="1">
-            <div class="float-card">
-              <div class="float-card-tag">대기 기사</div>
-              <h4>주변 기사 3명</h4>
-              <ul class="mini-list">
-                <li><span class="dot dot-green"></span> 박성호 <span style="margin-left:auto; color:rgba(255,255,255,0.35)">2km</span></li>
-                <li><span class="dot dot-green"></span> 이준혁 <span style="margin-left:auto; color:rgba(255,255,255,0.35)">3km</span></li>
-                <li><span class="dot dot-blue"></span> 김태민 <span style="margin-left:auto; color:rgba(255,255,255,0.35)">5km</span></li>
-              </ul>
-            </div>
-          </div>
-          <div class="scene-content" data-scene="2">
-            <div class="float-card">
-              <div class="float-card-tag">콜매니저 자동 정산</div>
-              <h4>정산 완료</h4>
-              <ul class="mini-list">
-                <li>운행료 <span class="hl" style="margin-left:auto;">20,000원</span></li>
-                <li>수수료 <span class="hl" style="margin-left:auto;">4,000원</span></li>
-                <li>기사몫 <span style="margin-left:auto; color:var(--white);">16,000원</span></li>
-              </ul>
-              <p style="margin-top:10px; font-size:0.78rem; color:rgba(255,255,255,0.35);">수기 정산 불필요</p>
-            </div>
-          </div>
-          <div class="scene-content" data-scene="3">
-            <div class="float-card">
-              <div class="float-card-tag">어떤 방식이든</div>
-              <h4>앱으로 불러도<br>전화로 불러도</h4>
-              <p>같은 사무실, 같은 혜택<br>손님이 편한 방식으로</p>
-              <p style="margin-top:10px; font-size:0.78rem; color:rgba(255,255,255,0.35);">명함은 버려져도<br>앱은 남습니다</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- ═══ 가운데 슬롯 ═══ -->
-        <div class="scene-slot" id="slotCenter">
-          <div class="scene-content active" data-scene="0">
-            <div class="main-screen">
-              <div class="main-screen-header">
-                <div class="app-icon">CD</div>
-                <span class="app-name">콜 디텍터</span>
-              </div>
-              <div class="main-screen-body">
-                <div style="text-align:center; padding:20px 0;">
-                  <div style="font-size:2.5rem; margin-bottom:12px;">&#128222;</div>
-                  <div style="color:var(--white); font-size:1.2rem; font-weight:700; margin-bottom:4px;">
-                    <span class="mock-pulse"></span>010-1234-5678
-                  </div>
-                  <div style="color:rgba(255,255,255,0.4); font-size:0.85rem;">수신 전화 자동 감지</div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="scene-content" data-scene="1">
-            <div class="main-screen">
-              <div class="main-screen-header">
-                <div class="app-icon">CM</div>
-                <span class="app-name">콜 매니저</span>
-              </div>
-              <div class="main-screen-body">
-                <div style="text-align:center;">
-                  <div style="background:rgba(255,171,0,0.08); border-radius:var(--radius-sm); padding:16px; margin-bottom:16px; text-align:left;">
-                    <div style="display:flex; justify-content:space-between; padding:6px 0; color:rgba(255,255,255,0.6); font-size:0.85rem;"><span>손님</span><span style="color:var(--white); font-weight:500;">김영희 (골드)</span></div>
-                    <div style="display:flex; justify-content:space-between; padding:6px 0; color:rgba(255,255,255,0.6); font-size:0.85rem;"><span>출발지</span><span style="color:var(--white); font-weight:500;">양평읍 양근리</span></div>
-                    <div style="display:flex; justify-content:space-between; padding:6px 0; color:rgba(255,255,255,0.6); font-size:0.85rem;"><span>도착지</span><span style="color:var(--white); font-weight:500;">용문면 삼성리</span></div>
-                  </div>
-                  <div class="mock-btn mock-btn-gold">박성호 기사에게 배차</div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="scene-content" data-scene="2">
-            <div class="main-screen">
-              <div class="main-screen-header">
-                <div class="app-icon">DA</div>
-                <span class="app-name">기사 앱</span>
-              </div>
-              <div class="main-screen-body">
-                <div style="text-align:center; padding:20px 0;">
-                  <div style="font-size:3rem; margin-bottom:12px; color:#4CAF50;">&#10003;</div>
-                  <div style="color:#4CAF50; font-weight:700; font-size:1.1rem; margin-bottom:8px;">운행 완료</div>
-                  <div style="color:var(--white); font-size:1.5rem; font-weight:900;">20,000원</div>
-                  <div style="color:rgba(255,255,255,0.4); font-size:0.85rem; margin-top:4px;">양평읍 양근리 → 용문면 삼성리</div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="scene-content" data-scene="3">
-            <div class="main-screen">
-              <div class="main-screen-header">
-                <div class="app-icon" style="background:var(--primary-dark);">CM</div>
-                <span class="app-name">양평 대리운전</span>
-              </div>
-              <div class="main-screen-body">
-                <div style="text-align:center; padding:20px 0;">
-                  <div style="color:var(--primary); font-size:1.3rem; font-weight:900; margin-bottom:4px;">양평 대리운전</div>
-                  <div style="color:rgba(255,255,255,0.4); font-size:0.85rem; margin-bottom:24px;">사장님 이름으로 된 앱</div>
-                  <div style="display:flex; gap:12px; justify-content:center;">
-                    <div style="flex:1; max-width:140px; padding:16px 12px; border-radius:var(--radius-sm); text-align:center; font-size:0.82rem; font-weight:600; background:rgba(255,171,0,0.12); color:var(--primary); border:1px solid rgba(255,171,0,0.2);">
-                      <div style="font-size:1.5rem; margin-bottom:6px;">&#128222;</div>
-                      전화로 부르기
-                    </div>
-                    <div style="flex:1; max-width:140px; padding:16px 12px; border-radius:var(--radius-sm); text-align:center; font-size:0.82rem; font-weight:600; background:var(--primary); color:var(--navy);">
-                      <div style="font-size:1.5rem; margin-bottom:6px;">&#128241;</div>
-                      앱으로 부르기
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- ═══ 오른쪽 슬롯 ═══ -->
-        <div class="scene-slot" id="slotRight">
-          <div class="scene-content active" data-scene="0">
-            <div class="float-card">
-              <div class="float-card-tag">실시간 동기화</div>
-              <h4>콜매니저에<br>즉시 전달</h4>
-              <p><span class="hl">0.3초</span> 내 동기화</p>
-              <p style="margin-top:8px;">전화기 2대, 3대 — 어디서 받든<br>하나의 화면에 통합</p>
-            </div>
-          </div>
-          <div class="scene-content" data-scene="1">
-            <div class="float-card">
-              <div class="float-card-tag">기사 앱</div>
-              <h4>콜 수신!</h4>
-              <p>양평읍 양근리<br>→ 용문면 삼성리</p>
-              <div style="margin-top:16px; display:flex; gap:8px;">
-                <span class="mock-btn mock-btn-gold" style="flex:1; text-align:center; padding:10px 0; font-size:0.82rem;">수락</span>
-                <span class="mock-btn mock-btn-outline" style="flex:1; text-align:center; padding:10px 0; font-size:0.82rem;">거절</span>
-              </div>
-            </div>
-          </div>
-          <div class="scene-content" data-scene="2">
-            <div class="float-card">
-              <div class="float-card-tag">손님 앱</div>
-              <h4>포인트 적립</h4>
-              <p><span class="hl" style="font-size:1.3rem; font-weight:900;">+300P</span></p>
-              <p style="margin-top:8px;">등급 상승</p>
-              <p><span style="color:rgba(255,255,255,0.4)">실버</span> → <span class="hl">골드</span></p>
-              <p style="margin-top:10px; font-size:0.78rem; color:rgba(255,255,255,0.35);">다음 호출 시 할인 적용</p>
-            </div>
-          </div>
-          <div class="scene-content" data-scene="3">
-            <div class="float-card">
-              <div class="float-card-tag">콜매니저</div>
-              <h4>귀속 손님<br><span class="hl" style="font-size:1.5rem;">48번째</span></h4>
-              <p>접수 완료</p>
-              <p style="margin-top:12px; font-size:0.78rem; color:rgba(255,255,255,0.35);">QR 한 번으로 시작된<br>손님이 계속 돌아옵니다</p>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- 컨트롤 -->
-      <div class="scene-controls">
-        <button class="play-pause" id="playPause" title="일시정지">&#10074;&#10074;</button>
-        <div class="scene-dots" id="sceneDots">
-          <button class="scene-dot active" data-idx="0"></button>
-          <button class="scene-dot" data-idx="1"></button>
-          <button class="scene-dot" data-idx="2"></button>
-          <button class="scene-dot" data-idx="3"></button>
-        </div>
-        <div class="progress-wrap">
-          <div class="progress-bar" id="progressBar" style="width:25%"></div>
-          <div class="progress-fill" id="progressFill"></div>
+  <!-- ════════════ NEW MAIN HERO ════════════ -->
+  <section class="main-hero">
+    <div class="container">
+      <div class="main-hero-split">
+        <video class="main-video" id="mainVideo" muted loop playsinline>
+          <source src="sourc/%EB%A9%94%EC%9D%B8%EA%B4%91%EA%B3%A0.mp4" type="video/mp4">
+        </video>
+        <div class="main-hero-text">
+          <h1>당신의 사무실을 무장하세요.</h1>
+          <p class="main-sub">
+            전화기 하나로 홀로 손님을 지켜온 당신,<br>
+            <strong>이제, 진짜 무기로 무장하세요.</strong>
+          </p>
         </div>
       </div>
 
-      <div class="scene-labels">
-        <button class="scene-label-btn active" data-idx="0">전화 수신</button>
-        <button class="scene-label-btn" data-idx="1">원클릭 배차</button>
-        <button class="scene-label-btn" data-idx="2">자동 정산</button>
-        <button class="scene-label-btn" data-idx="3">손님 귀속</button>
+      <!-- 앱 4종 -->
+      <div class="main-apps">
+        <div class="main-apps-grid">
+          <div class="main-app-card">
+            <img class="main-app-img" src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%80.png" alt="콜매니저">
+            <h3>콜 매니저</h3>
+            <div class="main-app-role">관리자 대시보드</div>
+            <p>기사 실시간 상태, 원클릭 배차, 자동 정산, 운영 통계</p>
+          </div>
+          <div class="main-app-card">
+            <img class="main-app-img" src="sourc/%EC%BD%9C%EB%94%94%ED%85%8D%ED%84%B0.png" alt="콜디텍터">
+            <h3>콜 디텍터</h3>
+            <div class="main-app-role">서브 전화기</div>
+            <p>수신 전화 자동 감지, 개인·업무 필터링, 통화 종료 후 자동 배차 팝업</p>
+          </div>
+          <div class="main-app-card">
+            <img class="main-app-img" src="sourc/%EB%93%9C%EB%9D%BC%EC%9D%B4%EB%B2%84.png" alt="기사앱">
+            <h3>기사 앱</h3>
+            <div class="main-app-role">대리기사 전용</div>
+            <p>콜 수신 알림, 운행 이력·수익 자동 저장, 원터치 출퇴근</p>
+          </div>
+          <div class="main-app-card">
+            <img class="main-app-img" src="sourc/%EC%86%90%EB%8B%98%EC%95%B1.png" alt="손님앱">
+            <h3>콜마당</h3>
+            <div class="main-app-role">손님 전용</div>
+            <p>QR 스캔으로 사무실 연결, 전화·앱 중 편한 방식으로 호출, 포인트 자동 적립</p>
+          </div>
+        </div>
+        <h2 class="main-apps-title">앱 4종으로 완성되는 시스템</h2>
+        <p class="main-apps-sub">사무실 · 기사 · 손님, 모두를 위한 앱이 준비되어 있습니다</p>
       </div>
-
     </div>
   </section>
 
-  <!-- ════════════ 섹션 3: 구조 비교 ════════════ -->
+  <!-- ════════════ 섹션 4: 3자 비교 ════════════ -->
   <section class="compare section-padding">
     <div class="container">
-      <h2 class="section-heading animate">그리고, 구조가 다릅니다</h2>
-      <p class="section-sub animate">중앙 플랫폼을 거치지 않고, 사무실과 손님이 직접 연결됩니다</p>
+      <h2 class="section-heading animate">프랜차이즈 시스템, 단골은 내 것</h2>
+      <p class="section-sub animate">"또 앱이야?"에 대한 답. 콜마당은 중간에 없습니다.</p>
 
-      <div class="compare-grid animate">
-        <!-- 기존 플랫폼 -->
-        <div class="compare-box compare-box-old">
-          <h3>기존 플랫폼</h3>
-          <div class="compare-flow">
-            손님 → <strong>[플랫폼]</strong> → 사무실
-          </div>
-          <ul class="compare-list">
-            <li><span class="label">수수료</span><span class="val">건당 25%</span></li>
-            <li><span class="label">고객 데이터</span><span class="val">플랫폼 소유</span></li>
-            <li><span class="label">해지 시</span><span class="val">고객 정보 소실</span></li>
-            <li><span class="label">단골 관리</span><span class="val">불가능</span></li>
-          </ul>
-        </div>
-
-        <!-- VS -->
-        <div class="compare-vs">
-          <span>VS</span>
-        </div>
-
-        <!-- 콜마당 -->
-        <div class="compare-box compare-box-new">
-          <h3>콜마당</h3>
-          <div class="compare-flow">
-            손님 → 사무실 <strong>(다이렉트)</strong>
-          </div>
-          <ul class="compare-list">
-            <li><span class="label">수수료</span><span class="val">0%</span></li>
-            <li><span class="label">고객 데이터</span><span class="val">사장님 소유</span></li>
-            <li><span class="label">해지 시</span><span class="val">고객 정보 유지</span></li>
-            <li><span class="label">단골 관리</span><span class="val">자동 CRM 구축</span></li>
-          </ul>
-        </div>
+      <div class="compare-table-wrap animate">
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th class="col-old">지금 방식</th>
+              <th class="col-old">자체앱 개발</th>
+              <th class="col-new">콜마당</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="row-label">단골 관리</td><td>전화번호부</td><td>가능</td><td class="val-new">가능</td></tr>
+            <tr><td class="row-label">초기 비용</td><td>명함·쿠폰 인쇄비</td><td>5천만~1억원+</td><td class="val-new">0원</td></tr>
+            <tr><td class="row-label">유지보수</td><td>없음</td><td>연 1천만원~</td><td class="val-new">포함</td></tr>
+            <tr><td class="row-label">내 브랜드 앱</td><td>없음</td><td>있음</td><td class="val-new">있음</td></tr>
+            <tr><td class="row-label">포인트·등급</td><td>종이 쿠폰</td><td>가능</td><td class="val-new">가능</td></tr>
+            <tr><td class="row-label">데이터 소유</td><td>전화기에만</td><td>내 것</td><td class="val-new">내 것</td></tr>
+            <tr><td class="row-label">자동 배차</td><td>없음</td><td>별도 개발</td><td class="val-new">포함</td></tr>
+            <tr><td class="row-label">자동 정산</td><td>수기 장부</td><td>별도 개발</td><td class="val-new">포함</td></tr>
+            <tr><td class="row-label">유지보수 책임</td><td>—</td><td>직접 부담</td><td class="val-new">콜마당이</td></tr>
+          </tbody>
+        </table>
       </div>
 
+      <p class="compare-msg animate">시스템은 콜마당이 제공하고, 손님은 사장님에게 귀속됩니다.</p>
     </div>
   </section>
 
-  <!-- ════════════ 섹션 4: 앱 4종 ════════════ -->
-  <section class="apps section-padding">
-    <div class="container">
-      <h2 class="section-heading animate">앱 4종으로 완성되는 시스템</h2>
-      <p class="section-sub animate">사무실 · 기사 · 손님, 모두를 위한 앱이 준비되어 있습니다</p>
-
-      <div class="apps-grid">
-        <div class="app-card animate">
-          <div class="app-card-icon">CM</div>
-          <h3>콜 매니저</h3>
-          <div class="app-card-role">관리자 대시보드</div>
-          <p>기사 실시간 상태, 원클릭 배차, 자동 정산, 운영 통계</p>
-        </div>
-        <div class="app-card animate animate-d1">
-          <div class="app-card-icon">CD</div>
-          <h3>콜 디텍터</h3>
-          <div class="app-card-role">서브 전화기</div>
-          <p>수신 전화 자동 감지, 개인·업무 필터링, 통화 종료 후 자동 배차 팝업</p>
-        </div>
-        <div class="app-card animate animate-d2">
-          <div class="app-card-icon">DA</div>
-          <h3>기사 앱</h3>
-          <div class="app-card-role">대리기사 전용</div>
-          <p>콜 수신 알림, 운행 이력·수익 자동 저장, 원터치 출퇴근</p>
-        </div>
-        <div class="app-card animate animate-d3">
-          <div class="app-card-icon" style="background:var(--primary-dark);">CA</div>
-          <h3>콜마당</h3>
-          <div class="app-card-role">손님 전용</div>
-          <p>QR 스캔으로 사무실 연결, 전화·앱 중 편한 방식으로 호출, 포인트 자동 적립</p>
-        </div>
-      </div>
+  <!-- ════════════ 섹션 5: 서두르세요 ════════════ -->
+  <section class="hurry">
+    <div class="container" style="text-align:center">
+      <h2 class="hurry-title animate">서두르세요.</h2>
     </div>
   </section>
 
-  <!-- ════════════ 섹션 5: SIGNUP ════════════ -->
+  <!-- ════════════ 섹션 6: SIGNUP ════════════ -->
   <section class="signup" id="signup">
     <div class="container">
       <h2 class="section-heading animate">담당자가 직접 방문하여 설치해드립니다</h2>
@@ -1598,159 +1380,188 @@
     });
 
     // ═══════════════════════════════════════
-    // Showcase Demo (히어로 인라인)
+    // Showcase Compare (히어로 인라인)
     // ═══════════════════════════════════════
     (function(){
       var stage=document.getElementById('demoStage');
       if(!stage)return;
       var cur=document.getElementById('demoCur');
       var rip=document.getElementById('demoRip');
+      var hdr=document.getElementById('demoHdr');
       var titleEl=document.getElementById('demoTitle');
+      var lblMgr=document.getElementById('demoLblMgr');
+      var lblOld=document.getElementById('demoLblOld');
       var pCust=document.getElementById('dpCust');
       var pMgr=document.getElementById('dpMgr');
-      var pDrv=document.getElementById('dpDrv');
+      var pOld=document.getElementById('dpOld');
+      var icMgr=document.getElementById('demoIcMgr');
+      var icOld=document.getElementById('demoIcOld');
       var bgm=document.getElementById('demoBgm');
       var btnPlay=document.getElementById('demoBtnPlay');
       var endingEl=document.getElementById('demoEnding');
-      var midtextEl=document.getElementById('demoMidtext');
-      var allIcons=document.querySelectorAll('.demo-ic');
-      var playing=true,pool=[],fadeInt=null,glowInt=null,VOL=0.3;
-      function w(fn,ms){var t=setTimeout(fn,ms);pool.push(t)}
+      var playing=false,pool=[],fadeInt=null,glowInt=null,VOL=0.3;
+      var phoneW=170;
+
+      function w(fn,ms){var t=setTimeout(function(){if(playing){fn();return}var ck=setInterval(function(){if(playing){clearInterval(ck);fn()}},50);pool.push(ck)},ms);pool.push(t)}
       function stopAll(){pool.forEach(clearTimeout);pool=[];if(fadeInt){clearInterval(fadeInt);fadeInt=null}if(glowInt){clearInterval(glowInt);glowInt=null}}
       function bgmStart(){bgm.currentTime=0;bgm.volume=VOL;bgm.play().catch(function(){})}
       function bgmStop(){bgm.pause();bgm.currentTime=0}
       function bgmFadeOut(ms,cb){var steps=20,step=0,iv=ms/steps,sv=bgm.volume;fadeInt=setInterval(function(){step++;bgm.volume=Math.max(0,sv*(1-step/steps));if(step>=steps){clearInterval(fadeInt);fadeInt=null;bgm.pause();if(cb)cb()}},iv)}
-      function setT(b,t){titleEl.style.opacity='0';w(function(){titleEl.textContent=t;titleEl.style.opacity='1'},180)}
-      function showMid(){midtextEl.classList.add('vis')}
-      function hideMid(){midtextEl.classList.remove('vis')}
+
+      function setT(t){titleEl.style.opacity='0';lblMgr.classList.remove('vis');lblOld.classList.remove('vis');if(t){w(function(){titleEl.textContent=t;titleEl.style.opacity='1'},180)}}
+      function showLabels(mL,oL){titleEl.style.opacity='0';lblMgr.style.left=(mL+phoneW/2)+'px';lblOld.style.left=(oL+phoneW/2)+'px';lblMgr.classList.add('vis');lblOld.classList.add('vis')}
+      function hideLabels(){lblMgr.classList.remove('vis');lblOld.classList.remove('vis')}
       function showEnding(){endingEl.classList.add('vis')}
       function hideEnding(){endingEl.classList.remove('vis')}
-      function hl(n){allIcons.forEach(function(i){var d=i.getAttribute('data-n');i.classList.toggle('on',n.indexOf(d)>=0);i.classList.toggle('off',n.indexOf(d)<0)})}
-      function hlOff(){allIcons.forEach(function(i){i.classList.remove('on','off')})}
+
+      function posIcon(ic,px){var pH=pMgr.offsetHeight;ic.style.left=(px+phoneW/2)+'px';ic.style.top=(pH+8)+'px';ic.style.transform='translateX(-50%)'}
+      function showIcons(mL,oL){posIcon(icMgr,mL);icMgr.classList.add('vis','on');if(typeof oL==='number'){posIcon(icOld,oL);icOld.classList.add('vis','on')}}
+      function hideIcons(){icMgr.classList.remove('vis','on');icOld.classList.remove('vis','on')}
+
       function scr(p,n){p.querySelectorAll('.scr').forEach(function(s){s.classList.toggle('vis',s.getAttribute('data-s')===n)})}
       function curTo(x,y){cur.classList.add('vis');cur.style.left=x+'px';cur.style.top=y+'px'}
       function curOff(){cur.classList.remove('vis')}
       function clickFx(x,y){cur.classList.add('click');rip.style.left=x+'px';rip.style.top=y+'px';rip.classList.remove('go');void rip.offsetWidth;rip.classList.add('go');w(function(){cur.classList.remove('click')},200)}
       function pp(p,xp,yp){var r=p.getBoundingClientRect(),s=stage.getBoundingClientRect();return{x:r.left-s.left+r.width*xp,y:r.top-s.top+r.height*yp}}
-      function centerL(){return(stage.offsetWidth-pMgr.offsetWidth)/2}
-      function leftL(){return stage.offsetWidth/2-pMgr.offsetWidth-6}
+
+      function centerL(){return(stage.offsetWidth-phoneW)/2}
+      function leftL(){return stage.offsetWidth/2-phoneW-6}
       function rightL(){return stage.offsetWidth/2+6}
       function fadeIn(p,l){p.style.left=l+'px';p.style.opacity='1'}
       function fadeOut(p){p.style.opacity='0'}
       function moveTo(p,l){p.style.left=l+'px'}
-      function blinkGlow(p,iv,cnt,cb){var step=0;p.classList.add('glow');glowInt=setInterval(function(){step++;if(step>=cnt*2){clearInterval(glowInt);glowInt=null;p.classList.remove('glow');if(cb)cb();return}p.classList.toggle('glow')},iv);pool.push(glowInt)}
-      function reset(){[pCust,pMgr,pDrv].forEach(function(p){p.style.transition='none';p.style.opacity='0'});pCust.style.left=leftL()+'px';pMgr.style.left=centerL()+'px';pDrv.style.left=rightL()+'px';void pCust.offsetWidth;void pMgr.offsetWidth;void pDrv.offsetWidth;[pCust,pMgr,pDrv].forEach(function(p){p.style.transition=''});scr(pCust,'call');scr(pMgr,'ring');scr(pDrv,'noti');curOff();hlOff();hideEnding();hideMid();if(glowInt){clearInterval(glowInt);glowInt=null}pMgr.classList.remove('glow');pCust.classList.remove('glow');pDrv.classList.remove('glow')}
-      function go(){if(!playing)return;reset();bgmStart();setT('','고객이 전화한다');hl(['cust','mgr']);w(function(){if(!playing)return;fadeIn(pCust,leftL());fadeIn(pMgr,rightL());w(function(){if(!playing)return;var p=pp(pMgr,0.22,0.80);curTo(p.x+25,p.y-35);w(function(){if(!playing)return;curTo(p.x,p.y);w(function(){if(!playing)return;clickFx(p.x,p.y);w(function(){if(!playing)return;sc2()},350)},450)},500)},800)},300)}
-      function sc2(){scr(pMgr,'call');setT('','고객과 통화중');hl(['mgr']);fadeOut(pCust);moveTo(pMgr,centerL());curOff();w(function(){if(!playing)return;var e=pp(pMgr,0.50,0.84);curTo(e.x+20,e.y-30);w(function(){if(!playing)return;curTo(e.x,e.y);w(function(){if(!playing)return;clickFx(e.x,e.y);w(function(){if(!playing)return;scr(pMgr,'dispatch');curOff();setT('','통화 종료 → 즉시 배차');blinkGlow(pMgr,500,3,function(){if(!playing)return;var d=pp(pMgr,0.35,0.45);curTo(d.x+20,d.y-20);w(function(){if(!playing)return;curTo(d.x,d.y);w(function(){if(!playing)return;clickFx(d.x,d.y);w(function(){if(!playing)return;sc3()},400)},450)},500)})},350)},450)},500)},1000)}
-      function sc3(){curOff();setT('','기사가 배차를 받는다');hl(['mgr','drv']);scr(pMgr,'done');moveTo(pMgr,leftL());w(function(){if(!playing)return;fadeIn(pDrv,rightL());w(function(){if(!playing)return;var c=pp(pDrv,0.50,0.58);curTo(c.x+15,c.y-15);w(function(){if(!playing)return;curTo(c.x,c.y);w(function(){if(!playing)return;clickFx(c.x,c.y);w(function(){if(!playing)return;sc4()},400)},450)},500)},600)},350)}
-      function sc4(){curOff();setT('','기사 운행 준비');hl(['drv']);fadeOut(pMgr);scr(pDrv,'prepare');moveTo(pDrv,centerL());w(function(){if(!playing)return;var s=pp(pDrv,0.65,0.72);curTo(s.x+15,s.y-15);w(function(){if(!playing)return;curTo(s.x,s.y);w(function(){if(!playing)return;clickFx(s.x,s.y);w(function(){if(!playing)return;scr(pDrv,'driving');curOff();setT('','운행 중');w(function(){if(!playing)return;sc5()},2000)},400)},450)},500)},600)}
-      function sc5(){fadeOut(pDrv);setT('','앱으로 호출시');hl(['cust']);scr(pCust,'home');w(function(){if(!playing)return;fadeIn(pCust,centerL());w(function(){if(!playing)return;var h=pp(pCust,0.50,0.68);curTo(h.x+15,h.y-15);w(function(){if(!playing)return;curTo(h.x,h.y);w(function(){if(!playing)return;clickFx(h.x,h.y);w(function(){if(!playing)return;scr(pCust,'appcall');curOff();w(function(){if(!playing)return;var b=pp(pCust,0.50,0.88);curTo(b.x+15,b.y-15);w(function(){if(!playing)return;curTo(b.x,b.y);w(function(){if(!playing)return;clickFx(b.x,b.y);w(function(){if(!playing)return;curOff();scr(pCust,'requested');moveTo(pCust,leftL());setT('','앱 호출도 바로 배차');hl(['cust','mgr']);scr(pMgr,'dispatch');fadeIn(pMgr,rightL());w(function(){if(!playing)return;blinkGlow(pMgr,500,3,function(){if(!playing)return;fadeOut(pCust);fadeOut(pMgr);setT('','');hlOff();w(function(){if(!playing)return;showMid();w(function(){if(!playing)return;hideMid();w(function(){if(!playing)return;showEnding();w(function(){if(!playing)return;bgmFadeOut(800,function(){if(!playing)return;w(function(){go()},1200)})},3000)},500)},2500)},600)})},300)},400)},450)},500)},700)},400)},450)},500)},800)},400)}
+
+      function startGlow(p,iv){p.classList.add('glow');glowInt=setInterval(function(){p.classList.toggle('glow')},iv);pool.push(glowInt)}
+      function stopGlow(p){if(glowInt){clearInterval(glowInt);glowInt=null}p.classList.remove('glow')}
+
+      function reset(){
+        [pCust,pMgr,pOld].forEach(function(p){p.style.transition='none';p.style.opacity='0'});
+        pCust.style.left=leftL()+'px';pMgr.style.left=centerL()+'px';pOld.style.left=rightL()+'px';
+        void pCust.offsetWidth;void pMgr.offsetWidth;void pOld.offsetWidth;
+        [pCust,pMgr,pOld].forEach(function(p){p.style.transition=''});
+        scr(pCust,'call');scr(pMgr,'ring');scr(pOld,'s1');
+        curOff();hideIcons();hideEnding();hideLabels();stopGlow(pMgr);
+        pMgr.classList.remove('glow');pOld.classList.remove('glow');
+        phoneW=pMgr.offsetWidth;
+      }
+
+      var clickSeq=[
+        {from:'s1',to:'s2',x:0.13,y:0.90},
+        {from:'s2',to:'s3',x:0.25,y:0.47},
+        {from:'s3',to:'s4',x:0.78,y:0.65},
+        {from:'s4',to:'s5',x:0.30,y:0.89},
+        {from:'s5',to:'s6',x:0.30,y:0.75},
+        {from:'s6',to:'s7',x:0.70,y:0.92},
+        {from:'s7',to:null, x:0.11,y:0.70}
+      ];
+
+      function runClickSeq(idx,cb){
+        if(!playing)return;
+        if(idx>=clickSeq.length){if(cb)cb();return}
+        var c=clickSeq[idx];
+        var p=pp(pOld,c.x,c.y);
+        curTo(p.x+15,p.y-15);
+        w(function(){if(!playing)return;curTo(p.x,p.y);
+          w(function(){if(!playing)return;clickFx(p.x,p.y);
+            w(function(){if(!playing)return;if(c.to)scr(pOld,c.to);lblOld.textContent=(idx+2<=8?(idx+2)+'/8':'8/8');
+              w(function(){if(!playing)return;runClickSeq(idx+1,cb)},500)
+            },300)
+          },400)
+        },400);
+      }
+
+      function go(){
+        if(!playing)return;reset();bgmStart();
+        setT('고객이 전화한다');
+        w(function(){if(!playing)return;
+          fadeIn(pCust,leftL());fadeIn(pMgr,rightL());
+          w(function(){if(!playing)return;
+            var p=pp(pMgr,0.22,0.80);curTo(p.x+25,p.y-35);
+            w(function(){if(!playing)return;curTo(p.x,p.y);
+              w(function(){if(!playing)return;clickFx(p.x,p.y);
+                w(function(){if(!playing)return;scene2()},350)
+              },450)
+            },500)
+          },800)
+        },300);
+      }
+
+      function scene2(){
+        scr(pMgr,'call');setT('고객과 통화중');fadeOut(pCust);moveTo(pMgr,centerL());curOff();
+        w(function(){if(!playing)return;
+          var e=pp(pMgr,0.50,0.84);curTo(e.x+20,e.y-30);
+          w(function(){if(!playing)return;curTo(e.x,e.y);
+            w(function(){if(!playing)return;clickFx(e.x,e.y);
+              w(function(){if(!playing)return;scr(pMgr,'dispatch');curOff();scene3()},350)
+            },450)
+          },500)
+        },1000);
+      }
+
+      function scene3(){
+        lblMgr.textContent='원클릭 배차끝';lblOld.textContent='1/8';
+        showLabels(leftL(),rightL());
+        moveTo(pMgr,leftL());startGlow(pMgr,500);
+        w(function(){if(!playing)return;
+          scr(pOld,'s1');fadeIn(pOld,rightL());showIcons(leftL(),rightL());
+          w(function(){if(!playing)return;
+            runClickSeq(0,function(){if(!playing)return;
+              curOff();stopGlow(pMgr);lblOld.textContent='8번만의 배차';
+              var lblBlink=setInterval(function(){lblMgr.classList.toggle('vis');lblOld.classList.toggle('vis')},400);pool.push(lblBlink);
+              w(function(){if(!playing)return;clearInterval(lblBlink);lblMgr.classList.add('vis');lblOld.classList.add('vis');
+                fadeOut(pMgr);fadeOut(pOld);hideLabels();hideIcons();
+                w(function(){if(!playing)return;showEnding();
+                  w(function(){if(!playing)return;
+                    bgmFadeOut(800,function(){if(!playing)return;w(function(){go()},1200)})
+                  },3000)
+                },600)
+              },3000)
+            })
+          },600)
+        },350);
+      }
+
       var startOverlay=document.getElementById('demoStartOverlay');
-      startOverlay.addEventListener('click',function(){
+      startOverlay.addEventListener('click',function(e){
+        e.stopPropagation();
         startOverlay.classList.add('hidden');
         playing=true;
         go();
       });
-      btnPlay.addEventListener('click',function(){if(!playing){playing=true;this.innerHTML='&#10074;&#10074;';go()}else{playing=false;this.innerHTML='&#9654;';stopAll();bgmStop()}});
+      function pause(){playing=false;btnPlay.innerHTML='&#9654;';bgm.pause()}
+      function resume(){playing=true;btnPlay.innerHTML='&#10074;&#10074;';bgm.play().catch(function(){})}
+      btnPlay.addEventListener('click',function(){if(!playing){resume()}else{pause()}});
+      stage.addEventListener('click',function(e){if(!startOverlay.classList.contains('hidden'))return;if(playing){pause()}else{resume()}});
+
+      // 스크롤 시 시연영상 화면 밖 → 자동 정지
+      var demoObs=new IntersectionObserver(function(entries){
+        entries.forEach(function(e){
+          if(!e.isIntersecting && playing){pause()}
+        });
+      },{threshold:0.1});
+      demoObs.observe(stage);
     })();
 
     // ═══════════════════════════════════════
-    // 장면 자동 전환 (Scene Theater)
+    // 메인광고 스크롤 자동 재생
     // ═══════════════════════════════════════
-    (function() {
-      var SCENES = [
-        { badge: 'SCENE 1', title: '전화가 온다' },
-        { badge: 'SCENE 2', title: '배차, 단 1번의 터치' },
-        { badge: 'SCENE 3', title: '운행 완료, 정산도 자동' },
-        { badge: 'SCENE 4', title: '다음 날, 손님이 돌아온다' }
-      ];
-
-      var INTERVAL = 4000;
-      var current = 0;
-      var playing = true;
-      var timer = null;
-
-      var badgeEl = document.getElementById('sceneBadge');
-      var titleEl = document.getElementById('sceneTitle');
-      var dots = document.querySelectorAll('.scene-dot');
-      var labels = document.querySelectorAll('.scene-label-btn');
-      var progressBar = document.getElementById('progressBar');
-      var progressFill = document.getElementById('progressFill');
-      var playPauseBtn = document.getElementById('playPause');
-      var slots = ['slotLeft', 'slotCenter', 'slotRight'];
-
-      function goTo(idx) {
-        current = idx;
-        badgeEl.textContent = SCENES[idx].badge;
-        titleEl.style.opacity = '0';
-        setTimeout(function() {
-          titleEl.textContent = SCENES[idx].title;
-          titleEl.style.opacity = '1';
-        }, 200);
-
-        slots.forEach(function(slotId) {
-          var slot = document.getElementById(slotId);
-          var contents = slot.querySelectorAll('.scene-content');
-          contents.forEach(function(c) { c.classList.remove('active'); });
-          var target = slot.querySelector('[data-scene="' + idx + '"]');
-          if (target) {
-            setTimeout(function() { target.classList.add('active'); }, 80);
+    (function(){
+      var mv=document.getElementById('mainVideo');
+      if(!mv)return;
+      var videoObs=new IntersectionObserver(function(entries){
+        entries.forEach(function(e){
+          if(e.isIntersecting){
+            mv.volume=0.15;
+            mv.muted=false;
+            mv.play().catch(function(){mv.muted=true;mv.play()});
+          }else{
+            mv.pause();
           }
         });
-
-        dots.forEach(function(d, i) { d.classList.toggle('active', i === idx); });
-        labels.forEach(function(l, i) { l.classList.toggle('active', i === idx); });
-        progressBar.style.width = ((idx + 1) / SCENES.length * 100) + '%';
-        resetFill();
-      }
-
-      function next() { goTo((current + 1) % SCENES.length); }
-
-      function resetFill() {
-        progressFill.style.transition = 'none';
-        progressFill.style.width = (current / SCENES.length * 100) + '%';
-        if (playing) {
-          requestAnimationFrame(function() {
-            progressFill.style.transition = 'width ' + (INTERVAL / 1000) + 's linear';
-            progressFill.style.width = ((current + 1) / SCENES.length * 100) + '%';
-          });
-        }
-      }
-
-      function startTimer() {
-        stopTimer();
-        timer = setInterval(next, INTERVAL);
-        resetFill();
-      }
-
-      function stopTimer() {
-        if (timer) { clearInterval(timer); timer = null; }
-        progressFill.style.transition = 'none';
-      }
-
-      dots.forEach(function(d) {
-        d.addEventListener('click', function() {
-          goTo(parseInt(this.getAttribute('data-idx')));
-          if (playing) startTimer();
-        });
-      });
-
-      labels.forEach(function(l) {
-        l.addEventListener('click', function() {
-          goTo(parseInt(this.getAttribute('data-idx')));
-          if (playing) startTimer();
-        });
-      });
-
-      playPauseBtn.addEventListener('click', function() {
-        playing = !playing;
-        this.innerHTML = playing ? '&#10074;&#10074;' : '&#9654;';
-        this.title = playing ? '일시정지' : '재생';
-        if (playing) { startTimer(); } else { stopTimer(); }
-      });
-
-      startTimer();
+      },{threshold:0.5});
+      videoObs.observe(mv);
     })();
+
   </script>
 
 </body>
