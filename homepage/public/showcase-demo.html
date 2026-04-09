@@ -13,7 +13,7 @@
 
     .wrap{width:100%;max-width:500px;padding:12px}
 
-    .hdr{text-align:center;margin-bottom:16px;padding:0;min-height:auto;display:flex;flex-direction:column;align-items:center;justify-content:center}
+    .hdr{text-align:center;margin-bottom:16px;padding:0;height:28px;display:flex;align-items:center;justify-content:center}
     .hdr-badge{display:inline-block;background:rgba(255,171,0,.15);color:var(--primary);
       font-weight:900;font-size:.6rem;padding:2px 10px;border-radius:50px;margin-bottom:4px}
     .hdr-title{font-size:1.1rem;font-weight:900;transition:opacity .3s,font-size .3s,color .3s;white-space:pre-line}
@@ -126,8 +126,8 @@
 <body>
 <div class="wrap">
   <div class="hdr">
-    <div class="hdr-badge" id="badge">SCENE 1</div>
-    <div class="hdr-title" id="title">고객이 전화한다</div>
+    <div class="hdr-badge" id="badge" style="display:none"></div>
+    <div class="hdr-title" id="title"></div>
   </div>
 
   <div class="stage" id="stage">
@@ -224,9 +224,9 @@
   }
 
   function setT(b,t,emph){
-    badgeEl.textContent=b;badgeEl.style.display=b?'':'none';
+    badgeEl.style.display='none';
     titleEl.style.opacity='0';titleEl.classList.remove('emphasis');
-    w(function(){titleEl.textContent=t;titleEl.style.opacity='1';if(emph)titleEl.classList.add('emphasis')},180);
+    w(function(){titleEl.textContent=t||'';titleEl.style.opacity=t?'1':'0';if(emph)titleEl.classList.add('emphasis')},180);
   }
   function showMid(){midtextEl.classList.add('vis')}
   function hideMid(){midtextEl.classList.remove('vis')}
@@ -312,41 +312,15 @@
     if(!playing)return;
     reset();
     bgmStart();
-
-    // ===== SCENE 1: 고객이 전화한다 =====
-    setT('SCENE 1','고객이 전화한다');
-    hl(['cust','mgr']);
-
-    w(function(){
-      if(!playing)return;
-      fadeIn(pCust,leftL());
-      fadeIn(pMgr,rightL());
-
-      // 콜매니저 수락 클릭
-      w(function(){
-        if(!playing)return;
-        var p=pp(pMgr,0.22,0.80);
-        curTo(p.x+25,p.y-35);
-        w(function(){
-          if(!playing)return;
-          curTo(p.x,p.y);
-          w(function(){
-            if(!playing)return;
-            clickFx(p.x,p.y);
-            w(function(){if(!playing)return; scene2()},350);
-          },450);
-        },500);
-      },800);
-    },300);
+    scene2();
   }
 
   // ===== SCENE 2: 고객과 통화중 → 배차 =====
   function scene2(){
     scr(pMgr,'call');
-    setT('SCENE 2','고객과 통화중');
+    setT('','고객과 통화중');
     hl(['mgr']);
-    fadeOut(pCust);
-    moveTo(pMgr,centerL());
+    fadeIn(pMgr,centerL());
     curOff();
 
     // 통화 종료 클릭
@@ -391,7 +365,7 @@
   // ===== SCENE 3: 기사가 배차를 받는다 =====
   function scene3(){
     curOff();
-    setT('SCENE 3','기사가 배차를 받는다');
+    setT('','기사가 배차를 받는다');
     hl(['mgr','drv']);
     scr(pMgr,'done');
     moveTo(pMgr,leftL());
@@ -421,7 +395,7 @@
   // ===== SCENE 4: 기사 운행 준비 =====
   function scene4(){
     curOff();
-    setT('SCENE 4','기사 운행 준비');
+    setT('','기사 운행 준비');
     hl(['drv']);
     fadeOut(pMgr);
     scr(pDrv,'prepare');
@@ -453,7 +427,7 @@
   // ===== SCENE 5: 앱으로 호출시 =====
   function scene5(){
     fadeOut(pDrv);
-    setT('SCENE 5','앱으로 호출시');
+    setT('','앱으로 호출시');
     hl(['cust']);
     scr(pCust,'home');
 
@@ -494,7 +468,7 @@
                       // 동시에: 손님앱3 전환 + 왼쪽 이동 + 콜매니저3 오른쪽 페이드인
                       scr(pCust,'requested');
                       moveTo(pCust,leftL());
-                      setT('SCENE 6','앱 호출도 바로 배차',true);
+                      setT('','앱 호출도 바로 배차',true);
                       hl(['cust','mgr']);
                       scr(pMgr,'dispatch');
                       fadeIn(pMgr,rightL());
@@ -527,7 +501,7 @@
                                   if(!playing)return;
                                   bgmFadeOut(800,function(){
                                     if(!playing)return;
-                                    w(function(){go()},1200);
+                                    // 종료 — 루프 없음
                                   });
                                 },3000);
                               },500);
@@ -560,7 +534,34 @@
     }
   });
 
-  go();
+  // ?start=3 지원: Scene 3부터 시작
+  function goFromScene3(){
+    if(!playing)return;
+    reset();bgmStart();
+    setT('','기사가 배차를 받는다');
+    hl(['mgr','drv']);
+    scr(pMgr,'done');
+    fadeIn(pMgr,leftL());
+    w(function(){
+      if(!playing)return;
+      fadeIn(pDrv,rightL());
+      w(function(){
+        if(!playing)return;
+        var c=pp(pDrv,0.50,0.58);
+        curTo(c.x+15,c.y-15);
+        w(function(){
+          if(!playing)return;curTo(c.x,c.y);
+          w(function(){
+            if(!playing)return;clickFx(c.x,c.y);
+            w(function(){if(!playing)return;scene4()},400);
+          },450);
+        },500);
+      },600);
+    },350);
+  }
+
+  var params=new URLSearchParams(window.location.search);
+  if(params.get('start')==='3'){goFromScene3()}else{go()}
 })();
 </script>
 </body>

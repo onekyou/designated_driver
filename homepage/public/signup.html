@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>콜마당 - 무료 신청</title>
+  <meta name="description" content="콜마당 무료 파일럿 신청. 담당자가 직접 방문하여 설치해드립니다.">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/gh/fonts-archive/KakaoBigSans/KakaoBigSans.css" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --primary:       #FFAB00;
+      --primary-dark:  #FF8F00;
+      --primary-light: #FFCF66;
+      --bg-light:      #FFFBF0;
+      --bg-warm:       #FFF8EC;
+      --text-dark:     #2C3E50;
+      --text-muted:    #5D6D7E;
+      --white:         #ffffff;
+      --navy:          #1a2640;
+      --navy-deep:     #0f1a2e;
+      --border:        rgba(255,171,0,0.2);
+      --radius:        18px;
+      --radius-sm:     10px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+      color: var(--text-dark);
+      line-height: 1.7;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+      font-size: 18px;
+    }
+
+    h1, h2, h3 {
+      font-family: 'KakaoBigSans', sans-serif;
+      font-weight: 900;
+      line-height: 1.4;
+      letter-spacing: -0.02em;
+    }
+
+    a { text-decoration: none; color: inherit; }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* ── NAV ───────────────────────────────────── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 1000;
+      background: rgba(15,26,46,0.97);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      transition: box-shadow 0.3s, background 0.3s;
+    }
+    nav.scrolled { box-shadow: 0 4px 24px rgba(0,0,0,0.3); }
+    .nav-inner {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      height: 64px;
+    }
+    .nav-logo {
+      display: flex; align-items: center; gap: 2px;
+    }
+    .nav-logo-text {
+      font-family: 'KakaoBigSans', sans-serif;
+      font-size: 1.15rem; font-weight: 700;
+      color: var(--primary);
+    }
+    .nav-links { display: flex; gap: 28px; }
+    .nav-link {
+      color: rgba(255,255,255,0.65);
+      font-size: 0.92rem; font-weight: 500;
+      transition: color 0.2s;
+    }
+    .nav-link:hover { color: var(--white); }
+    .nav-hamburger {
+      display: none; flex-direction: column; gap: 5px;
+      cursor: pointer; padding: 4px;
+    }
+    .nav-hamburger span {
+      width: 22px; height: 2px;
+      background: rgba(255,255,255,0.7);
+      transition: transform 0.3s, opacity 0.3s;
+    }
+    .nav-hamburger.open span:nth-child(1) { transform: rotate(45deg) translate(5px, 5px); }
+    .nav-hamburger.open span:nth-child(2) { opacity: 0; }
+    .nav-hamburger.open span:nth-child(3) { transform: rotate(-45deg) translate(5px, -5px); }
+    .nav-mobile {
+      display: none; flex-direction: column;
+      padding: 16px 24px 20px;
+      background: var(--navy-deep);
+    }
+    .nav-mobile.open { display: flex; }
+    .nav-mobile a {
+      color: rgba(255,255,255,0.7);
+      padding: 10px 0; font-size: 0.95rem;
+    }
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      .nav-hamburger { display: flex; }
+    }
+
+    /* ── SIGNUP ─────────────────────────────────── */
+    .signup {
+      background: var(--bg-warm);
+      color: var(--text-dark);
+      padding: 140px 0 80px;
+      min-height: 100vh;
+    }
+    .signup .section-heading {
+      font-size: 2.2rem;
+      text-align: center;
+      margin-bottom: 16px;
+      color: var(--text-dark);
+    }
+
+    .signup-badges {
+      display: flex; justify-content: center;
+      gap: 16px; flex-wrap: wrap; margin-bottom: 40px;
+    }
+    .signup-badge {
+      background: rgba(255,171,0,0.1);
+      border: 1px solid rgba(255,171,0,0.25);
+      color: var(--primary-dark);
+      padding: 10px 18px; border-radius: 50px;
+      font-size: 0.9rem; font-weight: 500;
+    }
+
+    .signup-form-wrap { max-width: 520px; margin: 0 auto; }
+
+    #ref-banner {
+      display: none;
+      background: rgba(255,171,0,0.12);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 16px;
+      color: var(--primary-dark);
+      font-size: 0.9rem; margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .form-group { margin-bottom: 18px; }
+    .form-group label {
+      display: block; font-size: 0.92rem;
+      font-weight: 500; color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%; padding: 14px 16px;
+      border: 1px solid rgba(0,0,0,0.12);
+      border-radius: var(--radius-sm);
+      font-size: 1rem;
+      font-family: 'Noto Sans KR', sans-serif;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      background: var(--white);
+      color: var(--text-dark);
+    }
+    .form-group input::placeholder,
+    .form-group textarea::placeholder { color: rgba(0,0,0,0.3); }
+    .form-group select {
+      color: var(--text-dark);
+      appearance: none;
+      background-color: var(--white);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23FF8F00' d='M1.41 0L6 4.58 10.59 0 12 1.41l-6 6-6-6z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 16px center;
+      padding-right: 40px;
+    }
+    .form-group select option { background: var(--white); color: var(--text-dark); }
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(255,171,0,0.15);
+    }
+    .form-group textarea { resize: vertical; min-height: 72px; }
+
+    .btn-submit {
+      width: 100%; padding: 18px 20px;
+      background: var(--primary); color: var(--navy);
+      border: none; border-radius: var(--radius-sm);
+      font-size: 1.15rem; font-weight: 700;
+      font-family: 'Noto Sans KR', sans-serif;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.2s;
+    }
+    .btn-submit:hover { background: var(--primary-dark); transform: translateY(-2px); }
+    .btn-submit:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
+
+    #signup-success {
+      display: none; text-align: center; padding: 48px 20px;
+    }
+    #signup-success h3 {
+      font-family: 'Noto Sans KR', sans-serif;
+      font-size: 1.4rem; margin: 16px 0 12px;
+      color: var(--primary-dark);
+    }
+    #signup-success p { color: var(--text-muted); }
+
+    #signup-error {
+      display: none; color: #e53935;
+      text-align: center; margin-top: 12px; font-size: 0.9rem;
+    }
+
+    /* ── FOOTER ─────────────────────────────────── */
+    footer {
+      background: var(--navy-deep);
+      color: rgba(255,255,255,0.4);
+      padding: 40px 0 28px;
+      font-size: 0.85rem;
+    }
+    .footer-inner {
+      display: flex; justify-content: space-between;
+      align-items: flex-start; gap: 40px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .footer-logo {
+      font-family: 'KakaoBigSans', sans-serif;
+      font-size: 1rem; font-weight: 700;
+      color: rgba(255,255,255,0.6);
+      margin-bottom: 8px;
+    }
+    .footer-info { line-height: 1.8; }
+    .footer-links a {
+      color: rgba(255,255,255,0.5);
+      transition: color 0.2s;
+    }
+    .footer-links a:hover { color: var(--primary); }
+    .footer-bottom {
+      text-align: center;
+      padding-top: 20px;
+      color: rgba(255,255,255,0.25);
+      font-size: 0.8rem;
+    }
+    @media (max-width: 768px) {
+      .footer-inner { flex-direction: column; gap: 24px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ════════════ NAV ════════════ -->
+  <nav>
+    <div class="container nav-inner">
+      <a href="index.html" class="nav-logo">
+        <span class="nav-logo-text">콜마당</span>
+        <span style="color:rgba(255,255,255,0.4);font-size:0.8rem;font-weight:400;margin-left:4px">지역대리운전 관리 플랫폼</span>
+      </a>
+      <div class="nav-links">
+        <a href="index.html" class="nav-link">서비스 소개</a>
+        <a href="https://head-manager-web.web.app/owner/login" class="nav-link">관리자 로그인</a>
+      </div>
+      <div class="nav-hamburger" onclick="toggleMobileNav()">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+    <div class="nav-mobile" id="nav-mobile">
+      <a href="index.html" onclick="closeMobileNav()">서비스 소개</a>
+      <a href="https://head-manager-web.web.app/owner/login" onclick="closeMobileNav()">관리자 로그인</a>
+    </div>
+  </nav>
+
+  <!-- ════════════ SIGNUP ════════════ -->
+  <section class="signup">
+    <div class="container">
+      <h2 class="section-heading">담당자가 직접 방문하여 설치해드립니다</h2>
+      <div class="signup-badges">
+        <span class="signup-badge">6개월 무료</span>
+        <span class="signup-badge">설치 무료</span>
+        <span class="signup-badge">해지 자유, 데이터는 사장님 것</span>
+      </div>
+      <div class="signup-form-wrap">
+        <div id="ref-banner"></div>
+        <form id="signup-form">
+          <div class="form-group">
+            <label for="officeName">사무실 이름 *</label>
+            <input type="text" id="officeName" name="officeName" required placeholder="예: 양평 대리운전">
+          </div>
+          <div class="form-group">
+            <label for="ownerName">대표자 이름 *</label>
+            <input type="text" id="ownerName" name="ownerName" required placeholder="홍길동">
+          </div>
+          <div class="form-group">
+            <label for="phone">연락처 *</label>
+            <input type="tel" id="phone" name="phone" required placeholder="010-0000-0000">
+          </div>
+          <div class="form-group">
+            <label for="gmail">Gmail 주소 *</label>
+            <input type="email" id="gmail" name="gmail" required placeholder="example@gmail.com">
+            <small style="color: var(--text-muted); font-size: 0.78rem;">Play Store에 로그인된 Gmail을 입력해주세요<br>(Play Store 앱 → 우측 상단 프로필 아이콘에서 확인)</small>
+            <small style="color: var(--primary-dark); font-size: 0.78rem; display:block; margin-top:6px;">※ 업무 특성상 비공개 앱 다운로드를 위해 반드시 필요합니다</small>
+          </div>
+          <div class="form-group">
+            <label for="region">운영 지역</label>
+            <input type="text" id="region" name="region" value="양평" placeholder="예: 양평 용문읍">
+          </div>
+          <div class="form-group">
+            <label for="message">문의사항</label>
+            <textarea id="message" name="message" rows="3" placeholder="궁금한 점이 있으시면 자유롭게 입력해주세요"></textarea>
+          </div>
+          <button type="submit" class="btn-submit">신청하기</button>
+          <div id="signup-error">
+            전송에 실패했습니다. 아래 번호로 직접 연락 주세요.<br>
+            <strong style="color:var(--primary)"></strong>
+          </div>
+        </form>
+        <div id="signup-success">
+          <div style="font-size:3rem">&#127881;</div>
+          <h3>신청 완료!</h3>
+          <p>담당자가 24시간 내에 연락드립니다.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ FOOTER ════════════ -->
+  <footer>
+    <div class="container">
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <div class="footer-logo">콜마당 · 콜링크</div>
+          <div class="footer-info">
+            상호: 콜링크 (callLink)<br>
+            주소: 경기도 양평군 용문면 두담길 10, 12519<br>
+            사업자등록번호: 460-08-03296<br>
+            전화: +82 10 3670 2011
+          </div>
+        </div>
+        <div class="footer-contact">
+          <div class="footer-links">
+            <a href="https://head-manager-web.web.app/owner/login">관리자 로그인</a>
+          </div>
+          <p style="margin-top:8px;"><a href="mailto:calllinkdrive@gmail.com">calllinkdrive@gmail.com</a></p>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        &copy; 2026 콜링크. All rights reserved.
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    function toggleMobileNav() {
+      document.querySelector('.nav-hamburger').classList.toggle('open');
+      document.getElementById('nav-mobile').classList.toggle('open');
+    }
+    function closeMobileNav() {
+      document.querySelector('.nav-hamburger').classList.remove('open');
+      document.getElementById('nav-mobile').classList.remove('open');
+    }
+
+    window.addEventListener('scroll', function() {
+      document.querySelector('nav').classList.toggle('scrolled', window.scrollY > 50);
+    });
+
+    var FORM_ENDPOINT = 'https://asia-northeast3-calldetector-5d61e.cloudfunctions.net/submitOfficeApplication';
+
+    document.getElementById('signup-form').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      var btn = e.target.querySelector('button[type=submit]');
+      btn.textContent = '전송중...';
+      btn.disabled = true;
+
+      var data = {
+        officeName: e.target.officeName.value.trim(),
+        ownerName:  e.target.ownerName.value.trim(),
+        phone:      e.target.phone.value.trim(),
+        gmail:      e.target.gmail.value.trim(),
+        region:     e.target.region.value.trim(),
+        dailyCalls: e.target.dailyCalls.value,
+        message:    e.target.message.value.trim(),
+        ref:        sessionStorage.getItem('cm_ref') || 'direct',
+        timestamp:  new Date().toLocaleString('ko-KR'),
+      };
+
+      try {
+        var response = await fetch(FORM_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        var result = await response.json();
+        if (response.ok && result.success) {
+          document.getElementById('signup-form').style.display = 'none';
+          document.getElementById('signup-success').style.display = 'block';
+        } else {
+          var msg = result.error || '신청 중 오류가 발생했습니다.';
+          document.getElementById('signup-error').style.display = 'block';
+          document.getElementById('signup-error').querySelector('strong').textContent = msg;
+          btn.textContent = '신청하기';
+          btn.disabled = false;
+        }
+      } catch (err) {
+        document.getElementById('signup-error').style.display = 'block';
+        btn.textContent = '신청하기';
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
