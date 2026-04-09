@@ -276,7 +276,8 @@
       margin-bottom: 28px;
     }
     .hero-text h1 {
-      font-size: 2.8rem; font-weight: 900; color: var(--white);
+      font-family: 'KakaoBigSans', sans-serif;
+      font-size: 2.8rem; font-weight: 700; color: var(--white);
       line-height: 1.3; margin-bottom: 24px;
     }
     .hero-text h1 strong { color: var(--primary); }
@@ -902,7 +903,7 @@
         <!-- 왼쪽 텍스트 -->
         <div class="hero-text">
           <div class="hero-label animate">&#10024; 양평 지역 사무실 무료 파일럿 신청중</div>
-          <h1 class="animate animate-d1">통화가 끝나면<br><strong>배차가 시작됩니다</strong></h1>
+          <h1 class="animate animate-d1">통화가 끝나면<br>배차가 시작됩니다</h1>
           <p class="hero-desc animate animate-d2">
             통화 후 기사배차까지 <strong style="color:var(--primary)">8번의 클릭</strong>,<br>
             콜마당은 <strong style="color:var(--primary)">단 1번</strong>에 해결합니다.
@@ -993,14 +994,14 @@
   <section class="main-hero">
     <div class="container">
       <div class="main-hero-split">
-        <video class="main-video" id="mainVideo" muted loop playsinline>
+        <video class="main-video" id="mainVideo" muted loop playsinline controls>
           <source src="sourc/%EB%A9%94%EC%9D%B8%EA%B4%91%EA%B3%A0.mp4" type="video/mp4">
         </video>
         <div class="main-hero-text">
-          <h1>당신의 사무실을 무장하세요.</h1>
+          <h1>운전 중 배차, 도로 위 수많은 위험들</h1>
           <p class="main-sub">
-            전화기 하나로 홀로 손님을 지켜온 당신,<br>
-            <strong>이제, 진짜 무기로 무장하세요.</strong>
+            그럼에도 전화기 하나로 손님을 지켜온 당신,<br>
+            <strong>이제 콜마당으로 당신의 사무실을 무장하세요</strong>
           </p>
         </div>
       </div>
@@ -1464,10 +1465,10 @@
         w(function(){if(!playing)return;curTo(p.x,p.y);
           w(function(){if(!playing)return;clickFx(p.x,p.y);
             w(function(){if(!playing)return;if(c.to)scr(pOld,c.to);lblOld.textContent=(idx+2<=8?(idx+2)+'/8':'8/8');
-              w(function(){if(!playing)return;runClickSeq(idx+1,cb)},500)
-            },300)
-          },400)
-        },400);
+              w(function(){if(!playing)return;runClickSeq(idx+1,cb)},310)
+            },190)
+          },250)
+        },250);
       }
 
       function go(){
@@ -1536,7 +1537,10 @@
       // 스크롤 시 시연영상 화면 밖 → 자동 정지
       var demoObs=new IntersectionObserver(function(entries){
         entries.forEach(function(e){
-          if(!e.isIntersecting && playing){pause()}
+          if(!e.isIntersecting){
+            pause();stopAll();bgmStop();reset();
+            startOverlay.classList.remove('hidden');
+          }
         });
       },{threshold:0.1});
       demoObs.observe(stage);
@@ -1548,13 +1552,17 @@
     (function(){
       var mv=document.getElementById('mainVideo');
       if(!mv)return;
+      var userPaused=false;
+      mv.addEventListener('pause',function(){if(!document.hidden)userPaused=true});
+      mv.addEventListener('play',function(){userPaused=false});
       var videoObs=new IntersectionObserver(function(entries){
         entries.forEach(function(e){
           if(e.isIntersecting){
             mv.volume=0.15;
             mv.muted=false;
-            mv.play().catch(function(){mv.muted=true;mv.play()});
+            if(!userPaused)mv.play().catch(function(){mv.muted=true;mv.play()});
           }else{
+            if(!mv.paused)userPaused=false;
             mv.pause();
           }
         });
