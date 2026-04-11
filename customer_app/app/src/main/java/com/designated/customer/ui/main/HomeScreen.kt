@@ -116,7 +116,7 @@ fun HomeScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -135,7 +135,7 @@ fun HomeScreen(
                     .fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.weight(1f))
 
             // 하단: 전화호출/앱호출 버튼 (세로 배치)
             Column(
@@ -167,12 +167,7 @@ fun HomeScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // 슬로건
-            SloganBanner(slogan = uiState.slogan)
-
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.weight(1f))
 
             // 에러 메시지
             if (uiState.error != null) {
@@ -327,12 +322,12 @@ private fun PointGradeCard(
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = NavigationBarDefaults.containerColor
         ),
         shape = RoundedCornerShape(0.dp)
     ) {
         Column(
-            modifier = Modifier.padding(20.dp)
+            modifier = Modifier.padding(14.dp)
         ) {
             // 등급 + 포인트
             Row(

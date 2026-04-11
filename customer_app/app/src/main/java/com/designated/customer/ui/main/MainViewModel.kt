@@ -161,12 +161,14 @@ class MainViewModel(
 
                 if (officeDoc.exists()) {
                     val officeName = officeDoc.getString("name") ?: officeId
-                    val provinceName = when(provinceId) {
-                        "seoul" -> "서울"
-                        "gyeonggi" -> "경기"
-                        "Hongchon" -> "홍천"
-                        else -> provinceId
-                    }
+
+                    // provinces 문서에서 지역명 조회
+                    val provinceDoc = firestore
+                        .collection("provinces")
+                        .document(provinceId)
+                        .get()
+                        .await()
+                    val provinceName = provinceDoc.getString("name") ?: provinceId
 
                     uiState = uiState.copy(
                         officeName = officeName,

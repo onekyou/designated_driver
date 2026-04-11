@@ -212,10 +212,10 @@ class MainActivity : ComponentActivity() {
             android.util.Log.d("InstallReferrer", "디코딩된 Referrer: $decoded")
 
             // 파라미터 파싱
-            val params = decoded.split("&").associate {
-                val (key, value) = it.split("=", limit = 2)
-                key to value
-            }
+            val params = decoded.split("&").mapNotNull {
+                val parts = it.split("=", limit = 2)
+                if (parts.size == 2) parts[0] to parts[1] else null
+            }.toMap()
 
             val provinceId = params["p"] ?: params["r"] // p=provinceId, r=regionId(하위호환)
             val cityId = params["c"] ?: "" // c=cityId

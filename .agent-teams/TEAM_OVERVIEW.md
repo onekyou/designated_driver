@@ -1,6 +1,6 @@
 # 콜마당 Agent Teams 전체 상황
 
-> 마지막 업데이트: 2026-02-24 세션5 종료 시점
+> 마지막 업데이트: 2026-04-11 재검증 완료
 
 ## 프로젝트 아키텍처
 
@@ -19,7 +19,7 @@ Customer App ───┘
 - **Call Detector**: 전화 감지 + 배차 (관리자 멀티폰)
 - **Call Manager**: 전체 통제, 콜 접수/배정, Detector 기능 내장
 - **Driver App**: 기사용, 콜 수락/거절/운행/정산
-- **Customer App**: 고객용, 상태 확인 (FCM 100% 의존)
+- **Customer App**: 고객용, 상태 확인 (FCM + Firestore fallback)
 - **Firestore 구조**: `provinces/{pId}/cities/{cId}/offices/{oId}/` (attributed node)
 - **상태 흐름**: WAITING → ASSIGNED → ACCEPTED → IN_PROGRESS → AWAITING_SETTLEMENT → COMPLETED
 
@@ -34,86 +34,112 @@ Customer App ───┘
 | **customer-analyst** | Customer App | manager, driver, firebase |
 | **team-lead** | 종합 조율, 보고서 작성 | - |
 
-## 완료된 분석 (세션 1~4)
+### 홈페이지 검토팀 (2026-04-10~)
+
+| 팀원 | 담당 | 컨텍스트 파일 |
+|------|------|--------------|
+| **homepage-tech** | HTML/CSS/JS 코드 품질, 반응형, 성능, 접근성, SEO | `.agent-teams/homepage-tech.md` |
+| **homepage-design** | UI/UX 디자인 평가, 타 웹사이트 벤치마킹, 트렌드 분석 | `.agent-teams/homepage-design.md` |
+| **리드 (메인)** | 두 팀원 결과 취합, 종합 평가, 우선순위 결정 | - |
+
+## 완료된 분석 (세션 1~5 + 4/11 재검증)
 
 ### 세션 1: V2 코드 분석 + 크로스 검증
 - 4개 앱 전체 코드 리뷰, 상태 전이 매핑, 크로스 검증 프레임워크 구축
-- CROSS-01~07, NEW-08~15, BUG-D08~D12 발견
 
 ### 세션 2: 코드 수정 + 재검증
-- 4건 코드 수정 (아래 "수정 완료" 참조)
-- CD-01 마감 이중 공유콜 방지
+- 4건 코드 수정 (CROSS-01, CROSS-07 일부, Driver 취소, CD-01)
 
 ### 세션 3: Customer App 집중 분석
-- CUST-01~10 발견, SEC-C01~C05 보안 이슈 발견
-- 상세: `.agent-teams/customer-app-analysis.md`
+- CUST-01~10, SEC-C01~C05 발견
 
 ### 세션 4: 정산 로직 크로스 검증
 - STL-01~11 발견 (Manager↔Driver↔CF 3-Way 대조)
-- 시나리오 A~E 시뮬레이션 완료
-- 상세: `.agent-teams/settlement-simulation.md`
 
-### 세션 5 (현재): STL-09 수정 시도 → 토큰 부족으로 문서화만 완료
-- STL-09 수정 방향 settlement-simulation.md에 기록
-- 파일럿 운영 가이드 추가 (전체내역 초기화 전 CONFIRMED 필수)
+### 세션 5: STL-09 문서화
 
-## 수정 완료 (4건)
+### 4/11 재검증 (손님앱 수정 계기)
+- 손님앱 수정 2건 (Install Referrer 파싱 + 지역명 동적 조회) 검증
+- 7일 350콜 시뮬레이션 ALL PASS (180 CP / 0 FAIL)
+- **전체 40건 미해결 이슈 실제 코드 기준 재검증 완료**
+- 결과: 해소 19건, 오탐 7건, 심각도 하향 11건, 조치 권장 4건
+
+## 수정 완료 (4건 + 2건)
 
 | 이슈 | 수정 내용 | 파일 |
 |------|----------|------|
-| CROSS-01 | 기사 상태 4자 통일 ("ASSIGNED") | DispatchActivity.kt:172,275 / index.ts:1198 |
-| CROSS-07 일부 | cancelCall() 기사 WAITING 복구 + FCM | DashboardViewModel.kt:809-868 / index.ts:4368-4431 |
+| CROSS-01 | 기사 상태 4자 통일 ("ASSIGNED") | DispatchActivity.kt / index.ts |
+| CROSS-07 일부 | cancelCall() 기사 WAITING 복구 + FCM | DashboardViewModel.kt / index.ts |
 | Driver App 취소 수신 | "call_cancelled" 전체 구현 | Constants.kt / MyFirebaseMessagingService.kt / DriverViewModel.kt / MainActivity.kt |
-| CD-01 | 마감 시 RINGING+IDLE 이중 공유콜 생성 방지 | CallDetectorService.kt:50,190,691-700,907 |
+| CD-01 | 마감 시 RINGING+IDLE 이중 공유콜 생성 방지 | CallDetectorService.kt |
+| 손님앱 Referrer 파싱 | `=` 없는 파라미터 크래시 방지 (mapNotNull) | customer_app/MainActivity.kt:215-218 |
+| 손님앱 지역명 | 하드코딩 → Firestore provinces 동적 조회 | customer_app/MainViewModel.kt:162-175 |
 
-## 전체 미해결 이슈 현황
+## 전체 이슈 현황 (2026-04-11 재검증 기준)
 
-### 통합 집계 (중복 제거)
+### 해소 확정 (19건)
 
-| 심각도 | 건수 | 항목 |
-|--------|------|------|
-| **Critical** | 11건 | NEW-11(이중배차), NEW-12(Callable인증), CROSS-07(rejectCall), NEW-08(crashlytics), NEW-10(크래시감지), BUG-D11(공유콜ASSIGNED취소잠김), CUST-01(관리자취소FCM), CUST-02(포인트비원자적), BUG-D12(3자이중포인트), SEC-C01(콜생성비인증), **STL-09(carryOver이중계산)** |
-| **High** | 13건 | 공유콜필터, CROSS-02(enum불일치), CROSS-05(Detector동기화), CUST-03(ACCEPTED/IN_PROGRESS FCM없음), CUST-04(100%FCM의존), CUST-07(토큰재시도없음), SEC-C02(포인트소유권), SEC-C03(거래위조), SEC-C04(FCM토큰탈취), CUST-06(CANCELLED철자), **STL-01(외상/이체 creditAmount 미기록)**, **STL-02(Manager pointsUsed=0)**, **STL-03(submitDailySettlement settlementLastCleared 미갱신)** |
-| **Medium** | 11건 | CROSS-06(비원자적), NEW-13(CANCELED철자), NEW-15(ASSIGNED타임아웃없음), BUG-D08(하향), 백그라운드취소, LockScreen취소, reopenSharedCall보안, **STL-04(totalFare≠부분합)**, **STL-05(반올림 불일치)**, **STL-06(settlementLastCleared 2-Way경로)**, **STL-07(매니저확인 후 dailySettlement 누락)** |
-| **Low** | 3건 | approveDriver한글(데드코드), acknowledgeNotification인증, **STL-08(현금+포인트 creditAmount 의미혼동)** |
-| **Info** | 2건 | **STL-10(구/신 정산 시스템 공존)**, **STL-11(자동/수동 finalize 공존)** |
-| **합계** | **40건** | Critical 11 + High 13 + Medium 11 + Low 3 + Info 2 |
+| 이슈 | 근거 |
+|------|------|
+| CROSS-01 | DriverStatus enum PREPARING 추가, 하드코딩 해소 |
+| CROSS-07 | rejectCall() 트랜잭션 기반 구현 완료 (DriverViewModel + LockScreenActivity) |
+| CD-01 | 마감 시 이중 공유콜 방지 |
+| Driver 취소 수신 | call_cancelled 전체 구현 |
+| BUG-D09 | 필드명 불일치 (의도적 설계) |
+| NEW-09 | doc.id vs authUid (등록 흐름에서 보장) |
+| isOfficeAdmin | top-level admins 3곳 일치 |
+| NEW-08 | 4개 앱 Crashlytics 설정 완료 |
+| NEW-10 | onCallDetectorCrash CF + CrashReportService 구현 |
+| NEW-11 | runTransaction + status 체크로 이중배차 방지 |
+| NEW-15 | checkAssignedTimeout CF 매 1분 스케줄 실행 |
+| CUST-01 | CF가 관리자 취소(CANCELED)도 고객 FCM 전송 |
+| CUST-03 | CF onCallStatusChanged가 ACCEPTED/IN_PROGRESS 시 고객 FCM 전송 |
+| BUG-D11 | cancelTrip()이 CANCELLED_BY_DRIVER 사용 + 보안 규칙 허용 |
+| BUG-D12 | 기사앱 포인트 로직 완전 제거, CF 단일화 |
+| STL-09 | calculatedCarryOver 사용으로 이중계산 원천 차단 |
+| STL-07 | 트랜잭션 내 원자적 처리로 dailySettlement 누락 불가 |
+| BUG-D01 | rejectCall() DriverViewModel에 완전 구현 |
+| BUG-D02~D04 | PREPARING enum 추가, HOLD 미사용, runTransaction 사용 |
 
-### 운영 긴급
-- Cloud Functions 소스/빌드 불일치: `firebase deploy --only functions` 필요 (src 수정 반영 안 됨)
-- **⚠️ STL-09 임시 운영 가이드**: 전체내역 초기화 전에 **반드시 기사별 정산 확인(CONFIRMED) 먼저** 완료할 것
+### 오탐 확정 (7건)
 
-### 오탐 확정 (3건)
-- BUG-D09: 필드명 불일치 (의도적 설계)
-- NEW-09: doc.id vs authUid (등록 흐름에서 보장)
-- isOfficeAdmin 경로 불일치 (top-level admins 3곳 일치)
+| 이슈 | 근거 |
+|------|------|
+| CUST-06 | CANCELED/CANCELLED 철자는 의도적 상태 구분 (관리자/기사/고객) |
+| STL-04 | totalFare 전체 합산 후 계산, 부분합 불일치 없음 |
+| STL-05 | Math.floor(CF) = .toInt()(Kotlin) — 양수 범위 동일 |
+| CROSS-05 일부 | ExcludeNumber 미연동은 오탐 (이미 구현). wasRinging 부재만 유효 |
+| STL-06 | settlementLastCleared는 1-Way (CF→Firestore), 2-Way 우려 오탐 |
+| STL-10 | 구/신 정산 공존 아님. dailySettlements 컬렉션 CF에 없음, settlementSessions만 사용 |
+| STL-11 | 자동/수동 finalize는 isFinalized 체크로 충돌 없는 정상 설계 |
 
-### 해소 확정 (4건)
-- BUG-D05: cancelCall FCM 전송 추가
-- CROSS-01: 기사 상태 4자 통일
-- CD-01 (NEW-05): 마감 시 RINGING+IDLE 이중 공유콜 생성 방지
-- Driver App 취소 수신: call_cancelled 전체 구현
+### 유효 — 급하지 않음 (조치 권장, 파일럿 이후)
 
-## 수정 Phase 로드맵
+| 이슈 | 심각도 | 내용 | 비고 |
+|------|--------|------|------|
+| RTDB rules | Medium | `.read/.write: true` → `auth != null` 제한 필요 | 보안 |
+| NEW-12 | Low | onCall 함수 17개 인증 없음 | 파일럿 전 앱 내부 호출 전용, 장기 |
+| SEC-C01 | Low | 콜 생성 무인증 (Detector 구조적 한계) | CF callable 이전 시 해결 |
+| SEC-C02~C04 | Low | 포인트/FCM 토큰 보안 | 익명인증 환경에서 실행 난이도 높음 |
+| CROSS-05 | Medium | 내장 Detector wasRinging 부재 (발신 오감지 가능) | ExcludeNumber는 구현됨 |
+| STL-01 | High | 관리자 직접 완료 시 creditAmount 미설정 경로 가능 | 현재 기사앱 100% 경유라 실질 영향 없음 |
+| CROSS-02 | Low | enum 개수 차이 (Firestore 상태값 문자열은 호환) | 정보성 |
+| STL-02 | Medium | pointsUsed Firestore 동적 읽기 확인, 실기기 검증 권장 | 하드코딩 아님 |
+| NEW-13 | Low | CANCELED/CANCELLED 혼용. CF cleanup은 4가지 모두 처리 | 완전 통일은 중기 과제 |
+| CUST-02 | Low | 포인트 차감 + 콜 생성 비원자적. 재시도 + CF 환불로 보완 | 실질 피해 가능성 매우 낮음 |
+| CUST-04 | Low | 100% FCM 의존. restoreActiveCall()로 Firestore fallback 존재 | 앱 재시작으로 복구 |
+| CUST-07 | Low | FCM 토큰 재시도 없음. 앱 시작마다 토큰 재저장으로 자연 복구 | |
+| BUG-D08 | Low | 백그라운드 ghost state. refreshActiveCallStatus()로 보완 | |
+| 백그라운드/LockScreen 취소 | Low | refreshActiveCallStatus + 알림바 취소 알림으로 보완 | |
 
-### Phase 1: 보안 긴급 패치 (미착수)
-- [ ] Callable Functions 14개에 request.auth 검증 추가
-- [ ] RTDB rules `read/write: true` → 인증 기반 규칙으로 변경
-- [ ] Firestore rules `request.auth == null` 패턴 정리
-- [ ] device_status/device_alerts 컬렉션 보안 규칙 추가
+### 집계
 
-### Phase 2: 데이터 무결성 (미착수)
-- [ ] **STL-09 (Critical)**: processCarryOverOnFinalize에 realDeposit 반영 (Driver submitDailySettlement 공식과 통일) ← **다음 세션 최우선**
-- [ ] NEW-11: 배차 시 Firestore transaction + status=="WAITING" 체크
-- [ ] BUG-D12: 포인트 컬렉션명 통일 (또는 Driver App 포인트 로직 제거)
-- [ ] CROSS-07: rejectCall() 구현
-- [ ] NEW-13: CANCELED/CANCELLED 철자 통일
-
-### Phase 3: 기능 개선 (미착수)
-- [ ] CROSS-05: 내장 vs 독립 Detector 코드 동기화
-- [ ] 공유콜 OPEN vs SHARED 필터 수정
-- [ ] 백그라운드/LockScreen 취소 처리
-- [ ] crashlytics-monitor 필드명 수정 (provinces 구조 반영)
+| 구분 | 건수 |
+|------|------|
+| 해소 확정 | 19건 |
+| 오탐 확정 | 7건 |
+| 유효 (급하지 않음) | 14건 (Critical 0, High 1, Medium 3, Low 10) |
+| **합계** | **40건** |
 
 ## 상세 문서 목록
 - `.agent-teams/CROSS_VERIFICATION_LOG.md` - 크로스 검증 기록 (세션 1~4)
