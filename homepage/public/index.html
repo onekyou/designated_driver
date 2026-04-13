@@ -841,6 +841,17 @@
       .footer-legal { flex-direction: column; gap: 24px; }
     }
 
+    /* 모바일에서 강제 줄바꿈 해제 (히어로/섹션 타이틀·서브카피 자연 흐름) */
+    @media (max-width: 768px) {
+      section h1 br:not(.keep),
+      section h2 br:not(.keep),
+      .section-heading br:not(.keep),
+      .armory-apps-sub br:not(.keep),
+      .armory-main p br:not(.keep),
+      .hero-sub br:not(.keep) { display: none; }
+      body { word-break: keep-all; overflow-wrap: break-word; }
+    }
+
     /* ── VIDEO MODAL ──────────────────────────── */
     .video-modal {
       display: none;
@@ -908,13 +919,13 @@
         <!-- 왼쪽 텍스트 -->
         <div class="hero-text">
           <div class="hero-label animate">&#10024; 양평 지역 사무실 무료 파일럿 신청중</div>
-          <h1 class="animate animate-d1">통화가 끝나면<br>배차가 시작됩니다</h1>
+          <h1 class="animate animate-d1">통화가 끝나면<br class="keep">배차가 시작됩니다</h1>
           <p class="hero-desc animate animate-d2">
             통화 후 기사배차까지 <strong style="color:var(--primary)">8번의 클릭</strong>,<br>
             콜마당은 <strong style="color:var(--primary)">단 1번</strong>에 해결합니다.
           </p>
           <p class="hero-desc animate animate-d2" style="margin-bottom:36px">
-            플랫폼 종속이 아닌, 독립된 사무실로 손님과 연결
+            플랫폼 종속이 아닌,<br class="keep">독립된 사무실로 손님과 연결
           </p>
           <div class="hero-buttons animate animate-d3">
             <a href="signup.html" class="btn btn-primary">지금 무료 신청하기</a>
@@ -1012,8 +1023,8 @@
     <div class="container">
       <div class="armory-split">
         <div class="armory-text">
-          <h2 class="section-heading animate" style="text-align:left;font-weight:400;">단 한번의 QR이 만드는 각인<br>이후, 누구도 데려갈 수 없는 손님</h2>
-          <p class="armory-apps-sub animate" style="text-align:left;margin-top:16px;">호출한 손님에게 실시간 배차현황 알림,<br>등급별 포인트 자동 적립 및 혜택은 당신의 강력한 무기가 됩니다.</p>
+          <h2 class="section-heading animate" style="text-align:left;font-weight:400;">한번의 QR이 만드는 각인<br class="keep">이후, 누구도 데려갈 수 없는 손님</h2>
+          <p class="armory-apps-sub animate" style="text-align:left;margin-top:16px;">호출한 손님에게 실시간 배차현황 알림<br class="keep">등급별 포인트 자동 적립 및 혜택은 당신의 강력한 무기가 됩니다.</p>
         </div>
         <div class="armory-cards animate">
           <div class="main-app-card">
@@ -1041,7 +1052,7 @@
 
       <div style="text-align:center;margin-top:60px;" class="animate">
         <h2 class="section-heading">앱은 물론 <strong style="color:var(--primary);">일반전화</strong>까지도 자동배차</h2>
-        <p class="armory-apps-sub" style="color:#555;">수기 정산, 매달 반복되는 메모 누락, 계산 실수, 기사별 정산 분쟁.<br>사무실 · 기사 · 손님, 모두를 위한 앱이 준비되어 있습니다</p>
+        <p class="armory-apps-sub" style="color:#555;">수기 정산, 매달 반복되는 메모 누락, 계산 실수, 기사별 정산 분쟁<br class="keep">사무실 · 기사 · 손님, 모두를 위한 앱이 준비되어 있습니다</p>
       </div>
     </div>
   </section>

@@ -1,0 +1,606 @@
+<html class="scroll-smooth" lang="ko"><head></head><body class="text-on-surface">```html
+
+
+    <meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CallMadang | 통화가 끝나면 배차가 시작됩니다</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Manrope:wght@600;700;800&amp;family=Noto+Sans+KR:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-high": "#eae7e9",
+                        "background": "#fcf8fa",
+                        "on-primary-fixed-variant": "#3f465c",
+                        "on-error-container": "#93000a",
+                        "on-secondary": "#ffffff",
+                        "on-tertiary-fixed": "#0d1c2f",
+                        "secondary": "#855300",
+                        "surface-container": "#f0edef",
+                        "on-secondary-container": "#684000",
+                        "tertiary-fixed-dim": "#b9c7e0",
+                        "outline": "#76777d",
+                        "on-tertiary-fixed-variant": "#3a485c",
+                        "surface-bright": "#fcf8fa",
+                        "secondary-fixed-dim": "#ffb95f",
+                        "inverse-on-surface": "#f3f0f2",
+                        "outline-variant": "#c6c6cd",
+                        "surface-container-low": "#f6f3f5",
+                        "surface-tint": "#565e74",
+                        "on-primary": "#ffffff",
+                        "on-tertiary-container": "#76859b",
+                        "on-tertiary": "#ffffff",
+                        "primary-container": "#131b2e",
+                        "surface-variant": "#e4e2e4",
+                        "error": "#ba1a1a",
+                        "inverse-surface": "#303032",
+                        "on-background": "#1b1b1d",
+                        "on-surface": "#1b1b1d",
+                        "tertiary": "#000000",
+                        "secondary-fixed": "#ffddb8",
+                        "on-primary-container": "#7c839b",
+                        "on-error": "#ffffff",
+                        "primary-fixed-dim": "#bec6e0",
+                        "error-container": "#ffdad6",
+                        "on-secondary-fixed": "#2a1700",
+                        "on-secondary-fixed-variant": "#653e00",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-fixed": "#dae2fd",
+                        "secondary-container": "#fea619",
+                        "on-surface-variant": "#45464d",
+                        "surface-container-highest": "#e4e2e4",
+                        "inverse-primary": "#bec6e0",
+                        "primary": "#000000",
+                        "tertiary-fixed": "#d5e3fd",
+                        "surface": "#fcf8fa",
+                        "surface-dim": "#dcd9db",
+                        "tertiary-container": "#0d1c2f",
+                        "on-primary-fixed": "#131b2e"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "1rem",
+                        "lg": "2rem",
+                        "xl": "3rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Manrope", "Noto Sans KR"],
+                        "body": ["Inter", "Noto Sans KR"],
+                        "label": ["Inter", "Noto Sans KR"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            word-break: keep-all;
+            overflow-wrap: break-word;
+            font-family: 'Inter', 'Noto Sans KR', sans-serif;
+            background-color: #fcf8fa;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-nav {
+            background: rgba(252, 248, 250, 0.8);
+            backdrop-filter: blur(20px);
+        }
+
+        /* Showcase Compare Integration */
+        :root {
+            --primary-demo: #fea619;
+            --navy-demo: #131b2e;
+        }
+        .demo-wrap{width:100%;max-width:500px;padding:12px;margin:0 auto;position:relative;z-index:20;}
+        .demo-hdr{text-align:center;margin-bottom:16px;padding:0;min-height:36px;display:flex;align-items:center;justify-content:center;position:relative}
+        .demo-title{font-size:1.1rem;font-weight:900;color:var(--navy-demo);transition:opacity .3s;white-space:pre-line;line-height:1.4;font-family: 'Manrope', sans-serif;}
+        .demo-lbl{position:absolute;top:50%;transform:translate(-50%,-50%);font-size:1.1rem;font-weight:900;color:var(--navy-demo);white-space:nowrap;opacity:0;transition:opacity .4s;pointer-events:none;font-family: 'Manrope', sans-serif;}
+        .demo-lbl.vis{opacity:1}
+        .demo-pic{position:absolute;z-index:15;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:4px;opacity:0;transition:opacity .4s,left .5s ease}
+        .demo-pic.vis{opacity:1}
+        .demo-pic .dp-img{width:44px;height:44px;border-radius:12px;overflow:hidden;border:2px solid transparent;transition:border-color .3s,box-shadow .3s;background:#fff;}
+        .demo-pic.on .dp-img{border-color:var(--primary-demo);box-shadow:0 0 10px rgba(254,166,25,.3)}
+        .demo-pic .dp-img img{width:100%;height:100%;object-fit:cover;display:block}
+        .demo-pic .dp-img svg{width:100%;height:100%;display:block}
+        .demo-pic .dp-name{font-size:.7rem;color:rgba(19,27,46,.4);font-weight:700;white-space:nowrap;transition:color .3s}
+        .demo-pic.on .dp-name{color:var(--secondary)}
+        .demo-stage{position:relative;width:100%;height:378px;overflow:visible}
+        .demo-phone{position:absolute;width:170px;height:378px;border-radius:24px;overflow:hidden;background:#000;border:4px solid var(--navy-demo);box-shadow:0 10px 40px rgba(0,0,0,.1);top:0;opacity:0;transition:opacity .5s ease,left .5s ease,box-shadow .3s,border-color .3s;z-index:2}
+        .demo-phone img{width:100%;height:100%;object-fit:cover;display:block}
+        .demo-phone .scr{position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;transition:opacity .25s}
+        .demo-phone .scr.vis{opacity:1}
+        .demo-phone.glow{box-shadow:0 0 30px rgba(254,166,25,.4),0 10px 40px rgba(0,0,0,.1);border-color:var(--primary-demo)}
+        .demo-cur{position:absolute;width:48px;height:48px;z-index:20;opacity:0;pointer-events:none;transition:left .6s cubic-bezier(.4,0,.2,1),top .6s cubic-bezier(.4,0,.2,1),opacity .25s;filter:drop-shadow(1px 2px 2px rgba(0,0,0,.2))}
+        .demo-cur.vis{opacity:1}
+        .demo-cur.click{animation:dck .2s ease}
+        @keyframes dck{0%{transform:scale(1)}50%{transform:scale(.75)}100%{transform:scale(1)}}
+        .demo-rip{position:absolute;width:30px;height:30px;border-radius:50%;border:2px solid var(--primary-demo);opacity:0;z-index:19;pointer-events:none;transform:translate(-50%,-50%) scale(0)}
+        .demo-rip.go{animation:drp .35s ease-out forwards}
+        @keyframes drp{0%{opacity:1;transform:translate(-50%,-50%) scale(0)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.5)}}
+        .demo-ending{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;text-align:center;z-index:15;pointer-events:none;opacity:0;transition:opacity .6s}
+        .demo-ending.vis{pointer-events:auto;opacity:1}
+        .demo-ending-inner{width:100%}
+        .demo-ending-main{font-size:1.8rem;font-weight:900;margin-bottom:8px;letter-spacing:-1px;line-height:1.2;color:var(--navy-demo);font-family: 'Manrope', sans-serif;}
+        .demo-ending-main .demo-hl{color:var(--secondary)}
+        .demo-start-overlay{position:absolute;top:0;left:0;right:0;bottom:0;z-index:30;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(19, 27, 46, 0.6);backdrop-filter: blur(4px);border-radius:22px;cursor:pointer;transition:opacity .4s}
+        .demo-start-overlay.hidden{opacity:0;pointer-events:none}
+        .demo-start-title{color:white;font-size:1rem;font-weight:700;margin-bottom:12px;font-family: 'Manrope', sans-serif;}
+        .demo-start-btn{width:64px;height:64px;border-radius:50%;background:var(--primary-demo);display:flex;align-items:center;justify-content:center;transition:transform .2s,background .2s;box-shadow: 0 4px 15px rgba(254,166,25,0.4);}
+        .demo-start-btn:hover{transform:scale(1.1);background:var(--secondary-container)}
+        .demo-start-btn svg{width:24px;height:24px;margin-left:4px;fill: var(--on-secondary-container);}
+        @media(min-width:640px){
+            .demo-phone{width:200px;height:444px}
+            .demo-stage{height:444px}
+            .demo-pic .dp-img{width:50px;height:50px}
+            .demo-lbl{font-size:1.3rem}
+        }
+    </style>
+<!-- TopNavBar -->
+<nav class="fixed top-0 w-full z-50 glass-nav shadow-sm">
+<div class="flex justify-between items-center max-w-7xl mx-auto px-6 py-4">
+<div class="text-2xl font-black text-slate-900 tracking-tighter font-headline">CallMadang</div>
+<div class="hidden md:flex items-center gap-8">
+<a class="text-slate-900 border-b-2 border-secondary pb-1 font-semibold font-headline" href="#">서비스 소개</a>
+<a class="text-slate-500 hover:text-slate-900 transition-colors font-semibold font-headline" href="#">주요 기능</a>
+<a class="text-slate-500 hover:text-slate-900 transition-colors font-semibold font-headline" href="#">비교 분석</a>
+<a class="text-slate-500 hover:text-slate-900 transition-colors font-semibold font-headline" href="#">요금 안내</a>
+</div>
+<button class="bg-primary-container text-white px-6 py-2.5 rounded-full font-bold scale-95 active:scale-90 duration-200 transition-all hover:bg-black">
+            무료 신청하기
+        </button>
+</div>
+</nav>
+<!-- Hero Section -->
+<section class="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden">
+<div class="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-12 items-center">
+<div class="z-10">
+<span class="inline-block px-4 py-1.5 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant text-sm font-bold tracking-wider mb-6">
+                B2B 대리운전의 혁신
+            </span>
+<h1 class="text-5xl md:text-7xl font-extrabold text-on-surface font-headline leading-[1.1] mb-8 tracking-tight">
+                통화가 끝나면<br/>
+<span class="text-secondary">배차가 시작됩니다</span>
+</h1>
+<p class="text-xl text-on-surface-variant mb-10 max-w-lg leading-relaxed">
+                복잡한 입력 없이 전화 한 통이면 끝. 고객의 위치를 자동으로 탐지하고 기사님을 매칭하는 스마트 대리운전 솔루션.
+            </p>
+<div class="flex flex-col sm:flex-row gap-4">
+<button class="bg-secondary-container text-on-secondary-container px-8 py-4 rounded-full font-bold text-lg hover:shadow-lg transition-all flex items-center justify-center gap-2">
+                    서비스 신청하기
+                    <span class="material-symbols-outlined">arrow_forward</span>
+</button>
+<button class="bg-surface-container-highest text-on-surface px-8 py-4 rounded-full font-bold text-lg hover:bg-surface-variant transition-all flex items-center justify-center gap-2">
+                    데모 시연 예약
+                </button>
+</div>
+</div>
+<div class="relative">
+<div class="demo-wrap">
+<div class="demo-hdr" id="demoHdr">
+<div class="demo-title" id="demoTitle"></div>
+<div class="demo-lbl" id="demoLblMgr">원클릭 배차끝</div>
+<div class="demo-lbl" id="demoLblOld">1/8</div>
+</div>
+<div class="demo-stage" id="demoStage">
+<div class="demo-start-overlay" id="demoStartOverlay">
+<div class="demo-start-title">시연영상 보러가기</div>
+<div class="demo-start-btn">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+</div>
+</div>
+<svg class="demo-cur" id="demoCur" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M2 2L10 20L13 13L20 16L2 2Z" fill="#fff" stroke="#131b2e" stroke-linejoin="round" stroke-width="1.2"></path>
+</svg>
+<div class="demo-rip" id="demoRip"></div>
+<div class="demo-ending" id="demoEnding">
+<div class="demo-ending-inner">
+<div class="demo-ending-main"><span class="demo-hl">원클릭</span>이면 배차 끝</div>
+</div>
+</div>
+<!-- Icons below phones with actual App Icons -->
+<div class="demo-pic" id="demoIcMgr">
+<div class="dp-img"><img alt="콜마당 관제" src="https://lh3.googleusercontent.com/aida/ADBb0uhYrvOuHF7COZxk-IJm8D41J2Cmsp0iGjS7n0BoZNM37Vax8JhY1GyqyAwOpXX1J4fjdrnEryCMZs0qdQ28QrchflVn2__hYySoKd6P_KIwFDlkd09hz3O8byo1VlKMT8ab-Plcvo5N1P5ZXfccceBImaJ_rTcjySzxcygE1DhFSNgaHQQdep2os-9WR7T9d3YGnptQCGvWw68tS71OBV2lp4xPsJS7aYn3y9eI1xxZzCbcYTWMf0QfM58BjLu5KO-Fz_wybH5FXQ"/></div>
+<div class="dp-name">콜마당</div>
+</div>
+<div class="demo-pic" id="demoIcOld">
+<div class="dp-img">
+<svg viewbox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
+<rect fill="#76777d" height="44" rx="12" width="44"></rect>
+<path d="M10 16c0-1.7 1.3-3 3-3h2c1.2 0 2.2.7 2.6 1.8l1 2.5c.3.8.1 1.8-.5 2.4l-1 1c1.2 2.4 3.2 4.4 5.6 5.6l1-1c.6-.6 1.6-.8 2.4-.5l2.5 1c1.1.4 1.8 1.4 1.8 2.6v2c0 1.7-1.3 3-3 3C17.8 30.4 10 22.6 10 16z" fill="#fff"></path>
+</svg>
+</div>
+<div class="dp-name">일반전화</div>
+</div>
+<!-- Phones -->
+<div class="demo-phone" id="dpCust">
+<div class="scr vis" data-s="call"><img alt="customer call screen" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtw0T1d7FdoyGT3SZzJU4m4_k8Aaw_hH58vjpsKsJ8gxFkhJHWiZtTX-iFRdiCLwM69fnbMR-dTKEh3tPy0lQwYspSgfyybaIYmNyx7X2jns6uJK8VB-v8YSyT8KGGQhA-hbpIKRb6DvLeEs7WIgU51XHn1IdqQJJNXEMrtk6T0x4BLq3lTz2xj4kIHl6GsXRpUpS3hFwwD_CXt4ycFUYGIfobYzRf0UrVWfEMS4sPX4wFuy_Su2UMgWko-Z5MnGV6YqQCCA3aSVQ"/></div>
+</div>
+<div class="demo-phone" id="dpMgr">
+<div class="scr vis" data-s="ring"><img alt="manager ringing" src="https://lh3.googleusercontent.com/aida-public/AB6AXuByNUVer6d7v9o-G6rYVFZ_b0mjIZT8mMut1ncl05MczXQ0t4Wz5PhwkfKzan_aYc_V_rj86tAhBC7DAuSOqT7x1qgzhJ1bbxE8JJb4zX3ia68qsji6cTQxu_4gBoBVLkPh9rhWKoO6ySvhGV04VOYriFvNej0XF9Wjo6-CO0wuoBl26OAh0spu_c1aADFNiDEzPAG_M-rZw1gRZTq6HiRU3YJQlGJglj9IxG76q68jCzA3Hycq4SVCUdvGczPkAAcud3QQTN0FCCA"/></div>
+<div class="scr" data-s="call"><img alt="manager call" src="https://lh3.googleusercontent.com/aida-public/AB6AXuByNUVer6d7v9o-G6rYVFZ_b0mjIZT8mMut1ncl05MczXQ0t4Wz5PhwkfKzan_aYc_V_rj86tAhBC7DAuSOqT7x1qgzhJ1bbxE8JJb4zX3ia68qsji6cTQxu_4gBoBVLkPh9rhWKoO6ySvhGV04VOYriFvNej0XF9Wjo6-CO0wuoBl26OAh0spu_c1aADFNiDEzPAG_M-rZw1gRZTq6HiRU3YJQlGJglj9IxG76q68jCzA3Hycq4SVCUdvGczPkAAcud3QQTN0FCCA"/></div>
+<div class="scr" data-s="dispatch"><img alt="dispatch complete" src="https://lh3.googleusercontent.com/aida-public/AB6AXuByNUVer6d7v9o-G6rYVFZ_b0mjIZT8mMut1ncl05MczXQ0t4Wz5PhwkfKzan_aYc_V_rj86tAhBC7DAuSOqT7x1qgzhJ1bbxE8JJb4zX3ia68qsji6cTQxu_4gBoBVLkPh9rhWKoO6ySvhGV04VOYriFvNej0XF9Wjo6-CO0wuoBl26OAh0spu_c1aADFNiDEzPAG_M-rZw1gRZTq6HiRU3YJQlGJglj9IxG76q68jCzA3Hycq4SVCUdvGczPkAAcud3QQTN0FCCA"/></div>
+</div>
+<div class="demo-phone" id="dpOld">
+<div class="scr vis" data-s="s1"><img src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtw0T1d7FdoyGT3SZzJU4m4_k8Aaw_hH58vjpsKsJ8gxFkhJHWiZtTX-iFRdiCLwM69fnbMR-dTKEh3tPy0lQwYspSgfyybaIYmNyx7X2jns6uJK8VB-v8YSyT8KGGQhA-hbpIKRb6DvLeEs7WIgU51XHn1IdqQJJNXEMrtk6T0x4BLq3lTz2xj4kIHl6GsXRpUpS3hFwwD_CXt4ycFUYGIfobYzRf0UrVWfEMS4sPX4wFuy_Su2UMgWko-Z5MnGV6YqQCCA3aSVQ"/></div>
+<div class="scr" data-s="s2"><img src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtw0T1d7FdoyGT3SZzJU4m4_k8Aaw_hH58vjpsKsJ8gxFkhJHWiZtTX-iFRdiCLwM69fnbMR-dTKEh3tPy0lQwYspSgfyybaIYmNyx7X2jns6uJK8VB-v8YSyT8KGGQhA-hbpIKRb6DvLeEs7WIgU51XHn1IdqQJJNXEMrtk6T0x4BLq3lTz2xj4kIHl6GsXRpUpS3hFwwD_CXt4ycFUYGIfobYzRf0UrVWfEMS4sPX4wFuy_Su2UMgWko-Z5MnGV6YqQCCA3aSVQ"/></div>
+<div class="scr" data-s="s3"><img src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtw0T1d7FdoyGT3SZzJU4m4_k8Aaw_hH58vjpsKsJ8gxFkhJHWiZtTX-iFRdiCLwM69fnbMR-dTKEh3tPy0lQwYspSgfyybaIYmNyx7X2jns6uJK8VB-v8YSyT8KGGQhA-hbpIKRb6DvLeEs7WIgU51XHn1IdqQJJNXEMrtk6T0x4BLq3lTz2xj4kIHl6GsXRpUpS3hFwwD_CXt4ycFUYGIfobYzRf0UrVWfEMS4sPX4wFuy_Su2UMgWko-Z5MnGV6YqQCCA3aSVQ"/></div>
+<div class="scr" data-s="s4"><img src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtw0T1d7FdoyGT3SZzJU4m4_k8Aaw_hH58vjpsKsJ8gxFkhJHWiZtTX-iFRdiCLwM69fnbMR-dTKEh3tPy0lQwYspSgfyybaIYmNyx7X2jns6uJK8VB-v8YSyT8KGGQhA-hbpIKRb6DvLeEs7WIgU51XHn1IdqQJJNXEMrtk6T0x4BLq3lTz2xj4kIHl6GsXRpUpS3hFwwD_CXt4ycFUYGIfobYzRf0UrVWfEMS4sPX4wFuy_Su2UMgWko-Z5MnGV6YqQCCA3aSVQ"/></div>
+<div class="scr" data-s="s5"><img src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtw0T1d7FdoyGT3SZzJU4m4_k8Aaw_hH58vjpsKsJ8gxFkhJHWiZtTX-iFRdiCLwM69fnbMR-dTKEh3tPy0lQwYspSgfyybaIYmNyx7X2jns6uJK8VB-v8YSyT8KGGQhA-hbpIKRb6DvLeEs7WIgU51XHn1IdqQJJNXEMrtk6T0x4BLq3lTz2xj4kIHl6GsXRpUpS3hFwwD_CXt4ycFUYGIfobYzRf0UrVWfEMS4sPX4wFuy_Su2UMgWko-Z5MnGV6YqQCCA3aSVQ"/></div>
+<div class="scr" data-s="s6"><img src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtw0T1d7FdoyGT3SZzJU4m4_k8Aaw_hH58vjpsKsJ8gxFkhJHWiZtTX-iFRdiCLwM69fnbMR-dTKEh3tPy0lQwYspSgfyybaIYmNyx7X2jns6uJK8VB-v8YSyT8KGGQhA-hbpIKRb6DvLeEs7WIgU51XHn1IdqQJJNXEMrtk6T0x4BLq3lTz2xj4kIHl6GsXRpUpS3hFwwD_CXt4ycFUYGIfobYzRf0UrVWfEMS4sPX4wFuy_Su2UMgWko-Z5MnGV6YqQCCA3aSVQ"/></div>
+<div class="scr" data-s="s7"><img src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtw0T1d7FdoyGT3SZzJU4m4_k8Aaw_hH58vjpsKsJ8gxFkhJHWiZtTX-iFRdiCLwM69fnbMR-dTKEh3tPy0lQwYspSgfyybaIYmNyx7X2jns6uJK8VB-v8YSyT8KGGQhA-hbpIKRb6DvLeEs7WIgU51XHn1IdqQJJNXEMrtk6T0x4BLq3lTz2xj4kIHl6GsXRpUpS3hFwwD_CXt4ycFUYGIfobYzRf0UrVWfEMS4sPX4wFuy_Su2UMgWko-Z5MnGV6YqQCCA3aSVQ"/></div>
+</div>
+</div>
+</div>
+<!-- Floating Info Card -->
+<div class="absolute -bottom-6 -left-6 md:-left-12 bg-white p-6 rounded-lg shadow-xl max-w-xs border-l-4 border-secondary z-20">
+<div class="flex items-center gap-3 mb-2">
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">speed</span>
+<span class="font-bold text-primary font-headline">8번 클릭 vs 1번 클릭</span>
+</div>
+<p class="text-sm text-on-surface-variant">기존 방식 대비 작업 효율 800% 향상. 전화가 종료됨과 동시에 배차 정보가 생성됩니다.</p>
+</div>
+</div>
+</div>
+<!-- Decorative Background Element -->
+<div class="absolute top-0 right-0 -z-10 w-1/2 h-full bg-surface-container-low rounded-bl-[10rem]"></div>
+</section>
+<!-- Empathy & Video Section -->
+<section class="py-24 bg-white relative overflow-hidden">
+<div class="max-w-7xl mx-auto px-6 flex flex-col items-center">
+<div class="text-center mb-16 max-w-3xl">
+<h2 class="text-3xl md:text-5xl font-extrabold font-headline mb-6 tracking-tight leading-tight">
+                도로 위 수많은 위험들
+            </h2>
+<p class="text-xl md:text-2xl text-on-surface-variant mb-4 font-medium italic">
+                "하지만 운전중에도 전화기를 놓지 못한채 손님을 지켜온 당신..."
+            </p>
+<p class="text-2xl md:text-3xl font-bold text-secondary font-headline">
+                지금 모신 손님은 다음에도 전화할까요?
+            </p>
+</div>
+<div class="relative w-full max-w-4xl group">
+<div class="aspect-video bg-primary-container rounded-2xl overflow-hidden shadow-2xl relative">
+<img alt="Service Presentation" class="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-1000" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtw0T1d7FdoyGT3SZzJU4m4_k8Aaw_hH58vjpsKsJ8gxFkhJHWiZtTX-iFRdiCLwM69fnbMR-dTKEh3tPy0lQwYspSgfyybaIYmNyx7X2jns6uJK8VB-v8YSyT8KGGQhA-hbpIKRb6DvLeEs7WIgU51XHn1IdqQJJNXEMrtk6T0x4BLq3lTz2xj4kIHl6GsXRpUpS3hFwwD_CXt4ycFUYGIfobYzRf0UrVWfEMS4sPX4wFuy_Su2UMgWko-Z5MnGV6YqQCCA3aSVQ"/>
+<div class="absolute inset-0 flex items-center justify-center">
+<button class="w-20 h-20 bg-secondary-container text-on-secondary-container rounded-full flex items-center justify-center shadow-2xl hover:scale-110 transition-transform group-active:scale-95">
+<span class="material-symbols-outlined text-4xl" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+</button>
+</div>
+<div class="absolute bottom-6 left-6 right-6 flex justify-between items-center text-white/80 text-sm">
+<span>CallMadang Solution Demo</span>
+<div class="flex gap-2">
+<div class="w-2 h-2 rounded-full bg-secondary animate-pulse"></div>
+<span>LIVE</span>
+</div>
+</div>
+</div>
+<!-- Decorative Element -->
+<div class="absolute -z-10 -top-8 -left-8 w-32 h-32 bg-secondary-fixed/30 rounded-full blur-2xl"></div>
+<div class="absolute -z-10 -bottom-8 -right-8 w-48 h-48 bg-primary-fixed/20 rounded-full blur-3xl"></div>
+</div>
+</div>
+</section>
+<!-- App Ecosystem Section -->
+<section class="py-24 bg-surface-container-low">
+<div class="max-w-7xl mx-auto px-6">
+<div class="text-center mb-20">
+<h2 class="text-4xl font-bold font-headline mb-4">완벽하게 연결된 생태계</h2>
+<p class="text-on-surface-variant max-w-2xl mx-auto">전화 상담부터 기사 배차, 수익 정산까지 하나의 플랫폼으로 해결하세요.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+<!-- Customer App -->
+<div class="bg-surface-container-lowest p-8 rounded-lg shadow-sm hover:shadow-md transition-all group border border-transparent hover:border-secondary-container/30">
+<div class="w-16 h-16 rounded-2xl overflow-hidden mb-6 group-hover:scale-110 transition-transform shadow-sm">
+<img alt="고객용 앱" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida/ADBb0uglyG7HrqzrilbhOwWjwAm0Z1j8SraDbNyYEL6btSBkg9ijQ7-iirm8is92B442fqavofCske4EpkUqVKZeAEhfcYclOkjbQ1qHkJyRjXWkCppL6M0zSm3Qh7-1R5UuN9NpXBGnwbsyNa_tQmYCEHmALoAzN_-GnYy9rigOx8W3eyuHN1YbY7Gq2PByiHtYLNlRI9h7qNFi5ocYlzoBti2Bb_4hSoUGPw_b1fhErGh5H4cb0Fn7k2qr6yS8hprPRKCqmLnyb3WZ"/>
+</div>
+<h3 class="text-xl font-bold mb-3 font-headline">고객용 앱</h3>
+<p class="text-on-surface-variant text-sm leading-relaxed mb-6">고객용 앱으로 실시간 기사 위치 확인과 간편 결제를 지원합니다.</p>
+<div class="h-1 w-0 bg-secondary transition-all group-hover:w-full"></div>
+</div>
+<!-- Driver App -->
+<div class="bg-surface-container-lowest p-8 rounded-lg shadow-sm hover:shadow-md transition-all group border border-transparent hover:border-primary-fixed/30">
+<div class="w-16 h-16 rounded-2xl overflow-hidden mb-6 group-hover:scale-110 transition-transform shadow-sm">
+<img alt="기사용 앱" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida/ADBb0uiH5T6jorq3kERLfdlyzpEfDevAXuWrrEg7jmci50vjgDWy3r-uwe6lSbhxzk3YuKRXAQvVAFpqTbLwg4YVSDyRqvAAFDRsjhOcVxuAOwAjhqNyGaJhF-bHMI9NBUhg7X_xoRBnAdDkmBuoCYmAmtdrYAoYj2tnc_wo64ydJyOS1csln-THSMPsCDdBrKtRHtWL1TkqhIYjkO_NbL8dcGehdvR64O_xCsL8EgcFEqx5c_iCTQlVU9DolgUJBvQYm3PzZWRUY28N"/>
+</div>
+<h3 class="text-xl font-bold mb-3 font-headline">기사용 앱</h3>
+<p class="text-on-surface-variant text-sm leading-relaxed mb-6">기사님을 위한 최적화된 인터페이스와 공정한 배차 로직을 제공합니다.</p>
+<div class="h-1 w-0 bg-primary transition-all group-hover:w-full"></div>
+</div>
+<!-- Call Manager -->
+<div class="bg-surface-container-lowest p-8 rounded-lg shadow-sm hover:shadow-md transition-all group border border-transparent hover:border-tertiary-fixed/30">
+<div class="w-16 h-16 rounded-2xl overflow-hidden mb-6 group-hover:scale-110 transition-transform shadow-sm">
+<img alt="관제 대시보드" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida/ADBb0uhYrvOuHF7COZxk-IJm8D41J2Cmsp0iGjS7n0BoZNM37Vax8JhY1GyqyAwOpXX1J4fjdrnEryCMZs0qdQ28QrchflVn2__hYySoKd6P_KIwFDlkd09hz3O8byo1VlKMT8ab-Plcvo5N1P5ZXfccceBImaJ_rTcjySzxcygE1DhFSNgaHQQdep2os-9WR7T9d3YGnptQCGvWw68tS71OBV2lp4xPsJS7aYn3y9eI1xxZzCbcYTWMf0QfM58BjLu5KO-Fz_wybH5FXQ"/>
+</div>
+<h3 class="text-xl font-bold mb-3 font-headline">관제 대시보드</h3>
+<p class="text-on-surface-variant text-sm leading-relaxed mb-6">상담원 대시보드로 모든 호출 현황을 실시간으로 관제합니다.</p>
+<div class="h-1 w-0 bg-on-tertiary-fixed transition-all group-hover:w-full"></div>
+</div>
+<!-- Call Detector -->
+<div class="bg-surface-container-lowest p-8 rounded-lg shadow-sm hover:shadow-md transition-all group border-2 border-secondary/20">
+<div class="w-16 h-16 rounded-2xl overflow-hidden mb-6 group-hover:scale-110 transition-transform shadow-sm">
+<img alt="지능형 수신 탐지" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida/ADBb0uiMU5PsxUt3qjTxjJSCDCyMr1cQ5z4HLAZeqf3MsBTk3UcjaRy8noviLmcne1XAlik_n1OBULpAUPuv9QspYnKGf8fs5ez51MvLH43bQcruNelFKwPkT0XGqLlHecwpaOKMBKyCuKljZXvURtZZH2w4OkpMnIu1VTvVoDnV8BNPLXuogPeGtBvSpyl3Q_0qHfjnZkWYGmzuSbGNE5phBK8cDrkjjVLi-CK6QUZvqFan6UGfPvPE43oc_pulsQJ1G6EiXzXWFkuGtg"/>
+</div>
+<h3 class="text-xl font-bold mb-3 font-headline">지능형 수신 탐지</h3>
+<p class="text-on-surface-variant text-sm leading-relaxed mb-6">AI 기반 음성 인식을 통해 통화 내용을 즉시 데이터화합니다.</p>
+<div class="h-1 w-0 bg-secondary transition-all group-hover:w-full"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- Comparison Section -->
+<section class="py-24 overflow-hidden">
+<div class="max-w-7xl mx-auto px-6">
+<div class="grid lg:grid-cols-2 gap-16 items-center">
+<div class="order-2 lg:order-1">
+<div class="relative rounded-lg overflow-hidden aspect-video shadow-2xl">
+<div class="absolute inset-0 bg-gradient-to-br from-primary-container to-black opacity-90"></div>
+<div class="absolute inset-0 flex flex-col items-center justify-center text-white p-12">
+<div class="text-8xl font-black text-secondary mb-4">0%</div>
+<div class="text-2xl font-bold font-headline mb-8">수수료 0원</div>
+<p class="text-center text-on-primary-container">
+                            기존 플랫폼에 지불하던 과도한 수수료를 없앴습니다.<br/>
+                            번 만큼 그대로 가져가는 수익 구조.
+                        </p>
+</div>
+</div>
+</div>
+<div class="order-1 lg:order-2">
+<h2 class="text-4xl font-extrabold font-headline mb-6 tracking-tight">차원이 다른 수익성,<br/>직접 연결의 힘</h2>
+<p class="text-lg text-on-surface-variant mb-8 leading-relaxed">
+                    CallMadang은 중개 플랫폼이 아닙니다. 사장님과 고객을 직접 연결하는 인프라를 제공합니다. 불필요한 비용은 줄이고, 고객 관리는 더 정교해집니다.
+                </p>
+<ul class="space-y-4 mb-10">
+<li class="flex items-start gap-3">
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<div>
+<strong class="text-on-surface font-headline">완전한 데이터 소유</strong>
+<p class="text-sm text-on-surface-variant">우리 업장의 고객 데이터를 직접 관리하고 마케팅에 활용하세요.</p>
+</div>
+</li>
+<li class="flex items-start gap-3">
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<div>
+<strong class="text-on-surface font-headline">실시간 정산 시스템</strong>
+<p class="text-sm text-on-surface-variant">기다릴 필요 없이 즉시 확인 가능한 투명한 수익 현황.</p>
+</div>
+</li>
+<li class="flex items-start gap-3">
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<div>
+<strong class="text-on-surface font-headline">맞춤형 기사 매칭</strong>
+<p class="text-sm text-on-surface-variant">업장의 특성에 맞는 전담 기사님 그룹을 직접 운영할 수 있습니다.</p>
+</div>
+</li>
+</ul>
+<a class="text-secondary font-bold text-lg flex items-center gap-2 hover:translate-x-2 transition-transform" href="#">
+                    타 서비스와 상세 비교하기 <span class="material-symbols-outlined">trending_flat</span>
+</a>
+</div>
+</div>
+</div>
+</section>
+<!-- Bento Grid Features -->
+<section class="py-24 bg-surface">
+<div class="max-w-7xl mx-auto px-6">
+<h2 class="text-3xl font-bold font-headline mb-12 text-center">왜 CallMadang인가요?</h2>
+<div class="grid grid-cols-1 md:grid-cols-6 gap-6">
+<div class="md:col-span-4 bg-primary-container p-10 rounded-lg text-white flex flex-col justify-between min-h-[400px] relative overflow-hidden group">
+<div class="z-10">
+<h3 class="text-3xl font-bold font-headline mb-4">지능형 자동 배차 솔루션</h3>
+<p class="text-on-primary-container max-w-md">통화 종료 후 단 1초 만에 최적의 기사님을 매칭합니다. 배차 확률을 높이는 자체 알고리즘을 경험하세요.</p>
+</div>
+<div class="z-10 mt-12 grid grid-cols-3 gap-4">
+<div class="bg-white/5 p-4 rounded backdrop-blur-sm border border-white/10">
+<div class="text-2xl font-bold text-secondary">99%</div>
+<div class="text-xs text-white/60">배차 성공률</div>
+</div>
+<div class="bg-white/5 p-4 rounded backdrop-blur-sm border border-white/10">
+<div class="text-2xl font-bold text-secondary">1.2s</div>
+<div class="text-xs text-white/60">평균 매칭 시간</div>
+</div>
+<div class="bg-white/5 p-4 rounded backdrop-blur-sm border border-white/10">
+<div class="text-2xl font-bold text-secondary">85%</div>
+<div class="text-xs text-white/60">재호출 비율</div>
+</div>
+</div>
+<img alt="Car on road" class="absolute right-0 bottom-0 w-2/3 h-full object-cover opacity-20 mix-blend-overlay group-hover:scale-110 transition-transform duration-1000" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtw0T1d7FdoyGT3SZzJU4m4_k8Aaw_hH58vjpsKsJ8gxFkhJHWiZtTX-iFRdiCLwM69fnbMR-dTKEh3tPy0lQwYspSgfyybaIYmNyx7X2jns6uJK8VB-v8YSyT8KGGQhA-hbpIKRb6DvLeEs7WIgU51XHn1IdqQJJNXEMrtk6T0x4BLq3lTz2xj4kIHl6GsXRpUpS3hFwwD_CXt4ycFUYGIfobYzRf0UrVWfEMS4sPX4wFuy_Su2UMgWko-Z5MnGV6YqQCCA3aSVQ"/>
+</div>
+<div class="md:col-span-2 bg-secondary-container p-10 rounded-lg flex flex-col justify-center items-center text-center">
+<span class="material-symbols-outlined text-6xl text-on-secondary-container mb-6" style="font-variation-settings: 'FILL' 1;">support_agent</span>
+<h3 class="text-2xl font-bold text-on-secondary-container font-headline mb-4">24/7 전문 기술 지원</h3>
+<p class="text-on-secondary-container/80 text-sm">시스템 구축부터 운영까지, 전문가가 실시간으로 지원합니다.</p>
+</div>
+<div class="md:col-span-2 bg-surface-container-highest p-10 rounded-lg">
+<div class="w-12 h-12 bg-white rounded-full flex items-center justify-center mb-6 shadow-sm">
+<span class="material-symbols-outlined text-primary">security</span>
+</div>
+<h3 class="text-xl font-bold font-headline mb-2">보안 및 프라이버시</h3>
+<p class="text-on-surface-variant text-sm">모든 고객 전화번호는 안심번호 시스템으로 철저히 보호됩니다.</p>
+</div>
+<div class="md:col-span-4 bg-surface-container-low p-10 rounded-lg border border-outline-variant/30 flex items-center gap-12 overflow-hidden">
+<div class="flex-1">
+<h3 class="text-2xl font-bold font-headline mb-4">손쉬운 관리자 대시보드</h3>
+<p class="text-on-surface-variant text-sm mb-6">복잡한 데이터도 한눈에. 실적 리포트와 정산 내역을 직관적인 UI로 확인하세요.</p>
+<button class="text-primary font-bold flex items-center gap-2">대시보드 미리보기 <span class="material-symbols-outlined text-sm">open_in_new</span></button>
+</div>
+<div class="hidden lg:block w-1/3 rotate-12 translate-y-12 shadow-2xl">
+<div class="bg-white p-4 rounded-lg border border-slate-200">
+<div class="space-y-2">
+<div class="h-2 w-full bg-slate-100 rounded"></div>
+<div class="h-2 w-2/3 bg-slate-100 rounded"></div>
+<div class="h-8 w-full bg-secondary/10 rounded mt-4"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Final CTA -->
+<section class="py-24 bg-primary-container relative overflow-hidden">
+<div class="max-w-4xl mx-auto px-6 text-center relative z-10">
+<h2 class="text-4xl md:text-5xl font-extrabold text-white font-headline mb-8 tracking-tight">
+            지금 바로 대리운전의<br/>미래를 시작하세요
+        </h2>
+<p class="text-on-primary-container text-xl mb-12">
+            CallMadang과 함께하면 업무 효율은 오르고 운영 비용은 낮아집니다.<br/>
+            상담만으로도 운영 최적화 진단을 무료로 제공해 드립니다.
+        </p>
+<div class="flex flex-col sm:flex-row gap-6 justify-center">
+<button class="bg-secondary-container text-on-secondary-container px-10 py-5 rounded-full font-bold text-xl hover:scale-105 transition-all shadow-xl">
+                무료 컨설팅 신청하기
+            </button>
+<button class="bg-white/10 text-white backdrop-blur-md px-10 py-5 rounded-full font-bold text-xl hover:bg-white/20 transition-all">
+                자료 더보기
+            </button>
+</div>
+</div>
+<!-- Decorative Circle -->
+<div class="absolute -bottom-64 -left-64 w-[500px] h-[500px] bg-secondary/10 rounded-full blur-3xl"></div>
+<div class="absolute -top-64 -right-64 w-[500px] h-[500px] bg-secondary/5 rounded-full blur-3xl"></div>
+</section>
+<!-- Footer -->
+<footer class="bg-slate-50 border-t border-slate-200">
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto px-6 py-12">
+<div>
+<div class="text-xl font-bold text-slate-900 mb-6 font-headline">CallMadang</div>
+<p class="text-slate-500 text-sm leading-relaxed mb-6">
+                B2B 통합 대리운전 솔루션의 표준. 사장님의 성공적인 비즈니스 운영을 지원합니다.
+            </p>
+</div>
+<div>
+<h4 class="font-bold mb-6 font-headline">회사 소개</h4>
+<ul class="space-y-4 text-sm text-slate-500">
+<li><a class="hover:underline hover:text-slate-900 transition-colors" href="#">개인정보 처리방침</a></li>
+<li><a class="hover:underline hover:text-slate-900 transition-colors" href="#">이용약관</a></li>
+<li><a class="hover:underline hover:text-slate-900 transition-colors" href="#">고객지원</a></li>
+</ul>
+</div>
+<div>
+<h4 class="font-bold mb-6 font-headline">파트너</h4>
+<ul class="space-y-4 text-sm text-slate-500">
+<li><a class="hover:underline hover:text-slate-900 transition-colors" href="#">기사 협약</a></li>
+<li><a class="hover:underline hover:text-slate-900 transition-colors" href="#">파트너 프로그램</a></li>
+</ul>
+</div>
+<div>
+<h4 class="font-bold mb-6 font-headline">문의하기</h4>
+<p class="text-sm text-slate-500 mb-2">서울특별시 강남구 테헤란로 123</p>
+<p class="text-sm text-slate-500 mb-4 font-bold text-slate-900">1234-5678</p>
+<div class="flex gap-4">
+<div class="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center hover:bg-secondary-fixed transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-slate-600 text-sm">mail</span>
+</div>
+<div class="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center hover:bg-secondary-fixed transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-slate-600 text-sm">call</span>
+</div>
+</div>
+</div>
+</div>
+<div class="max-w-7xl mx-auto px-6 py-8 border-t border-slate-200 text-center">
+<p class="text-slate-500 text-xs font-label">© 2024 CallMadang Inc. All rights reserved.</p>
+</div>
+</footer>
+<script>
+    (function(){
+        var stage=document.getElementById('demoStage');
+        if(!stage)return;
+        var cur=document.getElementById('demoCur');
+        var rip=document.getElementById('demoRip');
+        var hdr=document.getElementById('demoHdr');
+        var titleEl=document.getElementById('demoTitle');
+        var lblMgr=document.getElementById('demoLblMgr');
+        var lblOld=document.getElementById('demoLblOld');
+        var pCust=document.getElementById('dpCust');
+        var pMgr=document.getElementById('dpMgr');
+        var pOld=document.getElementById('dpOld');
+        var icMgr=document.getElementById('demoIcMgr');
+        var icOld=document.getElementById('demoIcOld');
+        var endingEl=document.getElementById('demoEnding');
+        var overlay=document.getElementById('demoStartOverlay');
+        var playing=false,pool=[],fadeInt=null,glowInt=null;
+        var phoneW=170;
+
+        function w(fn,ms){var t=setTimeout(function(){if(playing){fn();return}var ck=setInterval(function(){if(playing){clearInterval(ck);fn()}},50);pool.push(ck)},ms);pool.push(t)}
+        function stopAll(){pool.forEach(clearTimeout);pool=[];if(fadeInt){clearInterval(fadeInt);fadeInt=null}if(glowInt){clearInterval(glowInt);glowInt=null}}
+
+        function setT(t){titleEl.style.opacity='0';lblMgr.classList.remove('vis');lblOld.classList.remove('vis');if(t){w(function(){titleEl.textContent=t;titleEl.style.opacity='1'},180)}}
+        function showLabels(mL,oL){titleEl.style.opacity='0';lblMgr.style.left=(mL+phoneW/2)+'px';lblOld.style.left=(oL+phoneW/2)+'px';lblMgr.classList.add('vis');lblOld.classList.add('vis')}
+        function hideLabels(){lblMgr.classList.remove('vis');lblOld.classList.remove('vis')}
+        function showEnding(){endingEl.classList.add('vis')}
+        function hideEnding(){endingEl.classList.remove('vis')}
+
+        function posIcon(ic,px){var pH=pMgr.offsetHeight;ic.style.left=(px+phoneW/2)+'px';ic.style.top=(pH+8)+'px';ic.style.transform='translateX(-50%)'}
+        function showIcons(mL,oL){posIcon(icMgr,mL);icMgr.classList.add('vis','on');if(typeof oL==='number'){posIcon(icOld,oL);icOld.classList.add('vis','on')}}
+        function hideIcons(){icMgr.classList.remove('vis','on');icOld.classList.remove('vis','on')}
+
+        function scr(p,n){p.querySelectorAll('.scr').forEach(function(s){s.classList.toggle('vis',s.getAttribute('data-s')===n)})}
+        function curTo(x,y){cur.classList.add('vis');cur.style.left=x+'px';cur.style.top=y+'px'}
+        function curOff(){cur.classList.remove('vis')}
+        function clickFx(x,y){cur.classList.add('click');rip.style.left=x+'px';rip.style.top=y+'px';rip.classList.remove('go');void rip.offsetWidth;rip.classList.add('go');w(function(){cur.classList.remove('click')},200)}
+        function pp(p,xp,yp){var r=p.getBoundingClientRect(),s=stage.getBoundingClientRect();return{x:r.left-s.left+r.width*xp,y:r.top-s.top+r.height*yp}}
+
+        function centerL(){return(stage.offsetWidth-phoneW)/2}
+        function leftL(){return stage.offsetWidth/2-phoneW-6}
+        function rightL(){return stage.offsetWidth/2+6}
+        function fadeIn(p,l){p.style.left=l+'px';p.style.opacity='1'}
+        function fadeOut(p){p.style.opacity='0'}
+        function moveTo(p,l){p.style.left=l+'px'}
+
+        function startGlow(p,iv){p.classList.add('glow');glowInt=setInterval(function(){p.classList.toggle('glow')},iv);pool.push(glowInt)}
+        function stopGlow(p){if(glowInt){clearInterval(glowInt);glowInt=null}p.classList.remove('glow')}
+
+        function reset(){
+            [pCust,pMgr,pOld].forEach(function(p){p.style.transition='none';p.style.opacity='0'});
+            pCust.style.left=leftL()+'px';pMgr.style.left=centerL()+'px';pOld.style.left=rightL()+'px';
+            void pCust.offsetWidth;void pMgr.offsetWidth;void pOld.offsetWidth;
+            [pCust,pMgr,pOld].forEach(function(p){p.style.transition=''});
+            scr(pCust,'call');scr(pMgr,'ring');scr(pOld,'s1');
+            curOff();hideIcons();hideEnding();hideLabels();stopGlow(pMgr);
+            titleEl.textContent='';titleEl.style.opacity='0';
+            pMgr.classList.remove('glow');pOld.classList.remove('glow');
+            phoneW=pMgr.offsetWidth;
+        }
+
+        var clickSeq=[
+            {from:'s1',to:'s2',x:0.13,y:0.90},
+            {from:'s2',to:'s3',x:0.25,y:0.47},
+            {from:'s3',to:'s4',x:0.78,y:0.65},
+            {from:'s4',to:'s5',x:0.30,y:0.89},
+            {from:'s5',to:'s6',x:0.30,y:0.75},
+            {from:'s6',to:'s7',x:0.70,y:0.92},
+            {from:'s7',to:null, x:0.11,y:0.70}
+        ];
+
+        function runClickSeq(idx,cb){
+            if(!playing)return;
+            if(idx>=clickSeq.length){if(cb)cb();return}
+            var c=clickSeq[idx];
+            var p=pp(pOld,c.x,c.y);
+            curTo(p.x+15,p.y-15);
+            w(function(){if(!playing)return;curTo(p.x,p.y);
+                w(function(){if(!playing)return;clickFx(p.x,p.y);
+                    w(function(){if(!playing)return;if(c.to)scr(pOld,c.to);if(idx+2<=7)lblOld.textContent=(idx+2)+'/8';
+                        w(function(){if(!playing)return;runClickSeq(idx+1,cb)},310)
+                    },190)
+                },250)
+            },250);
+        }
+
+        function loop(){
+            if(!playing)return;
+            reset();
+            setT("고객의 대리운전 요청");
+            w(function(){if(!playing)return;fadeIn(pCust,centerL());
+                w(function(){if(!playing)return;setT("상담원에게 수신 알림");
+                    w(function(){if(!playing)return;moveTo(pCust,leftL());fadeIn(pMgr,rightL());showIcons(rightL(),null);startGlow(pMgr,300);
+                        w(function(){if(!playing)return;setT("단 한번의 통화 종료");
+                            var p=pp(pMgr,0.5,0.85);curTo(p.x+20,p.y+20);
+                            w(function(){if(!playing)return;curTo(p.x,p.y);
+                                w(function(){if(!playing)return;clickFx(p.x,p.y);scr(pMgr,'call');
+                                    w(function(){if(!playing)return;stopGlow(pMgr);</script></body></html>

@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>콜마당 - 레이아웃 목업</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --primary:       #FFAB00;
+      --primary-dark:  #FF8F00;
+      --primary-light: #FFCF66;
+      --white:         #ffffff;
+      --navy:          #1a2640;
+      --navy-deep:     #0f1a2e;
+      --navy-mid:      #162035;
+      --radius:        18px;
+      --radius-sm:     10px;
+      --shadow-gold:   0 8px 32px rgba(255,171,0,0.20);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+      color: #2C3E50;
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+      font-size: 16px;
+      background: var(--navy-deep);
+    }
+
+    /* ── HERO ──────────────────────────── */
+    .hero {
+      background: var(--navy);
+      padding: 120px 0 80px;
+      text-align: center;
+    }
+    .hero h1 {
+      font-size: 3rem;
+      font-weight: 900;
+      color: var(--white);
+      margin-bottom: 16px;
+      letter-spacing: -0.02em;
+    }
+    .hero .sub {
+      font-size: 1.3rem;
+      color: rgba(255,255,255,0.55);
+      margin-bottom: 40px;
+    }
+    .hero .sub strong { color: var(--primary); }
+    .hero .cta {
+      display: inline-block;
+      padding: 16px 40px;
+      background: var(--primary);
+      color: var(--navy);
+      border-radius: 50px;
+      font-weight: 700;
+      font-size: 1.05rem;
+      text-decoration: none;
+      box-shadow: var(--shadow-gold);
+    }
+
+    @media (max-width: 639px) {
+      .hero { padding: 100px 24px 60px; }
+      .hero h1 { font-size: 2rem; }
+      .hero .sub { font-size: 1.05rem; }
+    }
+
+    /* ── SCENE THEATER ─────────────────── */
+    .theater {
+      padding: 80px 0;
+      background: var(--navy-mid);
+    }
+    .theater-container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* 상단: 장면 제목 영역 */
+    .scene-header {
+      text-align: center;
+      margin-bottom: 40px;
+      min-height: 80px;
+    }
+    .scene-badge {
+      display: inline-block;
+      background: rgba(255,171,0,0.15);
+      color: var(--primary);
+      font-weight: 900;
+      font-size: 0.75rem;
+      padding: 5px 14px;
+      border-radius: 50px;
+      letter-spacing: 0.05em;
+      margin-bottom: 10px;
+    }
+    .scene-title {
+      font-size: 1.6rem;
+      font-weight: 900;
+      color: var(--white);
+      letter-spacing: -0.02em;
+      transition: opacity 0.4s ease;
+    }
+
+    /* 3열 레이아웃 — 고정 프레임 */
+    .scene-frame {
+      display: grid;
+      grid-template-columns: 220px 1fr 220px;
+      gap: 24px;
+      align-items: center;
+      min-height: 380px;
+      position: relative;
+    }
+
+    @media (max-width: 900px) {
+      .scene-frame {
+        grid-template-columns: 1fr;
+        gap: 16px;
+        min-height: auto;
+      }
+    }
+
+    /* 각 장면 콘텐츠 — 겹쳐놓고 하나만 보이게 */
+    .scene-slot {
+      position: relative;
+      min-height: 380px;
+    }
+    .scene-content {
+      opacity: 0;
+      transition: opacity 0.5s ease;
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      pointer-events: none;
+    }
+    .scene-content.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* 가운데 메인 화면 */
+    .main-screen {
+      background: #1e2d47;
+      border: 1px solid rgba(255,171,0,0.15);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: 0 12px 48px rgba(0,0,0,0.4);
+    }
+    .main-screen-header {
+      background: rgba(255,171,0,0.08);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid rgba(255,171,0,0.1);
+    }
+    .app-icon {
+      width: 28px; height: 28px;
+      border-radius: 6px;
+      background: var(--primary);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.7rem; font-weight: 900; color: var(--navy);
+    }
+    .app-name {
+      color: rgba(255,255,255,0.8);
+      font-size: 0.85rem; font-weight: 700;
+    }
+    .main-screen-body {
+      padding: 24px 20px;
+      min-height: 280px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    /* 플로팅 카드 */
+    .float-card {
+      background: rgba(30,45,71,0.9);
+      border: 1px solid rgba(255,171,0,0.12);
+      border-radius: 14px;
+      padding: 20px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+    .float-card-tag {
+      display: inline-block;
+      font-size: 0.7rem; font-weight: 700;
+      color: var(--primary);
+      background: rgba(255,171,0,0.1);
+      padding: 3px 10px; border-radius: 50px;
+      margin-bottom: 12px;
+    }
+    .float-card h4 {
+      color: var(--white);
+      font-size: 0.95rem; font-weight: 700;
+      margin-bottom: 10px; line-height: 1.5;
+    }
+    .float-card p {
+      color: rgba(255,255,255,0.5);
+      font-size: 0.82rem; line-height: 1.6;
+    }
+    .hl { color: var(--primary); font-weight: 700; }
+
+    /* 미니 리스트 */
+    .mini-list { list-style: none; padding: 0; margin: 8px 0 0; }
+    .mini-list li {
+      color: rgba(255,255,255,0.6);
+      font-size: 0.82rem;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .mini-list li:last-child { border-bottom: none; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .dot-green { background: #4CAF50; }
+    .dot-blue { background: #42A5F5; }
+    .dot-gold { background: var(--primary); }
+
+    /* 목업 내부 UI */
+    .mock-pulse {
+      display: inline-block;
+      width: 12px; height: 12px;
+      background: #4CAF50; border-radius: 50%;
+      margin-right: 6px;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.3); }
+    }
+
+    .mock-btn {
+      display: inline-block;
+      padding: 12px 32px;
+      border-radius: 10px;
+      font-weight: 700; font-size: 0.9rem;
+      border: none; cursor: default;
+    }
+    .mock-btn-gold { background: var(--primary); color: var(--navy); }
+    .mock-btn-outline {
+      background: transparent;
+      color: rgba(255,255,255,0.6);
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+
+    /* 하단: 진행 인디케이터 + 컨트롤 */
+    .scene-controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      margin-top: 40px;
+    }
+
+    .scene-dots {
+      display: flex; gap: 8px;
+    }
+    .scene-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.15);
+      cursor: pointer;
+      transition: background 0.3s, transform 0.3s;
+      border: none;
+      padding: 0;
+    }
+    .scene-dot.active {
+      background: var(--primary);
+      transform: scale(1.3);
+    }
+    .scene-dot:hover {
+      background: rgba(255,171,0,0.5);
+    }
+
+    /* 진행 바 */
+    .progress-wrap {
+      position: relative;
+      width: 200px;
+      height: 3px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      position: absolute;
+      top: 0; left: 0;
+      height: 100%;
+      background: var(--primary);
+      border-radius: 2px;
+      transition: width 0.3s ease;
+    }
+    .progress-fill {
+      position: absolute;
+      top: 0; left: 0;
+      height: 100%;
+      background: rgba(255,171,0,0.4);
+      border-radius: 2px;
+      width: 0%;
+    }
+
+    /* 재생/일시정지 */
+    .play-pause {
+      background: none;
+      border: 1px solid rgba(255,255,255,0.2);
+      color: rgba(255,255,255,0.6);
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.8rem;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .play-pause:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    /* 장면 라벨 목록 */
+    .scene-labels {
+      display: flex;
+      justify-content: center;
+      gap: 4px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+    .scene-label-btn {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.3);
+      font-size: 0.78rem;
+      font-weight: 500;
+      padding: 6px 14px;
+      cursor: pointer;
+      border-radius: 50px;
+      transition: color 0.3s, background 0.3s;
+      font-family: 'Noto Sans KR', sans-serif;
+    }
+    .scene-label-btn.active {
+      color: var(--primary);
+      background: rgba(255,171,0,0.1);
+    }
+    .scene-label-btn:hover {
+      color: rgba(255,255,255,0.6);
+    }
+
+    /* ── NOTICE ──────────────────────── */
+    .notice {
+      text-align: center;
+      padding: 40px 24px;
+      color: rgba(255,255,255,0.3);
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ════════════ HERO ════════════ -->
+  <section class="hero">
+    <h1>당신의 사무실을 무장하세요</h1>
+    <p class="sub">명함도 쿠폰도 아닌, <strong>QR 하나로</strong></p>
+    <a href="#" class="cta">무료 파일럿 신청하기</a>
+  </section>
+
+  <!-- ════════════ SCENE THEATER ════════════ -->
+  <section class="theater">
+    <div class="theater-container">
+
+      <!-- 장면 제목 -->
+      <div class="scene-header">
+        <div class="scene-badge" id="sceneBadge">SCENE 1</div>
+        <div class="scene-title" id="sceneTitle">전화가 온다</div>
+      </div>
+
+      <!-- 3열 프레임 -->
+      <div class="scene-frame">
+
+        <!-- ═══ 왼쪽 슬롯 ═══ -->
+        <div class="scene-slot" id="slotLeft">
+
+          <!-- 장면1 왼쪽 -->
+          <div class="scene-content active" data-scene="0">
+            <div class="float-card">
+              <div class="float-card-tag">고객 자동 조회</div>
+              <h4>김영희 님</h4>
+              <ul class="mini-list">
+                <li><span class="dot dot-gold"></span> 골드 등급</li>
+                <li><span class="dot dot-green"></span> 3회째 호출</li>
+                <li><span class="dot dot-blue"></span> 최근: 3일 전</li>
+              </ul>
+              <p style="margin-top:12px; font-size:0.78rem; color:rgba(255,255,255,0.35);">전화번호만으로 자동 매칭</p>
+            </div>
+          </div>
+
+          <!-- 장면2 왼쪽 -->
+          <div class="scene-content" data-scene="1">
+            <div class="float-card">
+              <div class="float-card-tag">대기 기사</div>
+              <h4>주변 기사 3명</h4>
+              <ul class="mini-list">
+                <li><span class="dot dot-green"></span> 박성호 <span style="margin-left:auto; color:rgba(255,255,255,0.35)">2km</span></li>
+                <li><span class="dot dot-green"></span> 이준혁 <span style="margin-left:auto; color:rgba(255,255,255,0.35)">3km</span></li>
+                <li><span class="dot dot-blue"></span> 김태민 <span style="margin-left:auto; color:rgba(255,255,255,0.35)">5km</span></li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- 장면3 왼쪽 -->
+          <div class="scene-content" data-scene="2">
+            <div class="float-card">
+              <div class="float-card-tag">콜매니저 자동 정산</div>
+              <h4>정산 완료</h4>
+              <ul class="mini-list">
+                <li>운행료 <span class="hl" style="margin-left:auto;">20,000원</span></li>
+                <li>수수료 <span class="hl" style="margin-left:auto;">4,000원</span></li>
+                <li>기사몫 <span style="margin-left:auto; color:var(--white);">16,000원</span></li>
+              </ul>
+              <p style="margin-top:10px; font-size:0.78rem; color:rgba(255,255,255,0.35);">수기 정산 불필요</p>
+            </div>
+          </div>
+
+          <!-- 장면4 왼쪽 -->
+          <div class="scene-content" data-scene="3">
+            <div class="float-card">
+              <div class="float-card-tag">어떤 방식이든</div>
+              <h4>앱으로 불러도<br>전화로 불러도</h4>
+              <p>같은 사무실, 같은 혜택<br>손님이 편한 방식으로</p>
+              <p style="margin-top:10px; font-size:0.78rem; color:rgba(255,255,255,0.35);">명함은 버려져도<br>앱은 남습니다</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══ 가운데 슬롯 ═══ -->
+        <div class="scene-slot" id="slotCenter">
+
+          <!-- 장면1 가운데: 콜디텍터 -->
+          <div class="scene-content active" data-scene="0">
+            <div class="main-screen">
+              <div class="main-screen-header">
+                <div class="app-icon">CD</div>
+                <span class="app-name">콜 디텍터</span>
+              </div>
+              <div class="main-screen-body">
+                <div style="text-align:center; padding:20px 0;">
+                  <div style="font-size:2.5rem; margin-bottom:12px;">&#128222;</div>
+                  <div style="color:var(--white); font-size:1.2rem; font-weight:700; margin-bottom:4px;">
+                    <span class="mock-pulse"></span>010-1234-5678
+                  </div>
+                  <div style="color:rgba(255,255,255,0.4); font-size:0.85rem;">수신 전화 자동 감지</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 장면2 가운데: 콜매니저 배차 -->
+          <div class="scene-content" data-scene="1">
+            <div class="main-screen">
+              <div class="main-screen-header">
+                <div class="app-icon">CM</div>
+                <span class="app-name">콜 매니저</span>
+              </div>
+              <div class="main-screen-body">
+                <div style="text-align:center;">
+                  <div style="background:rgba(255,171,0,0.08); border-radius:var(--radius-sm); padding:16px; margin-bottom:16px; text-align:left;">
+                    <div style="display:flex; justify-content:space-between; padding:6px 0; color:rgba(255,255,255,0.6); font-size:0.85rem;"><span>손님</span><span style="color:var(--white); font-weight:500;">김영희 (골드)</span></div>
+                    <div style="display:flex; justify-content:space-between; padding:6px 0; color:rgba(255,255,255,0.6); font-size:0.85rem;"><span>출발지</span><span style="color:var(--white); font-weight:500;">양평읍 양근리</span></div>
+                    <div style="display:flex; justify-content:space-between; padding:6px 0; color:rgba(255,255,255,0.6); font-size:0.85rem;"><span>도착지</span><span style="color:var(--white); font-weight:500;">용문면 삼성리</span></div>
+                  </div>
+                  <div class="mock-btn mock-btn-gold">박성호 기사에게 배차</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 장면3 가운데: 기사앱 완료 -->
+          <div class="scene-content" data-scene="2">
+            <div class="main-screen">
+              <div class="main-screen-header">
+                <div class="app-icon">DA</div>
+                <span class="app-name">기사 앱</span>
+              </div>
+              <div class="main-screen-body">
+                <div style="text-align:center; padding:20px 0;">
+                  <div style="font-size:3rem; margin-bottom:12px; color:#4CAF50;">&#10003;</div>
+                  <div style="color:#4CAF50; font-weight:700; font-size:1.1rem; margin-bottom:8px;">운행 완료</div>
+                  <div style="color:var(--white); font-size:1.5rem; font-weight:900;">20,000원</div>
+                  <div style="color:rgba(255,255,255,0.4); font-size:0.85rem; margin-top:4px;">양평읍 양근리 → 용문면 삼성리</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 장면4 가운데: 손님 폰 -->
+          <div class="scene-content" data-scene="3">
+            <div class="main-screen">
+              <div class="main-screen-header">
+                <div class="app-icon" style="background:var(--primary-dark);">CM</div>
+                <span class="app-name">양평 대리운전</span>
+              </div>
+              <div class="main-screen-body">
+                <div style="text-align:center; padding:20px 0;">
+                  <div style="color:var(--primary); font-size:1.3rem; font-weight:900; margin-bottom:4px;">양평 대리운전</div>
+                  <div style="color:rgba(255,255,255,0.4); font-size:0.85rem; margin-bottom:24px;">사장님 이름으로 된 앱</div>
+                  <div style="display:flex; gap:12px; justify-content:center;">
+                    <div style="flex:1; max-width:140px; padding:16px 12px; border-radius:var(--radius-sm); text-align:center; font-size:0.82rem; font-weight:600; background:rgba(255,171,0,0.12); color:var(--primary); border:1px solid rgba(255,171,0,0.2);">
+                      <div style="font-size:1.5rem; margin-bottom:6px;">&#128222;</div>
+                      전화로 부르기
+                    </div>
+                    <div style="flex:1; max-width:140px; padding:16px 12px; border-radius:var(--radius-sm); text-align:center; font-size:0.82rem; font-weight:600; background:var(--primary); color:var(--navy);">
+                      <div style="font-size:1.5rem; margin-bottom:6px;">&#128241;</div>
+                      앱으로 부르기
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══ 오른쪽 슬롯 ═══ -->
+        <div class="scene-slot" id="slotRight">
+
+          <!-- 장면1 오른쪽 -->
+          <div class="scene-content active" data-scene="0">
+            <div class="float-card">
+              <div class="float-card-tag">실시간 동기화</div>
+              <h4>콜매니저에<br>즉시 전달</h4>
+              <p><span class="hl">0.3초</span> 내 동기화</p>
+              <p style="margin-top:8px;">전화기 2대, 3대 — 어디서 받든<br>하나의 화면에 통합</p>
+            </div>
+          </div>
+
+          <!-- 장면2 오른쪽 -->
+          <div class="scene-content" data-scene="1">
+            <div class="float-card">
+              <div class="float-card-tag">기사 앱</div>
+              <h4>콜 수신!</h4>
+              <p>양평읍 양근리<br>→ 용문면 삼성리</p>
+              <div style="margin-top:16px; display:flex; gap:8px;">
+                <span class="mock-btn mock-btn-gold" style="flex:1; text-align:center; padding:10px 0; font-size:0.82rem;">수락</span>
+                <span class="mock-btn mock-btn-outline" style="flex:1; text-align:center; padding:10px 0; font-size:0.82rem;">거절</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 장면3 오른쪽 -->
+          <div class="scene-content" data-scene="2">
+            <div class="float-card">
+              <div class="float-card-tag">손님 앱</div>
+              <h4>포인트 적립</h4>
+              <p><span class="hl" style="font-size:1.3rem; font-weight:900;">+300P</span></p>
+              <p style="margin-top:8px;">등급 상승</p>
+              <p><span style="color:rgba(255,255,255,0.4)">실버</span> → <span class="hl">골드</span></p>
+              <p style="margin-top:10px; font-size:0.78rem; color:rgba(255,255,255,0.35);">다음 호출 시 할인 적용</p>
+            </div>
+          </div>
+
+          <!-- 장면4 오른쪽 -->
+          <div class="scene-content" data-scene="3">
+            <div class="float-card">
+              <div class="float-card-tag">콜매니저</div>
+              <h4>귀속 손님<br><span class="hl" style="font-size:1.5rem;">48번째</span></h4>
+              <p>접수 완료</p>
+              <p style="margin-top:12px; font-size:0.78rem; color:rgba(255,255,255,0.35);">QR 한 번으로 시작된<br>손님이 계속 돌아옵니다</p>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /scene-frame -->
+
+      <!-- 컨트롤 -->
+      <div class="scene-controls">
+        <button class="play-pause" id="playPause" title="일시정지">&#10074;&#10074;</button>
+        <div class="scene-dots" id="sceneDots">
+          <button class="scene-dot active" data-idx="0"></button>
+          <button class="scene-dot" data-idx="1"></button>
+          <button class="scene-dot" data-idx="2"></button>
+          <button class="scene-dot" data-idx="3"></button>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-bar" id="progressBar" style="width:25%"></div>
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+      </div>
+
+      <div class="scene-labels">
+        <button class="scene-label-btn active" data-idx="0">전화 수신</button>
+        <button class="scene-label-btn" data-idx="1">원클릭 배차</button>
+        <button class="scene-label-btn" data-idx="2">자동 정산</button>
+        <button class="scene-label-btn" data-idx="3">손님 귀속</button>
+      </div>
+
+    </div>
+  </section>
+
+  <div class="notice">
+    * 레이아웃 확인용 목업입니다. 가운데 영역에 실제 스크린샷이 들어갑니다.
+  </div>
+
+  <script>
+    var SCENES = [
+      { badge: 'SCENE 1', title: '전화가 온다' },
+      { badge: 'SCENE 2', title: '배차, 단 1번의 터치' },
+      { badge: 'SCENE 3', title: '운행 완료, 정산도 자동' },
+      { badge: 'SCENE 4', title: '다음 날, 손님이 돌아온다' }
+    ];
+
+    var INTERVAL = 4000; // 4초
+    var current = 0;
+    var playing = true;
+    var timer = null;
+    var fillTimer = null;
+
+    var badgeEl = document.getElementById('sceneBadge');
+    var titleEl = document.getElementById('sceneTitle');
+    var dots = document.querySelectorAll('.scene-dot');
+    var labels = document.querySelectorAll('.scene-label-btn');
+    var progressBar = document.getElementById('progressBar');
+    var progressFill = document.getElementById('progressFill');
+    var playPauseBtn = document.getElementById('playPause');
+
+    var slots = ['slotLeft', 'slotCenter', 'slotRight'];
+
+    function goTo(idx) {
+      current = idx;
+
+      // 제목 전환
+      badgeEl.textContent = SCENES[idx].badge;
+      titleEl.style.opacity = '0';
+      setTimeout(function() {
+        titleEl.textContent = SCENES[idx].title;
+        titleEl.style.opacity = '1';
+      }, 200);
+
+      // 3열 콘텐츠 전환
+      slots.forEach(function(slotId) {
+        var slot = document.getElementById(slotId);
+        var contents = slot.querySelectorAll('.scene-content');
+        contents.forEach(function(c) {
+          c.classList.remove('active');
+        });
+        var target = slot.querySelector('[data-scene="' + idx + '"]');
+        if (target) {
+          setTimeout(function() { target.classList.add('active'); }, 80);
+        }
+      });
+
+      // 인디케이터
+      dots.forEach(function(d, i) {
+        d.classList.toggle('active', i === idx);
+      });
+      labels.forEach(function(l, i) {
+        l.classList.toggle('active', i === idx);
+      });
+
+      // 진행바
+      progressBar.style.width = ((idx + 1) / SCENES.length * 100) + '%';
+
+      // 채우기 애니메이션 리셋
+      resetFill();
+    }
+
+    function next() {
+      goTo((current + 1) % SCENES.length);
+    }
+
+    function resetFill() {
+      progressFill.style.transition = 'none';
+      progressFill.style.width = (current / SCENES.length * 100) + '%';
+
+      if (playing) {
+        requestAnimationFrame(function() {
+          progressFill.style.transition = 'width ' + (INTERVAL / 1000) + 's linear';
+          progressFill.style.width = ((current + 1) / SCENES.length * 100) + '%';
+        });
+      }
+    }
+
+    function startTimer() {
+      stopTimer();
+      timer = setInterval(next, INTERVAL);
+      resetFill();
+    }
+
+    function stopTimer() {
+      if (timer) { clearInterval(timer); timer = null; }
+      progressFill.style.transition = 'none';
+    }
+
+    // 도트 클릭
+    dots.forEach(function(d) {
+      d.addEventListener('click', function() {
+        goTo(parseInt(this.getAttribute('data-idx')));
+        if (playing) startTimer();
+      });
+    });
+
+    // 라벨 클릭
+    labels.forEach(function(l) {
+      l.addEventListener('click', function() {
+        goTo(parseInt(this.getAttribute('data-idx')));
+        if (playing) startTimer();
+      });
+    });
+
+    // 재생/정지
+    playPauseBtn.addEventListener('click', function() {
+      playing = !playing;
+      this.innerHTML = playing ? '&#10074;&#10074;' : '&#9654;';
+      this.title = playing ? '일시정지' : '재생';
+      if (playing) {
+        startTimer();
+      } else {
+        stopTimer();
+      }
+    });
+
+    // 시작
+    startTimer();
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>앱 쇼케이스 데모</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{--primary:#FFAB00;--navy:#0f1a2e;--white:#fff;--yellow:#FFD400}
+    body{font-family:'Noto Sans KR',sans-serif;background:var(--navy);color:var(--white);
+      min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden}
+
+    .wrap{width:100%;max-width:500px;padding:12px}
+
+    .hdr{text-align:center;margin-bottom:16px;padding:0;height:28px;display:flex;align-items:center;justify-content:center}
+    .hdr-badge{display:inline-block;background:rgba(255,171,0,.15);color:var(--primary);
+      font-weight:900;font-size:.6rem;padding:2px 10px;border-radius:50px;margin-bottom:4px}
+    .hdr-title{font-size:1.1rem;font-weight:900;transition:opacity .3s,font-size .3s,color .3s;white-space:pre-line}
+    .hdr-title.emphasis{font-size:1.4rem;color:var(--white)}
+
+    /* 아이콘 바 */
+    .icons{display:flex;justify-content:center;gap:16px;padding:16px 0 0;position:relative;z-index:1}
+    .ic{display:flex;flex-direction:column;align-items:center;gap:2px;transition:transform .3s,opacity .3s}
+    .ic.on{transform:scale(1.15)}.ic.off{opacity:.25}
+    .ic-circle{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;
+      justify-content:center;font-size:1.2rem;border:2px solid transparent;transition:border-color .3s,box-shadow .3s;
+      overflow:hidden;background:transparent}
+    .ic.on .ic-circle{border-color:var(--primary);box-shadow:0 0 10px rgba(255,171,0,.3)}
+    .ic-circle img{width:100%;height:100%;object-fit:cover;display:block}
+    .ic-name{font-size:.5rem;color:rgba(255,255,255,.35);font-weight:500;white-space:nowrap;transition:color .3s}
+    .ic.on .ic-name{color:var(--primary)}
+
+    /* 스테이지 */
+    .stage{position:relative;width:100%;height:368px;overflow:visible}
+
+    .phone{
+      position:absolute;width:170px;height:368px;border-radius:22px;overflow:hidden;
+      background:#000;border:3px solid rgba(255,255,255,.1);
+      box-shadow:0 10px 40px rgba(0,0,0,.5);
+      top:0;opacity:0;
+      transition:opacity .5s ease, left .5s ease, box-shadow .3s, border-color .3s;
+      z-index:2;
+    }
+    .phone img{width:100%;height:100%;object-fit:cover;display:block}
+    .phone .scr{position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;transition:opacity .25s}
+    .phone .scr.vis{opacity:1}
+    .phone.glow{box-shadow:0 0 30px rgba(255,171,0,.5),0 10px 40px rgba(0,0,0,.5);border-color:var(--primary)}
+
+    /* 커서 */
+    .cur{position:absolute;width:24px;height:24px;z-index:20;opacity:0;pointer-events:none;
+      transition:left .6s cubic-bezier(.4,0,.2,1),top .6s cubic-bezier(.4,0,.2,1),opacity .25s;
+      filter:drop-shadow(1px 2px 2px rgba(0,0,0,.6))}
+    .cur.vis{opacity:1}
+    .cur.click{animation:ck .2s ease}
+    @keyframes ck{0%{transform:scale(1)}50%{transform:scale(.75)}100%{transform:scale(1)}}
+
+    .rip{position:absolute;width:30px;height:30px;border-radius:50%;border:2px solid var(--primary);
+      opacity:0;z-index:19;pointer-events:none;transform:translate(-50%,-50%) scale(0)}
+    .rip.go{animation:rp .35s ease-out forwards}
+    @keyframes rp{0%{opacity:1;transform:translate(-50%,-50%) scale(0)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.5)}}
+
+    /* 중간 문구 (엔딩 전) */
+    .midtext{position:absolute;top:0;left:0;right:0;bottom:0;
+      display:flex;align-items:center;justify-content:center;
+      text-align:center;z-index:15;pointer-events:none;
+      opacity:0;transition:opacity .6s}
+    .midtext.vis{opacity:1}
+    .midtext-inner{font-size:1rem;font-weight:800;color:var(--white);line-height:2;white-space:pre-line}
+
+    /* 엔딩 카드 */
+    .ending{position:absolute;top:0;left:0;right:0;bottom:0;
+      display:flex;align-items:center;justify-content:center;
+      text-align:center;z-index:15;pointer-events:none;
+      opacity:0;transition:opacity .6s}
+    .ending.vis{opacity:1}
+    .ending-inner{width:100%}
+    .ending-top{font-size:.85rem;font-weight:800;color:rgba(255,255,255,.7);margin-bottom:16px;letter-spacing:-0.5px}
+    .ending-main{font-size:2rem;font-weight:900;margin-bottom:8px;letter-spacing:-1.5px;line-height:1.2}
+    .ending-main .hl{color:var(--yellow)}
+    .ending-sub{font-size:1rem;font-weight:700;color:#eee;margin-bottom:32px}
+    .ending-url{font-size:.8rem;color:#666;border-top:1px solid #222;padding-top:16px;display:inline-block}
+    .ending-url span{color:var(--yellow);font-weight:800}
+
+    .cap{position:absolute;top:8px;left:50%;transform:translateX(-50%);
+      background:rgba(0,0,0,.7);color:var(--primary);font-size:.7rem;font-weight:700;
+      padding:4px 14px;border-radius:50px;opacity:0;transition:opacity .3s;
+      z-index:15;white-space:nowrap}
+    .cap.vis{opacity:1}
+
+    /* 컨트롤 */
+    .ctrls{display:flex;align-items:center;justify-content:center;gap:12px;padding-top:8px}
+    .cbtn{background:none;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.6);
+      width:28px;height:28px;border-radius:50%;cursor:pointer;display:flex;align-items:center;
+      justify-content:center;font-size:.6rem;transition:border-color .2s,color .2s}
+    .cbtn:hover,.cbtn.active{border-color:var(--primary);color:var(--primary)}
+
+    /* 시작 오버레이 */
+    .start-overlay{
+      position:absolute;top:0;left:0;right:0;bottom:0;z-index:30;
+      display:flex;align-items:center;justify-content:center;
+      background:rgba(15,26,46,.85);cursor:pointer;transition:opacity .4s;
+    }
+    .start-overlay.hidden{opacity:0;pointer-events:none}
+    .start-btn{
+      width:72px;height:72px;border-radius:50%;
+      background:rgba(255,171,0,.15);border:2px solid var(--primary);
+      display:flex;align-items:center;justify-content:center;
+      transition:transform .2s,background .2s;
+    }
+    .start-btn:hover{transform:scale(1.1);background:rgba(255,171,0,.25)}
+    .start-btn svg{width:28px;height:28px;margin-left:4px}
+
+    @media(min-width:640px){
+      .phone{width:200px;height:434px}
+      .stage{height:438px}
+      .ic-circle{width:50px;height:50px;font-size:1.3rem}
+      .icons{gap:20px}
+      .ending-main{font-size:2.5rem}
+      .ending-top{font-size:1rem}
+      .ending-sub{font-size:1.2rem}
+      .midtext-inner{font-size:1.15rem}
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hdr">
+    <div class="hdr-badge" id="badge" style="display:none"></div>
+    <div class="hdr-title" id="title"></div>
+  </div>
+
+  <div class="stage" id="stage">
+    <svg class="cur" id="cur" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M2 2L10 20L13 13L20 16L2 2Z" fill="#fff" stroke="#222" stroke-width="1.2" stroke-linejoin="round"/>
+    </svg>
+    <div class="rip" id="rip"></div>
+    <div class="cap" id="cap"></div>
+
+    <!-- 중간 문구 (엔딩 전) -->
+    <div class="midtext" id="midtext">
+      <div class="midtext-inner">일반전화콜은 물론<br>가입한 손님의 앱호출 전화호출<br>모두 <span style="color:var(--yellow)">원클릭배차</span></div>
+    </div>
+
+    <!-- 엔딩 카드 -->
+    <div class="ending" id="ending">
+      <div class="ending-inner">
+        <div class="ending-top">운전 중 배차, 도로 위 수많은 위험들</div>
+        <div class="ending-main"><span class="hl">원클릭</span>이면 배차 끝</div>
+        <div class="ending-sub">콜마당이 만드는 달리는 사무실</div>
+        <div class="ending-url"><span>calllink.io.kr</span></div>
+      </div>
+    </div>
+
+    <!-- 고객/손님 폰 -->
+    <div class="phone" id="pCust">
+      <div class="scr vis" data-s="call"><img src="sourc/%EC%9D%BC%EB%B0%98%EC%BD%9C.jpg"></div>
+      <div class="scr" data-s="home"><img src="sourc/%EC%86%90%EB%8B%98%EC%95%B11.jpg"></div>
+      <div class="scr" data-s="appcall"><img src="sourc/%EC%86%90%EB%8B%98%EC%95%B12.jpg"></div>
+      <div class="scr" data-s="requested"><img src="sourc/%EC%86%90%EB%8B%98%EC%95%B13.jpg"></div>
+    </div>
+
+    <!-- 콜매니저 폰 -->
+    <div class="phone" id="pMgr">
+      <div class="scr vis" data-s="ring"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%801.jpg"></div>
+      <div class="scr" data-s="call"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%802.jpg"></div>
+      <div class="scr" data-s="dispatch"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%803.jpg"></div>
+      <div class="scr" data-s="done"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%804.jpg"></div>
+    </div>
+
+    <!-- 기사 폰 -->
+    <div class="phone" id="pDrv">
+      <div class="scr vis" data-s="noti"><img src="sourc/%EA%B8%B0%EC%82%AC%EC%95%B11.jpg"></div>
+      <div class="scr" data-s="prepare"><img src="sourc/%EA%B8%B0%EC%82%AC%EC%95%B13.jpg"></div>
+      <div class="scr" data-s="driving"><img src="sourc/%EA%B8%B0%EC%82%AC%EC%95%B14.jpg"></div>
+    </div>
+  </div>
+
+  <div class="icons">
+    <div class="ic" data-n="cust"><div class="ic-circle"><img src="sourc/%EC%86%90%EB%8B%98%EC%95%B1.png" alt="손님앱"></div><div class="ic-name">손님앱</div></div>
+    <div class="ic" data-n="det"><div class="ic-circle"><img src="sourc/%EC%BD%9C%EB%94%94%ED%85%8D%ED%84%B0.png" alt="콜디텍터"></div><div class="ic-name">콜디텍터</div></div>
+    <div class="ic" data-n="mgr"><div class="ic-circle"><img src="sourc/%EC%BD%9C%EB%A7%A4%EB%8B%88%EC%A0%80.png" alt="콜매니저"></div><div class="ic-name">콜매니저</div></div>
+    <div class="ic" data-n="drv"><div class="ic-circle"><img src="sourc/%EB%93%9C%EB%9D%BC%EC%9D%B4%EB%B2%84.png" alt="기사앱"></div><div class="ic-name">기사앱</div></div>
+  </div>
+
+  <div class="ctrls">
+    <button class="cbtn" id="btnPlay">&#10074;&#10074;</button>
+  </div>
+</div>
+
+<audio id="bgm" preload="auto" src="sourc/Seamless_Flow.mp3"></audio>
+
+<script>
+(function(){
+  var stage=document.getElementById('stage');
+  var cur=document.getElementById('cur');
+  var rip=document.getElementById('rip');
+  var capEl=document.getElementById('cap');
+  var badgeEl=document.getElementById('badge');
+  var titleEl=document.getElementById('title');
+  var pCust=document.getElementById('pCust');
+  var pMgr=document.getElementById('pMgr');
+  var pDrv=document.getElementById('pDrv');
+  var bgm=document.getElementById('bgm');
+  var btnPlay=document.getElementById('btnPlay');
+  var endingEl=document.getElementById('ending');
+  var midtextEl=document.getElementById('midtext');
+  var allIcons=document.querySelectorAll('.ic');
+
+  var playing=true, pool=[], fadeInt=null;
+  var VOL=0.3;
+
+  function w(fn,ms){var t=setTimeout(fn,ms);pool.push(t)}
+  function stopAll(){pool.forEach(clearTimeout);pool=[];if(fadeInt){clearInterval(fadeInt);fadeInt=null}}
+
+  function bgmStart(){bgm.currentTime=0;bgm.volume=VOL;bgm.play().catch(function(){})}
+  function bgmStop(){bgm.pause();bgm.currentTime=0}
+  function bgmFadeOut(ms,cb){
+    var steps=20,step=0,iv=ms/steps,startVol=bgm.volume;
+    fadeInt=setInterval(function(){
+      step++;bgm.volume=Math.max(0,startVol*(1-step/steps));
+      if(step>=steps){clearInterval(fadeInt);fadeInt=null;bgm.pause();if(cb)cb()}
+    },iv);
+  }
+
+  function setT(b,t,emph){
+    badgeEl.style.display='none';
+    titleEl.style.opacity='0';titleEl.classList.remove('emphasis');
+    w(function(){titleEl.textContent=t||'';titleEl.style.opacity=t?'1':'0';if(emph)titleEl.classList.add('emphasis')},180);
+  }
+  function showMid(){midtextEl.classList.add('vis')}
+  function hideMid(){midtextEl.classList.remove('vis')}
+  function showEnding(){endingEl.classList.add('vis')}
+  function hideEnding(){endingEl.classList.remove('vis')}
+  function hl(names){allIcons.forEach(function(i){var n=i.getAttribute('data-n');i.classList.toggle('on',names.indexOf(n)>=0);i.classList.toggle('off',names.indexOf(n)<0)})}
+  function hlOff(){allIcons.forEach(function(i){i.classList.remove('on','off')})}
+  function scr(phone,name){phone.querySelectorAll('.scr').forEach(function(s){s.classList.toggle('vis',s.getAttribute('data-s')===name)})}
+
+  function curTo(x,y){cur.classList.add('vis');cur.style.left=x+'px';cur.style.top=y+'px'}
+  function curOff(){cur.classList.remove('vis')}
+  function clickFx(x,y){
+    cur.classList.add('click');
+    rip.style.left=x+'px';rip.style.top=y+'px';
+    rip.classList.remove('go');void rip.offsetWidth;rip.classList.add('go');
+    w(function(){cur.classList.remove('click')},200);
+  }
+
+  function pp(phone,xp,yp){
+    var r=phone.getBoundingClientRect(),s=stage.getBoundingClientRect();
+    return{x:r.left-s.left+r.width*xp,y:r.top-s.top+r.height*yp};
+  }
+
+  function centerL(){return(stage.offsetWidth-pMgr.offsetWidth)/2}
+  function leftL(){return stage.offsetWidth/2-pMgr.offsetWidth-6}
+  function rightL(){return stage.offsetWidth/2+6}
+
+  function fadeIn(phone,leftPx){phone.style.left=leftPx+'px';phone.style.opacity='1'}
+  function fadeOut(phone){phone.style.opacity='0'}
+  function moveTo(phone,leftPx){phone.style.left=leftPx+'px'}
+
+  // 교대 glow 반짝이 효과
+  var glowInt=null;
+  function alternateGlow(a,b,interval,count,cb){
+    var step=0;
+    a.classList.add('glow');b.classList.remove('glow');
+    glowInt=setInterval(function(){
+      step++;
+      if(step>=count*2){
+        clearInterval(glowInt);glowInt=null;
+        a.classList.remove('glow');b.classList.remove('glow');
+        if(cb)cb();return;
+      }
+      if(step%2===1){a.classList.remove('glow');b.classList.add('glow')}
+      else{a.classList.add('glow');b.classList.remove('glow')}
+    },interval);
+    pool.push(glowInt);
+  }
+  // 단일 폰 반짝이
+  function blinkGlow(phone,interval,count,cb){
+    var step=0;
+    phone.classList.add('glow');
+    glowInt=setInterval(function(){
+      step++;
+      if(step>=count*2){
+        clearInterval(glowInt);glowInt=null;
+        phone.classList.remove('glow');
+        if(cb)cb();return;
+      }
+      phone.classList.toggle('glow');
+    },interval);
+    pool.push(glowInt);
+  }
+
+  function reset(){
+    [pCust,pMgr,pDrv].forEach(function(p){
+      p.style.transition='none';p.style.opacity='0';
+    });
+    pCust.style.left=leftL()+'px';
+    pMgr.style.left=centerL()+'px';
+    pDrv.style.left=rightL()+'px';
+    void pCust.offsetWidth;void pMgr.offsetWidth;void pDrv.offsetWidth;
+    [pCust,pMgr,pDrv].forEach(function(p){p.style.transition=''});
+    scr(pCust,'call');scr(pMgr,'ring');scr(pDrv,'noti');
+    curOff();hlOff();hideEnding();hideMid();
+    if(glowInt){clearInterval(glowInt);glowInt=null}
+    pMgr.classList.remove('glow');pCust.classList.remove('glow');pDrv.classList.remove('glow');
+    titleEl.classList.remove('emphasis');
+  }
+
+  // ── 시나리오 ──
+  function go(){
+    if(!playing)return;
+    reset();
+    bgmStart();
+    scene2();
+  }
+
+  // ===== SCENE 2: 고객과 통화중 → 배차 =====
+  function scene2(){
+    scr(pMgr,'call');
+    setT('','고객과 통화중');
+    hl(['mgr']);
+    fadeIn(pMgr,centerL());
+    curOff();
+
+    // 통화 종료 클릭
+    w(function(){
+      if(!playing)return;
+      var e=pp(pMgr,0.50,0.84);
+      curTo(e.x+20,e.y-30);
+      w(function(){
+        if(!playing)return;
+        curTo(e.x,e.y);
+        w(function(){
+          if(!playing)return;
+          clickFx(e.x,e.y);
+          w(function(){
+            if(!playing)return;
+            scr(pMgr,'dispatch');
+            curOff();
+            setT('','통화 종료 → 즉시 배차',true);
+
+            // 반짝이 glow 효과
+            blinkGlow(pMgr,500,3,function(){
+              if(!playing)return;
+              // 기사 선택 클릭
+              var d=pp(pMgr,0.35,0.45);
+              curTo(d.x+20,d.y-20);
+              w(function(){
+                if(!playing)return;
+                curTo(d.x,d.y);
+                w(function(){
+                  if(!playing)return;
+                  clickFx(d.x,d.y);
+                  w(function(){if(!playing)return; scene3()},400);
+                },450);
+              },500);
+            });
+          },350);
+        },450);
+      },500);
+    },1000);
+  }
+
+  // ===== SCENE 3: 기사가 배차를 받는다 =====
+  function scene3(){
+    curOff();
+    setT('','기사가 배차를 받는다');
+    hl(['mgr','drv']);
+    scr(pMgr,'done');
+    moveTo(pMgr,leftL());
+
+    w(function(){
+      if(!playing)return;
+      fadeIn(pDrv,rightL());
+
+      // 기사 확인 클릭
+      w(function(){
+        if(!playing)return;
+        var c=pp(pDrv,0.50,0.58);
+        curTo(c.x+15,c.y-15);
+        w(function(){
+          if(!playing)return;
+          curTo(c.x,c.y);
+          w(function(){
+            if(!playing)return;
+            clickFx(c.x,c.y);
+            w(function(){if(!playing)return; scene4()},400);
+          },450);
+        },500);
+      },600);
+    },350);
+  }
+
+  // ===== SCENE 4: 기사 운행 준비 =====
+  function scene4(){
+    curOff();
+    setT('','기사 운행 준비');
+    hl(['drv']);
+    fadeOut(pMgr);
+    scr(pDrv,'prepare');
+    moveTo(pDrv,centerL());
+
+    // 운행 시작 버튼 클릭
+    w(function(){
+      if(!playing)return;
+      var s=pp(pDrv,0.65,0.72);
+      curTo(s.x+15,s.y-15);
+      w(function(){
+        if(!playing)return;
+        curTo(s.x,s.y);
+        w(function(){
+          if(!playing)return;
+          clickFx(s.x,s.y);
+          w(function(){
+            if(!playing)return;
+            scr(pDrv,'driving');
+            curOff();
+            setT('','운행 중',true);
+            w(function(){if(!playing)return; scene5()},1000);
+          },400);
+        },450);
+      },500);
+    },600);
+  }
+
+  // ===== SCENE 5: 앱으로 호출시 =====
+  function scene5(){
+    fadeOut(pDrv);
+    setT('','앱으로 호출시');
+    hl(['cust']);
+    scr(pCust,'home');
+
+    w(function(){
+      if(!playing)return;
+      fadeIn(pCust,centerL());
+
+      // 앱호출 버튼 클릭
+      w(function(){
+        if(!playing)return;
+        var h=pp(pCust,0.50,0.68);
+        curTo(h.x+15,h.y-15);
+        w(function(){
+          if(!playing)return;
+          curTo(h.x,h.y);
+          w(function(){
+            if(!playing)return;
+            clickFx(h.x,h.y);
+            w(function(){
+              if(!playing)return;
+              scr(pCust,'appcall');
+              curOff();
+
+              // 대리운전 호출 버튼 클릭
+              w(function(){
+                if(!playing)return;
+                var b=pp(pCust,0.50,0.88);
+                curTo(b.x+15,b.y-15);
+                w(function(){
+                  if(!playing)return;
+                  curTo(b.x,b.y);
+                  w(function(){
+                    if(!playing)return;
+                    clickFx(b.x,b.y);
+                    w(function(){
+                      if(!playing)return;
+                      curOff();
+                      // 동시에: 손님앱3 전환 + 왼쪽 이동 + 콜매니저3 오른쪽 페이드인
+                      scr(pCust,'requested');
+                      moveTo(pCust,leftL());
+                      setT('','앱 호출도 바로 배차',true);
+                      hl(['cust','mgr']);
+                      scr(pMgr,'dispatch');
+                      fadeIn(pMgr,rightL());
+
+                      // 콜매니저3만 반짝이
+                      w(function(){
+                        if(!playing)return;
+                        blinkGlow(pMgr,500,3,function(){
+                          if(!playing)return;
+                          fadeOut(pCust);
+                          fadeOut(pMgr);
+                          setT('','');
+                          hlOff();
+
+                          // 중간 문구 표시
+                          w(function(){
+                            if(!playing)return;
+                            showMid();
+
+                            // 중간 문구 → 엔딩 카드
+                            w(function(){
+                              if(!playing)return;
+                              hideMid();
+
+                              w(function(){
+                                if(!playing)return;
+                                showEnding();
+
+                                w(function(){
+                                  if(!playing)return;
+                                  bgmFadeOut(800,function(){
+                                    if(!playing)return;
+                                    // 종료 — 루프 없음
+                                  });
+                                },3000);
+                              },500);
+                            },2500);
+                          },600);
+                        });
+                      },300);
+                    },400);
+                  },450);
+                },500);
+              },700);
+            },400);
+          },450);
+        },500);
+      },800);
+    },400);
+  }
+
+  // 컨트롤
+  btnPlay.addEventListener('click',function(){
+    if(!playing){
+      playing=true;
+      this.innerHTML='&#10074;&#10074;';
+      go();
+    }else{
+      playing=false;
+      this.innerHTML='&#9654;';
+      stopAll();
+      bgmStop();
+    }
+  });
+
+  // ?start=3 지원: Scene 3부터 시작
+  function goFromScene3(){
+    if(!playing)return;
+    reset();bgmStart();
+    setT('','기사가 배차를 받는다');
+    hl(['mgr','drv']);
+    scr(pMgr,'done');
+    fadeIn(pMgr,leftL());
+    w(function(){
+      if(!playing)return;
+      fadeIn(pDrv,rightL());
+      w(function(){
+        if(!playing)return;
+        var c=pp(pDrv,0.50,0.58);
+        curTo(c.x+15,c.y-15);
+        w(function(){
+          if(!playing)return;curTo(c.x,c.y);
+          w(function(){
+            if(!playing)return;clickFx(c.x,c.y);
+            w(function(){if(!playing)return;scene4()},400);
+          },450);
+        },500);
+      },600);
+    },350);
+  }
+
+  var params=new URLSearchParams(window.location.search);
+  if(params.get('start')==='3'){goFromScene3()}else{go()}
+})();
+</script>
+</body>
+</html>

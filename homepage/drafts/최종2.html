@@ -1,0 +1,737 @@
+<html class="scroll-smooth" lang="ko"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>콜마당 | 통화가 끝나면 배차가 시작됩니다</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Manrope:wght@600;700;800&amp;family=Noto+Sans+KR:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-high": "#eae7e9",
+                        "background": "#fcf8fa",
+                        "on-primary-fixed-variant": "#3f465c",
+                        "on-error-container": "#93000a",
+                        "on-secondary": "#ffffff",
+                        "on-tertiary-fixed": "#0d1c2f",
+                        "secondary": "#855300",
+                        "surface-container": "#f0edef",
+                        "on-secondary-container": "#684000",
+                        "tertiary-fixed-dim": "#b9c7e0",
+                        "outline": "#76777d",
+                        "on-tertiary-fixed-variant": "#3a485c",
+                        "surface-bright": "#fcf8fa",
+                        "secondary-fixed-dim": "#ffb95f",
+                        "inverse-on-surface": "#f3f0f2",
+                        "outline-variant": "#c6c6cd",
+                        "surface-container-low": "#f6f3f5",
+                        "surface-tint": "#565e74",
+                        "on-primary": "#ffffff",
+                        "on-tertiary-container": "#76859b",
+                        "on-tertiary": "#ffffff",
+                        "primary-container": "#131b2e",
+                        "surface-variant": "#e4e2e4",
+                        "error": "#ba1a1a",
+                        "inverse-surface": "#303032",
+                        "on-background": "#1b1b1d",
+                        "on-surface": "#1b1b1d",
+                        "tertiary": "#000000",
+                        "secondary-fixed": "#ffddb8",
+                        "on-primary-container": "#7c839b",
+                        "on-error": "#ffffff",
+                        "primary-fixed-dim": "#bec6e0",
+                        "error-container": "#ffdad6",
+                        "on-secondary-fixed": "#2a1700",
+                        "on-secondary-fixed-variant": "#653e00",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-fixed": "#dae2fd",
+                        "secondary-container": "#fea619",
+                        "on-surface-variant": "#45464d",
+                        "surface-container-highest": "#e4e2e4",
+                        "inverse-primary": "#bec6e0",
+                        "primary": "#000000",
+                        "tertiary-fixed": "#d5e3fd",
+                        "surface": "#fcf8fa",
+                        "surface-dim": "#dcd9db",
+                        "tertiary-container": "#0d1c2f",
+                        "on-primary-fixed": "#131b2e"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "1rem",
+                        "lg": "2rem",
+                        "xl": "3rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Manrope", "Noto Sans KR"],
+                        "body": ["Inter", "Noto Sans KR"],
+                        "label": ["Inter", "Noto Sans KR"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            word-break: keep-all;
+            overflow-wrap: break-word;
+            font-family: 'Inter', 'Noto Sans KR', sans-serif;
+            background-color: #fcf8fa;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-nav {
+            background: rgba(252, 248, 250, 0.8);
+            backdrop-filter: blur(20px);
+        }
+
+        /* Showcase Compare Integration */
+        :root {
+            --primary-demo: #fea619;
+            --navy-demo: #131b2e;
+        }
+        .demo-wrap{width:100%;max-width:500px;padding:12px;margin:0 auto;position:relative;z-index:20;}
+        .demo-hdr{text-align:center;margin-bottom:16px;padding:0;min-height:36px;display:flex;align-items:center;justify-content:center;position:relative}
+        .demo-title{font-size:1.1rem;font-weight:900;color:var(--navy-demo);transition:opacity .3s;white-space:pre-line;line-height:1.4;font-family: 'Manrope', sans-serif;}
+        .demo-lbl{position:absolute;top:50%;transform:translate(-50%,-50%);font-size:1.1rem;font-weight:900;color:var(--navy-demo);white-space:nowrap;opacity:0;transition:opacity .4s;pointer-events:none;font-family: 'Manrope', sans-serif;}
+        .demo-lbl.vis{opacity:1}
+        .demo-pic{position:absolute;z-index:15;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:4px;opacity:0;transition:opacity .4s,left .5s ease}
+        .demo-pic.vis{opacity:1}
+        .demo-pic .dp-img{width:44px;height:44px;border-radius:12px;overflow:hidden;border:2px solid transparent;transition:border-color .3s,box-shadow .3s;background:#fff;}
+        .demo-pic.on .dp-img{border-color:var(--primary-demo);box-shadow:0 0 10px rgba(254,166,25,.3)}
+        .demo-pic .dp-img img{width:100%;height:100%;object-fit:cover;display:block}
+        .demo-pic .dp-img svg{width:100%;height:100%;display:block}
+        .demo-pic .dp-name{font-size:.7rem;color:rgba(19,27,46,.4);font-weight:700;white-space:nowrap;transition:color .3s}
+        .demo-pic.on .dp-name{color:var(--secondary)}
+        .demo-stage{position:relative;width:100%;height:378px;overflow:visible}
+        .demo-phone{position:absolute;width:170px;height:378px;border-radius:24px;overflow:hidden;background:#000;border:4px solid var(--navy-demo);box-shadow:0 10px 40px rgba(0,0,0,.1);top:0;opacity:0;transition:opacity .5s ease,left .5s ease,box-shadow .3s,border-color .3s;z-index:2}
+        .demo-phone img{width:100%;height:100%;object-fit:cover;display:block}
+        .demo-phone .scr{position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;transition:opacity .25s}
+        .demo-phone .scr.vis{opacity:1}
+        .demo-phone.glow{box-shadow:0 0 30px rgba(254,166,25,.4),0 10px 40px rgba(0,0,0,.1);border-color:var(--primary-demo)}
+        .demo-cur{position:absolute;width:48px;height:48px;z-index:20;opacity:0;pointer-events:none;transition:left .6s cubic-bezier(.4,0,.2,1),top .6s cubic-bezier(.4,0,.2,1),opacity .25s;filter:drop-shadow(1px 2px 2px rgba(0,0,0,.2))}
+        .demo-cur.vis{opacity:1}
+        .demo-cur.click{animation:dck .2s ease}
+        @keyframes dck{0%{transform:scale(1)}50%{transform:scale(.75)}100%{transform:scale(1)}}
+        .demo-rip{position:absolute;width:30px;height:30px;border-radius:50%;border:2px solid var(--primary-demo);opacity:0;z-index:19;pointer-events:none;transform:translate(-50%,-50%) scale(0)}
+        .demo-rip.go{animation:drp .35s ease-out forwards}
+        @keyframes drp{0%{opacity:1;transform:translate(-50%,-50%) scale(0)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.5)}}
+        .demo-ending{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;text-align:center;z-index:15;pointer-events:none;opacity:0;transition:opacity .6s}
+        .demo-ending.vis{pointer-events:auto;opacity:1}
+        .demo-ending-inner{width:100%}
+        .demo-ending-main{font-size:1.8rem;font-weight:900;margin-bottom:8px;letter-spacing:-1px;line-height:1.2;color:var(--navy-demo);font-family: 'Manrope', sans-serif;}
+        .demo-ending-main .demo-hl{color:var(--secondary)}
+        .demo-start-overlay{position:absolute;top:0;left:0;right:0;bottom:0;z-index:30;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(19, 27, 46, 0.6);backdrop-filter: blur(4px);border-radius:22px;cursor:pointer;transition:opacity .4s}
+        .demo-start-overlay.hidden{opacity:0;pointer-events:none}
+        .demo-start-title{color:white;font-size:1rem;font-weight:700;margin-bottom:12px;font-family: 'Manrope', sans-serif;}
+        .demo-start-btn{width:64px;height:64px;border-radius:50%;background:var(--primary-demo);display:flex;align-items:center;justify-content:center;transition:transform .2s,background .2s;box-shadow: 0 4px 15px rgba(254,166,25,0.4);}
+        .demo-start-btn:hover{transform:scale(1.1);background:var(--secondary-container)}
+        .demo-start-btn svg{width:24px;height:24px;margin-left:4px;fill: var(--on-secondary-container);}
+        @media(min-width:640px){
+            .demo-phone{width:200px;height:444px}
+            .demo-stage{height:444px}
+            .demo-pic .dp-img{width:50px;height:50px}
+            .demo-lbl{font-size:1.3rem}
+        }
+        
+        .faq-item .answer {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out, padding 0.3s ease;
+        }
+        .faq-item.active .answer {
+            max-height: 2000px;
+            padding-top: 1rem;
+            padding-bottom: 1rem;
+        }
+        .faq-item .icon {
+            transition: transform 0.3s ease;
+        }
+        .faq-item.active .icon {
+            transform: rotate(180deg);
+        }
+    </style>
+</head>
+<body class="text-on-surface">
+<!-- TopNavBar -->
+<nav class="fixed top-0 w-full z-50 glass-nav shadow-sm">
+<div class="flex justify-between items-center max-w-7xl mx-auto px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="text-2xl font-black text-slate-900 tracking-tighter font-headline">콜마당</div>
+<span class="text-xs text-slate-400 font-medium">지역대리운전 관리 플랫폼</span>
+</div>
+<div class="hidden md:flex items-center gap-8">
+<a class="text-slate-900 border-b-2 border-secondary pb-1 font-semibold font-headline" href="#service-intro">서비스 소개</a>
+<a class="text-slate-500 hover:text-slate-900 transition-colors font-semibold font-headline" href="https://head-manager-web.web.app/owner/login" target="_blank">관리자 로그인</a>
+</div>
+<a class="bg-primary-container text-white px-6 py-2.5 rounded-full font-bold scale-95 active:scale-90 duration-200 transition-all hover:bg-black" href="signup.html">
+            무료 신청하기
+        </a>
+</div>
+</nav>
+<!-- Hero Section -->
+<section class="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden">
+<div class="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-12 items-center">
+<div class="z-10">
+<span class="inline-block px-4 py-1.5 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant text-sm font-bold tracking-wider mb-6">
+                ✨ 양평 지역 사무실 무료 파일럿 신청중
+            </span>
+<h1 class="text-5xl md:text-7xl font-extrabold text-on-surface font-headline leading-[1.1] mb-8 tracking-tight">
+                통화가 끝나면<br/>
+<span class="text-secondary">배차가 시작됩니다</span>
+</h1>
+<div class="text-xl text-on-surface-variant mb-10 max-w-lg leading-relaxed">
+                통화 후 기사배차까지 <span class="text-secondary-container font-bold px-1 rounded">8번의 클릭</span>, <br/>
+                콜마당은 <span class="text-secondary-container font-bold px-1 rounded">단 1번에</span> 해결합니다.
+                <p class="mt-4">플랫폼 종속이 아닌, 독립된 사무실로 손님과 연결</p>
+</div>
+<div class="flex flex-col sm:flex-row gap-4">
+<a class="bg-secondary-container text-on-secondary-container px-8 py-4 rounded-full font-bold text-lg hover:shadow-lg transition-all flex items-center justify-center gap-2" href="signup.html">
+                    지금 무료 신청하기
+                    <span class="material-symbols-outlined">arrow_forward</span>
+</a>
+<a class="bg-surface-container-highest text-on-surface px-8 py-4 rounded-full font-bold text-lg hover:bg-surface-variant transition-all flex items-center justify-center gap-2" href="#ecosystem">
+                    서비스 알아보기
+                </a>
+</div>
+</div>
+<div class="relative">
+<div class="demo-wrap">
+<div class="demo-hdr" id="demoHdr">
+<div class="demo-title" id="demoTitle"></div>
+<div class="demo-lbl" id="demoLblMgr">원클릭 배차끝</div>
+<div class="demo-lbl" id="demoLblOld">1/8</div>
+</div>
+<div class="demo-stage" id="demoStage">
+<div class="demo-start-overlay" id="demoStartOverlay">
+<div class="demo-start-title">시연영상 보러가기</div>
+<div class="demo-start-btn">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+</div>
+</div>
+<svg class="demo-cur" id="demoCur" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M2 2L10 20L13 13L20 16L2 2Z" fill="#fff" stroke="#131b2e" stroke-linejoin="round" stroke-width="1.2"></path>
+</svg>
+<div class="demo-rip" id="demoRip"></div>
+<div class="demo-ending" id="demoEnding">
+<div class="demo-ending-inner">
+<div class="demo-ending-main"><span class="demo-hl">원클릭</span>이면 배차 끝</div>
+</div>
+</div>
+<!-- Icons below phones -->
+<div class="demo-pic" id="demoIcMgr">
+<div class="dp-img"><img alt="콜마당 관제" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAGwZjlyZUKXBsm7JYnbSZIl9dTRgWEKxhAMFrPxUbKlnKdU1nypsuiFi57j33Y-WxOEwghUnsKfix-XCG1IVhJ8NovdMq8BLaquFloF9D9lvPQ2AtjHdBHipXVHBMoL3SXksicsdrebQqFCaWdjOyv2v4jKdK0Y0T9QZG9UfZ3ui4UwOeYyp-YerpJPrLKhiJc_EdSRk8kDcoq28uZDJC2-OHyEFwFzloMqKJM1HF2rOO8zEsOHiB0dzrRttqUWPTdLShWGWH3Vno"/></div>
+<div class="dp-name">콜마당</div>
+</div>
+<div class="demo-pic" id="demoIcOld">
+<div class="dp-img">
+<svg viewbox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
+<rect fill="#76777d" height="44" rx="12" width="44"></rect>
+<path d="M10 16c0-1.7 1.3-3 3-3h2c1.2 0 2.2.7 2.6 1.8l1 2.5c.3.8.1 1.8-.5 2.4l-1 1c1.2 2.4 3.2 4.4 5.6 5.6l1-1c.6-.6 1.6-.8 2.4-.5l2.5 1c1.1.4 1.8 1.4 1.8 2.6v2c0 1.7-1.3 3-3 3C17.8 30.4 10 22.6 10 16z" fill="#fff"></path>
+</svg>
+</div>
+<div class="dp-name">일반전화</div>
+</div>
+<!-- Phones -->
+<div class="demo-phone" id="dpCust">
+<div class="scr vis" data-s="call"><img alt="customer call screen" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBUMlN8MGNZD5PPlSdW_29VsmVMjATiHoazvQ6uF6WR68nkcZP9h-cEAAJivxiJZfkFTNelJHz1V9LBKHTBvo_bO4YTr0VhZMXJAQJdqdU3kTKsJi9VHFP-Vls6PbZ9HPr6NPvAoNiJcuVBMdVN1cfN_k9KwVDmzHJvpCliz9RVanyl9PjWtgZryvZBYgLJFWzi95rJF42IKPLTtATmCR-Mfq7Wa0bIEU-A562xS-1dbPUu8orddA4m8C49g8wae_sKH--JbEP1kJM"/></div>
+</div>
+<div class="demo-phone" id="dpMgr">
+<div class="scr vis" data-s="ring"><img alt="manager ringing" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCpYtnYb_h-i0y_tANV69EngMUZ60M1leUpjQn7gemxjpCUTCs-R2bnbbkfEdybGIUPwPeJbCqzAX5_oOL7EbxIW8V1NaCFw_gy35O7O_3BtXnQJExk23SdCvAgMczeWgvYj2ouKLUrZquQ6ku6Byjc6W7zYzlE4PY40rqzYzRr2GNROHov6FCuWX8TVJNxjv5zLSGhw0jnALFDjyodjWtaELjpdhMM_9ZuHompeJ0tRXSQIJkfJm9oDoTW9Gq8XreZQ_-S3wnn5bA"/></div>
+<div class="scr" data-s="call"><img alt="manager call" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAqzosn9nTYGB7VmG9c6PEmvW0li6G1yzhywWOmAvGw7u2TT0jPVLEAsfxZaXT_UIAAgT09q343lb54Ykt7TJIYqHgH2Vt9nDPne6jQOBlIoh1EtPG4wODxPA5Af7sdOX32g7oaF1t33SRr5wRrPwyFafQ1Pb7XprMvBNKQNWHASJaBwFRmK2yXAenGs7AAW_YkAv_mVKFmjPf0ZrjCoryx3FUnyyelyTPCzyt-xtocVKHxbCavMYkqv90f-6TKAjiGnTkQOLrKTMI"/></div>
+<div class="scr" data-s="dispatch"><img alt="dispatch complete" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDf4noj3eWuJXk5mMWeg3P0psGr40dyuLdoOfIsCvOj8DSPSN9IPEEUqq9hX6z3iBfcrGsp1sonX2WEN28WIeXQjV3g8-4MRNxgw32YezIjrNindoNrBaroRiUHJTv8kxER95D9n8EcbiZh9dQ8A9mE2pG0EqgW4WK2Uo4tblaR4BDO7ZvuKw4v7jZ5oKzZwhhtqnwZuTLXUa7q6FslXfQBICMrvyVUoxE5HwbZ2BXjAQuTo_88JoAaCElEdxdFdyEyG_L2t10CFAw"/></div>
+</div>
+<div class="demo-phone" id="dpOld">
+<div class="scr vis" data-s="s1"><img src="https://lh3.googleusercontent.com/aida-public/AB6AXuB7hCOuxmX_RtpnfKoFtk9BAtgx_cOlWWsHG15Jn3Z085w-F-Wz_3jy2hYo-5kBta7OZTawftAKXJKnbjPMmb2esoQmWrhpSaHagmcRHgeBDhEM6cXJTPpgtKHWze6cLOeqLvwDn1LbJjNiOw7_PL0xLw2o9QKTbphzCrftr574c2wMgT-Yn5Dn145abKCWy0oSuaItX9sPnhyQLXo1cHkKD2We2AOeRzF6X-1IYU1I1YiXBoFJqo5Okc5lsWfbDYAVkmvklveAPfo"/></div>
+<div class="scr" data-s="s2"><img src="https://lh3.googleusercontent.com/aida-public/AB6AXuBM53-XNndPSZhyFd-7SoGJY_bqDY5TK1Bx8s2KgbUNO6-krqJbW3vk4bH6avh8YW8n70rgbteZjPIB41i746jFgT6SWI9h5fDrm6rUp1zFrTop4Nmy7oyQMtU4_NHaKBOzWmT7c7BqNDtiiKaRML9amNJg4jEfo2vjvUp4EPUqkcUkzgctydLkKQuc8CDgMB8_QnwQrYqO5tGRP9HscMiK0dRnOlDJ-V1a_W0XKNw-vsNHC5CTGjE9ISk-weG9ntuTohqBTAEQN-c"/></div>
+<div class="scr" data-s="s3"><img src="https://lh3.googleusercontent.com/aida-public/AB6AXuAT4jGXP_cLWN6vNYxNkHCHCkM-jaYhJ4sRNYJOXYItZSHO5YaLkSprhRpBQupFFN1f__ertwD3P9_ec4tOKN7YQHLUGBZOUMUERmOcUHt6goTzKQQ4xvCeh3UbL-yHxggNigt2wZ0n-RYN_MrbQhnB0HueDINtHM8Bcehd2E69Y6WRG202R9lqm_TM2Xv7mLOsOGZ1P49QdDA3C7XeOyTsg7iyNKOtgr7xpvMJK0qDLNYXuicQX8gTn0SOB3KkdfBP0et13xVcQ5w"/></div>
+<div class="scr" data-s="s4"><img src="https://lh3.googleusercontent.com/aida-public/AB6AXuD1SEG3MIaBzQl8lFl8uAL0bLOVgz_Ps6vtFqpnyMsQ2TvXc6kKoaVxDiXDCiH-pYBkSVnOEVBOIj9RFtoJ8YbhmK25ujreTDWV2uXjG_n6tq0pcoHQBw0Io2izVOhxE8trtRQcGBQkdPmCr7-Fj_FG0ZF6jLLyDgkfZCABjJudwkc_q4qDdGaV0Q5qaF8NNHLEzy7ADbi42Xv21988KDVsrfcIOqOENad5QRGGb_1l0l5ofHqY4Oo4wByBV9UcYHOhGKQBH6-VjQ4"/></div>
+<div class="scr" data-s="s5"><img src="https://lh3.googleusercontent.com/aida-public/AB6AXuCjaz0YIWoetHXUGU7vduKg_raRZHIw2xEe_3kDtWG_lpp81zYf3BSWbC0NBXjYtWxeqiPKpezLT7yNJsFLXA0FI8jBZc2V22CPXiDVZOK_6VV3hn9H3lVaM5VZxVVgYEMC6t6Jvi20GkCLBELJPLUTGQGvm8mzkO-U1Q-XZBwE_XsGY4wDTpLCGkxWozMVmWeWpfBJcHE_NNy3S0_14lmci2oLhHjrEH1IrIiimc6WeEd0Drv8FruHpP2LaW0K6fXDSwV5Ae-zd4E"/></div>
+<div class="scr" data-s="s6"><img src="https://lh3.googleusercontent.com/aida-public/AB6AXuBc9yNU6dIaRHzuCW05497JRkhQTTazIwBoG1oUY7c_ZhkN6iED2vQvBQ86-B6c8E4rcchPR8IWfHvrRhTebT5puO7B6HnwZ8M_gcTxmkSxE2Wd9zkXvtEwXq564LWQO72rQjEbKfaQ5PsmotKOOptpD9kDBA2Mnqe1bz2eih2VzIlEPz_RvEXhn6Uk4fuq0ojrS-isYmRq-w8G8G6UsGNfmgi2qAgw8q2KYG9YJIvP2SvcUCXC56rBt8UXEq4bcbbRmIQgM07Xjwo"/></div>
+<div class="scr" data-s="s7"><img src="https://lh3.googleusercontent.com/aida-public/AB6AXuCCkZZrSNF0hGw7vRzmD4RvAn36ewy-Oequ7HHP48jVyOs_MtHoLUyCaG-xebegXl9dBKED02QilS-lAlxxnPrWa2wYZOZ0Q74vLdjYgr-1Me2JgBhCjlASxTF5pKxU8YAJ5yHcFuSH-1IpqJk5tLmKSoIivvNWaYm-znaGReYi9gHuHIwEoFJEHIeeVrupo0EvsOt6ICzq8lcOY0FxjncDFo3h7YuOf01q5NAV659ZqpPB09spfL-AE8umwlFZNLesnGG2B__f0_I"/></div>
+</div>
+</div>
+<audio id="demoBgm" preload="auto" src="sourc/Seamless_Flow.mp3"></audio>
+</div>
+<!-- Floating Info Card -->
+<div class="absolute -bottom-6 -left-6 md:-left-12 bg-white p-6 rounded-lg shadow-xl max-w-xs border-l-4 border-secondary z-20">
+<div class="flex items-center gap-3 mb-2">
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">speed</span>
+<span class="font-bold text-primary font-headline">8번 클릭 vs 1번 클릭</span>
+</div>
+<p class="text-sm text-on-surface-variant">기존 방식 대비 작업 효율 800% 향상. 전화가 종료됨과 동시에 배차 정보가 생성됩니다.</p>
+</div>
+</div>
+</div>
+<!-- Decorative Background Element -->
+<div class="absolute top-0 right-0 -z-10 w-1/2 h-full bg-surface-container-low rounded-bl-[10rem]"></div>
+</section>
+<!-- Empathy & Video Section -->
+<section class="py-24 bg-white relative overflow-hidden" id="service-intro">
+<div class="max-w-7xl mx-auto px-6 flex flex-col items-center">
+<div class="text-center mb-16 max-w-3xl">
+<h2 class="text-3xl md:text-5xl font-extrabold font-headline mb-6 tracking-tight leading-tight">
+                도로 위 수많은 위험들
+            </h2>
+<div class="text-xl md:text-2xl text-on-surface-variant mb-4 font-medium italic whitespace-pre-line">
+                하지만 운전중에도 전화기를 놓지 못한채 손님을 지켜온 당신
+                명함도 돌리고 쿠폰도 제공하지만,
+                언제 사라질지 모르는 전화기 속 손님들
+            </div>
+<p class="text-2xl md:text-3xl font-bold text-secondary font-headline">
+                지금 모신 손님은 다음에도 전화할까요?
+            </p>
+</div>
+<div class="relative w-full max-w-4xl group">
+<div class="aspect-video bg-primary-container rounded-2xl overflow-hidden shadow-2xl relative">
+<video class="w-full h-full object-cover" controls="" id="mainVideo" loop="" muted="" playsinline="" src="sourc/메인광고.mp4"></video>
+</div>
+<!-- Decorative Element -->
+<div class="absolute -z-10 -top-8 -left-8 w-32 h-32 bg-secondary-fixed/30 rounded-full blur-2xl"></div>
+<div class="absolute -z-10 -bottom-8 -right-8 w-48 h-48 bg-primary-fixed/20 rounded-full blur-3xl"></div>
+</div>
+</div>
+</section>
+<!-- App Ecosystem Section -->
+<section class="py-24 bg-surface-container-low" id="ecosystem">
+<div class="max-w-7xl mx-auto px-6">
+<div class="text-center mb-20">
+<h2 class="text-4xl font-bold font-headline mb-4 leading-tight">단 한번의 QR이 만드는 각인<br/>이후, 누구도 데려갈 수 없는 손님</h2>
+<p class="text-on-surface-variant max-w-2xl mx-auto leading-relaxed">호출한 손님에게 실시간 배차현황 알림,<br/>등급별 포인트 자동 적립 및 혜택은 당신의 강력한 무기가 됩니다.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+<!-- Customer App -->
+<div class="bg-surface-container-lowest p-8 rounded-lg shadow-sm hover:shadow-md transition-all group border border-transparent hover:border-secondary-container/30 text-center">
+<div class="w-20 h-20 rounded-2xl overflow-hidden mb-6 mx-auto group-hover:scale-110 transition-transform shadow-sm">
+<img alt="콜마당" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAGLgrjrYRYxDboAShe7wq6YqWdbNaXuWfEeXH175MscE1020Pi8SyKNpO_TCsPIib7mUQ9fx3RMkA18Wt3eA3_g3kR5lMeM5ZerIw0cahy4ZVSiGqpyQpws93SIVl-2ZaZi2j6p2pRMKvQyAh3u2merXni_gz-MvomykwzbhhMjri9Y13CR-6FPgsnjL7yYczeYrFi_MWyVdMQpaVXPdIIWqv6YHod8EZiw2gD0c7fJ1RrK1WRhrXlWed7_Qo_VHNGNBn4OAIiKbo"/>
+</div>
+<h3 class="text-xl font-bold mb-1 font-headline">콜마당</h3>
+<span class="inline-block px-3 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant text-xs font-bold mb-6">손님 전용</span>
+<div class="h-1 w-0 bg-secondary transition-all group-hover:w-full mx-auto"></div>
+</div>
+<!-- Driver App -->
+<div class="bg-surface-container-lowest p-8 rounded-lg shadow-sm hover:shadow-md transition-all group border border-transparent hover:border-primary-fixed/30 text-center">
+<div class="w-20 h-20 rounded-2xl overflow-hidden mb-6 mx-auto group-hover:scale-110 transition-transform shadow-sm">
+<img alt="기사 앱" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAZ1AdVsYQlV5nlLVX5Hwzu89MIVL7WN9WWBjh94ZGz91l9Acud-O1NXa7Ruf29m8X2lKfWk4nCXMpew9KMnGH9OwR2f2bZcqCfWqkSl1iZZgAgng-y2c5d2zmNl1aJ_vqtSEOj7lvU3gR5heumHkstDCf93OCZOW5tFyq_EWdZ8RqmPcfQz57uuCT8Q1j5k__zznuDqpzWa2tpyufZVBdt7fo0RTpngu63uAQXfUAAwC7fc3RYUaJwcH5VkEpdWYQLRB2lGKzLh4c"/>
+</div>
+<h3 class="text-xl font-bold mb-1 font-headline">기사 앱</h3>
+<span class="inline-block px-3 py-1 rounded-full bg-primary-fixed text-on-primary-fixed-variant text-xs font-bold mb-6">대리기사 전용</span>
+<div class="h-1 w-0 bg-primary transition-all group-hover:w-full mx-auto"></div>
+</div>
+<!-- Call Manager -->
+<div class="bg-surface-container-lowest p-8 rounded-lg shadow-sm hover:shadow-md transition-all group border border-transparent hover:border-tertiary-fixed/30 text-center">
+<div class="w-20 h-20 rounded-2xl overflow-hidden mb-6 mx-auto group-hover:scale-110 transition-transform shadow-sm">
+<img alt="콜 매니저" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBbUKWq7NQz3miAm3J74gC_ICwf3OaySO-aGZC4W33B5TgFsLQdbD12wHvAJBYVX8hpRKmFFV0B7UBSHprpw1vipvTbtrL0TgRpYyfbGMDNIEAGuv6yqNg1lg7gq7LJaQ4LwoikZElzIHGAfTsWs9fNRnlDpGWMB9DEm3JWKD5mD1P15MKvhi8Jb7EOeEno-uECZpsJWYjMa3R4R5HjCyGlLFK744uoPjUR12halLJe94Ml9Z85nCyQHkYNxvH_CFOiEC08NraNSC0"/>
+</div>
+<h3 class="text-xl font-bold mb-1 font-headline">콜 매니저</h3>
+<span class="inline-block px-3 py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant text-xs font-bold mb-6">관리자 대시보드</span>
+<div class="h-1 w-0 bg-on-tertiary-fixed transition-all group-hover:w-full mx-auto"></div>
+</div>
+<!-- Call Detector -->
+<div class="bg-surface-container-lowest p-8 rounded-lg shadow-sm hover:shadow-md transition-all group border-2 border-secondary/20 text-center">
+<div class="w-20 h-20 rounded-2xl overflow-hidden mb-6 mx-auto group-hover:scale-110 transition-transform shadow-sm">
+<img alt="콜 디텍터" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCtXfDDsQ5G4gB4cQbgVHqptLRP5txoSbDKT0-OkbSI0ch-chKTuyXsWVwjbfrA4nYB1Z27_M3kHgZwseQDx_wrFjFf1nR7iUyO3S2Q1xo8sb3WC1__anC8lTwHK4idCKXmdq9JTK60lTUSwzY0hSn2FNE9F1s7kBn9c7WrHLuxDNEOyPr4pQMS8ZyWTQI6BWxHqNiDcVwWVWlsJp4mCMzT9aNcVbUbtWmmreho99M_BdBYHd44823pL5raKsPszL8IGlOdR5pHXcQ"/>
+</div>
+<h3 class="text-xl font-bold mb-1 font-headline">콜 디텍터</h3>
+<span class="inline-block px-3 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant text-xs font-bold mb-6">서브 전화기</span>
+<div class="h-1 w-0 bg-secondary transition-all group-hover:w-full mx-auto"></div>
+</div>
+</div>
+<div class="mt-20 text-center">
+<p class="text-xl md:text-2xl font-bold text-on-surface">
+                앱은 물론 <span class="text-secondary font-black border-b-4 border-secondary/20">일반전화</span>까지도 자동배차
+            </p>
+<p class="mt-4 text-on-surface-variant max-w-3xl mx-auto leading-relaxed">
+                수기 정산, 매달 반복되는 메모 누락, 계산 실수, 기사별 정산 분쟁.<br/>
+                사무실 · 기사 · 손님, 모두를 위한 앱이 준비되어 있습니다
+            </p>
+</div>
+</div>
+</section>
+<!-- Comparison Section -->
+<section class="py-24 overflow-hidden bg-white">
+<div class="max-w-7xl mx-auto px-6">
+<div class="text-center mb-16">
+<h2 class="text-4xl font-extrabold font-headline mb-4">그래서, 프로그램 설치하고 수수료 내라고?</h2>
+<p class="text-xl text-on-surface-variant">손님은 플랫폼을 거치지 않고, 사무실과 직접 연결됩니다</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-11 gap-4 items-center max-w-5xl mx-auto">
+<!-- Legacy Platform -->
+<div class="md:col-span-5 bg-slate-50 p-8 rounded-2xl border border-slate-200">
+<div class="text-center mb-8">
+<h3 class="text-2xl font-bold text-slate-400 mb-2">기존 플랫폼</h3>
+<div class="h-1 w-12 bg-slate-300 mx-auto"></div>
+</div>
+<ul class="space-y-6">
+<li class="flex justify-between items-center border-b border-slate-200 pb-4">
+<span class="text-slate-500 font-medium">구조</span>
+<span class="text-slate-700 font-bold">손님 → [플랫폼] → 사무실</span>
+</li>
+<li class="flex justify-between items-center border-b border-slate-200 pb-4">
+<span class="text-slate-500 font-medium">수수료</span>
+<span class="text-slate-700 font-bold">건당 25%</span>
+</li>
+<li class="flex justify-between items-center border-b border-slate-200 pb-4">
+<span class="text-slate-500 font-medium">고객 데이터</span>
+<span class="text-slate-700 font-bold">플랫폼 소유</span>
+</li>
+<li class="flex justify-between items-center border-b border-slate-200 pb-4">
+<span class="text-slate-500 font-medium">해지 시</span>
+<span class="text-slate-700 font-bold">고객 정보 소실</span>
+</li>
+<li class="flex justify-between items-center">
+<span class="text-slate-500 font-medium">단골 관리</span>
+<span class="text-slate-700 font-bold">불가능</span>
+</li>
+</ul>
+</div>
+<!-- VS Divider -->
+<div class="md:col-span-1 flex justify-center">
+<div class="w-12 h-12 rounded-full bg-secondary text-white font-black flex items-center justify-center shadow-lg">VS</div>
+</div>
+<!-- CallMadang -->
+<div class="md:col-span-5 bg-white p-8 rounded-2xl border-4 border-secondary shadow-2xl relative">
+<div class="absolute -top-4 left-1/2 -translate-x-1/2 bg-secondary text-white px-4 py-1 rounded-full text-xs font-bold tracking-widest">추천</div>
+<div class="text-center mb-8">
+<h3 class="text-2xl font-bold text-secondary mb-2">콜마당</h3>
+<div class="h-1 w-12 bg-secondary mx-auto"></div>
+</div>
+<ul class="space-y-6">
+<li class="flex justify-between items-center border-b border-secondary/10 pb-4">
+<span class="text-on-surface-variant font-medium">구조</span>
+<span class="text-secondary font-black">손님 → 사무실 (다이렉트)</span>
+</li>
+<li class="flex justify-between items-center border-b border-secondary/10 pb-4">
+<span class="text-on-surface-variant font-medium">수수료</span>
+<span class="text-secondary font-black">0%</span>
+</li>
+<li class="flex justify-between items-center border-b border-secondary/10 pb-4">
+<span class="text-on-surface-variant font-medium">고객 데이터</span>
+<span class="text-secondary font-black">사장님 소유</span>
+</li>
+<li class="flex justify-between items-center border-b border-secondary/10 pb-4">
+<span class="text-on-surface-variant font-medium">해지 시</span>
+<span class="text-secondary font-black">고객 정보 유지</span>
+</li>
+<li class="flex justify-between items-center">
+<span class="text-on-surface-variant font-medium">단골 관리</span>
+<span class="text-secondary font-black">자동 CRM 구축</span>
+</li>
+</ul>
+</div>
+</div>
+<div class="mt-16 text-center">
+<p class="text-xl font-bold font-headline mb-6">PC도, 수수료도 없이 만드는 당신만의 브랜드<br/>콜마당으로 지금 무장하세요</p>
+<a class="inline-flex items-center gap-2 text-secondary font-bold text-lg hover:translate-x-2 transition-transform" href="signup.html">
+                지금 무료 신청하기 <span class="material-symbols-outlined">trending_flat</span>
+</a>
+</div>
+</div>
+</section>
+<!-- Bento Grid Features -->
+<section class="py-24 bg-surface">
+<div class="max-w-7xl mx-auto px-6">
+<h2 class="text-3xl font-bold font-headline mb-12 text-center">왜 CallMadang인가요?</h2>
+<div class="grid grid-cols-1 md:grid-cols-6 gap-6">
+<div class="md:col-span-4 bg-primary-container p-10 rounded-lg text-white flex flex-col justify-between min-h-[400px] relative overflow-hidden group">
+<div class="z-10">
+<h3 class="text-3xl font-bold font-headline mb-4">지능형 자동 배차 솔루션</h3>
+<p class="text-on-primary-container max-w-md">전화 종료와 동시에 배차 화면이 자동 생성됩니다. 기사 선택 한 번이면 배차 완료.</p>
+</div>
+<div class="z-10 mt-12 grid grid-cols-3 gap-4">
+<div class="bg-white/5 p-4 rounded backdrop-blur-sm border border-white/10">
+<div class="text-2xl font-bold text-secondary">99%</div>
+<div class="text-xs text-white/60">배차 성공률 (목표)</div>
+</div>
+<div class="bg-white/5 p-4 rounded backdrop-blur-sm border border-white/10">
+<div class="text-2xl font-bold text-secondary">1.2s</div>
+<div class="text-xs text-white/60">평균 매칭 시간</div>
+</div>
+<div class="bg-white/5 p-4 rounded backdrop-blur-sm border border-white/10">
+<div class="text-2xl font-bold text-secondary">85%</div>
+<div class="text-xs text-white/60">재호출 비율</div>
+</div>
+</div>
+<img alt="Car on road" class="absolute right-0 bottom-0 w-2/3 h-full object-cover opacity-20 mix-blend-overlay group-hover:scale-110 transition-transform duration-1000" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtw0T1d7FdoyGT3SZzJU4m4_k8Aaw_hH58vjpsKsJ8gxFkhJHWiZtTX-iFRdiCLwM69fnbMR-dTKEh3tPy0lQwYspSgfyybaIYmNyx7X2jns6uJK8VB-v8YSyT8KGGQhA-hbpIKRb6DvLeEs7WIgU51XHn1IdqQJJNXEMrtk6T0x4BLq3lTz2xj4kIHl6GsXRpUpS3hFwwD_CXt4ycFUYGIfobYzRf0UrVWfEMS4sPX4wFuy_Su2UMgWko-Z5MnGV6YqQCCA3aSVQ"/>
+</div>
+<div class="md:col-span-2 bg-secondary-container p-10 rounded-lg flex flex-col justify-center items-center text-center">
+<span class="material-symbols-outlined text-6xl text-on-secondary-container mb-6" style="font-variation-settings: 'FILL' 1;">support_agent</span>
+<h3 class="text-2xl font-bold text-on-secondary-container font-headline mb-4">24/7 전문 기술 지원</h3>
+<p class="text-on-secondary-container/80 text-sm">시스템 구축부터 운영까지, 전문가가 실시간으로 지원합니다.</p>
+</div>
+<div class="md:col-span-2 bg-surface-container-highest p-10 rounded-lg">
+<div class="w-12 h-12 bg-white rounded-full flex items-center justify-center mb-6 shadow-sm">
+<span class="material-symbols-outlined text-primary">security</span>
+</div>
+<h3 class="text-xl font-bold font-headline mb-2">보안 및 프라이버시</h3>
+<p class="text-on-surface-variant text-sm">모든 고객·기사 데이터는 사무실 단위로 격리 저장되며, Firebase 보안 규칙으로 접근을 제어합니다.</p>
+</div>
+<div class="md:col-span-4 bg-surface-container-low p-10 rounded-lg border border-outline-variant/30 flex items-center gap-12 overflow-hidden">
+<div class="flex-1">
+<h3 class="text-2xl font-bold font-headline mb-4">손쉬운 관리자 대시보드</h3>
+<p class="text-on-surface-variant text-sm mb-6">복잡한 데이터도 한눈에. 실적 리포트와 정산 내역을 직관적인 UI로 확인하세요.</p>
+<button class="text-primary font-bold flex items-center gap-2">대시보드 미리보기 <span class="material-symbols-outlined text-sm">open_in_new</span></button>
+</div>
+<div class="hidden lg:block w-1/3 rotate-12 translate-y-12 shadow-2xl">
+<div class="bg-white p-4 rounded-lg border border-slate-200">
+<div class="space-y-2">
+<div class="h-2 w-full bg-slate-100 rounded"></div>
+<div class="h-2 w-2/3 bg-slate-100 rounded"></div>
+<div class="h-8 w-full bg-secondary/10 rounded mt-4"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Final CTA -->
+<section class="py-24 bg-primary-container relative overflow-hidden">
+<div class="max-w-4xl mx-auto px-6 text-center relative z-10">
+<h2 class="text-4xl md:text-5xl font-extrabold text-white font-headline mb-8 tracking-tight">
+            PC도, 수수료도 없이 만드는<br/>당신만의 브랜드
+        </h2>
+<p class="text-on-primary-container text-xl mb-12">
+            콜마당으로 지금 무장하세요.
+        </p>
+<div class="flex justify-center">
+<a class="bg-secondary-container text-on-secondary-container px-12 py-5 rounded-full font-bold text-xl hover:scale-105 transition-all shadow-xl" href="signup.html">
+                지금 무료 신청하기
+            </a>
+</div>
+</div>
+<!-- Decorative Circle -->
+<div class="absolute -bottom-64 -left-64 w-[500px] h-[500px] bg-secondary/10 rounded-full blur-3xl"></div>
+<div class="absolute -top-64 -right-64 w-[500px] h-[500px] bg-secondary/5 rounded-full blur-3xl"></div>
+</section>
+<!-- Footer -->
+<footer class="bg-slate-50 border-t border-slate-200">
+<div class="max-w-7xl mx-auto px-6 py-12">
+<!-- Business Info -->
+<div class="mb-12 border-b border-slate-200 pb-12">
+<div class="text-xl font-bold text-slate-900 mb-6 font-headline">콜마당 · 콜링크</div>
+<div class="text-sm text-slate-500 flex flex-wrap gap-x-6 gap-y-2 leading-relaxed">
+<span>상호: 콜링크 (callLink)</span>
+<span>경기도 양평군 용문면 두담길 10, 12519</span>
+<span>사업자등록번호: 460-08-03296</span>
+<span>전화: +82 10 3670 2011</span>
+<span>calllinkdrive@gmail.com</span>
+</div>
+</div>
+<!-- Accordion Section -->
+<div class="space-y-4 mb-12">
+<!-- Privacy Policy -->
+<div class="faq-item bg-white border border-slate-200 rounded-lg overflow-hidden">
+<button class="w-full flex justify-between items-center p-4 text-left font-bold text-slate-700 hover:bg-slate-50 transition-colors" onclick="toggleFaq(this)">
+                    개인정보처리방침
+                    <span class="material-symbols-outlined icon">expand_more</span>
+</button>
+<div class="answer px-4 bg-slate-50">
+<div class="text-xs text-slate-600 space-y-4">
+<p><strong>1. 개요</strong><br/>콜링크 (이하 "회사")는 대리운전 서비스 제공을 위해 다음과 같은 개인정보를 수집하고 이용합니다.</p>
+<p><strong>2. 수집하는 개인정보 항목</strong><br/>- 전화번호 (필수): 회원 식별, 기사 연결<br/>- 위치 정보 (필수): 출발지 확인, 기사 배차<br/>- FCM 토큰 (필수): 푸시 알림 전송</p>
+<p><strong>3. 개인정보의 이용 목적</strong><br/>- 서비스 제공: 대리운전 배차, 운행 관리, 정산<br/>- 회원 관리: 본인 확인, 서비스 이용 기록 관리<br/>- 알림 서비스: 배차 알림, 운행 완료 알림, 포인트 적립 안내</p>
+<p><strong>4. 개인정보의 보유 및 이용 기간</strong><br/>- 회원 정보: 회원 탈퇴 시까지<br/>- 운행 기록: 정산 완료 후 90일<br/>- 위치 정보: 운행 완료 즉시 삭제</p>
+<p><strong>5. 개인정보의 제3자 제공</strong><br/>원칙적으로 외부에 제공하지 않습니다. 다만 법령에 의거한 경우 제외됩니다.</p>
+<p><strong>6. 문의처</strong><br/>개인정보와 관련한 문의사항: calllinkdrive@gmail.com</p>
+</div>
+</div>
+</div>
+<!-- Account Deletion -->
+<div class="faq-item bg-white border border-slate-200 rounded-lg overflow-hidden">
+<button class="w-full flex justify-between items-center p-4 text-left font-bold text-slate-700 hover:bg-slate-50 transition-colors" onclick="toggleFaq(this)">
+                    계정삭제 안내
+                    <span class="material-symbols-outlined icon">expand_more</span>
+</button>
+<div class="answer px-4 bg-slate-50">
+<div class="text-xs text-slate-600 space-y-4">
+<p><strong>탈퇴 방법</strong><br/>앱 내 "설정 &gt; 회원 탈퇴" 메뉴에서 직접 탈퇴할 수 있습니다.</p>
+<p><strong>탈퇴 시 처리</strong><br/>- 모든 개인정보가 즉시 삭제됩니다.<br/>- 잔여 포인트는 소멸되며, 이에 대한 보상은 제공되지 않습니다.<br/>- 삭제된 정보는 복구할 수 없습니다.</p>
+<p><strong>문의</strong><br/>계정삭제 관련 문의: calllinkdrive@gmail.com</p>
+</div>
+</div>
+</div>
+</div>
+<div class="py-8 border-t border-slate-200 text-center">
+<p class="text-slate-500 text-xs font-label">© 2026 콜링크. All rights reserved.</p>
+</div>
+</div>
+</footer>
+<script>
+    // FAQ Toggle
+    function toggleFaq(btn) {
+        const item = btn.parentElement;
+        item.classList.toggle('active');
+    }
+
+    // Video Auto Play/Pause logic
+    const mainVideo = document.getElementById('mainVideo');
+    if (mainVideo) {
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+                    mainVideo.play().catch(() => {});
+                } else {
+                    mainVideo.pause();
+                }
+            });
+        }, { threshold: 0.5 });
+        observer.observe(mainVideo);
+    }
+
+    // Showcase Compare script (Unified from index.html)
+    (function(){
+        var stage=document.getElementById('demoStage');
+        if(!stage)return;
+        var cur=document.getElementById('demoCur');
+        var rip=document.getElementById('demoRip');
+        var hdr=document.getElementById('demoHdr');
+        var titleEl=document.getElementById('demoTitle');
+        var lblMgr=document.getElementById('demoLblMgr');
+        var lblOld=document.getElementById('demoLblOld');
+        var pCust=document.getElementById('dpCust');
+        var pMgr=document.getElementById('dpMgr');
+        var pOld=document.getElementById('dpOld');
+        var icMgr=document.getElementById('demoIcMgr');
+        var icOld=document.getElementById('demoIcOld');
+        var endingEl=document.getElementById('demoEnding');
+        var overlay=document.getElementById('demoStartOverlay');
+        var bgm = document.getElementById('demoBgm');
+        var playing=false,pool=[],fadeInt=null,glowInt=null;
+        var phoneW=170;
+
+        function w(fn,ms){var t=setTimeout(function(){if(playing){fn();return}var ck=setInterval(function(){if(playing){clearInterval(ck);fn()}},50);pool.push(ck)},ms);pool.push(t)}
+        function stopAll(){pool.forEach(clearTimeout);pool=[];if(fadeInt){clearInterval(fadeInt);fadeInt=null}if(glowInt){clearInterval(glowInt);glowInt=null}}
+
+        function setT(t){titleEl.style.opacity='0';lblMgr.classList.remove('vis');lblOld.classList.remove('vis');if(t){w(function(){titleEl.textContent=t;titleEl.style.opacity='1'},180)}}
+        function showLabels(mL,oL){titleEl.style.opacity='0';lblMgr.style.left=(mL+phoneW/2)+'px';lblOld.style.left=(oL+phoneW/2)+'px';lblMgr.classList.add('vis');lblOld.classList.add('vis')}
+        function hideLabels(){lblMgr.classList.remove('vis');lblOld.classList.remove('vis')}
+        function showEnding(){endingEl.classList.add('vis')}
+        function hideEnding(){endingEl.classList.remove('vis')}
+
+        function posIcon(ic,px){var pH=pMgr.offsetHeight;ic.style.left=(px+phoneW/2)+'px';ic.style.top=(pH+8)+'px';ic.style.transform='translateX(-50%)'}
+        function showIcons(mL,oL){posIcon(icMgr,mL);icMgr.classList.add('vis','on');if(typeof oL==='number'){posIcon(icOld,oL);icOld.classList.add('vis','on')}}
+        function hideIcons(){icMgr.classList.remove('vis','on');icOld.classList.remove('vis','on')}
+
+        function scr(p,n){p.querySelectorAll('.scr').forEach(function(s){s.classList.toggle('vis',s.getAttribute('data-s')===n)})}
+        function curTo(x,y){cur.classList.add('vis');cur.style.left=x+'px';cur.style.top=y+'px'}
+        function curOff(){cur.classList.remove('vis')}
+        function clickFx(x,y){cur.classList.add('click');rip.style.left=x+'px';rip.style.top=y+'px';rip.classList.remove('go');void rip.offsetWidth;rip.classList.add('go');w(function(){cur.classList.remove('click')},200)}
+        function pp(p,xp,yp){var r=p.getBoundingClientRect(),s=stage.getBoundingClientRect();return{x:r.left-s.left+r.width*xp,y:r.top-s.top+r.height*yp}}
+
+        function centerL(){return(stage.offsetWidth-phoneW)/2}
+        function leftL(){return stage.offsetWidth/2-phoneW-6}
+        function rightL(){return stage.offsetWidth/2+6}
+        function fadeIn(p,l){p.style.left=l+'px';p.style.opacity='1'}
+        function fadeOut(p){p.style.opacity='0'}
+        function moveTo(p,l){p.style.left=l+'px'}
+
+        function startGlow(p,iv){p.classList.add('glow');glowInt=setInterval(function(){p.classList.toggle('glow')},iv);pool.push(glowInt)}
+        function stopGlow(p){if(glowInt){clearInterval(glowInt);glowInt=null}p.classList.remove('glow')}
+
+        function bgmStart(){if(!bgm)return;bgm.currentTime=0;bgm.volume=1;bgm.play().catch(function(){})}
+        function bgmFadeOut(){if(!bgm)return;var v=1;fadeInt=setInterval(function(){v-=0.05;if(v<=0){clearInterval(fadeInt);bgm.pause();bgm.volume=1}else{bgm.volume=v}},50)}
+
+        function reset(){
+            [pCust,pMgr,pOld].forEach(function(p){p.style.transition='none';p.style.opacity='0'});
+            pCust.style.left=leftL()+'px';pMgr.style.left=centerL()+'px';pOld.style.left=rightL()+'px';
+            void pCust.offsetWidth;void pMgr.offsetWidth;void pOld.offsetWidth;
+            [pCust,pMgr,pOld].forEach(function(p){p.style.transition=''});
+            scr(pCust,'call');scr(pMgr,'ring');scr(pOld,'s1');
+            curOff();hideIcons();hideEnding();hideLabels();stopGlow(pMgr);
+            titleEl.textContent='';titleEl.style.opacity='0';lblOld.textContent='1/8';
+            phoneW=pMgr.offsetWidth;
+        }
+
+        var clickSeq=[
+            {from:'s1',to:'s2',x:0.13,y:0.90},
+            {from:'s2',to:'s3',x:0.25,y:0.47},
+            {from:'s3',to:'s4',x:0.78,y:0.65},
+            {from:'s4',to:'s5',x:0.30,y:0.89},
+            {from:'s5',to:'s6',x:0.30,y:0.75},
+            {from:'s6',to:'s7',x:0.70,y:0.92},
+            {from:'s7',to:null, x:0.11,y:0.70}
+        ];
+
+        function runClickSeq(idx,cb){
+            if(!playing)return;
+            if(idx>=clickSeq.length){if(cb)cb();return}
+            var c=clickSeq[idx];
+            var p=pp(pOld,c.x,c.y);
+            curTo(p.x+15,p.y-15);
+            w(function(){if(!playing)return;curTo(p.x,p.y);
+                w(function(){if(!playing)return;clickFx(p.x,p.y);
+                    w(function(){if(!playing)return;if(c.to)scr(pOld,c.to);if(idx+2<=8)lblOld.textContent=(idx+2)+'/8';
+                        w(function(){if(!playing)return;runClickSeq(idx+1,cb)},310)
+                    },190)
+                },250)
+            },250);
+        }
+
+        function loop(){
+            if(!playing)return;
+            reset();bgmStart();
+            setT("고객의 대리운전 요청");
+            w(function(){if(!playing)return;fadeIn(pCust,centerL());
+                w(function(){if(!playing)return;setT("상담원에게 수신 알림");
+                    w(function(){if(!playing)return;moveTo(pCust,leftL());fadeIn(pMgr,rightL());showIcons(rightL(),null);startGlow(pMgr,300);
+                        w(function(){if(!playing)return;setT("단 한번의 통화 종료");
+                            var p=pp(pMgr,0.5,0.85);curTo(p.x+20,p.y+20);
+                            w(function(){if(!playing)return;curTo(p.x,p.y);
+                                w(function(){if(!playing)return;clickFx(p.x,p.y);scr(pMgr,'call');
+                                    w(function(){if(!playing)return;stopGlow(pMgr);
+                                        setT("상담 완료 후\n자동 배차 화면 생성");
+                                        w(function(){if(!playing)return;fadeOut(pCust);moveTo(pMgr,centerL());posIcon(icMgr,centerL());
+                                            w(function(){if(!playing)return;setT("기사님 한 번 터치로 배차 끝!");
+                                                var p2=pp(pMgr,0.5,0.45);curTo(p2.x,p2.y);
+                                                w(function(){if(!playing)return;clickFx(p2.x,p2.y);scr(pMgr,'dispatch');curOff();
+                                                    w(function(){if(!playing)return;fadeOut(pMgr);hideIcons();
+                                                        w(function(){if(!playing)return;showEnding();bgmFadeOut();
+                                                            w(function(){if(!playing)return;hideEnding();
+                                                                w(function(){if(!playing)return;
+                                                                    setT("기존 방식 vs 콜마당");
+                                                                    w(function(){if(!playing)return;
+                                                                        var cL=leftL(), rL=rightL();
+                                                                        fadeIn(pMgr,cL);fadeIn(pOld,rL);showIcons(cL,rL);showLabels(cL,rL);
+                                                                        w(function(){if(!playing)return;
+                                                                            runClickSeq(0,function(){
+                                                                                w(function(){if(!playing)return;fadeOut(pMgr);fadeOut(pOld);hideIcons();hideLabels();loop()},1500)
+                                                                            });
+                                                                        },1000)
+                                                                    },1000)
+                                                                },1000)
+                                                            },4000)
+                                                        },600)
+                                                    },1500)
+                                                },500)
+                                            },1200)
+                                        },1200)
+                                    },800)
+                                },300)
+                            },600)
+                        },1200)
+                    },1500)
+                },1500)
+            },1500)
+        }
+
+        overlay.onclick=function(){playing=true;overlay.classList.add('hidden');loop()};
+        stage.onclick=function(){if(!playing)return;playing=false;stopAll();reset();if(bgm){bgm.pause();bgm.volume=1}overlay.classList.remove('hidden')};
+
+        var obs=new IntersectionObserver(function(es){
+            if(!es[0].isIntersecting && playing){
+                playing=false;stopAll();reset();if(bgm){bgm.pause();bgm.volume=1}overlay.classList.remove('hidden')
+            }
+        },{threshold:0.1});
+        obs.observe(stage);
+
+        // QR 추적 코드
+        var ref = new URLSearchParams(window.location.search).get('ref') || 'direct';
+        sessionStorage.setItem('cm_ref', ref);
+    })();
+</script>
+</body></html>

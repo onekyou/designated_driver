@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+
+<html class="light scroll-smooth" lang="ko"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>콜마당 - 서비스 신청</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600;700&amp;family=Noto+Sans+KR:wght@400;500;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "surface-variant": "#e4e2e4",
+                      "on-surface": "#1b1b1d",
+                      "on-secondary": "#ffffff",
+                      "on-background": "#1b1b1d",
+                      "surface-container-low": "#f6f3f5",
+                      "on-primary-fixed": "#0f172a",
+                      "primary-fixed-dim": "#bec6e0",
+                      "tertiary": "#000000",
+                      "primary-fixed": "#dae2fd",
+                      "on-secondary-fixed": "#2a1700",
+                      "secondary": "#E89500",
+                      "on-primary": "#ffffff",
+                      "surface-container-high": "#eae7e9",
+                      "inverse-surface": "#303032",
+                      "on-tertiary-container": "#76859b",
+                      "outline-variant": "#c6c6cd",
+                      "error": "#ba1a1a",
+                      "surface-container": "#f0edef",
+                      "on-primary-fixed-variant": "#3f465c",
+                      "secondary-container": "#fea619",
+                      "outline": "#76777d",
+                      "on-surface-variant": "#475569",
+                      "on-secondary-fixed-variant": "#653e00",
+                      "error-container": "#ffdad6",
+                      "on-tertiary": "#ffffff",
+                      "inverse-primary": "#bec6e0",
+                      "tertiary-container": "#0d1c2f",
+                      "surface-bright": "#fcf8fa",
+                      "primary": "#0f172a",
+                      "tertiary-fixed-dim": "#b9c7e0",
+                      "surface": "#fcf8fa",
+                      "inverse-on-surface": "#f3f0f2",
+                      "background": "#fcf8fa",
+                      "surface-container-highest": "#e4e2e4",
+                      "tertiary-fixed": "#d5e3fd",
+                      "on-primary-container": "#cbd5e1",
+                      "on-error-container": "#93000a",
+                      "secondary-fixed-dim": "#ffb95f",
+                      "secondary-fixed": "#ffeddb",
+                      "surface-container-lowest": "#ffffff",
+                      "on-secondary-container": "#4d2f00",
+                      "surface-tint": "#565e74",
+                      "surface-dim": "#dcd9db",
+                      "primary-container": "#0f172a",
+                      "on-tertiary-fixed": "#0d1c2f",
+                      "on-tertiary-fixed-variant": "#3a485c",
+                      "on-error": "#ffffff"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.75rem",
+                      "lg": "1.25rem",
+                      "xl": "2rem",
+                      "2xl": "2.5rem",
+                      "full": "9999px"
+              },
+              "fontFamily": {
+                      "headline": ["Manrope", "Noto Sans KR", "sans-serif"],
+                      "body": ["Inter", "Noto Sans KR", "sans-serif"],
+                      "label": ["Inter", "Noto Sans KR", "sans-serif"]
+              }
+            },
+          },
+        }
+      </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { 
+            font-family: 'Inter', 'Noto Sans KR', sans-serif; 
+            word-break: keep-all;
+            overflow-wrap: break-word;
+        }
+        .headline-font { font-family: 'Manrope', 'Noto Sans KR', sans-serif; }
+        .glass-nav {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+        }
+        .premium-shadow {
+            box-shadow: 0 20px 50px rgba(0,0,0,0.08);
+        }
+        .form-input-focus:focus {
+            box-shadow: 0 0 0 4px rgba(254, 166, 25, 0.15);
+        }
+        .faq-item .answer {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s cubic-bezier(0, 1, 0, 1);
+        }
+        .faq-item.active .answer {
+            max-height: 2000px;
+            padding-top: 1.5rem;
+            padding-bottom: 1.5rem;
+            transition: max-height 0.4s ease-in;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface min-h-screen flex flex-col antialiased">
+<!-- TopNavBar (Inherited Glassmorphism) -->
+<nav class="fixed top-0 w-full z-50 glass-nav">
+<div class="max-w-7xl mx-auto px-6 h-20 flex justify-between items-center">
+<div class="flex items-center gap-4">
+<div class="text-2xl font-black text-slate-900 tracking-tighter headline-font">콜마당</div>
+<div class="hidden sm:block h-4 w-px bg-slate-200"></div>
+<span class="hidden sm:block text-sm text-slate-500 font-medium font-body">지역대리운전 통합 관리 솔루션</span>
+</div>
+<div class="hidden md:flex items-center gap-10">
+<a class="text-slate-500 hover:text-slate-900 transition-colors font-bold headline-font text-sm" href="#">서비스 소개</a>
+<a class="text-slate-500 hover:text-slate-900 transition-colors font-bold headline-font text-sm" href="#">요금 안내</a>
+<a class="text-slate-900 font-bold headline-font text-sm relative after:content-[''] after:absolute after:bottom-[-4px] after:left-0 after:w-full after:h-0.5 after:bg-secondary" href="#">신청하기</a>
+</div>
+<a class="bg-primary text-white px-7 py-3 rounded-full font-bold text-sm scale-100 hover:scale-105 active:scale-95 duration-200 transition-all shadow-lg shadow-primary/20" href="#">
+            메인으로 돌아가기
+        </a>
+</div>
+</nav>
+<main class="flex-grow flex items-center justify-center pt-32 pb-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+<!-- Background Accents -->
+<div class="absolute top-0 right-0 -mr-24 -mt-24 w-96 h-96 bg-secondary-container opacity-10 rounded-full blur-3xl"></div>
+<div class="absolute bottom-0 left-0 -ml-24 -mb-24 w-80 h-80 bg-primary opacity-5 rounded-full blur-3xl"></div>
+<div class="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-12 gap-16 items-start relative z-10">
+<!-- Left: Editorial Content -->
+<div class="lg:col-span-5 flex flex-col space-y-10">
+<div class="space-y-6">
+<div class="inline-flex items-center px-4 py-1.5 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant text-xs font-bold tracking-tight shadow-sm">
+<span class="mr-2">✨</span> 전문 설치팀 방문 서비스
+                </div>
+<h1 class="headline-font text-4xl lg:text-5xl font-black text-on-surface leading-[1.15] tracking-tighter">
+                    담당자가 직접 <br/>
+<span class="text-secondary">방문하여 설치</span><br/>
+                    해드립니다
+                </h1>
+<div class="space-y-4">
+<p class="text-on-surface-variant text-xl leading-relaxed font-medium">
+                        복잡한 설정 걱정 마세요. 콜마당 전문가가 직접 찾아가 사장님의 데이터 이관부터 설치까지 완벽하게 지원합니다.
+                    </p>
+<p class="text-secondary font-bold text-lg headline-font">
+                        PC도 수수료도 필요 없는 당신만의 브랜드
+                    </p>
+</div>
+</div>
+<!-- Benefits Chips (Gold Tone) -->
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-white p-5 rounded-2xl flex items-center gap-4 shadow-sm border border-slate-100">
+<div class="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-secondary font-bold" style="font-variation-settings: 'FILL' 1;">calendar_today</span>
+</div>
+<span class="font-bold text-slate-900 text-base">6개월 무료</span>
+</div>
+<div class="bg-white p-5 rounded-2xl flex items-center gap-4 shadow-sm border border-slate-100">
+<div class="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-secondary font-bold" style="font-variation-settings: 'FILL' 1;">payments</span>
+</div>
+<span class="font-bold text-slate-900 text-base">설치 비용 0원</span>
+</div>
+<div class="bg-white p-5 rounded-2xl flex items-center gap-4 shadow-sm border border-slate-100 col-span-2">
+<div class="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-secondary font-bold" style="font-variation-settings: 'FILL' 1;">verified_user</span>
+</div>
+<span class="font-bold text-slate-900 text-base">해지 자유 (모든 데이터는 사장님 소유)</span>
+</div>
+</div>
+<!-- Image with Card Style -->
+<div class="rounded-3xl overflow-hidden bg-white aspect-video premium-shadow relative group border-4 border-white">
+<img alt="Consultation" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA9vBigBKcV0QIQrCaKy71d974mTM0C3YVzi3txGt_k1qnBNudHJ5Zy206D12_6G4v57MGPcPp45Bk6GcOGmkGk6TiBYXMsOeBrykPbFortKTYM4frV_Yqh5LnoQ6OJMLOIlJvQxrBkc7QlajUa1QWJOR3VEDVIMJ-jfDvSxN2KZP17ApJMXC-86e_3nt31RUNERtrDbgAxVxBat9W3gG68PQrW7a52Z73FzDSoqR8VN_ey9402ylnwl94tGoxvi_WCTCA1zVOaagY"/>
+<div class="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent"></div>
+<div class="absolute bottom-6 left-6 text-white">
+<p class="text-xs font-bold opacity-80 uppercase tracking-widest headline-font mb-1">Premium Support</p>
+<p class="text-lg font-black headline-font">전국 어디든 찾아가는 맞춤 상담</p>
+</div>
+</div>
+</div>
+<!-- Right: Application Form (High-End Polish) -->
+<div class="lg:col-span-7 bg-white rounded-[2.5rem] premium-shadow p-8 md:p-12 border border-slate-100">
+<h2 class="text-2xl font-black text-slate-900 headline-font mb-8">상담 신청 정보 입력</h2>
+<form action="#" class="space-y-8" method="POST">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<!-- Office Name -->
+<div class="space-y-2.5">
+<label class="block text-sm font-bold text-slate-500 ml-1 headline-font" for="office_name">사무실 이름</label>
+<input class="w-full px-6 py-4.5 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:border-secondary focus:ring-0 transition-all text-lg font-bold headline-font form-input-focus placeholder:text-slate-300" id="office_name" name="office_name" placeholder="예: 한강 콜센터" required="" type="text"/>
+</div>
+<!-- Representative Name -->
+<div class="space-y-2.5">
+<label class="block text-sm font-bold text-slate-500 ml-1 headline-font" for="rep_name">대표자 성함</label>
+<input class="w-full px-6 py-4.5 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:border-secondary focus:ring-0 transition-all text-lg font-bold headline-font form-input-focus placeholder:text-slate-300" id="rep_name" name="rep_name" placeholder="실명을 입력해주세요" required="" type="text"/>
+</div>
+</div>
+<!-- Contact -->
+<div class="space-y-2.5">
+<label class="block text-sm font-bold text-slate-500 ml-1 headline-font" for="contact">연락처</label>
+<input class="w-full px-6 py-4.5 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:border-secondary focus:ring-0 transition-all text-lg font-bold headline-font form-input-focus placeholder:text-slate-300" id="contact" name="contact" placeholder="010-0000-0000" required="" type="tel"/>
+</div>
+<!-- Gmail -->
+<div class="space-y-2.5">
+<label class="block text-sm font-bold text-slate-500 ml-1 headline-font" for="gmail">Gmail 주소 (필수)</label>
+<div class="relative">
+<input class="w-full px-6 py-4.5 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:border-secondary focus:ring-0 transition-all text-lg font-bold headline-font form-input-focus placeholder:text-slate-300" id="gmail" name="gmail" placeholder="example@gmail.com" required="" type="email"/>
+<span class="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300 material-symbols-outlined">mail</span>
+</div>
+<p class="text-xs text-slate-400 px-1 font-medium">* 전용 앱 설치 권한 부여를 위해 지메일 주소가 필요합니다.</p>
+</div>
+<!-- Operating Region -->
+<div class="space-y-2.5">
+<label class="block text-sm font-bold text-slate-500 ml-1 headline-font" for="region">운영 희망 지역</label>
+<div class="relative">
+<select class="w-full px-6 py-4.5 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:border-secondary focus:ring-0 appearance-none transition-all text-lg font-bold headline-font form-input-focus" id="region" name="region">
+<option value="양평">양평 (파일럿 모집 중)</option>
+<option value="서울">서울</option>
+<option value="경기">경기 기타</option>
+<option value="인천">인천</option>
+<option value="강원">강원</option>
+<option value="충청">충청</option>
+</select>
+<span class="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 material-symbols-outlined pointer-events-none">expand_more</span>
+</div>
+</div>
+<!-- Inquiries -->
+<div class="space-y-2.5">
+<label class="block text-sm font-bold text-slate-500 ml-1 headline-font" for="inquiry">상담 문의사항</label>
+<textarea class="w-full px-6 py-4.5 rounded-2xl bg-slate-50 border border-slate-100 focus:bg-white focus:border-secondary focus:ring-0 transition-all text-lg font-bold headline-font form-input-focus resize-none placeholder:text-slate-300" id="inquiry" name="inquiry" placeholder="추가로 궁금하신 점을 자유롭게 적어주세요." rows="4"></textarea>
+</div>
+<!-- Consent -->
+<div class="pt-2">
+<label class="flex items-start gap-4 cursor-pointer group">
+<div class="relative flex items-center">
+<input class="rounded border-slate-200 text-secondary focus:ring-secondary w-6 h-6 transition-all cursor-pointer" required="" type="checkbox"/>
+</div>
+<span class="text-[14px] text-slate-500 leading-snug font-medium">
+                            개인정보 수집 및 이용에 동의하며, 서비스 안내를 위한 상담 연락을 받는 것에 동의합니다.
+                        </span>
+</label>
+</div>
+<!-- CTA Button -->
+<button class="w-full bg-secondary-container hover:bg-[#ffb95f] text-on-secondary-container py-5 rounded-full text-xl font-black transition-all transform active:scale-[0.98] shadow-xl shadow-secondary-container/20 flex items-center justify-center gap-3 mt-6 headline-font" type="submit">
+<span class="material-symbols-outlined font-bold" style="font-variation-settings: 'FILL' 1;">rocket_launch</span>
+                    방문 상담 신청하기
+                </button>
+</form>
+</div>
+</div>
+</main>
+<!-- Enhanced Footer (Inherited from SCREEN_30) -->
+<footer class="bg-slate-50 pt-20 pb-12 border-t border-slate-200/60">
+<div class="max-w-7xl mx-auto px-6">
+<div class="flex flex-col md:flex-row justify-between items-start gap-12 mb-16">
+<div class="max-w-sm">
+<div class="text-2xl font-black text-slate-900 headline-font mb-6 tracking-tighter">콜마당</div>
+<p class="text-slate-500 text-sm leading-relaxed font-medium mb-8">
+                    기존 대기업 플랫폼에 의존하지 않고 사장님만의 브랜드를 구축할 수 있도록 돕는 지역 기반 대리운전 통합 솔루션입니다.
+                </p>
+<div class="flex gap-4">
+<a class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-secondary hover:border-secondary transition-all" href="#">
+<span class="material-symbols-outlined text-xl">share</span>
+</a>
+<a class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-secondary hover:border-secondary transition-all" href="#">
+<span class="material-symbols-outlined text-xl">support_agent</span>
+</a>
+</div>
+</div>
+<div class="grid grid-cols-2 sm:grid-cols-3 gap-12 lg:gap-20">
+<div>
+<h4 class="font-bold text-slate-900 mb-6 headline-font text-sm uppercase tracking-wider">서비스</h4>
+<ul class="space-y-4 text-sm font-medium text-slate-500">
+<li><a class="hover:text-secondary transition-colors" href="#">서비스 소개</a></li>
+<li><a class="hover:text-secondary transition-colors" href="#">요금 안내</a></li>
+<li><a class="hover:text-secondary transition-colors" href="#">신청하기</a></li>
+</ul>
+</div>
+<div>
+<h4 class="font-bold text-slate-900 mb-6 headline-font text-sm uppercase tracking-wider">고객지원</h4>
+<ul class="space-y-4 text-sm font-medium text-slate-500">
+<li><a class="hover:text-secondary transition-colors" href="#">자주 묻는 질문</a></li>
+<li><a class="hover:text-secondary transition-colors" href="#">공지사항</a></li>
+<li><a class="hover:text-secondary transition-colors" href="#">문의하기</a></li>
+</ul>
+</div>
+<div>
+<h4 class="font-bold text-slate-900 mb-6 headline-font text-sm uppercase tracking-wider">약관</h4>
+<ul class="space-y-4 text-sm font-medium text-slate-500">
+<li><a class="hover:text-secondary transition-colors" href="#">이용약관</a></li>
+<li><a class="hover:text-secondary transition-colors font-bold text-slate-900" href="#">개인정보처리방침</a></li>
+</ul>
+</div>
+</div>
+</div>
+<!-- Accordion for Business Info -->
+<div class="faq-item border-t border-slate-200/60 pt-8">
+<button class="flex items-center gap-2 text-xs font-bold text-slate-400 headline-font group" onclick="this.parentElement.classList.toggle('active')">
+                사업자 정보 및 법적 고지 확인
+                <span class="material-symbols-outlined text-sm transition-transform group-hover:translate-y-0.5">expand_more</span>
+</button>
+<div class="answer">
+<div class="grid md:grid-cols-2 gap-8 text-[13px] text-slate-400 leading-relaxed font-medium">
+<div class="space-y-1">
+<p>상호명: 콜마당 | 대표: 홍길동 | 사업자등록번호: 123-45-67890</p>
+<p>통신판매업신고: 제 2024-서울강남-0000호</p>
+<p>주소: 서울특별시 강남구 테헤란로 123 콜마당빌딩 7층</p>
+</div>
+<div class="space-y-1">
+<p>이메일: support@callmadang.com | 고객센터: 1544-0000</p>
+<p>개인정보보호책임자: 김철수 (privacy@callmadang.com)</p>
+<p>© 2024 콜마당. All rights reserved.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</footer>
+<script>
+    // Simple script for accordion functionality
+    document.querySelectorAll('.faq-item button').forEach(button => {
+        button.addEventListener('click', () => {
+            const item = button.parentElement;
+            item.classList.toggle('active');
+        });
+    });
+</script>
+</body></html>
