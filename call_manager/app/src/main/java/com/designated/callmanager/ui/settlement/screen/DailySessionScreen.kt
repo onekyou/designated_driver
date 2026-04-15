@@ -21,6 +21,7 @@ import java.util.*
 @Composable
 fun DailySessionScreen(vm: SettlementViewModel = viewModel()) {
     val sessions by vm.sessionList.collectAsState()
+    val managerCounts by vm.managerCountsBySession.collectAsState()
     var selectedSession by remember { mutableStateOf<String?>(null) }
     var sessionTrips by remember { mutableStateOf<List<SettlementData>>(emptyList()) }
     var showDialog by remember { mutableStateOf(false) }
@@ -47,6 +48,10 @@ fun DailySessionScreen(vm: SettlementViewModel = viewModel()) {
                         Column(Modifier.padding(12.dp)) {
                             Text(dateStr, color=Color.White, fontWeight=FontWeight.Bold)
                             Text("총 ${s.totalTrips} 건  /  총금액 ${NumberFormat.getNumberInstance().format(s.totalFare)}원", color=Color.White)
+                            val mgrCount = managerCounts[s.sessionId] ?: 0
+                            if (mgrCount > 0) {
+                                Text("직접운행 ${mgrCount}건", color = Color(0xFFFFB000), style = MaterialTheme.typography.bodySmall)
+                            }
                         }
                     }
                 }

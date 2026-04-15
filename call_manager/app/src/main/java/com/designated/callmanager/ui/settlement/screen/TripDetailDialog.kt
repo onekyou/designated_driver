@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.designated.callmanager.data.SettlementData
@@ -51,21 +52,35 @@ fun TripDetailDialog(settlement: SettlementData, onDismiss: () -> Unit) {
 
 @Composable
 fun DateDetailDialog(date: String, settlements: List<SettlementData>, onDismiss: () -> Unit) {
+    val mgrCount = settlements.count { it.driverId == "MANAGER" }
+    val title = if (mgrCount > 0) "$date 상세 내역 (직접운행 ${mgrCount}건 포함)" else "$date 상세 내역"
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("$date 상세 내역", color = Color.White) },
+        title = { Text(title, color = Color.White) },
         text = {
             LazyColumn(Modifier.heightIn(max = 450.dp).fillMaxWidth()) {
                 itemsIndexed(settlements) { idx, s ->
+                    val isMgr = s.driverId == "MANAGER"
                     Column(Modifier.padding(vertical = 4.dp)) {
+                        Row {
+                            if (isMgr) {
+                                Text(
+                                    text = "[직접] ",
+                                    color = Color(0xFFFFB000),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Text(
+                                text = "${idx+1}.${s.departure} - ${s.destination}",
+                                color = Color.White,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
                         Text(
-                            text = "${idx+1}.${s.departure} - ${s.destination}",
-                            color = Color.White,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            text = "${s.customerName} ${NumberFormat.getNumberInstance().format(s.fare)} ${s.paymentMethod}",
-                            color = Color.LightGray,
+                            text = "${s.driverName} · ${s.customerName} ${NumberFormat.getNumberInstance().format(s.fare)} ${s.paymentMethod}",
+                            color = if (isMgr) Color(0xFFFFD37A) else Color.LightGray,
                             style = MaterialTheme.typography.bodySmall
                         )
                     }

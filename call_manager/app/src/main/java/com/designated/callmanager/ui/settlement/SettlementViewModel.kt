@@ -12,6 +12,8 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import java.text.SimpleDateFormat
 import java.util.*
 import com.designated.callmanager.data.local.CallManagerDatabase
@@ -95,6 +97,12 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
     private val _directRunTrips = MutableStateFlow<List<SettlementData>>(emptyList())
     val directRunTrips: StateFlow<List<SettlementData>> = _directRunTrips.asStateFlow()
 
+    // office 문서의 settlementLastCleared 실시간 값 (업무 마감 시 갱신됨)
+    private val _officeLastCleared = MutableStateFlow(0L)
+    // 직접운행 raw 캐시 — officeLastCleared 변경 시 재필터링
+    private var directRunRawCache: List<SettlementData> = emptyList()
+    private var officeLastClearedListener: ListenerRegistration? = null
+
     // 기사별 settlementLastCleared 맵 (driverId → millis)
     // 개별 기사 정산 완료(퇴근) 시 갱신된 기사별 마감 시점
     private val _driverLastClearedMap = MutableStateFlow<Map<String, Long>>(emptyMap())
@@ -103,6 +111,12 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
     private val database = CallManagerDatabase.getInstance(getApplication())
     private val repository = SettlementRepository(database)
     private val creditDao = database.creditDao()
+
+    // 세션별 직접운행 건수 (일일 탭 뱃지용)
+    val managerCountsBySession: StateFlow<Map<String, Int>> = repository.dao
+        .flowManagerCountsBySession()
+        .map { list -> list.associate { it.sessionId to it.count } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     // 백업/복원 관련
     private val backupRepository = SettlementBackupRepository(getApplication())
@@ -189,8 +203,36 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
         if (!province.isNullOrBlank() && !city.isNullOrBlank() && !office.isNullOrBlank()) {
             loadSettlementData(province, city, office)
             startCarryOverListener(province, city, office)
+            startOfficeLastClearedListener(province, city, office)
             startManagerDirectListener(province, city, office)
         }
+    }
+
+    /**
+     * office 문서의 settlementLastCleared 실시간 감시.
+     * 업무 마감 시 CF가 이 필드를 갱신하면 직접운행 트립 필터가 즉시 반영됨.
+     */
+    private fun startOfficeLastClearedListener(provinceId: String, cityId: String, officeId: String) {
+        officeLastClearedListener?.remove()
+        officeLastClearedListener = firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
+            .collection("offices").document(officeId)
+            .addSnapshotListener { doc, e ->
+                if (e != null || doc == null) return@addSnapshotListener
+                val ts = doc.getTimestamp("settlementLastCleared")?.toDate()?.time ?: 0L
+                if (_officeLastCleared.value != ts) {
+                    _officeLastCleared.value = ts
+                    // 직접운행 raw 캐시 재필터링
+                    applyDirectRunFilter()
+                }
+            }
+    }
+
+    private fun applyDirectRunFilter() {
+        val cutoff = _officeLastCleared.value
+        _directRunTrips.value = directRunRawCache
+            .filter { it.completedAt > cutoff }
+            .sortedByDescending { it.completedAt }
     }
 
     /**
@@ -237,12 +279,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                         }
                     }
 
-                    // 대기/전체 탭용 SettlementData 변환 (office lastCleared 이후만)
-                    val officeCleared = prefs.getLong(
-                        "${currentProvinceId}_${currentCityId}_${currentOfficeId}_lastCleared", 0L
-                    )
-                    if (ct <= officeCleared) return@forEach
-
+                    // 대기/전체 탭용 SettlementData 변환 (filter는 applyDirectRunFilter에서 적용)
                     trips.add(
                         SettlementData(
                             callId = doc.id,
@@ -266,7 +303,8 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                     )
                 }
                 _managerDirectStats.value = ManagerDirectStats(count, fare, cash, card, credit)
-                _directRunTrips.value = trips.sortedByDescending { it.completedAt }
+                directRunRawCache = trips
+                applyDirectRunFilter()
             }
     }
 
@@ -473,24 +511,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                     }
                     if (newTrips.isNotEmpty()) {
                         repository.insertAll(newTrips.map { SettlementEntity.fromData(it) })
-
-                        newTrips.forEach { trip ->
-                            if (trip.creditAmount > 0) {
-                                val creditDetail = CreditEntry(
-                                    date = calculateWorkDate(trip.completedAt),
-                                    departure = trip.departure,
-                                    destination = trip.destination,
-                                    amount = trip.creditAmount
-                                )
-                                addOrIncrementCredit(
-                                    name = trip.customerName,
-                                    phone = "",
-                                    addAmount = trip.creditAmount,
-                                    detail = creditDetail
-                                )
-                            }
-                        }
-                    } else {
+                        // 외상 자동 등록 제거 — 대기 탭에서 "외상 등록" 버튼으로 관리자가 수동 확정
                     }
                 }
                 // 만약 사용자가 "전체내역 초기화" 후 새 콜이 도착하면 자동으로 리스트를 다시 보여주기 위해 플래그 해제
@@ -634,23 +655,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                         if (reallyNewEntities.isNotEmpty()) {
                             repository.insertAll(reallyNewEntities)
                             _allTripsCleared.value = false
-
-                            reallyNewEntities.forEach { entity ->
-                                if (entity.creditAmount > 0) {
-                                    val creditDetail = CreditEntry(
-                                        date = entity.workDate,
-                                        departure = entity.departure,
-                                        destination = entity.destination,
-                                        amount = entity.creditAmount
-                                    )
-                                    addOrIncrementCredit(
-                                        name = entity.customerName,
-                                        phone = "",
-                                        addAmount = entity.creditAmount,
-                                        detail = creditDetail
-                                    )
-                                }
-                            }
+                            // 외상 자동 등록 제거 — 대기 탭에서 관리자가 수동 확정
                         }
                     }
                 }
@@ -667,6 +672,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
         callsListener2?.remove()
         carryOverListener?.remove()
         managerDirectListener?.remove()
+        officeLastClearedListener?.remove()
     }
 
     fun clearLocalSettlement() {
@@ -687,10 +693,12 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
 
     fun clearAllTrips() {
         val trips = _settlementList.value
-        if (trips.isEmpty()) return
+        val mgrTrips = _directRunTrips.value
+        if (trips.isEmpty() && mgrTrips.isEmpty()) return
 
-        val totalTrips = trips.size
-        val totalFare  = trips.sumOf { it.fare }.toLong()
+        // 일일 세션 집계에는 실기사 + 직접운행 모두 포함
+        val totalTrips = trips.size + mgrTrips.size
+        val totalFare  = (trips.sumOf { it.fare } + mgrTrips.sumOf { it.fare }).toLong()
         val newSessionId = System.currentTimeMillis().toString()
         val closingTime = System.currentTimeMillis()
         val ratio = _officeShareRatio.value
@@ -705,6 +713,31 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                 )
             )
             repository.markTripsFinalized(trips.map { it.callId }, newSessionId)
+
+            // 직접운행 트립도 Room settlements에 세션 소속으로 기록 (일일 탭 상세보기용)
+            if (mgrTrips.isNotEmpty()) {
+                val mgrEntities = mgrTrips.map { trip ->
+                    SettlementEntity.fromData(trip).copy(
+                        isFinalized = true,
+                        sessionId = newSessionId
+                    )
+                }
+                repository.insertAll(mgrEntities)
+            }
+
+            // office 문서 settlementLastCleared 갱신 → 직접운행 리스너가 재필터링해서 리스트에서 제거
+            val p = currentProvinceId
+            val c = currentCityId
+            val o = currentOfficeId
+            if (p != null && c != null && o != null) {
+                firestore.collection("provinces").document(p)
+                    .collection("cities").document(c)
+                    .collection("offices").document(o)
+                    .update("settlementLastCleared", com.google.firebase.Timestamp.now())
+                    .addOnFailureListener { e ->
+                        Log.e("SettlementViewModel", "office settlementLastCleared 갱신 실패", e)
+                    }
+            }
 
             // ✅ 기사별 미지급금 계산 및 carryOver 저장
             val driverTrips = trips.groupBy { it.driverId }
@@ -1173,6 +1206,14 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
 
         if (provinceId == null || cityId == null || officeId == null) {
             onResult(false, "사무실 정보가 설정되지 않았습니다")
+            return
+        }
+
+        // 직접운행만 있는 경우: settlementSessions 서버 마감을 건너뛰고 로컬 세션만 생성
+        // (CF `finalizeSettlementAndNotifyDrivers`는 실기사 알림용이므로 대상 없음)
+        if (_settlementList.value.isEmpty() && _directRunTrips.value.isNotEmpty()) {
+            Log.d("SettlementViewModel", "직접운행 전용 마감 — CF 스킵, 로컬 세션만 생성")
+            onResult(true, "마감 완료 (직접운행 ${_directRunTrips.value.size}건)")
             return
         }
 

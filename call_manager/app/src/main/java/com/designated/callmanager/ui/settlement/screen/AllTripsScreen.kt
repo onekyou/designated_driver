@@ -374,7 +374,7 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel(), onHome: (() -> Unit)? 
                     showFinalizeDialog = true
                 }
             },
-            enabled = trips.isNotEmpty(),
+            enabled = trips.isNotEmpty() || directRunTrips.isNotEmpty(),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF4444))
         ) { Text("업무 마감", color = Color.White) }

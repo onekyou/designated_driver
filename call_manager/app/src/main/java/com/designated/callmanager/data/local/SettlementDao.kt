@@ -34,4 +34,12 @@ interface SettlementDao {
 
     @Query("SELECT * FROM settlements WHERE sessionId = :sessionId")
     fun getTripsBySession(sessionId: String): Flow<List<SettlementEntity>>
+
+    @Query("SELECT sessionId, COUNT(*) as count FROM settlements WHERE driverId = 'MANAGER' AND sessionId IS NOT NULL GROUP BY sessionId")
+    fun flowManagerCountsBySession(): Flow<List<ManagerCountBySession>>
 }
+
+data class ManagerCountBySession(
+    val sessionId: String,
+    val count: Int
+)
