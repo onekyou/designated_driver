@@ -21,13 +21,20 @@ import com.designated.callmanager.ui.settlement.SettlementViewModel
 @Composable
 fun PendingSettlementsScreen(vm: SettlementViewModel = viewModel()) {
     val trips by vm.settlementList.collectAsState()
+    val directRunTrips by vm.directRunTrips.collectAsState()
     var selectedTrip by remember { mutableStateOf<SettlementData?>(null) }
     var showCreditDialog by remember { mutableStateOf(false) }
     var phoneForDialog by remember { mutableStateOf("") }
 
     val creditedIds by vm.creditedTripIds.collectAsState()
 
-    val pending = trips.filter { it.paymentMethod in listOf("이체", "외상") }
+    // 실기사 + 직접운행 합쳐서 이체/외상만 필터 (callId 중복 제거)
+    val pending = remember(trips, directRunTrips) {
+        (trips + directRunTrips)
+            .distinctBy { it.callId }
+            .filter { it.paymentMethod in listOf("이체", "외상") }
+            .sortedByDescending { it.completedAt }
+    }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         val unprocessedCount = pending.count { !creditedIds.contains(it.callId) }

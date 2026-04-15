@@ -584,6 +584,34 @@ class MainActivity : ComponentActivity() {
                             },
                             onShare = { departure, destination, fare ->
                                 dashboardViewModel.shareCall(newCallInfo!!, departure, destination, fare)
+                            },
+                            onDirectRun = {
+                                newCallInfo?.let { dashboardViewModel.requestDirectRun(it) }
+                                dashboardViewModel.dismissNewCallPopup()
+                            }
+                        )
+                    }
+
+                    // 관리자 직접운행 정산 다이얼로그 (전역 렌더)
+                    val directRunCall by dashboardViewModel.directRunCall.collectAsState()
+                    directRunCall?.let { call ->
+                        com.designated.callmanager.ui.dashboard.DirectRunDialog(
+                            callInfo = call,
+                            onDismiss = { dashboardViewModel.dismissDirectRun() },
+                            onConfirm = { fare, paymentMethod, cash, credit, points, cname, phone, dep, dest ->
+                                dashboardViewModel.completeAsManager(
+                                    callId = call.id,
+                                    fare = fare,
+                                    paymentMethod = paymentMethod,
+                                    cashReceived = cash,
+                                    creditAmount = credit,
+                                    pointsUsed = points,
+                                    customerName = cname,
+                                    phoneNumber = phone,
+                                    departure = dep,
+                                    destination = dest
+                                )
+                                dashboardViewModel.dismissDirectRun()
                             }
                         )
                     }

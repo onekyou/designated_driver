@@ -174,11 +174,11 @@ fun DashboardScreen(
     // 에러 메시지 스낵바 표시
     LaunchedEffect(snackbarMessage) {
         snackbarMessage?.let { message ->
+            viewModel.clearSnackbarMessage()
             snackbarHostState.showSnackbar(
                 message = message,
                 duration = SnackbarDuration.Long
             )
-            viewModel.clearSnackbarMessage()
         }
     }
 
@@ -337,7 +337,8 @@ fun DashboardScreen(
                 callIdForDriverAssignment = callInfoForDialog!!.id
             },
             onHold = { viewModel.updateCallStatus(callInfoForDialog!!.id, CallStatus.HOLD) },
-            onDelete = { viewModel.cancelCall(callInfoForDialog!!.id) }
+            onDelete = { viewModel.cancelCall(callInfoForDialog!!.id) },
+            onDirectRun = { viewModel.requestDirectRun(callInfoForDialog!!) }
         )
     }
 
@@ -1092,8 +1093,13 @@ fun CallInfoDialog(
     onDismiss: () -> Unit,
     onAssignRequest: () -> Unit,
     onHold: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onDirectRun: () -> Unit = {}
 ) {
+    val isWaiting = callInfo.status == CallStatus.WAITING.firestoreValue ||
+                    callInfo.status == CallStatus.HOLD.firestoreValue
+    val canDirectRun = isWaiting && callInfo.assignedDriverId.isNullOrBlank()
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("호출 정보 (${callInfo.id.takeLast(4)})") },
@@ -1109,20 +1115,178 @@ fun CallInfoDialog(
             }
         },
         confirmButton = {
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End)
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                TextButton(onClick = onDismiss) { Text("닫기") }
-                TextButton(onClick = onDelete) { Text("삭제") }
-                TextButton(onClick = onHold) { Text("보류") }
-                TextButton(onClick = {
-                    onAssignRequest()
-                    onDismiss()
-                }) { Text("기사배정") }
+                if (canDirectRun) {
+                    Button(
+                        onClick = {
+                            onDirectRun()
+                            onDismiss()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB8860B))
+                    ) { Text("직접운행", fontWeight = FontWeight.Bold) }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End)
+                ) {
+                    TextButton(onClick = onDismiss) { Text("닫기") }
+                    TextButton(onClick = onDelete) { Text("삭제") }
+                    TextButton(onClick = onHold) { Text("보류") }
+                    TextButton(onClick = {
+                        onAssignRequest()
+                        onDismiss()
+                    }) { Text("기사배정") }
+                }
             }
         },
         dismissButton = null
+    )
+}
+
+/**
+ * 관리자 직접운행 정산 입력 다이얼로그.
+ * 저장 시 콜을 바로 COMPLETED로 전이 + handledByManager=true.
+ */
+@Composable
+fun DirectRunDialog(
+    callInfo: CallInfo,
+    onDismiss: () -> Unit,
+    onConfirm: (fare: Long, paymentMethod: String, cashReceived: Long, creditAmount: Long, pointsUsed: Long,
+                customerName: String, phoneNumber: String, departure: String, destination: String) -> Unit
+) {
+    val initialFare = (callInfo.fare_set ?: callInfo.fare ?: 0L).toString().let { if (it == "0") "" else it }
+    var fareText by remember { mutableStateOf(initialFare) }
+    var paymentMethod by remember { mutableStateOf("현금") }
+    var cashText by remember { mutableStateOf("") }
+    var creditText by remember { mutableStateOf("") }
+    var pointsText by remember { mutableStateOf("") }
+    var customerName by remember { mutableStateOf(callInfo.customerName ?: "") }
+    var phoneNumber by remember { mutableStateOf(callInfo.phoneNumber ?: "") }
+    var departure by remember { mutableStateOf(callInfo.departure_set ?: "") }
+    var destination by remember { mutableStateOf(callInfo.destination_set ?: "") }
+
+    val paymentOptions = listOf("현금", "이체", "카드", "외상", "현금+포인트")
+
+    val isCreditCase = paymentMethod == "외상"
+    val missingForCredit = isCreditCase && (departure.isBlank() || destination.isBlank() || customerName.isBlank())
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("직접운행 정산 입력", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.verticalScroll(rememberScrollState())
+            ) {
+                OutlinedTextField(
+                    value = customerName,
+                    onValueChange = { customerName = it },
+                    label = { Text("고객명${if (isCreditCase) " (외상 필수)" else ""}") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = phoneNumber,
+                    onValueChange = { phoneNumber = it.filter { c -> c.isDigit() } },
+                    label = { Text("전화번호") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = departure,
+                    onValueChange = { departure = it },
+                    label = { Text("출발지${if (isCreditCase) " (외상 필수)" else ""}") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = destination,
+                    onValueChange = { destination = it },
+                    label = { Text("목적지${if (isCreditCase) " (외상 필수)" else ""}") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = fareText,
+                    onValueChange = { fareText = it.filter { c -> c.isDigit() } },
+                    label = { Text("요금 (원)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Text("결제수단", fontWeight = FontWeight.Medium)
+                Column {
+                    paymentOptions.chunked(3).forEach { rowItems ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            rowItems.forEach { opt ->
+                                FilterChip(
+                                    selected = paymentMethod == opt,
+                                    onClick = { paymentMethod = opt },
+                                    label = { Text(opt) }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (paymentMethod == "현금+포인트") {
+                    OutlinedTextField(
+                        value = cashText,
+                        onValueChange = { cashText = it.filter { c -> c.isDigit() } },
+                        label = { Text("현금 수령액") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = pointsText,
+                        onValueChange = { pointsText = it.filter { c -> c.isDigit() } },
+                        label = { Text("사용 포인트") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                if (paymentMethod == "외상") {
+                    Text("전액 미수금으로 기록됩니다", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onDismiss) { Text("취소") }
+                Button(
+                    onClick = {
+                        val fare = fareText.toLongOrNull() ?: 0L
+                        val cash = when (paymentMethod) {
+                            "현금" -> fare
+                            "현금+포인트" -> cashText.toLongOrNull() ?: 0L
+                            else -> 0L
+                        }
+                        val credit = when (paymentMethod) {
+                            "외상" -> fare
+                            else -> creditText.toLongOrNull() ?: 0L
+                        }
+                        val points = when (paymentMethod) {
+                            "현금+포인트" -> pointsText.toLongOrNull() ?: 0L
+                            else -> 0L
+                        }
+                        onConfirm(fare, paymentMethod, cash, credit, points,
+                            customerName.trim(), phoneNumber.trim(),
+                            departure.trim(), destination.trim())
+                    },
+                    enabled = (fareText.toLongOrNull() ?: 0L) > 0 && !missingForCredit
+                ) { Text("완료") }
+            }
+        }
     )
 }
 
@@ -1238,7 +1402,8 @@ fun NewCallAssignmentDialog(
     onDriverSelect: (DriverInfo) -> Unit,
     onDriverSelectWithInfo: ((DriverInfo, String, String, Long) -> Unit)? = null,
     onDelete: () -> Unit,
-    onShare: (departure: String, destination: String, fare: Int) -> Unit
+    onShare: (departure: String, destination: String, fare: Int) -> Unit,
+    onDirectRun: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
 
@@ -1593,24 +1758,26 @@ fun NewCallAssignmentDialog(
             }
         },
         confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = {
-                    try {
-                        val stickyR = RingtoneManager.getRingtone(context.applicationContext, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI)
-                        if (stickyR.isPlaying) stickyR.stop()
-                        val defaultR = RingtoneManager.getRingtone(context.applicationContext, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
-                        if (defaultR.isPlaying) defaultR.stop()
-                    } catch (e: Exception) {
-                    }
-                    onDismiss()
-                }) { Text(if (isFromCallManager) "취소" else "나중에") }
-
-                if (!isFromCallManager) {
-                    TextButton(onClick = { showShareDialog = true }) { Text("공유") }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (onDirectRun != null && callInfo.status == "WAITING") {
+                    Button(
+                        onClick = {
+                            try {
+                                val stickyR = RingtoneManager.getRingtone(context.applicationContext, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI)
+                                if (stickyR.isPlaying) stickyR.stop()
+                                val defaultR = RingtoneManager.getRingtone(context.applicationContext, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+                                if (defaultR.isPlaying) defaultR.stop()
+                            } catch (e: Exception) {
+                            }
+                            onDirectRun()
+                            onDismiss()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB8860B))
+                    ) { Text("직접운행", fontWeight = FontWeight.Bold) }
                 }
-
-                TextButton(
-                    onClick = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = {
                         try {
                             val stickyR = RingtoneManager.getRingtone(context.applicationContext, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI)
                             if (stickyR.isPlaying) stickyR.stop()
@@ -1618,12 +1785,29 @@ fun NewCallAssignmentDialog(
                             if (defaultR.isPlaying) defaultR.stop()
                         } catch (e: Exception) {
                         }
-                        showDeleteConfirmDialog = true
-                    },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
-                ) { Text("삭제") }
+                        onDismiss()
+                    }) { Text(if (isFromCallManager) "취소" else "나중에") }
+
+                    if (!isFromCallManager) {
+                        TextButton(onClick = { showShareDialog = true }) { Text("공유") }
+                    }
+
+                    TextButton(
+                        onClick = {
+                            try {
+                                val stickyR = RingtoneManager.getRingtone(context.applicationContext, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI)
+                                if (stickyR.isPlaying) stickyR.stop()
+                                val defaultR = RingtoneManager.getRingtone(context.applicationContext, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+                                if (defaultR.isPlaying) defaultR.stop()
+                            } catch (e: Exception) {
+                            }
+                            showDeleteConfirmDialog = true
+                        },
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) { Text("삭제") }
+                }
             }
         }
     )

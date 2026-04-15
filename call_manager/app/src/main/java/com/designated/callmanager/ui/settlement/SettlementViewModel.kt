@@ -78,6 +78,22 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
     private var callsListener: ListenerRegistration? = null
     private var callsListener2: ListenerRegistration? = null  // completedAt 기준 리스너
     private var carryOverListener: ListenerRegistration? = null
+    private var managerDirectListener: ListenerRegistration? = null
+
+    // 관리자 직접운행 오늘 집계 (정산 세션과 별개)
+    data class ManagerDirectStats(
+        val count: Int = 0,
+        val totalFare: Long = 0,
+        val cash: Long = 0,
+        val card: Long = 0,
+        val credit: Long = 0
+    )
+    private val _managerDirectStats = MutableStateFlow(ManagerDirectStats())
+    val managerDirectStats: StateFlow<ManagerDirectStats> = _managerDirectStats.asStateFlow()
+
+    // 직접운행 콜을 SettlementData 형태로 노출 — 대기/전체 탭 합산용
+    private val _directRunTrips = MutableStateFlow<List<SettlementData>>(emptyList())
+    val directRunTrips: StateFlow<List<SettlementData>> = _directRunTrips.asStateFlow()
 
     // 기사별 settlementLastCleared 맵 (driverId → millis)
     // 개별 기사 정산 완료(퇴근) 시 갱신된 기사별 마감 시점
@@ -173,7 +189,85 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
         if (!province.isNullOrBlank() && !city.isNullOrBlank() && !office.isNullOrBlank()) {
             loadSettlementData(province, city, office)
             startCarryOverListener(province, city, office)
+            startManagerDirectListener(province, city, office)
         }
+    }
+
+    /**
+     * 관리자 직접운행 오늘 집계 리스너.
+     * handledByManager==true 콜을 실시간 감시하여 위젯에 반영.
+     */
+    private fun startManagerDirectListener(provinceId: String, cityId: String, officeId: String) {
+        managerDirectListener?.remove()
+        managerDirectListener = firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
+            .collection("offices").document(officeId)
+            .collection("calls")
+            .whereEqualTo("handledByManager", true)
+            .addSnapshotListener { snapshots, e ->
+                if (e != null) {
+                    Log.e("SettlementViewModel", "managerDirect listener error", e)
+                    return@addSnapshotListener
+                }
+                val today = getTodaySessionDate()
+                var count = 0
+                var fare = 0L
+                var cash = 0L
+                var card = 0L
+                var credit = 0L
+                val trips = mutableListOf<SettlementData>()
+
+                snapshots?.documents?.forEach { doc ->
+                    val ct = doc.getTimestamp("completedAt")?.toDate()?.time ?: return@forEach
+                    val workDate = calculateWorkDate(ct)
+                    val f = doc.getLong("fareFinal") ?: doc.getLong("fare_set") ?: 0L
+                    val pm = doc.getString("paymentMethod") ?: ""
+                    val c = doc.getLong("cashReceived") ?: 0L
+                    val cr = doc.getLong("creditAmount") ?: 0L
+
+                    // 오늘 집계 카드용
+                    if (workDate == today) {
+                        count++
+                        fare += f
+                        credit += cr
+                        when (pm) {
+                            "현금" -> cash += f
+                            "이체", "카드" -> card += f
+                            "현금+포인트" -> cash += c
+                        }
+                    }
+
+                    // 대기/전체 탭용 SettlementData 변환 (office lastCleared 이후만)
+                    val officeCleared = prefs.getLong(
+                        "${currentProvinceId}_${currentCityId}_${currentOfficeId}_lastCleared", 0L
+                    )
+                    if (ct <= officeCleared) return@forEach
+
+                    trips.add(
+                        SettlementData(
+                            callId = doc.id,
+                            driverName = "관리자",
+                            customerName = doc.getString("customerName") ?: "",
+                            departure = doc.getString("departure_set") ?: "",
+                            destination = doc.getString("destination_set") ?: "",
+                            waypoints = doc.getString("waypoints_set") ?: "",
+                            fare = f.toInt(),
+                            paymentMethod = pm,
+                            cardAmount = null,
+                            cashAmount = c.toInt(),
+                            creditAmount = cr.toInt(),
+                            pointsUsed = (doc.getLong("pointsUsed") ?: 0L).toInt(),
+                            completedAt = ct,
+                            driverId = "MANAGER",
+                            regionId = currentProvinceId ?: "",
+                            officeId = currentOfficeId ?: "",
+                            workDate = workDate
+                        )
+                    )
+                }
+                _managerDirectStats.value = ManagerDirectStats(count, fare, cash, card, credit)
+                _directRunTrips.value = trips.sortedByDescending { it.completedAt }
+            }
     }
 
     fun updateOfficeShareRatio(newRatio: Int) {
@@ -327,6 +421,9 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
             .addOnSuccessListener { result ->
                 val trips = result.documents.mapNotNull { doc ->
                     try {
+                        // 관리자 직접운행 콜은 정산 목록에서 제외 (별도 위젯 집계)
+                        if (doc.getBoolean("handledByManager") == true) return@mapNotNull null
+
                         val completedTimestamp = doc.getTimestamp("completedAt")?.toDate()?.time
                             ?: doc.getTimestamp("updatedAt")?.toDate()?.time
                             ?: System.currentTimeMillis()
@@ -433,6 +530,8 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                         dc.type != com.google.firebase.firestore.DocumentChange.Type.MODIFIED) return@mapNotNull null
                     val doc = dc.document
                     try {
+                        if (doc.getBoolean("handledByManager") == true) return@mapNotNull null
+
                         val completedTimestamp = doc.getTimestamp("completedAt")?.toDate()?.time
                             ?: doc.getTimestamp("updatedAt")?.toDate()?.time
                             ?: System.currentTimeMillis()
@@ -492,6 +591,8 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                         dc.type != com.google.firebase.firestore.DocumentChange.Type.MODIFIED) return@mapNotNull null
                     val doc = dc.document
                     try {
+                        if (doc.getBoolean("handledByManager") == true) return@mapNotNull null
+
                         val completedTimestamp = doc.getTimestamp("completedAt")?.toDate()?.time
                             ?: System.currentTimeMillis()
 
@@ -565,6 +666,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
         callsListener?.remove()
         callsListener2?.remove()
         carryOverListener?.remove()
+        managerDirectListener?.remove()
     }
 
     fun clearLocalSettlement() {
@@ -1249,6 +1351,8 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                 val ratio = _officeShareRatio.value
                 val calls = result.documents.mapNotNull { doc ->
                     try {
+                        if (doc.getBoolean("handledByManager") == true) return@mapNotNull null
+
                         val completedTimestamp = doc.getTimestamp("completedAt")?.toDate()?.time
                             ?: doc.getTimestamp("updatedAt")?.toDate()?.time
                             ?: return@mapNotNull null

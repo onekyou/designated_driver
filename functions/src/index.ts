@@ -4813,6 +4813,12 @@ export const onCallCompletedUpdateSettlement = onDocumentUpdated(
 
     // 운행 완료 감지 (다른 상태 → COMPLETED)
     if (beforeData.status !== "COMPLETED" && afterData.status === "COMPLETED") {
+      // 관리자 직접운행 콜은 정산 세션에 추가하지 않음 (별도 집계)
+      if (afterData.handledByManager === true) {
+        logger.info(`[Settlement:${callId}] 직접운행 콜 - 정산 세션 스킵`);
+        return;
+      }
+
       logger.info(`[Settlement:${callId}] 운행 완료 감지 - 정산 세션 업데이트 시작`);
 
       try {

@@ -166,6 +166,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _callInfoForDialog = MutableStateFlow<CallInfo?>(null)
     val callInfoForDialog: StateFlow<CallInfo?> = _callInfoForDialog.asStateFlow()
 
+    // 관리자 직접운행 다이얼로그 상태
+    private val _directRunCall = MutableStateFlow<CallInfo?>(null)
+    val directRunCall: StateFlow<CallInfo?> = _directRunCall.asStateFlow()
+
+    fun requestDirectRun(call: CallInfo) { _directRunCall.value = call }
+    fun dismissDirectRun() { _directRunCall.value = null }
+
     private val _showApprovalPopup = MutableStateFlow(false)
     val showApprovalPopup: StateFlow<Boolean> = _showApprovalPopup
     private val _driverForApproval = MutableStateFlow<DriverInfo?>(null)
@@ -928,6 +935,88 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
             } catch (e: Exception) {
                 Log.e(TAG, "콜 완료 처리 실패: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * 관리자 직접운행 — WAITING 콜을 바로 COMPLETED로 전이하며 정산 필드 기록.
+     * 기사 문서/배차 트랜잭션을 타지 않고, handledByManager=true 플래그로 식별.
+     * CF `onCallCompletedUpdateSettlement`의 가드가 이 플래그를 보고 정산 세션 추가를 스킵.
+     */
+    fun completeAsManager(
+        callId: String,
+        fare: Long,
+        paymentMethod: String,
+        cashReceived: Long,
+        creditAmount: Long,
+        pointsUsed: Long,
+        customerName: String = "",
+        phoneNumber: String = "",
+        departure: String = "",
+        destination: String = "",
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        if (_provinceId.value == null || _cityId.value == null || _officeId.value == null) {
+            onError("사무실 정보가 없습니다")
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val callRef = firestore.collection("provinces").document(_provinceId.value!!)
+                    .collection("cities").document(_cityId.value!!)
+                    .collection("offices").document(_officeId.value!!)
+                    .collection("calls").document(callId)
+
+                firestore.runTransaction { transaction ->
+                    val callDoc = transaction.get(callRef)
+                    val currentStatus = callDoc.getString("status")
+                    if (currentStatus != CallStatus.WAITING.firestoreValue &&
+                        currentStatus != CallStatus.HOLD.firestoreValue) {
+                        throw IllegalStateException("NOT_WAITING")
+                    }
+                    val now = com.google.firebase.Timestamp.now()
+                    val updates = mutableMapOf<String, Any>(
+                        "status" to CallStatus.COMPLETED.firestoreValue,
+                        "handledByManager" to true,
+                        "assignedDriverId" to "MANAGER",
+                        "assignedDriverName" to "관리자",
+                        "fareFinal" to fare,
+                        "fare_set" to fare,
+                        "paymentMethod" to paymentMethod,
+                        "cashReceived" to cashReceived,
+                        "creditAmount" to creditAmount,
+                        "pointsUsed" to pointsUsed,
+                        "completedAt" to now,
+                        "assignedTimestamp" to now,
+                        "updatedAt" to now
+                    )
+                    if (customerName.isNotBlank()) updates["customerName"] = customerName
+                    if (phoneNumber.isNotBlank()) updates["phoneNumber"] = phoneNumber
+                    if (departure.isNotBlank()) updates["departure_set"] = departure
+                    if (destination.isNotBlank()) updates["destination_set"] = destination
+                    transaction.update(callRef, updates)
+                }.await()
+
+                callRepository.updateAssignment(
+                    callId = callId,
+                    driverId = "MANAGER",
+                    driverName = "관리자",
+                    driverPhone = "",
+                    status = CallStatus.COMPLETED.firestoreValue
+                )
+                onSuccess()
+            } catch (e: Exception) {
+                Log.e(TAG, "직접운행 처리 실패", e)
+                val msg = if (e.message?.contains("NOT_WAITING") == true ||
+                    e.cause?.message?.contains("NOT_WAITING") == true) {
+                    "이미 처리된 콜입니다"
+                } else {
+                    "직접운행 처리 실패: ${e.message}"
+                }
+                _snackbarMessage.value = msg
+                onError(msg)
             }
         }
     }

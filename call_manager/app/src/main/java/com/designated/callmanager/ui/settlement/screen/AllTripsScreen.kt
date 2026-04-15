@@ -31,6 +31,7 @@ import com.google.firebase.auth.FirebaseAuth
 @Composable
 fun AllTripsScreen(vm: SettlementViewModel = viewModel(), onHome: (() -> Unit)? = null) {
     val trips by vm.settlementList.collectAsState()
+    val directRunTrips by vm.directRunTrips.collectAsState()
     val creditedIds by vm.creditedTripIds.collectAsState()
     var showCreditDialog by remember { mutableStateOf(false) }
 
@@ -148,7 +149,8 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel(), onHome: (() -> Unit)? 
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("전체 운행 ${trips.size}건", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            val totalCount = trips.size + directRunTrips.size
+            Text("전체 운행 ${totalCount}건", style = MaterialTheme.typography.titleMedium, color = Color.White)
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("수수료 비율 조정", color=Color.White, style = MaterialTheme.typography.bodySmall)
@@ -158,19 +160,24 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel(), onHome: (() -> Unit)? 
             }
         }
 
+        // 세부 내역(기사 납입/이체/미수금/포인트)은 실기사 기준만 사용
+        // 직접운행은 사무실 100% 귀속이라 "기사 납입" 개념이 없음 → 별도 한 줄로 표시
         val breakdown = SettlementCalculator.calculatePaymentBreakdown(trips)
-        val totalFare = breakdown.totalFare
+        val mgrBreakdown = SettlementCalculator.calculatePaymentBreakdown(directRunTrips)
+        val totalFare = breakdown.totalFare + mgrBreakdown.totalFare  // 상단 총매출용
         val cashSum = breakdown.cashSum
         val bankSum = breakdown.bankSum
         val creditSum = breakdown.creditSum
         val pointSum = breakdown.pointSum
+        val mgrNetRevenue = mgrBreakdown.totalFare - mgrBreakdown.pointSum  // 직접운행 순매출 (포인트 차감)
 
         Spacer(Modifier.height(8.dp))
 
         Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF424242))) {
             Column(Modifier.padding(16.dp)) {
-                // 총매출과 총수입 (사무실 비율)
-                val totalOfficeIncome = SettlementCalculator.calculateOfficeDeposit(totalFare, ratio)
+                // 총매출과 총수입 (실기사: ratio 적용, 직접운행: 100% 사무실 귀속)
+                val driverOfficeIncome = SettlementCalculator.calculateOfficeDeposit(breakdown.totalFare, ratio)
+                val totalOfficeIncome = driverOfficeIncome + mgrBreakdown.totalFare
                 Text("총매출 ${"%,d".format(totalFare)}원", color = Color.White, style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("settlement_all_totalFare"))
                 Text("총수입 ${"%,d".format(totalOfficeIncome)}원", color = Color.White, style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("settlement_all_officeIncome"))
 
@@ -217,10 +224,18 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel(), onHome: (() -> Unit)? 
                         style = MaterialTheme.typography.bodyMedium)
                 }
 
+                // 직접운행 매출 (관리자가 직접 운행한 콜 전체매출, 포인트 차감 후)
+                if (directRunTrips.isNotEmpty()) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("직접운행 매출", color = Color(0xFFFFB000), style = MaterialTheme.typography.bodyMedium)
+                        Text("${"%,d".format(mgrNetRevenue)}원", color = Color(0xFFFFB000), style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+
                 Spacer(Modifier.height(12.dp))
 
-                // 실수입 계산
-                val realIncome = SettlementCalculator.calculateRealIncome(finalDriverDeposit, bankSum, creditSum, pointSum)
+                // 실수입 계산 (실기사 실수입 + 직접운행 순매출)
+                val realIncome = SettlementCalculator.calculateRealIncome(finalDriverDeposit, bankSum, creditSum, pointSum) + mgrNetRevenue
 
                 HorizontalDivider(color = Color.Gray, thickness = 1.dp, modifier = Modifier.padding(vertical = 8.dp))
 
@@ -239,30 +254,43 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel(), onHome: (() -> Unit)? 
 
         Spacer(Modifier.height(12.dp))
 
-        // 기사별 미지급금 테이블 (항상 표시)
+        // 기사별 미지급금 테이블 (타이틀 클릭 시 펼침)
+        var unpaidExpanded by remember { mutableStateOf(false) }
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF3A3A3A))
         ) {
             Column(Modifier.padding(12.dp)) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { unpaidExpanded = !unpaidExpanded },
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        "기사별 미지급 현황",
-                        color = Color(0xFFFFAA00),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "기사별 미지급 현황",
+                            color = Color(0xFFFFAA00),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            if (unpaidExpanded) "▾" else "▸",
+                            color = Color(0xFFFFAA00),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                    }
                     Text(
                         "총 ${"%,d".format(driverUnpaidList.sumOf { it.total })}원",
                         color = if (driverUnpaidList.sumOf { it.total } > 0) Color(0xFFFF6666) else Color.Gray,
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
-                Spacer(Modifier.height(8.dp))
+
+                if (unpaidExpanded) {
+                    Spacer(Modifier.height(8.dp))
 
                 if (driverUnpaidList.isEmpty()) {
                     Text(
@@ -326,6 +354,7 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel(), onHome: (() -> Unit)? 
                         )
                     }
                 }
+                } // if (unpaidExpanded)
             }
         }
         Spacer(Modifier.height(8.dp))

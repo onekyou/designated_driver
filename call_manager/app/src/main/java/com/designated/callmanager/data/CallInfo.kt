@@ -55,7 +55,14 @@ data class CallInfo(
     @PropertyName("pointsUsed") var pointsUsed: Int? = null,
     @get:PropertyName("isAppCustomer") @set:PropertyName("isAppCustomer") var isAppCustomer: Boolean? = false,
     @PropertyName("attributionScore") var attributionScore: Int? = null, // 70점 기준 매칭 점수
-    @PropertyName("attributionSource") var attributionSource: String? = null // landing/qr_scan/referral
+    @PropertyName("attributionSource") var attributionSource: String? = null, // landing/qr_scan/referral
+
+    // 관리자 직접운행 (MVP)
+    @get:PropertyName("handledByManager") @set:PropertyName("handledByManager") var handledByManager: Boolean? = false,
+    @PropertyName("fareFinal") var fareFinal: Long? = null,
+    @PropertyName("cashReceived") var cashReceived: Long? = null,
+    @PropertyName("creditAmount") var creditAmount: Long? = null,
+    @PropertyName("completedAt") var completedAt: Timestamp? = null
 ) {
     // constructor() : this("", "", "", Timestamp.now(), CallStatus.PENDING.value)
 }
