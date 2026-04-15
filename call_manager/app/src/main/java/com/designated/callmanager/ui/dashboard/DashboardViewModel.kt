@@ -513,9 +513,10 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                             _showTripStartedPopup.value = true
                         }
 
-                        // 운행 완료 팝업
+                        // 운행 완료 팝업 (직접운행은 관리자 본인이 처리하므로 스킵)
                         if (call.status == CallStatus.COMPLETED.firestoreValue &&
-                            previousStatusMap[call.id] != CallStatus.COMPLETED.firestoreValue) {
+                            previousStatusMap[call.id] != CallStatus.COMPLETED.firestoreValue &&
+                            call.handledByManager != true) {
                             val prefs = appContext.getSharedPreferences("shown_popups", Context.MODE_PRIVATE)
                             val popupId = "TRIP_COMPLETED_${call.id}"
                             if (!prefs.getBoolean(popupId, false)) {

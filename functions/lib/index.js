@@ -381,6 +381,11 @@ exports.oncallassigned = (0, firestore_1.onDocumentWritten)({
         logger.info(`[${callId}] 문서가 삭제되어 함수를 종료합니다.`);
         return;
     }
+    // 관리자 직접운행 콜은 배차 알림 불필요 (assignedDriverId="MANAGER"로 오탐 방지)
+    if (afterData.handledByManager === true) {
+        logger.info(`[${callId}] 직접운행 콜 - 배차 알림 스킵`);
+        return;
+    }
     const beforeData = (_a = event.data.before) === null || _a === void 0 ? void 0 : _a.data();
     // 2. assignedDriverId가 유효하게 할당/변경되었는지 확인
     // 공유콜의 경우 새 문서 생성 시에는 알림을 보내지 않음 (중복 알림 방지)
@@ -3937,6 +3942,11 @@ exports.onCallCompletedUpdateSettlement = (0, firestore_1.onDocumentUpdated)({
     }
     // 운행 완료 감지 (다른 상태 → COMPLETED)
     if (beforeData.status !== "COMPLETED" && afterData.status === "COMPLETED") {
+        // 관리자 직접운행 콜은 정산 세션에 추가하지 않음 (별도 집계)
+        if (afterData.handledByManager === true) {
+            logger.info(`[Settlement:${callId}] 직접운행 콜 - 정산 세션 스킵`);
+            return;
+        }
         logger.info(`[Settlement:${callId}] 운행 완료 감지 - 정산 세션 업데이트 시작`);
         try {
             await (0, settlement_1.addCallToSettlementSession)(provinceId, cityId, officeId, afterData, callId);

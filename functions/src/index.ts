@@ -497,6 +497,12 @@ export const oncallassigned = onDocumentWritten(
             return;
         }
 
+        // 관리자 직접운행 콜은 배차 알림 불필요 (assignedDriverId="MANAGER"로 오탐 방지)
+        if ((afterData as any).handledByManager === true) {
+            logger.info(`[${callId}] 직접운행 콜 - 배차 알림 스킵`);
+            return;
+        }
+
         const beforeData = event.data.before?.data() as CallData | undefined;
 
         // 2. assignedDriverId가 유효하게 할당/변경되었는지 확인
