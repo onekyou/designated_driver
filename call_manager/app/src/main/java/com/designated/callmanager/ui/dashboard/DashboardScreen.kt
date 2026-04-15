@@ -1169,6 +1169,13 @@ fun DirectRunDialog(
     var departure by remember { mutableStateOf(callInfo.departure_set ?: "") }
     var destination by remember { mutableStateOf(callInfo.destination_set ?: "") }
 
+    val context = LocalContext.current
+    val voiceHelper = remember { VoiceInputHelper(context) }
+    DisposableEffect(Unit) { onDispose { voiceHelper.destroy() } }
+    var isRecordingDeparture by remember { mutableStateOf(false) }
+    var isRecordingDestination by remember { mutableStateOf(false) }
+    var isRecordingFare by remember { mutableStateOf(false) }
+
     val paymentOptions = listOf("현금", "이체", "카드", "외상", "현금+포인트")
 
     val isCreditCase = paymentMethod == "외상"
@@ -1202,14 +1209,54 @@ fun DirectRunDialog(
                     onValueChange = { departure = it },
                     label = { Text("출발지${if (isCreditCase) " (외상 필수)" else ""}") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        IconButton(onClick = {
+                            if (!isRecordingDeparture) {
+                                voiceHelper.startListening { result ->
+                                    departure = result
+                                    isRecordingDeparture = false
+                                }
+                                isRecordingDeparture = true
+                            } else {
+                                voiceHelper.stopListening()
+                                isRecordingDeparture = false
+                            }
+                        }) {
+                            Icon(
+                                Icons.Default.Mic,
+                                contentDescription = "음성 입력",
+                                tint = if (isRecordingDeparture) Color.Red else MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 )
                 OutlinedTextField(
                     value = destination,
                     onValueChange = { destination = it },
                     label = { Text("목적지${if (isCreditCase) " (외상 필수)" else ""}") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        IconButton(onClick = {
+                            if (!isRecordingDestination) {
+                                voiceHelper.startListening { result ->
+                                    destination = result
+                                    isRecordingDestination = false
+                                }
+                                isRecordingDestination = true
+                            } else {
+                                voiceHelper.stopListening()
+                                isRecordingDestination = false
+                            }
+                        }) {
+                            Icon(
+                                Icons.Default.Mic,
+                                contentDescription = "음성 입력",
+                                tint = if (isRecordingDestination) Color.Red else MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 )
 
                 OutlinedTextField(
@@ -1218,7 +1265,28 @@ fun DirectRunDialog(
                     label = { Text("요금 (원)") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        IconButton(onClick = {
+                            if (!isRecordingFare) {
+                                voiceHelper.startListening { result ->
+                                    val digits = voiceHelper.convertKoreanNumberToDigit(result)
+                                    if (digits.isNotEmpty()) fareText = digits
+                                    isRecordingFare = false
+                                }
+                                isRecordingFare = true
+                            } else {
+                                voiceHelper.stopListening()
+                                isRecordingFare = false
+                            }
+                        }) {
+                            Icon(
+                                Icons.Default.Mic,
+                                contentDescription = "음성 입력",
+                                tint = if (isRecordingFare) Color.Red else MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 )
 
                 Text("결제수단", fontWeight = FontWeight.Medium)

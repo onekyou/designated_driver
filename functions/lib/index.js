@@ -1500,6 +1500,11 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
         logger.info(`[onCallStatusChanged:${callId}] 상태 변경 없음 - status: ${afterData.status}, departure_set: ${afterData.departure_set}, destination_set: ${afterData.destination_set}, fare_set: ${afterData.fare_set}`);
         return;
     }
+    // 관리자 직접운행 콜은 콜매니저 본인이 처리하므로 FCM 알림 불필요
+    if (afterData.handledByManager === true) {
+        logger.info(`[onCallStatusChanged:${callId}] 직접운행 콜 - 알림 스킵`);
+        return;
+    }
     logger.info(`[onCallStatusChanged:${callId}] Status changed: ${beforeData.status} → ${afterData.status}`);
     // ✅ 콜매니저에 상태 변경 알림 전송
     try {
