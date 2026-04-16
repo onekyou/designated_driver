@@ -192,17 +192,19 @@ WAITING → ASSIGNED → ACCEPTED → IN_PROGRESS → AWAITING_SETTLEMENT → CO
 
 ---
 
-## 2. DriverStatus (기사 상태 5종)
+## 2. DriverStatus (기사 상태 9종) — kotlin-expert MODELS.md 정정 반영
 
 ### Kotlin 원본
-경로: `driver_app/app/src/main/java/com/designated/driverapp/data/Constants.kt`
+경로: `driver_app/app/src/main/java/com/designated/driverapp/data/model/DriverStatus.kt:3-12`
 
-5개 상태값:
+9개 상태값 (Kotlin 원본 9종 전부):
 - `OFFLINE` (로그아웃 또는 연결 끊김)
 - `ONLINE` / `WAITING` (대기 중, 배차 가능)
 - `ASSIGNED` (배차됨, 수락 대기)
+- **`ACCEPTED`** (수락 직후 중간 상태 — 추가 확인)
 - `PREPARING` (수락 후 운행 준비)
 - `ON_TRIP` (운행 중)
+- **`PENDING_CONFIRM`** (업무마감 후 매니저 확인 대기 — 추가 확인)
 
 ### Flutter Dart 매핑
 
@@ -256,6 +258,13 @@ class DriverStatusAssigned extends DriverStatus {
   @override bool get canReceiveCall => false;
 }
 
+class DriverStatusAccepted extends DriverStatus {
+  const DriverStatusAccepted();
+  @override String toJson() => 'ACCEPTED';
+  @override String get displayName => '수락함';
+  @override bool get canReceiveCall => false;
+}
+
 class DriverStatusPreparing extends DriverStatus {
   const DriverStatusPreparing();
   @override String toJson() => 'PREPARING';
@@ -267,6 +276,13 @@ class DriverStatusOnTrip extends DriverStatus {
   const DriverStatusOnTrip();
   @override String toJson() => 'ON_TRIP';
   @override String get displayName => '운행 중';
+  @override bool get canReceiveCall => false;
+}
+
+class DriverStatusPendingConfirm extends DriverStatus {
+  const DriverStatusPendingConfirm();
+  @override String toJson() => 'PENDING_CONFIRM';
+  @override String get displayName => '정산 대기';
   @override bool get canReceiveCall => false;
 }
 
@@ -290,16 +306,18 @@ ONLINE/WAITING → ASSIGNED → PREPARING → ON_TRIP → WAITING (완료 후 �
 
 ---
 
-## 3. DailySettlementStatus (일일 정산 상태 4종)
+## 3. DailySettlementStatus (일일 정산 상태 4종) — kotlin-expert MODELS.md 정정 반영
 
 ### Kotlin 원본
-경로: `driver_app/.../data/model/DailySettlement.kt`
+경로: `driver_app/.../data/model/SettlementModels.kt:288-293`
 
-4개 상태값:
-- `PENDING_CONFIRM` (기사 제출, 매니저 확인 대기)
-- `CONFIRMED` (매니저 확인 완료, 이체 대기)
-- `TRANSFERRED` (이체 완료, 기사 수령 확인 대기)
-- `SETTLED` (기사 수령 확인, 정산 종료)
+4개 상태값 (Kotlin 원본):
+- **`WORKING`** (근무 중, 마감 전)
+- `PENDING_CONFIRM` (기사 마감 완료, 매니저 확인 대기)
+- `CONFIRMED` (매니저 확인 완료)
+- **`REJECTED`** (매니저 거절, 재제출 필요)
+
+⚠️ **이전 잘못된 정의** (`TRANSFERRED / SETTLED`)는 `CarryOverStatus` 소속이며 본 enum과 별도. §6 참조.
 
 ### Flutter Dart 매핑
 
@@ -310,17 +328,24 @@ sealed class DailySettlementStatus {
   const DailySettlementStatus();
 
   static DailySettlementStatus fromString(String value) => switch (value) {
+        'WORKING' => const DailySettlementStatusWorking(),
         'PENDING_CONFIRM' => const DailySettlementStatusPendingConfirm(),
         'CONFIRMED' => const DailySettlementStatusConfirmed(),
-        'TRANSFERRED' => const DailySettlementStatusTransferred(),
-        'SETTLED' => const DailySettlementStatusSettled(),
+        'REJECTED' => const DailySettlementStatusRejected(),
         _ => DailySettlementStatusUnknown(value),
       };
 
   String toJson();
   String get displayName;
-  /// 정산 진행 단계 (UI progress bar용 1~4)
+  /// 정산 진행 단계 (UI progress bar용 1~3, REJECTED는 -1)
   int get step;
+}
+
+class DailySettlementStatusWorking extends DailySettlementStatus {
+  const DailySettlementStatusWorking();
+  @override String toJson() => 'WORKING';
+  @override String get displayName => '근무 중';
+  @override int get step => 0;
 }
 
 class DailySettlementStatusPendingConfirm extends DailySettlementStatus {
@@ -337,18 +362,11 @@ class DailySettlementStatusConfirmed extends DailySettlementStatus {
   @override int get step => 2;
 }
 
-class DailySettlementStatusTransferred extends DailySettlementStatus {
-  const DailySettlementStatusTransferred();
-  @override String toJson() => 'TRANSFERRED';
-  @override String get displayName => '이체 완료';
-  @override int get step => 3;
-}
-
-class DailySettlementStatusSettled extends DailySettlementStatus {
-  const DailySettlementStatusSettled();
-  @override String toJson() => 'SETTLED';
-  @override String get displayName => '정산 완료';
-  @override int get step => 4;
+class DailySettlementStatusRejected extends DailySettlementStatus {
+  const DailySettlementStatusRejected();
+  @override String toJson() => 'REJECTED';
+  @override String get displayName => '반려됨';
+  @override int get step => -1;
 }
 
 class DailySettlementStatusUnknown extends DailySettlementStatus {
@@ -360,16 +378,16 @@ class DailySettlementStatusUnknown extends DailySettlementStatus {
 }
 ```
 
-### 정산 플로우 (참조)
+### 정산 플로우 (DailySettlementStatus만)
 
 ```
+Driver 근무 중 → WORKING
 Driver submitDailySettlement → PENDING_CONFIRM
 Manager confirmDailySettlement → CONFIRMED
-Manager transferCarryOver → TRANSFERRED
-Driver confirmReceiveCarryOver → SETTLED
+Manager 반려 시 → REJECTED → 기사 재제출 → PENDING_CONFIRM
 ```
 
-상세는 `ios/SHARED_LOGIC.md` §4 참조.
+이체/수령 후속 플로우는 §6 `CarryOverStatus`로 분리. 상세는 `ios/SHARED_LOGIC.md` §4 참조.
 
 ---
 
@@ -471,14 +489,14 @@ enum PaymentMethod {
 
 ---
 
-## 6. CarryOverStatus (이월금 상태 3종, DailySettlementStatus 부분 집합)
+## 6. CarryOverStatus (이월금 상태 3종) — kotlin-expert MODELS.md 정정 반영
 
 ### Kotlin 원본
-경로: `driver_app/.../data/model/CarryOver.kt`
+경로: `driver_app/.../data/model/SettlementModels.kt:279-283`
 
-3개 상태값 (정산 플로우 후반부):
-- `CONFIRMED` (관리자 확인, 이체 대기)
-- `TRANSFERRED` (이체 완료)
+3개 상태값 (정산 이체 단계, DailySettlementStatus와 별도):
+- **`PENDING`** (이월금 발생, 매니저 이체 대기) — `CONFIRMED` 아님
+- `TRANSFERRED` (이체 완료, 기사 수령 확인 대기)
 - `SETTLED` (기사 수령 확인 → 종료)
 
 ### Flutter Dart 매핑
@@ -487,7 +505,7 @@ enum PaymentMethod {
 // lib/domain/enums/carry_over_status.dart
 
 enum CarryOverStatus {
-  confirmed('CONFIRMED', '확인 완료'),
+  pending('PENDING', '이체 대기'),
   transferred('TRANSFERRED', '이체 완료'),
   settled('SETTLED', '수령 확인');
 
@@ -498,12 +516,22 @@ enum CarryOverStatus {
   static CarryOverStatus fromString(String value) =>
       CarryOverStatus.values.firstWhere(
         (e) => e.json == value,
-        orElse: () => CarryOverStatus.confirmed,
+        orElse: () => CarryOverStatus.pending,
       );
 
   String toJson() => json;
 }
 ```
+
+### 이월금 플로우 (CarryOverStatus만)
+
+```
+정산 마감 시 이월금 발생 → PENDING
+Manager transferCarryOver → TRANSFERRED
+Driver confirmReceiveCarryOver → SETTLED
+```
+
+`DailySettlementStatus`(§3)와 독립된 별도 워크플로우.
 
 ---
 
