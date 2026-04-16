@@ -535,6 +535,74 @@ Driver confirmReceiveCarryOver → SETTLED
 
 ---
 
+## 6.1 PresenceStatus (기사 Presence 상태 4종) — kotlin-expert NOTIFIERS.md 보완 반영
+
+### Kotlin 원본
+경로: `driver_app/.../service/PresenceManager.kt:37-41`
+
+4개 상태값:
+- `online` (포그라운드, Realtime DB 연결 살아있음)
+- `background` (앱 백그라운드, 연결 살아있음)
+- `offline` (Realtime DB 연결 끊김 또는 로그아웃)
+- `unknown` (초기 상태 또는 데이터 손상 fallback)
+
+### Flutter Dart 매핑
+
+```dart
+// lib/domain/enums/presence_status.dart
+
+sealed class PresenceStatus {
+  const PresenceStatus();
+
+  static PresenceStatus fromString(String? value) => switch (value) {
+        'online' => const PresenceStatusOnline(),
+        'background' => const PresenceStatusBackground(),
+        'offline' => const PresenceStatusOffline(),
+        _ => const PresenceStatusUnknown(),
+      };
+
+  String toJson();
+  String get displayName;
+  /// CF checkAssignedTimeout이 "문제"로 취급하는지 여부
+  /// online/background = 정상, offline만 문제
+  bool get isProblematic;
+}
+
+class PresenceStatusOnline extends PresenceStatus {
+  const PresenceStatusOnline();
+  @override String toJson() => 'online';
+  @override String get displayName => '온라인';
+  @override bool get isProblematic => false;
+}
+
+class PresenceStatusBackground extends PresenceStatus {
+  const PresenceStatusBackground();
+  @override String toJson() => 'background';
+  @override String get displayName => '백그라운드';
+  @override bool get isProblematic => false;
+}
+
+class PresenceStatusOffline extends PresenceStatus {
+  const PresenceStatusOffline();
+  @override String toJson() => 'offline';
+  @override String get displayName => '오프라인';
+  @override bool get isProblematic => true;
+}
+
+class PresenceStatusUnknown extends PresenceStatus {
+  const PresenceStatusUnknown();
+  @override String toJson() => 'unknown';
+  @override String get displayName => '알 수 없음';
+  @override bool get isProblematic => false;
+}
+```
+
+**소문자 표기 주의**: `CallStatus`(대문자) / `DriverStatus`(대문자)와 달리 Presence는 **소문자**. Kotlin 원본 일치.
+
+**저장 위치**: Firebase Realtime DB `presence/drivers/{uid}.status` (Firestore 아님).
+
+---
+
 ## 7. NotificationType (FCM 메시지 타입 6종)
 
 ### Kotlin 원본
