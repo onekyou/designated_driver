@@ -38,10 +38,10 @@
 |------|------|----------|----------|
 | 7 | iOS LockScreen 대체 (B: Time Sensitive / R1: CallKit 심사 실측) | 기사앱 배차 UX | ✅ **Time Sensitive MVP + Feature Flag 롤백 구조** |
 | 8 | iOS Foreground Service 대체 (onDisconnect + APNs silent + BGAppRefreshTask 3단) | Presence | ✅ **옵션 C, 기존 PresenceService.dart 1:1 포팅 이미 완료** |
-| 9 | 자동로그인 credential 이관 (MethodChannel 마이그레이션 vs 재로그인 강제 UX) | 전환 시 기사 재로그인 리스크 | ⏳ 미결 |
-| 10 | 손님앱 전환 전략 (즉시 교체 vs forceUpdate vs 점진적) | 배포된 Kotlin 사용자 | ⏳ 미결 |
-| 11 | 측정 인프라 (수락률 로깅, R1 발동 기준 평가 가능화) | iOS 출시 후 R1 판단 | ⏳ 미결 |
-| 12 | 로컬 저장소 (sqflite 신규 도입 vs shared_preferences 유지) | 정산 캐시 | ⏳ 미결 |
+| 9 | 자동로그인 credential 이관 (MethodChannel 마이그레이션 vs 재로그인 강제 UX) | 전환 시 기사 재로그인 리스크 | ✅ **재로그인 + 이메일 사전 채움 + Firebase Auth 자동 상속 기대** |
+| 10 | 손님앱 전환 전략 (즉시 교체 vs forceUpdate vs 점진적) | 배포된 Kotlin 사용자 | ✅ **같은 applicationId + Staged Rollout + Remote Config 최소 버전** |
+| 11 | 측정 인프라 (수락률 로깅, R1 발동 기준 평가 가능화) | iOS 출시 후 R1 판단 | ✅ **CF acceptanceEvents + Analytics/Crashlytics 즉시 도입** |
+| 12 | 로컬 저장소 (sqflite 신규 도입 vs shared_preferences 유지) | 정산 캐시 | ✅ **MVP shared_preferences + Firestore 오프라인, sqflite는 R1** |
 
 ### 트랙 3 — Phase 2 + 잔여 (Mac 도착 시점 논의)
 
@@ -391,7 +391,207 @@ class IncomingCallService {
 
 ---
 
-### 의제 9~14: (3차 묶음 논의 착수 시 상세 채움)
+### 의제 9: 자동로그인 credential 이관 — **재로그인 강제 + UX 보강** (2026-04-16)
+
+**결정**: Kotlin EncryptedSharedPreferences → Flutter flutter_secure_storage 직접 이관 배제. **Firebase Auth currentUser 자동 상속 기대 + 실패 시 재로그인** 원칙. 재로그인 UX는 이메일 사전 채움 + 비밀번호 재설정 경로 다이얼로그로 최적화.
+
+**근거** (양측 수렴):
+- **kotlin-expert 실측**: Kotlin `SecurePreferencesManager.kt` 파일명 `"secure_prefs"`, 키 3종(`auto_login`/`identifier`/`password`), AES256-GCM + MasterKey `_androidx_security_master_key_`
+- **flutter-expert 실측**: Flutter `auth_local_datasource.dart` 키 3종(`saved_email`/`saved_password`/`auto_login_enabled`) — **파일명·키 이름·암호화 방식 모두 다름** → flutter_secure_storage가 Kotlin 파일 직접 읽기 불가
+- **공통 결론**: 기사 200명 규모 + MethodChannel 마이그레이션 90~95% 성공률이나 개발 2일 + 테스트 부담
+
+**구현 사양**:
+
+1. **Flutter 앱 첫 실행 시 Firebase Auth 세션 자동 상속 시도**:
+   ```dart
+   final user = FirebaseAuth.instance.currentUser;
+   if (user != null) {
+     // 세션 유효 → collectionGroup 쿼리로 기사 문서 재조회 → 홈 진입
+   } else {
+     // 세션 무효 → 로그인 화면 (이메일 사전 채움)
+   }
+   ```
+   - 같은 applicationId (`com.designated.driverapp.app`)이면 Firebase Auth SDK 내부 토큰이 `shared_prefs/com.google.firebase.auth.api.Store.{projectId}.xml`에 잔존 → 자동 상속 기대
+
+2. **재로그인 UX 보강**:
+   - 마지막 이메일 `shared_preferences` 1건 저장 (MethodChannel 경유 Kotlin 측 identifier 1회 복사 선택사항)
+   - 로그인 화면 진입 시 이메일 필드 자동 채움
+   - **"비밀번호 찾기" 버튼 상단 노출** (기사 연령대 고려, flutter-expert 지적)
+
+3. **iOS Keychain 설정 필수** (flutter-expert):
+   ```dart
+   const FlutterSecureStorage(
+     iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock_this_device),
+   )
+   ```
+   - 기본 `unlocked`는 **잠금화면 FCM 수신 시 토큰 조회 불가** — 배차 FCM 처리 영향
+
+4. **손님앱**: Anonymous Auth는 Firebase Auth SDK가 자동 관리 → credential 이관 **이슈 없음**. 의제 9는 **기사앱 전용**
+
+**위험 신호**:
+- Firebase Auth currentUser 자동 상속은 **Kotlin `firebase-auth-ktx` (bom 33.x) vs Flutter `firebase_auth ^5.3.1` SDK 간 호환성 실측 필요**. 실패 시 전원 재로그인
+- `SecurePreferencesManager.kt:39-44` 평문 password 저장 패턴을 **Flutter에서 재현하지 말 것**. flutter_secure_storage는 그대로 보관해도 HW-backed 암호화이나 **Phase 1부터 비밀번호 미저장 + Firebase Auth 세션 의존**이 권장
+
+---
+
+### 의제 10: 손님앱 전환 전략 — **같은 applicationId + Staged Rollout** (2026-04-16)
+
+**결정**: Kotlin 손님앱 `com.designated.customer.app` 패키지명 유지 + Flutter 버전으로 Google Play 자동 업데이트. Staged Rollout(1%→5%→25%→100%) 적용. iOS는 신규 출시 별도 타이밍.
+
+**근거** (양측 수렴):
+- **kotlin-expert**: CLAUDE.md "미배포" 기록이나 `versionCode = 12` 제출 이력 가능성 존재 → 사용자 확인 필요. Anonymous Auth uid 자동 상속 기대
+- **flutter-expert**: 같은 applicationId로 Play Store 업데이트 경로 성립. `in_app_update: ^4.2.3` + `firebase_remote_config: ^5.1.0` 최소 버전 강제 구조 권장
+
+**구현 사양**:
+
+1. **Android — 같은 applicationId 유지**:
+   - `com.designated.customer.app` 그대로 Flutter 앱 사용
+   - `versionCode`만 증가 (Kotlin 12 → Flutter 13 이상)
+   - SharedPreferences 평문 데이터(Install Referrer 10+ 필드) 자동 보존
+   - Firebase Auth Anonymous uid 자동 상속 기대 (실측 필요)
+
+2. **Staged Rollout (Google Play Console)**:
+   - Internal Testing 1주 (테스터 5~10명)
+   - Closed Testing / Beta 2주 (외부 기사 사용자)
+   - Open Testing 1주 + Production 5% → 25% → 100% (각 3일)
+
+3. **iOS — 독립 신규 출시**:
+   - 기존 Kotlin iOS 앱 없음 → Flutter 버전이 첫 출시
+   - Android Staged Rollout 안정화 후 iOS 착수 가능
+
+4. **Remote Config 최소 버전 강제**:
+   - `firebase_remote_config` 도입
+   - Remote Config 키: `min_supported_version_android`, `min_supported_version_ios`
+   - 앱 시작 시 버전 체크 → 미달 시 강제 업그레이드 화면
+   - (Apple 공식 forceUpdate API 없음을 커뮤니티 패턴으로 보완)
+
+5. **Firestore 데이터 호환성** (기존 문서 그대로):
+   - `customers/{uid}`, `customerInfo/{phone}`, `customerPoints/{phone}` 경로 보존
+   - `customerInfo/{phone}.fcmToken`은 Flutter 첫 실행 시 재발급 (의제 4·5 정합)
+
+**필수 패키지 추가**:
+- `in_app_update: ^4.2.3` (Android In-App Updates)
+- `firebase_remote_config: ^5.1.0` (양 플랫폼 최소 버전 강제)
+
+**위험 신호**:
+- **Kotlin 손님앱 Play Store 실제 배포 상태를 사용자(사업주)가 명확히 확인** 필요. CLAUDE.md "미배포"는 명세 기록, versionCode 12 제출 이력은 실무 정황
+- Anonymous Auth uid 자동 상속 실패 시 **기존 손님의 `customers/{uid}`/포인트/등급 전부 고아** → 심각한 신뢰 손실. 실기기 업그레이드 검증 필수
+- Install Referrer SharedPreferences 10+ 필드 MethodChannel 이관 누락 시 **외상 결제 계좌 정보 빈칸** 리그레션 (검토 포인트 3 재확인)
+
+---
+
+### 의제 11: 측정 인프라 — **CF 서버측 이벤트 + 클라이언트 Analytics/Crashlytics 병행** (2026-04-16)
+
+**결정**: **양측 권고 모두 채택**. CF에 `acceptanceEvents` 컬렉션 + 기사 문서 `platform` 필드 + Flutter/Kotlin 양쪽에 `firebase_analytics` + `firebase_crashlytics` 즉시 도입.
+
+**근거** (양측 중요 발견):
+- **kotlin-expert**: CF `notifications` 컬렉션(ACK 기록)만 존재, 수락률 카운터 부재 확인. Kotlin 기사앱도 Analytics 호출 0건 (Grep)
+- **flutter-expert**: Flutter `pubspec.yaml`에 `firebase_analytics`, `firebase_crashlytics` **둘 다 없음** (Grep 0건). **R1 발동 판단 근거 데이터 0 상태**
+
+**구현 사양**:
+
+1. **서버 측 (CF) — `acceptanceEvents` 컬렉션 신규**:
+   ```
+   /acceptanceEvents/{eventId}:
+     callId, assignedDriverId, platform ("android" | "ios"),
+     assignedAt, acceptedAt | rejectedAt | timeoutAt,
+     latencyMs, outcome: "accepted" | "rejected" | "timeout"
+   ```
+   - `onCallStatusChanged` CF에 ASSIGNED → ACCEPTED/WAITING 전이 시 이벤트 기록
+   - `checkAssignedTimeout`에 타임아웃 시 `outcome: "timeout"` 이벤트 기록
+   - 월 집계: `aggregateMonthlyStats` 신규 스케줄러 → `/monthlyStats/{YYYY-MM}`
+
+2. **기사 문서 `platform` 필드 추가** (의제 5 `fcmTokenPlatform`과 병합):
+   - Flutter 첫 로그인 시 `platform: Platform.isIOS ? 'ios' : 'android'` 저장 (의제 5 메타 필드와 동일 write)
+   - Kotlin 측도 `LoginViewModel.kt` 성공 경로에 `platform: "android"` 1줄 추가
+   - 기존 기사 200명 문서 1회성 마이그레이션 스크립트 (`platform = "android"` 기본값)
+
+3. **클라이언트 측 Flutter 필수 패키지**:
+   ```yaml
+   firebase_analytics: ^11.3.0
+   firebase_crashlytics: ^4.1.0
+   ```
+
+4. **최소 지표 4종** (flutter-expert):
+   - **수락률**: `call_accepted` / `call_assigned_received`. 목표 95%+, R1 임계치 80% 미만
+   - **배차 Time-To-Accept**: 목표 30초, 임계치 90초 초과
+   - **FCM 도달률**: 클라이언트 수신 이벤트 / CF 전송 count. 목표 98%+, 임계치 90% 미만
+   - **Offline 판정 빈도**: 일 1명당 3회 초과 시 Presence 재검토
+
+5. **Crashlytics Flutter 설정** (`main.dart`):
+   ```dart
+   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+   PlatformDispatcher.instance.onError = (error, stack) {
+     FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+     return true;
+   };
+   ```
+   - iOS Podfile Run Script Phase 추가 (dSYM 업로드)
+
+6. **Kotlin 측도 동등 추가**:
+   - `driver_app/build.gradle.kts`에 `firebase-analytics-ktx` + `firebase-crashlytics-ktx` 추가
+   - `LoginViewModel`, `MyFirebaseMessagingService`에 `logEvent('call_assigned_received', ...)` 호출 추가
+
+7. **데이터 집계 단계적 확장**:
+   - MVP: Firestore 직접 집계 + Manager 앱 대시보드
+   - 100 사무실 초과: CF 배치 집계 + `daily_stats/` 컬렉션
+   - 2000 사무실: BigQuery + Looker Studio
+
+**위험 신호**:
+- **측정 인프라 없으면 R1_LOCKSCREEN 발동 기준 "5%p 하락" 평가 불가능** (TRIGGERS.md 명시). 의제 7 결정(Time Sensitive MVP + R1 CallKit)과 연결되므로 **Phase 1 출시 전 측정 인프라 반드시 구축**
+- `acceptanceEvents` 신규 컬렉션 Firestore 보안 규칙 업데이트 필수 (admin 전용 write)
+- Analytics/Crashlytics 추가 ~30MB 증가 (iOS 앱 바이너리) → App Clip 50MB 한도와 무관(메인 앱만 영향)
+- Kotlin 측 Analytics 동시 도입은 **별도 과제로 분리** (플랜 범위 밖이나 Phase 1 출시 전 완료 필요)
+
+---
+
+### 의제 12: 로컬 저장소 — **MVP는 shared_preferences + Firestore 오프라인, sqflite는 R1** (2026-04-16)
+
+**결정**: Phase 1 MVP는 `shared_preferences` + `flutter_secure_storage` + Firebase Firestore 자동 오프라인 persistence로 정산 캐시 커버. **sqflite / drift 신규 도입은 R1_PENDING_SYNC 발동 시점**으로 연기.
+
+**근거** (양측 부분 대립, flutter-expert 권고 채택):
+- **kotlin-expert**: Phase 1부터 sqflite 도입 권장. Kotlin Room 2테이블(`pending_syncs` + `settlement_cache`) 운영 중이므로 등가 보존 필요
+- **flutter-expert**: MVP는 shared_preferences + Firestore offline으로 충분. 정산 캐시 1년 ~7200 row × 200B = ~1.4MB, shared_preferences 권장 한도 근처이나 가능. sqflite 초기 도입 러닝 커브 대비 실익 작음
+- **중재자 판단**: Firestore SDK 자동 오프라인이 핵심 데이터를 커버 + Kotlin `addPendingSync` 호출처 자체가 불명확(FUNCTIONAL_INVENTORY §1.7 지적) → Phase 1은 flutter-expert 안. 단 R1_PENDING_SYNC 발동 시 즉시 도입
+
+**Phase 1 MVP 구조**:
+- **자격증명**: `flutter_secure_storage` (iOS Keychain accessibility `first_unlock_this_device`)
+- **사무실 정보**: `shared_preferences` (Install Referrer 10+ 필드 포함)
+- **정산 캐시**: Firestore SDK 자동 offline persistence (cloud_firestore 기본 enable)
+- **이월금 리스너**: cloud_firestore snapshots() Stream (유일한 실시간 리스너)
+
+**R1_PENDING_SYNC 발동 시** (R1_PENDING_SYNC TRIGGERS.md 조건 충족):
+- 패키지 채택 우선순위:
+  1. **drift (권장)**: 타입 안전 + 코드 생성 + Flow<List<T>> 등가 Stream 지원. Kotlin Room과 가장 유사
+  2. **sqflite**: 성숙 + 공식. 수동 SQL 필요
+  3. **isar**: 가장 빠르지만 maintenance 불확실 (pub.dev 재확인 필요)
+- Kotlin `PendingSyncEntity.callSettlementJson` Gson 직렬화 → Flutter Freezed JsonSerializable 이관
+
+**위험 신호**:
+- Kotlin `SettlementDao.kt:67` `observePendingSyncCount(): Flow<Int>` UI 실시간 배지 패턴 → shared_preferences로는 재현 불가. **Phase 1은 해당 배지 UI 생략하거나 Firestore 리스너 대체**
+- `SettlementRepository.kt:145, 194-228` optimistic version compare는 순수 함수이나 SQL 트랜잭션 내 보장 → Phase 1에선 Firestore 트랜잭션으로 대체 가능
+- Firestore offline persistence 기본 크기 한도 **100MB** (충분). 이를 초과하는 로컬 DB 요구가 발생하면 R1 긴급 진입
+
+---
+
+### 의제 13, 14: (Mac 도착 후 + 기반 정책 — 추후 상세 논의)
+
+---
+
+## 6. 신규 식별 필요 조치 (플랜 확정 시 반영)
+
+1. **Podfile iOS 15 상향** + `permission_handler` 매크로 설정 (의제 1 + 6)
+2. **CF 전체 28곳+ `apns` 블록 audit** (의제 4 확대 과제)
+3. **`driver_app_flutter/ios/Runner/PrivacyInfo.xcprivacy` 신규 작성** (의제 6)
+4. **`fcm_service.dart` `interruptionLevel: .timeSensitive` 추가** (의제 7)
+5. **`feature_flags.dart` + `incoming_call_service.dart` 신규 작성** (의제 7 R1 롤백 대비)
+6. **CF `acceptanceEvents` 컬렉션 + 월 집계 스케줄러 신규** (의제 11, R1 평가용)
+7. **기사 문서에 `platform` + `fcmTokenPlatform` 필드 추가** (의제 5 + 11 통합)
+8. **Flutter pubspec: `firebase_analytics`, `firebase_crashlytics`, `in_app_update`, `firebase_remote_config` 추가** (의제 10 + 11)
+9. **Kotlin 기사앱에도 Analytics/Crashlytics 도입** (별도 과제, Phase 1 출시 전 완료)
+10. **기사 재로그인 UX: 이메일 사전 채움 + 비밀번호 재설정 경로 다이얼로그** (의제 9)
+11. **iOS `KeychainAccessibility.first_unlock_this_device` 설정** (의제 9)
+12. **손님앱 Firestore 보안 규칙 업데이트** (`acceptanceEvents` 컬렉션 admin 전용)
 
 ---
 
