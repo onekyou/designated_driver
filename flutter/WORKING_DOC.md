@@ -48,7 +48,7 @@
 | 순서 | 주제 | 영향 범위 | 결정 상태 |
 |------|------|----------|----------|
 | 13 | 손님앱 Phase 2 App Clip Swift 타겟 설계 | 귀속 완성 | ⏳ Mac 대기 |
-| 14 | 잔여 (Dart 3 patterns, Riverpod 2.x 고정, FVM, App Check, split-per-abi) | 기반 정책 | ⏳ 미결 |
+| 14 | 잔여 (Dart 3 patterns, Riverpod 2.x 고정, FVM, App Check, split-per-abi) | 기반 정책 | ✅ **8건 결정 완료 (sealed class / Riverpod 2.x / FVM 즉시 / Shorebird·App Check R2 / App Bundle / null-safety / deferred 배제)** |
 
 ---
 
@@ -574,7 +574,35 @@ class IncomingCallService {
 
 ---
 
-### 의제 13, 14: (Mac 도착 후 + 기반 정책 — 추후 상세 논의)
+### 의제 14: 잔여 기반 정책 — **8개 하위 결정 완료** (2026-04-16)
+
+**환경 확인** (flutter-expert): Dart SDK `^3.5.4`, Riverpod `^2.5.1` + annotation/generator 2.x, `.fvmrc`/`firebase_app_check`/`shorebird.yaml` **전부 미도입**.
+
+| 하위 | 결정 | 핵심 근거 |
+|------|------|----------|
+| **14-A** Dart 언어 | **sealed class + patterns 적극 활용**. records는 private 함수 반환에만. `CallStatus` String 상수 → sealed class/enum 점진 마이그레이션 | Dart 3.5.4 전제이므로 보수 유지 = 기술 부채. Kotlin sealed class ↔ Dart sealed class 1:1 매핑 자연스러움 |
+| **14-B** Riverpod 버전 | **`^2.5.1` caret 유지** (3.x pre-release 절대 금지) | Caret이 2.x 내 자동 상승 허용, 3.0은 자동 차단. Provider API 전면 재작성 비용 회피 |
+| **14-C** FVM 도입 | **즉시 도입**. `.fvmrc`로 3.41.6 고정 + `.gitignore .fvm/flutter_sdk/` + Codemagic `codemagic.yaml flutter: fvm` | 현재 `/c/Users/kala1/flutter_sdk/` 하드코딩은 CI/CD 재현 불가. 코드 리포지토리 재현성 확보 |
+| **14-D** Shorebird (OTA) | **Phase 1 배제, R2 보류** | 월 $20+ 유료 + 초기 설정 복잡. 긴급 패치 필요성은 Crashlytics 데이터(의제 11) 기반 `R2_HOTFIX_NEEDED` 발동 시 재검토 |
+| **14-E** Firebase App Check | **Phase 1 배제, R2 도입** | Firestore 보안 규칙 + Auth UID 검증만으로 Phase 1 충분. 도입 시 Kotlin 기사앱 동시 업데이트 아니면 **Firestore 쓰기 전면 실패** 리스크 |
+| **14-F** Android 빌드 포맷 | **App Bundle(.aab) only**. `flutter build appbundle --release`. iOS는 단일 IPA, App Store Connect 자동 thinning | Google Play 필수. `--split-per-abi`는 Galaxy Store 등 외부 배포 시에만 |
+| **14-G** Null Safety | **Freezed `required` + nullable `?` 명시 + default `@Default()` annotation**. `late` 남용 금지. Firestore `fromJson` 시 `json['field'] as String? ?? ''` 안전 파싱 | `late` LateInitializationError 런타임 크래시 방지 |
+| **14-H** Deferred Components / ODR | **Phase 1 배제** | Flutter deferred components iOS 미지원. 앱 크기 ~30MB, Google Play 150MB 여유 큼 |
+
+**중재자 보조 결정**:
+- **FVM 도입 시점**: **즉시** (Phase 6 코드 수정 전 병행). `.fvmrc` 파일 생성은 Phase 6 착수 직전 단계로 배정
+- **Dart 3 스타일 가이드 문서화**: 별도 파일 아닌 `flutter/driver_app/MVP/MODELS.md` 서두에 원칙 5줄 명시 (간소화)
+
+**추가 식별 조치** (§6 누적):
+13. `.fvmrc` 파일 생성 + `.gitignore`에 `.fvm/flutter_sdk/` 추가
+14. `codemagic.yaml`에 `flutter: fvm` 설정 (의제 3 결정 시 반영)
+15. Kotlin `CallStatus` String 상수 → Dart sealed class 전환 시 마이그레이션 가이드 (MODELS.md)
+
+---
+
+### 의제 13: Phase 2 App Clip Swift — (Mac 도착 후 상세 논의)
+
+**현 상태**: 보류. Mac 도착 + Phase 1 iOS 출시 안정화 후 착수. 기존 `ios/customer_app/PLAN.md` 설계를 재활용할 예정 (App Group, Custom Token 이관, AASA 호스팅 구조).
 
 ---
 
