@@ -1274,22 +1274,17 @@ class AddressSearchResult with _$AddressSearchResult {
   factory AddressSearchResult.fromKakao(Map<String, dynamic> kakao) {
     final road = kakao['road_address'] as Map<String, dynamic>?;
     final jibun = kakao['address'] as Map<String, dynamic>?;
+    // P0-C.1: Dart에는 `?.let`이 없음. double.tryParse 직접 호출 (null 안전)
+    final yStr = kakao['y'] as String?;
+    final xStr = kakao['x'] as String?;
     return AddressSearchResult(
       address: (road?['address_name'] ?? jibun?['address_name'] ?? '') as String,
       roadAddress: road?['address_name'] as String?,
       jibunAddress: jibun?['address_name'] as String?,
       placeName: kakao['place_name'] as String?,
-      latitude: (kakao['y'] as String?)?.let((s) => double.tryParse(s)),
-      longitude: (kakao['x'] as String?)?.let((s) => double.tryParse(s)),
+      latitude: yStr != null ? double.tryParse(yStr) : null,
+      longitude: xStr != null ? double.tryParse(xStr) : null,
     );
-  }
-}
-
-// Dart에는 Kotlin `?.let`이 없어 확장 함수 필요
-extension _NullableLet<T> on T? {
-  R? let<R>(R Function(T) block) {
-    final v = this;
-    return v == null ? null : block(v);
   }
 }
 ```

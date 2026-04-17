@@ -69,6 +69,7 @@
 ```dart
 // lib/features/driver/notifiers/driver_workflow_notifier.dart
 
+import 'dart:io' show Platform;  // P0-A.1: Platform.isIOS 사용 (의제 5/11)
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/state/driver_screen_ui_state.dart';
 import '../../domain/models/call_info.dart';
@@ -86,6 +87,7 @@ import 'package:firebase_analytics/firebase_analytics.dart';
 ```dart
 class DriverWorkflowNotifier extends StateNotifier<DriverScreenUiState> {
   DriverWorkflowNotifier({
+    required this.ref,          // P0-A.2: ref 주입 (depositRatioProvider 등 타 provider 접근용)
     required this.firestore,
     required this.auth,
     required this.prefs,
@@ -94,6 +96,7 @@ class DriverWorkflowNotifier extends StateNotifier<DriverScreenUiState> {
     _subscribeAuth();
   }
 
+  final Ref ref;                 // P0-A.2: Riverpod Ref 보유
   final FirebaseFirestore firestore;
   final FirebaseAuth auth;
   final SharedPreferences prefs;
@@ -112,6 +115,7 @@ class DriverWorkflowNotifier extends StateNotifier<DriverScreenUiState> {
   StreamSubscription<User?>? _authSub;
 
   void _subscribeAuth() {
+    _authSub?.cancel();  // P0-A.3: 재진입 방지 (기존 구독 해제 후 재구독)
     _authSub = auth.authStateChanges().listen((user) {
       if (user == null) {
         _stopListeners();
@@ -138,6 +142,7 @@ class DriverWorkflowNotifier extends StateNotifier<DriverScreenUiState> {
 final driverWorkflowProvider =
     StateNotifierProvider<DriverWorkflowNotifier, DriverScreenUiState>((ref) {
   return DriverWorkflowNotifier(
+    ref: ref,  // P0-A.2: depositRatioProvider / todaySettlementProvider 등 접근용
     firestore: ref.watch(firestoreProvider),
     auth: ref.watch(firebaseAuthProvider),
     prefs: ref.watch(sharedPreferencesProvider),
@@ -1193,6 +1198,7 @@ class CarryOverState with _$CarryOverState {
 
 class CarryOverNotifier extends StateNotifier<CarryOverState> {
   CarryOverNotifier({
+    required this.ref,        // P0-A.2: ref 주입 (필요 시 타 provider 접근)
     required this.firestore,
     required this.auth,
     required this.prefs,
@@ -1200,6 +1206,7 @@ class CarryOverNotifier extends StateNotifier<CarryOverState> {
     _subscribeAuth();
   }
 
+  final Ref ref;              // P0-A.2: Riverpod Ref 보유
   final FirebaseFirestore firestore;
   final FirebaseAuth auth;
   final SharedPreferences prefs;
@@ -1208,6 +1215,7 @@ class CarryOverNotifier extends StateNotifier<CarryOverState> {
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _carryOverSub;
 
   void _subscribeAuth() {
+    _authSub?.cancel();  // P0-A.3: 재진입 방지 (기존 구독 해제 후 재구독)
     _authSub = auth.authStateChanges().listen((user) {
       _stopListener();
       if (user != null) _startListener(user.uid);
@@ -1322,6 +1330,7 @@ class CarryOverNotifier extends StateNotifier<CarryOverState> {
 final carryOverProvider =
     StateNotifierProvider<CarryOverNotifier, CarryOverState>((ref) {
   return CarryOverNotifier(
+    ref: ref,  // P0-A.2
     firestore: ref.watch(firestoreProvider),
     auth: ref.watch(firebaseAuthProvider),
     prefs: ref.watch(sharedPreferencesProvider),

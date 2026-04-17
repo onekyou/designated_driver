@@ -254,7 +254,7 @@ Future<void> requestCall() async {
       status: 'WAITING',                            // Kotlin line 317 "REQUESTED" → "WAITING"
       customerId: phone,
       customerName: customerName,
-      customerGrade: pointState.customerPoints?.grade.jsonValue.toLowerCase() ?? 'bronze',
+      customerGrade: pointState.customerPoints?.grade.json.toLowerCase() ?? 'bronze',  // P0-B.3: jsonValue → json (ENUMS.md CustomerGrade 일관)
       pointsUsed: pointState.usePoints ? pointState.pointsToUse : 0,
     );
 
