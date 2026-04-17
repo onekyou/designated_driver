@@ -1,5 +1,17 @@
 # 잔여 작업
 
+## 기사앱 — iOS 인벤토리 작업 중 발견 (Phase 0, 2026-04-15)
+| ID | 이슈 | 우선순위 | 설명 |
+|----|------|---------|------|
+| AND-01 | LockScreenActivity.rejectCallDirectly() dead code | 낮음 | 3/18 거절 버튼 제거 후 메서드만 잔존. 단순 cleanup. `LockScreenActivity.kt:205-247` |
+| AND-02 | PendingSync 큐 라우팅 조건 불명 | **중간 (iOS 출시 전 검증 권장)** | `SettlementRepository.addPendingSync` 호출처 조건 분기 모호. 오프라인 정산이 실제로 큐잉되는지 검증 필요 |
+| AND-03 | PresenceManager.onLogout 호출 누락 가능성 | **중간 (iOS 출시 전 수정 권장)** | `LoginViewModel.logout`이 `auth.signOut()`만 호출. presence cleanup 누락 시 다음 로그인 혼선 위험 |
+| AND-04 | 손님앱 ACCEPTED/IN_PROGRESS FCM type 이름 미문서화 | 낮음 | CUST-03 작업이 어느 type 문자열을 쓰는지 CF 코드 재확인 + CLAUDE.md/SHARED_LOGIC.md 갱신 |
+| AND-05 | Firestore runTransaction 오프라인 실패 정책 비일관 | 중간 (구조 개선) | `performFirestoreUpdate` 공통 핸들러만 try/catch, 호출 사이트별 회복 UX 없음. 견고성 ↑ 작업 |
+| AND-06 | LockScreen 상태에서 취소 FCM 누락 | 기존 발견 (`.agent-teams/CROSS_VERIFICATION_LOG.md:51`) | 포그라운드는 정상, 백그라운드/LockScreen에서 누락. iOS도 동일 결함 막아야 |
+
+→ **iOS 출시 전 AND-02, AND-03 우선 검증·수정 권장** (Android와 iOS가 같은 결함 공유 시 해결 비용 2배)
+
 ## 보안 강화 (6건) - 플레이스토어 배포 전 필수
 | 이슈 | 내용 |
 |------|------|

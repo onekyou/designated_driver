@@ -136,6 +136,13 @@
 ### Hook 설정
 - PreToolUse hook: SendMessage에 shutdown_request 포함 시 차단
 
+## 사용자 프로필
+- [iOS 경험](memory/user_ios_experience.md) — App Store 출시 무경험, Android는 숙련. iOS 용어는 기초부터 + Android 비유
+- [Apple iOS 식별자](memory/apple_ios_ids.md) — Team ID `VCJD377MAU`, Bundle ID `com.designated.driverapp.app`
+
+## P0 진행 상태
+- [P0 재검증 2026-04-17](memory/p0_status_2026-04-17.md) — REVIEW_FINDINGS 9건 중 D.1/E.1(a) 완료, 5건 오늘 패치, B.2 false positive, B.1/E.1(b) Phase B 이연
+
 ## 피드백
 | 파일 | 내용 |
 |------|------|

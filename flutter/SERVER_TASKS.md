@@ -301,6 +301,9 @@ const db = admin.firestore();
 interface RecordEventInput {
   callId: string;
   assignedDriverId: string;
+  provinceId: string;       // ★ P0-D.1 패치: driver 경로 구성용
+  cityId: string;           // ★ 호출처 onCallStatusChanged의 afterData에서 추출 후 전달
+  officeId: string;         // ★ checkAssignedTimeout의 callData에서 추출
   outcome: "accepted" | "rejected" | "timeout";
   assignedAt: Timestamp;
   rejectReason?: string;
@@ -309,14 +312,19 @@ interface RecordEventInput {
 /**
  * acceptanceEvents 컬렉션에 이벤트 기록.
  * onCallStatusChanged, checkAssignedTimeout에서 호출.
+ *
+ * ⚠️ P0-D.1 패치 (REVIEW_FINDINGS.md): driver 경로 명시 구성.
+ * 이전 버전은 `<driver_path>` 플레이스홀더 리터럴이라 CF 런타임 실패.
  */
 export async function recordAcceptanceEvent(input: RecordEventInput): Promise<void> {
-  const driverSnap = await db.doc(`<driver_path>/${input.assignedDriverId}`).get();
+  const driverRef = db
+    .collection("provinces").doc(input.provinceId)
+    .collection("cities").doc(input.cityId)
+    .collection("offices").doc(input.officeId)
+    .collection("designated_drivers").doc(input.assignedDriverId);
+  const driverSnap = await driverRef.get();
   const driverData = driverSnap.data();
   const platform = (driverData?.platform ?? "android") as "android" | "ios";
-  const officeId = driverData?.officeId ?? "";
-  const provinceId = driverData?.provinceId ?? "";
-  const cityId = driverData?.cityId ?? "";
 
   const outcomeAt = Timestamp.now();
   const latencyMs = input.outcome === "accepted"
@@ -327,9 +335,9 @@ export async function recordAcceptanceEvent(input: RecordEventInput): Promise<vo
     callId: input.callId,
     assignedDriverId: input.assignedDriverId,
     platform,
-    officeId,
-    provinceId,
-    cityId,
+    officeId: input.officeId,
+    provinceId: input.provinceId,
+    cityId: input.cityId,
     assignedAt: input.assignedAt,
     outcome: input.outcome,
     outcomeAt,
@@ -354,8 +362,12 @@ if (beforeStatus === "ASSIGNED" && afterStatus === "ACCEPTED") {
   await recordAcceptanceEvent({
     callId,
     assignedDriverId: afterData.assignedDriverId,
+    provinceId: afterData.provinceId,
+    cityId: afterData.cityId,
+    officeId: afterData.officeId,
     outcome: "accepted",
-    assignedAt: beforeData.assignedTime ?? Timestamp.now(),
+    // ★ P1-17 패치: assignedTime → assignedTimestamp (실제 Firestore 필드명)
+    assignedAt: beforeData.assignedTimestamp ?? Timestamp.now(),
   });
 }
 
@@ -363,8 +375,11 @@ if (beforeStatus === "ASSIGNED" && afterStatus === "WAITING" && afterData.reject
   await recordAcceptanceEvent({
     callId,
     assignedDriverId: afterData.rejectedByDriver,
+    provinceId: afterData.provinceId,
+    cityId: afterData.cityId,
+    officeId: afterData.officeId,
     outcome: "rejected",
-    assignedAt: beforeData.assignedTime ?? Timestamp.now(),
+    assignedAt: beforeData.assignedTimestamp ?? Timestamp.now(),
     rejectReason: "driver_rejected",
   });
 }
@@ -379,8 +394,12 @@ if (beforeStatus === "ASSIGNED" && afterStatus === "WAITING" && afterData.reject
 await recordAcceptanceEvent({
   callId: doc.id,
   assignedDriverId: callData.assignedDriverId,
+  provinceId: callData.provinceId,
+  cityId: callData.cityId,
+  officeId: callData.officeId,
   outcome: "timeout",
-  assignedAt: callData.assignedTime ?? Timestamp.now(),
+  // ★ P1-17 패치: assignedTime → assignedTimestamp
+  assignedAt: callData.assignedTimestamp ?? Timestamp.now(),
   rejectReason: "assigned_timeout_3min",
 });
 ```
@@ -484,22 +503,25 @@ const db = admin.firestore();
 
 async function backfill() {
   const snap = await db.collectionGroup("designated_drivers").get();
-  const batch = db.batch();
+  let batch = db.batch();   // ★ P1-18 패치: let으로 재할당 가능
   let count = 0;
 
-  snap.forEach(doc => {
+  for (const doc of snap.docs) {
     const data = doc.data();
     if (!data.platform) {
       batch.update(doc.ref, { platform: "android", fcmTokenPlatform: "android" });
       count++;
       if (count % 400 === 0) {
         // Firestore 배치 한도 500
-        batch.commit();
+        await batch.commit();
+        batch = db.batch();   // ★ P1-18 패치: 신규 batch 재생성 (기존 batch 재사용 시 SDK 에러)
       }
     }
-  });
+  }
 
-  await batch.commit();
+  if (count % 400 !== 0) {
+    await batch.commit();
+  }
   console.log(`Backfill complete: ${count} drivers updated`);
 }
 
