@@ -153,6 +153,7 @@
 
 ## P0 진행 상태 + Phase 6 체크리스트
 - [Phase 6 남은 코딩 ⭐](memory/phase6_coding_remaining.md) — iOS 출시 전 7개 항목 체크리스트. **다음 세션 시작점**
+- [Phase 6 Day 4 Phase B RFC ⭐](memory/phase6_day4_phaseB_rfc.md) — 아이폰 도착 시 즉시 착수 가능한 5건 수정 스니펫 + Entitlement + Codemagic Phase B yaml
 - [P0 재검증 2026-04-17](memory/p0_status_2026-04-17.md) — MVP 매핑 스펙 문서(.md) 패치 현황. 런타임 영향 없음, Phase 6 진입 시 실제 코드에 반영 필요
 
 ## 피드백
