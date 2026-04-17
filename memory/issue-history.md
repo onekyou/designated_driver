@@ -45,3 +45,36 @@
 ## CF 배포 상태
 - 마지막 배포: 3/12 전체 재배포 완료 (40개 함수, 스케줄러 1개 삭제)
 - `checkSettlementDiscrepanciesScheduled` 삭제됨 (불필요한 비용 방지)
+
+---
+
+## 날짜별 작업 상세 (MEMORY.md에서 이관)
+
+### 2026-03-24 — 손님앱/기사앱 콜 취소 개선
+- **손님앱 콜 취소 확장**: CallService cancelCall()에 ACCEPTED/PREPARING 허용, HomeScreen 취소 버튼 DRIVER_ARRIVING까지 표시
+- **기사앱 cancelTrip() HOLD→CANCELLED_BY_DRIVER**: 대면 취소 시 확정 취소, 포인트 환불, 손님 FCM 전송
+- **3개 앱 취소 알림**: 손님앱 showCallCancelledNotification, 콜매니저 STATUS_CHANGE_CHANNEL, 기사앱 항상 알림 표시
+- **기사앱 취소 UX 개선**: handleCallCancelled에 errorMessage(Snackbar) 추가, handleNotificationCallId에서 취소 콜 홈 이동
+- **손님앱 익명인증 복원**: MainActivity LaunchedEffect에서 signInAnonymously() 자동 수행, phoneNumber 체크 제거
+- **Firestore 보안 규칙 2건**: 고객 CANCELLED_BY_CUSTOMER 허용 확장 + 기사 CANCELLED_BY_DRIVER 허용
+- **CF onCallCancelledByDriver**: 기사 FCM에 title/body 추가 + 매니저 FCM 전송 추가
+- **손님앱 테스트 환경**: ADB SharedPreferences 주입으로 QR 없이 debug 설치 가능 (서명 불일치 해결)
+
+### 2026-03-18 — 기사앱 UX + CF 보정
+- **기사앱 네트워크 끊김 배너**: PresenceManager `.info/connected` → isConnected StateFlow → HomeScreen 빨간 배너
+- **기사앱 배차 알림음**: LockScreenActivity 3초 간격 반복 (코루틴), NewCallPopup은 1회 (포그라운드는 수락 버튼이 바로 보이므로)
+- **기사앱 LockScreenActivity 재디자인**: 이모지 삭제, 거절/수락 → 확인 버튼, 앱 컬러(검정+골드)
+- **기사앱 VIBRATE 권한 추가**: AndroidManifest.xml (기존 누락 버그)
+- **콜매니저 기사탭 중복 제거**: FCM에 lastLoginTime 추가 → Room DB 직접 반영 → refreshDriverData() 전체 재로드 제거
+- **콜매니저 죽은 코드 삭제**: 미사용 로그인/로그아웃 인앱 팝업 인프라 제거
+- **CF #1 offline 즉시 복귀 → 타임아웃 적용**: `presenceStatus === "offline"` → `presenceStatus === "offline" && isTimedOut` (1분 유예로 FCM 도달 기회 보장)
+- **CF oncallassigned 이모지 삭제**: FCM title에서 🚨 제거
+- **배포 완료**: `onDriverStatusChange`, `checkAssignedTimeout`, `oncallassigned`
+
+### 2026-03-17 — Presence 시스템 전환
+- **Realtime DB 리스너 방식 시도 → 롤백**: 오감지, 2~4분 지연, onDisconnect 덮어쓰기 → 폐기
+- **CF 스케줄러 presence 보호 구현**:
+  - #1 ASSIGNED + offline + 타임아웃 → WAITING 복귀 + 관리자 FCM (3/18 수정: 즉시→타임아웃)
+  - #2 ASSIGNED + online + 타임아웃 → WAITING 복귀 + 관리자 FCM
+  - #3 ACCEPTED/PREPARING + offline → 관리자 FCM
+  - #4 IN_PROGRESS + 10분 연속 offline → firstOfflineAt 기록 → 관리자 FCM

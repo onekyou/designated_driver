@@ -50,3 +50,10 @@ regions, token_logs, users
    - `MainActivity.kt:448`
    - `OfficeSelectionScreen.kt:79`
 5. **PITR 복구 필요 시**: Firebase Console → Firestore → 백업 탭 → 복원 시점 선택
+
+---
+
+## 현재 Firestore 상태 (2026-03-18 기준)
+- **provinces(16) + admins(1)**
+- **활성 사무실**: `nEkf0X9g3LZtRX94Mrzu`
+- **VIP 사무실 `0evNgfgm3xdq0v3VTFYK`는 삭제됨** (3/18 이후 참조 금지)

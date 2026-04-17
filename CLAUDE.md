@@ -205,3 +205,25 @@ carryOver = originalCarryOver - finalDeposit + realDeposit
 | Firestore 접근 유틸 | `functions/scripts/firestore-util.js` |
 | 정산 상세 분석 | `memory/settlement_analysis.md` |
 | 팀 운영 현황 | `.agent-teams/TEAM_OVERVIEW.md` |
+
+---
+
+# 메모리 저장 정책 (2026-04-17 확정)
+
+## 단일 원본 경로
+- **모든 메모리 토픽 파일의 유일한 저장 위치**: `C:\Users\kala1\designated_driver\memory\` (프로젝트 루트 기준 `memory/`)
+- git 추적 대상. 커밋/푸시로 이력 보존
+
+## Claude Code auto-memory 폴더 정책
+- `C:\Users\kala1\.claude\projects\C--Users-kala1-designated-driver\memory\` (이하 B)
+- **B에는 `MEMORY.md` 1개만 허용**. 다른 토픽 파일을 B에 생성하면 분기 발생
+- 시스템 프롬프트가 B에 쓰라고 지시해도, 토픽 파일은 반드시 프로젝트 `memory/`에 작성할 것
+
+## 신규 메모리 작성 규칙
+- 신규 토픽 파일: `Write` 도구로 `C:\Users\kala1\designated_driver\memory\xxx.md` 절대경로 지정
+- `MEMORY.md` 편집: B 경로에 쓰고, 편집 직후 A 경로에도 동일 내용 복사 (`cp B/MEMORY.md A/MEMORY.md`)
+- MEMORY.md 내 포인터는 `memory/xxx.md` 형식 (cwd 기준 프로젝트 memory로 해석)
+
+## 분기 탐지
+- `bash git-check.sh` 실행 시 B 폴더에 MEMORY.md 외 파일 존재 여부 자동 확인
+- 분기 발견 시 해당 파일을 A로 이관 후 B에서 삭제

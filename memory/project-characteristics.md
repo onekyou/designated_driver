@@ -226,3 +226,19 @@ carryOver = originalCarryOver - finalDeposit + realDeposit
 ```
 - depositRatio: 사무실별 수수료율 (세션 생성 시 lock, 당일 변경 영향 없음)
 - workDate: KST 6AM 기준 (새벽 6시 전 완료 → 전날)
+
+---
+
+## Presence 시스템 결론 (2026-03-17 확정)
+
+**리스너 방식 폐기**
+- 오감지, 2~4분 지연, onDisconnect 덮어쓰기 발생 → 도움보다 문제가 많음
+- Realtime DB 기반 실시간 리스너 구조는 본 시스템에서 부적합
+
+**CF 스케줄러 방식 채택**
+- 매 1분 presence `.get()` 조회 → 오감지 없음, 서버 측, 앱 무관
+- **배차 시점 보호**: `oncallassigned` CF가 즉시 presence 확인 (기존)
+- **배차~완료 보호**: `checkAssignedTimeout` CF가 매 1분 체크 (신규)
+- online/background는 동일 취급, offline만 문제로 판단
+
+**3/18 보정**: `#1 offline 즉시 복귀 → 타임아웃 적용` (1분 유예로 FCM 도달 기회 보장)

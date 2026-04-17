@@ -53,7 +53,26 @@ else
 fi
 echo ""
 
-# 4. 요약
+# 4. 메모리 저장소 분기 탐지 (auto-memory B 폴더에 MEMORY.md 외 파일 존재 여부)
+echo "--- [4] 메모리 저장소 분기 탐지 ---"
+AUTO_MEMORY="/c/Users/kala1/.claude/projects/C--Users-kala1-designated-driver/memory"
+if [ -d "$AUTO_MEMORY" ]; then
+    STRAY=$(find "$AUTO_MEMORY" -mindepth 1 ! -name "MEMORY.md" 2>/dev/null)
+    if [ -z "$STRAY" ]; then
+        echo "[OK] auto-memory 폴더에 MEMORY.md만 존재 (정상)"
+    else
+        echo "[!!] auto-memory 폴더에 분기 파일 발견:"
+        echo "$STRAY"
+        echo ""
+        echo ">>> 해당 파일을 memory/ (프로젝트)로 이관 후 auto-memory에서 삭제하세요"
+        echo ">>> 정책: CLAUDE.md §메모리 저장 정책"
+    fi
+else
+    echo "[-] auto-memory 폴더 없음 (신규 환경이거나 Claude Code 미설치)"
+fi
+echo ""
+
+# 5. 요약
 echo "========================================"
 echo "  요약"
 echo "========================================"
