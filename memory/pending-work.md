@@ -1,5 +1,22 @@
 # 잔여 작업
 
+## ⭐ 현재 최우선 — Phase 6 iOS 출시 코딩 보강 (2026-04-17 진행)
+
+**상세 체크리스트**: `memory/phase6_coding_remaining.md`
+
+**한 줄 요약**: MVP 매핑 + P0 스펙 패치 + Codemagic 인프라 완료. **실제 iOS 대응 코드 보강 7개 항목 착수 전**.
+
+우선순위 순서:
+1. 서버측 CF 배포 (의제 4 apns + 의제 11 acceptanceEvents)
+2. 기사앱 iOS 코드 보강 (fcmTokenPlatform, Platform.isIOS, 권한 문구)
+3. Bundle ID 실제 변경 (Xcode + Firebase Console)
+4. App Store Connect API Key + Codemagic 서명 통합
+5. codemagic.yaml Phase B (서명 + TestFlight)
+6. TestFlight 배포 + 기사 파일럿
+7. 손님앱 Flutter 신규 포팅 (Phase 2)
+
+---
+
 ## 기사앱 — iOS 인벤토리 작업 중 발견 (Phase 0, 2026-04-15)
 | ID | 이슈 | 우선순위 | 설명 |
 |----|------|---------|------|

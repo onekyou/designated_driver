@@ -11,11 +11,20 @@
 
 ## 대시보드 (2026-04-17 기준)
 - **방향**: Flutter 전환 (Swift 보류) — iOS 출시는 Codemagic 기반 5~7주
-- **최근 마일스톤**: 4/17 Apple 생태계 진입 + Codemagic Phase A 첫 빌드 성공 🎉 (10m 37s, Runner.app.zip 15.16MB)
-- **Apple 식별자**: Team `VCJD377MAU`, Bundle ID `com.designated.driverapp.app`, 앱명 `콜마당 기사`
-- **P0 진행**: 2/9 → 7/9 (A.1~C.1 패치 완료, B.1/E.1(b)는 Phase B)
-- **다음 스텝 (Phase B)**: Bundle ID 실제 변경 + Firebase 재등록 + ASC API Key + TestFlight 업로드
-- **사용자 Week 0 잔여**: 앱 메타데이터 + 개인정보 URL + 기사 테스터 Apple ID
+- **현재 위치**: **설계·인프라 완료 → Phase 6 실제 iOS 코딩 보강 착수 직전**
+- **오늘 달성**:
+  1. Apple 생태계 진입 (Team `VCJD377MAU`, Bundle ID `com.designated.driverapp.app`, 앱명 `콜마당 기사`)
+  2. Codemagic 인프라 구축 + no-codesign 빌드 10m 37s 성공 (⚠️ 껍데기 검증, 서명·TestFlight 미설정)
+  3. P0 7/9 스펙 패치 (MVP .md 문서 정리, 런타임 영향 없음)
+- **Phase 6 남은 코딩 7개** (체크리스트: `memory/phase6_coding_remaining.md`):
+  1. 서버측 CF 보강 (의제 4 apns + 의제 11 acceptanceEvents)
+  2. 기사앱 iOS 코드 보강 (fcmTokenPlatform, Platform.isIOS, 권한 문구)
+  3. Bundle ID 실제 변경 (Xcode + Firebase Console)
+  4. ASC API Key + Codemagic 서명
+  5. codemagic.yaml Phase B (서명 + TestFlight)
+  6. TestFlight 배포 + 파일럿
+  7. 손님앱 신규 포팅 (Phase 2)
+- **사용자 Week 0 잔여**: 앱 아이콘/스크린샷/설명/개인정보 URL + 기사 테스터 Apple ID
 - **날짜별 상태 상세**: `memory/current_status.md`
 
 ## 상황별 참조 파일
@@ -142,8 +151,9 @@
 - [iOS 경험](memory/user_ios_experience.md) — App Store 출시 무경험, Android는 숙련. iOS 용어는 기초부터 + Android 비유
 - [Apple iOS 식별자](memory/apple_ios_ids.md) — Team ID `VCJD377MAU`, Bundle ID `com.designated.driverapp.app`
 
-## P0 진행 상태
-- [P0 재검증 2026-04-17](memory/p0_status_2026-04-17.md) — REVIEW_FINDINGS 9건 중 D.1/E.1(a) 완료, 5건 오늘 패치, B.2 false positive, B.1/E.1(b) Phase B 이연
+## P0 진행 상태 + Phase 6 체크리스트
+- [Phase 6 남은 코딩 ⭐](memory/phase6_coding_remaining.md) — iOS 출시 전 7개 항목 체크리스트. **다음 세션 시작점**
+- [P0 재검증 2026-04-17](memory/p0_status_2026-04-17.md) — MVP 매핑 스펙 문서(.md) 패치 현황. 런타임 영향 없음, Phase 6 진입 시 실제 코드에 반영 필요
 
 ## 피드백
 | 파일 | 내용 |

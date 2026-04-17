@@ -4,44 +4,79 @@
 
 ---
 
-## 2026-04-17 — Apple 생태계 진입 + Codemagic Phase A 첫 빌드 성공 🎉
+## 2026-04-17 — Apple 생태계 진입 + iOS 빌드 인프라 구축 (Phase 6 코딩 진입 직전)
 
-**오늘의 큰 마일스톤**: Mac 없이 iOS 빌드 파이프라인 구축 성공.
+**⚠️ 중요 프레이밍**: 오늘 "빌드 성공"은 **기존 3/27 코드가 iOS 컴파일된다는 껍데기 검증**이지, **iOS 대응 코드 보강이 끝난 것이 아님**. 실제 iOS 출시까지는 Phase 6 코딩 보강(7개 항목)이 남아있음. 상세: `memory/phase6_coding_remaining.md`
 
-### Apple Developer / App Store Connect 설정 완료
+### 오늘 실제 달성한 것
+
+**① Apple Developer / App Store Connect 설정**
 - Apple Team ID: `VCJD377MAU`
-- Bundle ID (Explicit App ID): `com.designated.driverapp.app` (Android applicationId와 통일)
+- Bundle ID (App ID 등록): `com.designated.driverapp.app` (Android applicationId와 통일)
 - Capabilities: Push Notifications 활성
 - App Store Connect 앱 `콜마당 기사` 생성 (기본 언어 한국어, SKU `driverapp-ios-001`)
 
-### Codemagic Phase A 구성
+**② Codemagic 빌드 인프라**
 - 레포 연결 완료 (`manager-direct-drive` 브랜치)
 - `codemagic.yaml` 레포 루트 배치 (Build ID `69e2395f...`)
 - Workflow: `Driver iOS Test Build (Phase A - No Codesign)` — `mac_mini_m2`, `flutter: 3.41.6`, `xcode: latest`, `max_build_duration: 90`
-- **첫 빌드 45분 타임아웃** → max_build_duration 45→90 상향 → **재빌드 10분 37초 성공** (캐시 효과로 5배 빨라짐)
-- Artifact: `Runner.app.zip` 15.16 MB 생성
+- **첫 빌드 45분 타임아웃** → max_build_duration 45→90 상향 → **재빌드 10분 37초 성공**
+- Artifact: `Runner.app.zip` 15.16 MB (⚠️ 서명 없음, 아이폰 설치 불가)
 
-### 코드 변경 요약 (오늘 커밋 4건)
-- `04e54502` docs: P0 D.1 + 메모리 업데이트
-- `d759fdbe` feat: codemagic.yaml + iOS 15.0 타깃 상향 (Podfile + pbxproj 3곳)
-- `a943a1e5` fix: P0 A.1/A.2/A.3/B.3/C.1 패치
-- `9fabf885` fix: codemagic.yaml 레포 루트 이동
-- `64814dc8` fix: max_build_duration 45→90
+**③ 스펙 문서 정리 (.md 파일만 — 런타임 영향 없음)**
+- P0 9건 재검증 (`memory/p0_status_2026-04-17.md`)
+- A.1/A.2/A.3/B.3/C.1 = MVP 매핑 문서(`flutter/*/MVP/*.md`)의 Dart 코드 예시 수정
+- D.1 = CF 스펙 (`flutter/SERVER_TASKS.md`) 수정 — **실제 CF 배포는 아직 안 함**
+- E.1(a) = 재검증으로 이미 정확 확인
 
-### P0 9건 진행 (2/9 → 7/9 처리)
-- 완료: D.1, E.1(a) (재검증) + A.1, A.2, A.3, B.3, C.1 (오늘 패치)
-- False positive: B.2
-- Phase B 이연: B.1 나머지 5/9 필드, E.1(b) customerInfo 권한 취약점 (phone-uid 매핑 설계)
+**④ 메모리 정리**
+- `memory/apple_ios_ids.md`: Apple 식별자 기록
+- `memory/user_ios_experience.md`: 사용자 iOS 무경험 프로필
+- `memory/p0_status_2026-04-17.md`: P0 재검증 결과
+- `memory/phase6_coding_remaining.md`: **Phase 6 남은 코딩 작업 체크리스트 (신규)**
 
-### 다음 스텝 (Phase B, 별도 세션)
-- Bundle ID 실제 변경: `com.designated.driverAppFlutter` → `com.designated.driverapp.app` (Xcode 6곳 + Firebase Console iOS 앱 재등록 + GoogleService-Info.plist 재발급)
-- App Store Connect API Key 발급 + Codemagic 등록
-- 코드 서명 + TestFlight 업로드
-- tag 기반 자동 트리거 추가
-- .fvmrc 도입 (의제 14-C)
+### 오늘 커밋 6건 (`manager-direct-drive` 푸시)
 
-### 사용자 측 Week 0 남은 작업
-- 앱 메타데이터: 아이콘(1024×1024 PNG no alpha), 스크린샷(6.5"/5.5" iPhone), 설명(promo 250자 + description 4000자)
+```
+c60dec3a docs(memory): 2026-04-17 상태 기록 (1차, 이후 정정 커밋 추가됨)
+64814dc8 fix(codemagic): max_build_duration 45 → 90
+9fabf885 fix(codemagic): codemagic.yaml 레포 루트 이동
+a943a1e5 fix(flutter): P0 A.1/A.2/A.3/B.3/C.1 (.md 스펙 문서) 패치
+d759fdbe feat(codemagic): Phase A 파이프라인 + iOS 15.0 타깃 상향
+04e54502 docs(flutter): P0 D.1 + Apple ID 등록 정보 메모리화
+```
+
+### P0 진행 상태 (정확한 해석)
+
+| # | 대상 파일 | 상태 | 의미 |
+|---|----------|------|------|
+| A.1/A.2/A.3 | `flutter/driver_app/MVP/NOTIFIERS.md` | ✅ 스펙 수정 | 미래 참조용 문서 정리 |
+| B.3 | `flutter/customer_app/MVP/NOTIFIERS.md` | ✅ 스펙 수정 | 손님앱 신규 포팅 시 참조 |
+| C.1 | `flutter/driver_app/MVP/MODELS.md` | ✅ 스펙 수정 | 미래 참조용 |
+| D.1 | `flutter/SERVER_TASKS.md` | ✅ CF 스펙 수정 | **실제 CF 배포는 ❌ 아직** |
+| E.1(a) | `flutter/SERVER_TASKS.md` | ✅ 이미 정확 | — |
+| B.2 | — | ✅ false positive | 이미 정의됨 (MODELS.md:481) |
+| B.1 | `flutter/customer_app/MVP/MODELS.md` | 🟡 4/9 확인 | 나머지 5 필드 검증 대기 |
+| E.1(b) | — | ❌ 미해결 | 별도 보안 설계 세션 필요 (phone-uid 매핑) |
+
+### 다음 세션 우선순위 (Phase 6 코딩)
+
+**"MVP 매핑 + P0 패치 완료 → 코딩 진입"이 원 계획**. 아직 착수 안 한 작업:
+
+1. **서버측 (CF) 보강** — 배포만 하면 끝. 의제 4 apns + 의제 11 acceptanceEvents
+2. **기사앱 iOS 코드 보강** — fcmTokenPlatform, Platform.isIOS 분기, 권한 문구
+3. **Bundle ID 실제 변경** — Xcode + Firebase Console + GoogleService-Info.plist
+4. **App Store Connect API Key** — Codemagic 서명 권한
+5. **codemagic.yaml Phase B** — 서명 + TestFlight 업로드
+6. **TestFlight 배포** — 기사 테스터 초대 + 실기기 파일럿
+7. **손님앱 신규 포팅** — Phase 2 (기사앱 안정화 후)
+
+상세 체크리스트: `memory/phase6_coding_remaining.md`
+
+### 사용자 측 준비 (병렬 가능)
+- 앱 아이콘 1024×1024 PNG no alpha
+- 스크린샷 6.5"/5.5" iPhone
+- 앱 설명 한국어 (프로모 250자 + description 4000자)
 - 개인정보 정책 URL (호스팅 필요)
 - 기사 테스터 5~10명 Apple ID 수집
 
