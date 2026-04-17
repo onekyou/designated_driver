@@ -1,19 +1,20 @@
 # 잔여 작업
 
-## ⭐ 현재 최우선 — Phase 6 iOS 출시 코딩 보강 (2026-04-17 진행)
+## ⭐ 현재 최우선 — Phase 6 iOS 출시 (2026-04-18 진행 상황 업데이트)
 
 **상세 체크리스트**: `memory/phase6_coding_remaining.md`
+**Phase B RFC**: `memory/phase6_day4_phaseB_rfc.md`
 
-**한 줄 요약**: MVP 매핑 + P0 스펙 패치 + Codemagic 인프라 완료. **실제 iOS 대응 코드 보강 7개 항목 착수 전**.
+**한 줄 요약**: Phase 6 ①~③ 완료. Codemagic iOS Simulator 검증 PASS. **④~⑦ 남음** (대부분 사용자 액션 + 아이폰 실기기 대기).
 
-우선순위 순서:
-1. 서버측 CF 배포 (의제 4 apns + 의제 11 acceptanceEvents)
-2. 기사앱 iOS 코드 보강 (fcmTokenPlatform, Platform.isIOS, 권한 문구)
-3. Bundle ID 실제 변경 (Xcode + Firebase Console)
-4. App Store Connect API Key + Codemagic 서명 통합
-5. codemagic.yaml Phase B (서명 + TestFlight)
-6. TestFlight 배포 + 기사 파일럿
-7. 손님앱 Flutter 신규 포팅 (Phase 2)
+진척:
+1. ✅ 서버측 CF 배포 (apns + acceptanceEvents + rules, commit `745070fa`, 2026-04-18)
+2. ✅ 기사앱 iOS 코드 보강 Phase A (fcmTokenPlatform + payload 헬퍼, commit `fab1050c`). Phase B는 RFC로 아이폰 도착 시 착수 대기
+3. ✅ Bundle ID 실제 변경 (Xcode 6곳 `878a39a5` + Firebase Console `1863824b`). Codemagic Build #4 15m 53s PASS
+4. ⏳ ASC API Key 발급 + Codemagic 서명 통합 (사용자 수동 액션)
+5. ⏳ codemagic.yaml Phase B (`ios-driver-testflight` 워크플로우) — RFC 초안 완료, ④ 완료 후 커밋
+6. ⏳ TestFlight 배포 + 기사 파일럿 (아이폰 실기기 도착 2-3일 후)
+7. ⏳ 손님앱 Flutter 신규 포팅 (Phase 2) — 별도 세션 권장 (큰 범위)
 
 ---
 
