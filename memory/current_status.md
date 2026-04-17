@@ -4,7 +4,32 @@
 
 ---
 
-## 2026-04-18 — Phase 6 ① 서버측 CF 보강 완료 (FCM apns + acceptanceEvents + rules 신규)
+## 2026-04-18 오후 — Phase 6 ② Day 4 Phase A 완료 (Flutter platform 저장 + iOS Sim 검증 인프라)
+
+**commit `fab1050c`** — 8 files (+97/-7). Kotlin `6e017fcc`의 platform/fcmTokenPlatform 저장 로직을 Flutter 기사앱으로 이식 + Codemagic iOS Simulator integration_test 경로 신규 구축.
+
+**Phase A/B 분리 배경**: 아이폰 실기기 2-3일 후 도착 → 맹목적 Platform.isIOS 분기 확장은 Android 회귀 위험. 따라서 저장 필드만 Phase A, 기타 분기(권한/알림/Foreground Service/잠금화면)는 Phase B로 이관.
+
+**핵심 산출물**:
+- `buildTokenUpdatePayload` 헬퍼 (`lib/core/utils/fcm_token_payload.dart`) — `isIos` 파라미터 주입으로 Platform 의존성 모킹 가능
+- 3케이스 단위 테스트 (Windows 로컬 3/3 PASS)
+- iOS Simulator integration_test (`Platform.isIOS == true`일 때 payload가 "ios" 포함 실행 검증)
+- codemagic.yaml에 3 스텝 추가: Flutter unit test → Boot iOS Simulator → integration_test (+2.5분 빌드)
+
+**팀원 3명 리뷰 PASS_WITH_NOTES**:
+- flutter-expert: AppConstants 섹션 정리(P1) 이번 커밋 반영. dart:io scope 정답
+- kotlin-expert: **Day 3 rules affectedKeys 6필드 경고** — `fcmTokenUpdatedAt` 필수. 빠뜨리면 Flutter 토큰 갱신 전량 거부
+- firebase-analyst: CF 경로(`acceptanceEvents.ts:35 raw === "ios"`) 완전 호환. 에뮬레이터 시나리오 2개 설계 완료
+
+**수동 액션 필요**:
+- Codemagic `triggering.events: []`이라 자동 트리거 안 됨 → Codemagic UI에서 "Start new build" 실행
+- 빌드 결과로 iOS Simulator 런타임 검증 확보
+
+**Phase B 진입 조건**: 아이폰 실기기 도착 + Codemagic Phase A 빌드 성공
+
+---
+
+## 2026-04-18 오전 — Phase 6 ① 서버측 CF 보강 완료 (FCM apns + acceptanceEvents + rules 신규)
 
 **성과**: iOS Flutter 기사앱 출시 전 서버 준비 완료. **클라이언트 코드 영향 0**. 프로덕션 CF 배포 후 실기기 회귀 없음 확인.
 

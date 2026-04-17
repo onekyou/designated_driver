@@ -80,15 +80,20 @@ type: project
 > - 완료 후 Firebase Console → Firestore에서 샘플 기사 문서 확인 (필드 존재 여부)
 >
 > **Day 3. `firestore.rules` 업데이트 + 배포**
-> - `designated_drivers` 업데이트 규칙에 `platform`/`fcmTokenPlatform`/`fcmToken`/`lastLoginTime`/`status` 필드 `affectedKeys().hasOnly([...])` 허용 조항 추가
+> - `designated_drivers` 업데이트 규칙에 **6필드** `affectedKeys().hasOnly([...])` 허용: `fcmToken`, `fcmTokenPlatform`, `platform`, **`fcmTokenUpdatedAt`**, `lastLoginTime`, `status`
+> - ⚠️ **`fcmTokenUpdatedAt` 필수 포함** — Flutter `_saveTokenToFirestore`가 쓰는 진단 필드. 빠뜨리면 Flutter 토큰 갱신 전량 거부 → 배차 알림 0%. kotlin-expert 리뷰(2026-04-18 commit `fab1050c` 시) 발견.
 > - `customerInfo`도 동일 방식으로 `fcmTokenPlatform` 허용
 > - `firebase deploy --only firestore:rules`
 > - 이 시점부터 Kotlin 앱이 Firestore write 시 platform 필드 필수 아니지만 허용됨
 >
-> **Day 4. Flutter iOS 코드 보강 + TestFlight 빌드**
-> - `Platform.isIOS ? "ios" : "android"` 로직으로 `platform` + `fcmTokenPlatform` 저장
-> - Info.plist 권한 사유 문자열 검토
-> - Codemagic Phase B(서명 + TestFlight)으로 빌드 + 업로드
+> **Day 4. Flutter iOS 코드 보강 + TestFlight 빌드** — **Phase A/B 분리 (2026-04-18)**
+> - **Phase A (아이폰 실기기 무관, ✅ 완료 commit `fab1050c`)**:
+>   - `platform`/`fcmTokenPlatform` 저장 2곳 (fcm_service + auth_remote_datasource), `buildTokenUpdatePayload` 헬퍼 추출
+>   - Codemagic iOS Simulator integration_test 경로 구축 (+2.5분 빌드)
+> - **Phase B (아이폰 도착 후, 별도 플랜)**:
+>   - Platform.isIOS 분기 4곳: 권한 Time Sensitive / LocalNotification foreground / Foreground Service iOS skip / LockScreen Android 가드
+>   - Info.plist 6개 Privacy 문구 최종 검토 + TestFlight 심사 대응
+>   - Codemagic Phase B(서명 + TestFlight)으로 빌드 + 업로드
 >
 > **Day 5. iOS 기사 테스터 초대 + 파일럿**
 > - TestFlight Internal Tester로 iOS 기사 합류
@@ -104,19 +109,17 @@ type: project
   - 추가 필드: `"platform" to "android"`, `"fcmTokenPlatform" to "android"`
   - APK 재빌드 + 사내 테스트 APK 배포 (Play Store 심사 아님 — 현재 공개 배포 전 상태)
 
-- [ ] **Flutter 기사앱 fcmTokenPlatform 메타 필드 저장** (의제 5)
-  - FCM 토큰 획득 시 `Platform.isIOS ? 'ios' : 'android'` 함께 저장
-  - `driver_app_flutter/lib/services/fcm_service.dart` 또는 토큰 등록 지점
-  - Firestore `designated_drivers/{uid}.fcmTokenPlatform` + `.platform` 필드 신규
+- [x] **Flutter 기사앱 fcmTokenPlatform 메타 필드 저장** (Phase A, 2026-04-18 `fab1050c`)
+  - `buildTokenUpdatePayload` 헬퍼(`lib/core/utils/fcm_token_payload.dart`)가 `Platform.isIOS ? 'ios' : 'android'` 분기
+  - fcm_service.dart `_saveTokenToFirestore` + auth_remote_datasource.dart `updateFcmToken` 2곳에서 헬퍼 호출
+  - 로컬 unit test 3/3 PASS, Codemagic iOS Simulator integration_test 실행 준비 완료
 
-- [ ] **Flutter Platform.isIOS 분기 처리**
-  - 현재 `driver_app_flutter/lib/`에 `dart:io` import 0건 → iOS 특이 로직 전무
-  - 필요한 분기: FCM 알림 표시 방식 (iOS는 Time Sensitive), 권한 요청, 백그라운드 모드 등
+- [ ] **Flutter Platform.isIOS 분기 처리** — Phase B (아이폰 도착 후)
+  - Phase A 시점에 `dart:io` import는 헬퍼 파일 한 곳에만 제한. 서비스 레이어는 독립 유지
+  - Phase B 분기 4곳: fcm_service.dart:33 권한 요청, :65-82 로컬 알림 init, :148-160 알림 표시, :183-190 잠금화면. 각각 실기기로 검증하며 단계적 추가
 
-- [ ] **Info.plist 권한 사유 문자열 한국어 최종 검토**
-  - 현재 상태: 이미 5개 Privacy 사유 존재 (위치 2, 마이크, 음성인식, 사진) — 내용 적절성 검토
-  - `driver_app_flutter/ios/Runner/Info.plist`
-  - 필요 시 문구 수정 + App Store 심사 대응
+- [ ] **Info.plist 권한 사유 문자열 한국어 최종 검토** — Phase B
+  - flutter-expert Explore 검토: 6개 Privacy 사유(위치 2 + 마이크 + 음성인식 + 사진 + Background Modes) 모두 대리운전 기사앱 맥락에 정당, App Store 심사 통과 수준. 변경 보류 — TestFlight 심사 리뷰 코멘트 반영 시 조정
 
 - [ ] **backfill-platform.js 실행** (Day 2)
   - 선행 조건: Kotlin APK 재배포 완료
@@ -125,8 +128,9 @@ type: project
   - 완료 후 Firestore Console에서 샘플 확인
 
 - [ ] **firestore.rules 기존 규칙 affectedKeys 확장** (Day 3)
-  - 선행 조건: backfill 완료
-  - `designated_drivers` 업데이트 규칙에 `['fcmToken', 'fcmTokenPlatform', 'platform', 'lastLoginTime', 'status']` 허용
+  - 선행 조건: backfill 완료 (현재 기사 0명이라 실질 생략 가능)
+  - `designated_drivers` 업데이트 규칙에 **6필드** 허용: `['fcmToken', 'fcmTokenPlatform', 'platform', 'fcmTokenUpdatedAt', 'lastLoginTime', 'status']`
+  - ⚠️ `fcmTokenUpdatedAt` 누락 시 Flutter 토큰 갱신 전량 거부 → 배차 알림 0%
   - `customerInfo` 업데이트 규칙에 `['fcmToken', 'fcmTokenPlatform']` 허용
   - `firebase deploy --only firestore:rules`
 
@@ -143,6 +147,24 @@ type: project
 - 재로그인 후 Firestore `designated_drivers/{uid}`에 `platform: "android"` 필드 생성 확인 완료
 - 커밋: `6e017fcc`
 - S21+ (R3CR312MB1L)는 재설치 안 함 — 필요 시 동일 방법으로 진행
+
+**Day 4 Phase A 완료 기록 (2026-04-18, commit `fab1050c`)**:
+- 8 files changed (+97/-7): 신규 3 + 수정 5
+- 신규: `lib/core/utils/fcm_token_payload.dart` (헬퍼) + `test/fcm_token_payload_test.dart` + `integration_test/platform_field_test.dart`
+- 수정: app_constants.dart(상수 4개 + Platform Values 섹션) / fcm_service.dart / auth_remote_datasource.dart / pubspec.yaml(integration_test dev_dep) / codemagic.yaml(Flutter unit test + Boot Simulator + integration_test 3 스텝)
+- 검증: flutter analyze 0 issue on changed files, flutter test 3/3 PASS, Android debug build PASS
+- 팀원 리뷰 3건 PASS_WITH_NOTES:
+  - **flutter-expert**: AppConstants 네이밍 P1 이번 커밋 반영 완료. dart:io show Platform 정답. Phase B에서 헬퍼 추상화 재검토
+  - **kotlin-expert**: 키/값/경로/write 유형 정합. **Day 3 rules 6필드 경고** (위 참조). updateFcmToken 호출처 미검증 후속 과제
+  - **firebase-analyst**: CF acceptanceEvents.ts 경로 완전 호환 (raw === "ios" 삼항식). firestore.rules 필드 제한 없어 platform write 거부 없음. Emulator 시나리오 2개 설계(실행은 별도 세션)
+- Codemagic 빌드 트리거: `triggering.events: []`이라 **수동 실행 필요** (사용자 액션)
+- 예상 빌드 시간: 기존 10m 37s → ~13분 (+2.5분)
+
+**Day 4 Phase B 진입 조건 (아이폰 실기기 도착 후)**:
+- Platform.isIOS 분기 4곳 단계적 추가 (각각 실기기 회귀 확인하며)
+- Info.plist 문구 TestFlight 심사 피드백 반영
+- Codemagic Phase B (서명 + TestFlight 업로드)
+- `codemagic.yaml` 신규 워크플로우 또는 기존 확장
 
 ### ③ Bundle ID 실제 변경
 

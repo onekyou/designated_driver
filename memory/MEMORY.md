@@ -11,9 +11,10 @@
 
 ## 대시보드 (2026-04-18 기준)
 - **방향**: Flutter 전환 (Swift 보류) — iOS 출시는 Codemagic 기반 5~7주
-- **현재 위치**: **Phase 6 ① 서버측 CF 보강 완료 → Phase 6 ② 클라이언트 코드 보강 진입 직전**
+- **현재 위치**: **Phase 6 ② Day 4 Phase A 완료 → 아이폰 실기기 도착 대기(2-3일) → Phase B 진입**
 - **최근 달성**:
-  - 2026-04-18: Phase 6 ① 완료 (commit `745070fa`) — FCM 34곳 apns + acceptanceEvents 집계 + rules 신규 블록. 프로덕션 배포 완료. 실기기 회귀 없음. **클라이언트 영향 0**
+  - 2026-04-18 오후: Phase 6 ② Day 4 Phase A 완료 (commit `fab1050c`) — Flutter 기사앱 platform 저장 + Codemagic iOS Simulator integration_test 경로 구축. Unit test 3/3 PASS. 팀원 3명 리뷰 PASS
+  - 2026-04-18 오전: Phase 6 ① 완료 (commit `745070fa`) — FCM 34곳 apns + acceptanceEvents 집계 + rules 신규 블록. 프로덕션 배포 완료
   - 2026-04-17: Apple 생태계 진입 (Team `VCJD377MAU`, Bundle ID `com.designated.driverapp.app`) + Codemagic no-codesign 빌드 성공 + P0 스펙 패치
 - **Phase 6 남은 코딩 7개** (체크리스트: `memory/phase6_coding_remaining.md`):
   1. ✅ 서버측 CF 보강 (FCM apns + acceptanceEvents + rules 신규) — 2026-04-18 완료
