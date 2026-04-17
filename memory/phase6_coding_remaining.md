@@ -132,6 +132,18 @@ type: project
 
 **현재 서버 동작 (Phase 6 ① 결과)**: 기사 문서에 `platform` 필드 없으면 CF가 `"android"` fallback. 모든 기사가 실제 Android라 데이터 정확. iOS 기사 0명인 한 현재 상태로 운영 가능 — Phase 6 ② 작업은 iOS 출시와 묶어서.
 
+**2026-04-18 확인**: 실제 운영 기사 0명 (테스트 단계). Firestore에는 테스트 계정만 존재. 이에 따라:
+- **Day 2 backfill 실행 불필요** — 기존 대량 기사 문서가 없으므로. 신규 로그인 기사는 Day 1 코드로 자동 필드 저장. iOS 출시 직전 실제 기사 합류 시점에 재평가. 건너뛰어도 무해 (재로그인 과정에서 자동 채워짐)
+- **Day 3 rules affectedKeys 제한도 지금 시급 아님** — 현재 rules는 owner/admin write 허용, 필드 제한 없음. 보안 강화가 주목적이라 iOS 출시 시점에 묶어서 진행
+- **실질적 남은 작업은 Day 4 (Flutter iOS 코드 보강 + TestFlight 배포) 하나로 압축**
+
+**Day 1 완료 기록 (2026-04-18)**:
+- Kotlin 기사앱 3곳 수정 (Constants.kt + MyFirebaseMessagingService 2곳 + DriverViewModel 1곳)
+- S22 (R5CT41TJZFP) + Flip4 (R3CT80K78NP) 재설치 (debug 서명 충돌로 기존 언인스톨 후 신규 설치, 데이터 초기화됨)
+- 재로그인 후 Firestore `designated_drivers/{uid}`에 `platform: "android"` 필드 생성 확인 완료
+- 커밋: `6e017fcc`
+- S21+ (R3CR312MB1L)는 재설치 안 함 — 필요 시 동일 방법으로 진행
+
 ### ③ Bundle ID 실제 변경
 
 - [ ] **Xcode PRODUCT_BUNDLE_IDENTIFIER 변경 (6곳)**
