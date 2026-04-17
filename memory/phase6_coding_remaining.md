@@ -173,11 +173,10 @@ type: project
   - `com.designated.driverAppFlutter` → `com.designated.driverapp.app`
   - Runner target Debug/Profile/Release(3곳) + RunnerTests Debug/Profile/Release(3곳, `.RunnerTests` suffix 유지)
 
-- [ ] **Firebase Console iOS 앱 신규 등록** — 사용자 수동 액션
-  - Firebase Console → 프로젝트 → 설정 → iOS 앱 추가 → `com.designated.driverapp.app`
-  - `GoogleService-Info.plist` 다운로드 → `driver_app_flutter/ios/Runner/` 교체
-  - 기존 `com.designated.driverAppFlutter` iOS 앱은 삭제 또는 보관
-  - ⚠️ Phase A Codemagic --no-codesign 빌드는 영향 없음. 실기기/TestFlight 진입 시 반드시 필요
+- [x] **Firebase Console iOS 앱 신규 등록** — 2026-04-18 commit `1863824b`
+  - Bundle ID: `com.designated.driverapp.app`, PROJECT_ID: `calldetector-5d61e` (동일 프로젝트 내 신규 iOS 앱)
+  - `driver_app_flutter/ios/Runner/GoogleService-Info.plist` 교체 완료 (18줄 변경, Bundle ID/API Key/Client ID 신규 값)
+  - 기존 `com.designated.driverAppFlutter` iOS 앱: Firebase Console에 유지 or 삭제 (사용자 판단, 런타임 영향 0)
 
 - [ ] **customerInfo 및 기타 Bundle ID 참조 검토** — 후속
   - `driver_app_flutter/ios/Runner/Info.plist`의 CFBundleDisplayName
