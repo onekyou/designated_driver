@@ -118,6 +118,18 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         // 상태 업데이트 실패해도 로그인은 진행
       }
 
+      if (fcmToken != null) {
+        try {
+          await updateFcmToken(
+            driverId: userId,
+            provinceId: provinceId,
+            cityId: cityId,
+            officeId: officeId,
+            token: fcmToken,
+          );
+        } catch (_) {}
+      }
+
       // 8. UserSessionModel 생성
       return UserSessionModel(
         userId: userId,
