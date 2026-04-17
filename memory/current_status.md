@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-04-18 저녁 — Codemagic iOS Simulator 검증 PASS (Phase A 완전 확증)
+
+**Codemagic Build** `69e285293e9d20cb0c3bd492` (Build #4, commit `7a06cba9`)
+- Status: finished, Duration 15m 53s, Machine Mac mini M2
+- 전 스텝 PASS:
+  - Flutter unit test (payload helper) 10s — 3/3 PASS
+  - Boot iOS Simulator 1m 4s — boot fix(`7a06cba9`) 작동 확인
+  - **Flutter integration_test on iOS Simulator 7m 57s** — `Platform.isIOS == true` + payload "ios" 저장 런타임 확증
+  - Flutter build iOS (no codesign) 4m 13s — 새 Bundle ID(`com.designated.driverapp.app`) + 신규 GoogleService-Info.plist 정상 컴파일
+- Artifact: Runner.app.zip 15.17 MB
+
+**이정표 의미**
+- Day 4 Phase A 런타임 확증 완료. Platform.isIOS 분기가 실제 iOS 환경에서 "ios" 문자열 산출
+- Bundle ID 변경(Xcode + Firebase Console) 통합 빌드 검증
+- 아이폰 실기기 없이도 검증 가능한 영역은 전부 확증. Phase B(실기기 전용 분기)만 남음
+
+**남은 것**
+- Phase 6 ④⑤ ASC API Key / APNs Authentication Key 발급 (사용자 수동)
+- Phase 6 ⑥ TestFlight 배포 (아이폰 도착 후)
+- Phase 6 ⑦ 손님앱 Flutter 포팅 (병렬 가능, Mac 무관)
+- Day 4 Phase B (iOS 분기 4곳 + Info.plist 심사 대응)
+
+---
+
 ## 2026-04-18 오후 — Phase 6 ② Day 4 Phase A 완료 (Flutter platform 저장 + iOS Sim 검증 인프라)
 
 **commit `fab1050c`** — 8 files (+97/-7). Kotlin `6e017fcc`의 platform/fcmTokenPlatform 저장 로직을 Flutter 기사앱으로 이식 + Codemagic iOS Simulator integration_test 경로 신규 구축.
