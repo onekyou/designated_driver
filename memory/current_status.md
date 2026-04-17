@@ -4,6 +4,49 @@
 
 ---
 
+## 2026-04-17 — Apple 생태계 진입 + Codemagic Phase A 첫 빌드 성공 🎉
+
+**오늘의 큰 마일스톤**: Mac 없이 iOS 빌드 파이프라인 구축 성공.
+
+### Apple Developer / App Store Connect 설정 완료
+- Apple Team ID: `VCJD377MAU`
+- Bundle ID (Explicit App ID): `com.designated.driverapp.app` (Android applicationId와 통일)
+- Capabilities: Push Notifications 활성
+- App Store Connect 앱 `콜마당 기사` 생성 (기본 언어 한국어, SKU `driverapp-ios-001`)
+
+### Codemagic Phase A 구성
+- 레포 연결 완료 (`manager-direct-drive` 브랜치)
+- `codemagic.yaml` 레포 루트 배치 (Build ID `69e2395f...`)
+- Workflow: `Driver iOS Test Build (Phase A - No Codesign)` — `mac_mini_m2`, `flutter: 3.41.6`, `xcode: latest`, `max_build_duration: 90`
+- **첫 빌드 45분 타임아웃** → max_build_duration 45→90 상향 → **재빌드 10분 37초 성공** (캐시 효과로 5배 빨라짐)
+- Artifact: `Runner.app.zip` 15.16 MB 생성
+
+### 코드 변경 요약 (오늘 커밋 4건)
+- `04e54502` docs: P0 D.1 + 메모리 업데이트
+- `d759fdbe` feat: codemagic.yaml + iOS 15.0 타깃 상향 (Podfile + pbxproj 3곳)
+- `a943a1e5` fix: P0 A.1/A.2/A.3/B.3/C.1 패치
+- `9fabf885` fix: codemagic.yaml 레포 루트 이동
+- `64814dc8` fix: max_build_duration 45→90
+
+### P0 9건 진행 (2/9 → 7/9 처리)
+- 완료: D.1, E.1(a) (재검증) + A.1, A.2, A.3, B.3, C.1 (오늘 패치)
+- False positive: B.2
+- Phase B 이연: B.1 나머지 5/9 필드, E.1(b) customerInfo 권한 취약점 (phone-uid 매핑 설계)
+
+### 다음 스텝 (Phase B, 별도 세션)
+- Bundle ID 실제 변경: `com.designated.driverAppFlutter` → `com.designated.driverapp.app` (Xcode 6곳 + Firebase Console iOS 앱 재등록 + GoogleService-Info.plist 재발급)
+- App Store Connect API Key 발급 + Codemagic 등록
+- 코드 서명 + TestFlight 업로드
+- tag 기반 자동 트리거 추가
+- .fvmrc 도입 (의제 14-C)
+
+### 사용자 측 Week 0 남은 작업
+- 앱 메타데이터: 아이콘(1024×1024 PNG no alpha), 스크린샷(6.5"/5.5" iPhone), 설명(promo 250자 + description 4000자)
+- 개인정보 정책 URL (호스팅 필요)
+- 기사 테스터 5~10명 Apple ID 수집
+
+---
+
 ## 2026-04-16 — Flutter 전환 결정 + Swift 네이티브 보류
 
 **방향 전환** (master plan: `C:\Users\kala1\.claude\plans\bubbly-cuddling-hopcroft.md`)

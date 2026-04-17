@@ -11,9 +11,11 @@
 
 ## 대시보드 (2026-04-17 기준)
 - **방향**: Flutter 전환 (Swift 보류) — iOS 출시는 Codemagic 기반 5~7주
-- **최근 마일스톤**: 4/16 Flutter 매핑 문서 27개 + 의제 12/14 결정, P0 9건 정리
-- **다음 스텝**: P0 9건 패치 → 의제 2/3 결정 → Codemagic 첫 iOS 빌드
-- **사용자 Week 0 잔여**: 앱 메타데이터 + 기사 테스터 Apple ID 수집
+- **최근 마일스톤**: 4/17 Apple 생태계 진입 + Codemagic Phase A 첫 빌드 성공 🎉 (10m 37s, Runner.app.zip 15.16MB)
+- **Apple 식별자**: Team `VCJD377MAU`, Bundle ID `com.designated.driverapp.app`, 앱명 `콜마당 기사`
+- **P0 진행**: 2/9 → 7/9 (A.1~C.1 패치 완료, B.1/E.1(b)는 Phase B)
+- **다음 스텝 (Phase B)**: Bundle ID 실제 변경 + Firebase 재등록 + ASC API Key + TestFlight 업로드
+- **사용자 Week 0 잔여**: 앱 메타데이터 + 개인정보 URL + 기사 테스터 Apple ID
 - **날짜별 상태 상세**: `memory/current_status.md`
 
 ## 상황별 참조 파일
