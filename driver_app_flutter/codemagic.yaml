@@ -1,0 +1,34 @@
+workflows:
+  ios-driver-test-build:
+    name: Driver iOS Test Build (Phase A - No Codesign)
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    environment:
+      flutter: 3.41.6
+      xcode: latest
+      cocoapods: default
+    cache:
+      cache_paths:
+        - $HOME/Library/Caches/CocoaPods
+        - $FLUTTER_ROOT/.pub-cache
+    triggering:
+      events: []
+    scripts:
+      - name: Flutter version check
+        working_directory: driver_app_flutter
+        script: flutter --version
+      - name: Flutter pub get
+        working_directory: driver_app_flutter
+        script: flutter pub get
+      - name: Flutter analyze (informational)
+        working_directory: driver_app_flutter
+        script: flutter analyze --no-fatal-infos || true
+      - name: CocoaPods install
+        working_directory: driver_app_flutter/ios
+        script: pod install --repo-update
+      - name: Flutter build iOS (no codesign)
+        working_directory: driver_app_flutter
+        script: flutter build ios --release --no-codesign
+    artifacts:
+      - driver_app_flutter/build/ios/iphoneos/Runner.app
+      - /tmp/xcodebuild_logs/*.log
