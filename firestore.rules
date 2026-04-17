@@ -451,5 +451,23 @@ service cloud.firestore {
       allow read: if isHeadManager() || isOfficeOwner();
       allow write: if isHeadManager();
     }
+
+    // =============================
+    //  acceptanceEvents (Phase 6 ① B — iOS 수락률 집계)
+    //  • CF admin SDK만 write, 클라이언트 read/write 불가
+    // =============================
+    match /acceptanceEvents/{eventId} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    // =============================
+    //  monthlyStats (Phase 6 ① B — 월별 수락률 집계 결과)
+    //  • CF admin SDK만 write, 관리자 read 허용
+    // =============================
+    match /monthlyStats/{yearMonth} {
+      allow read: if isAnyAdmin();
+      allow write: if false;
+    }
   }
 }

@@ -6,6 +6,7 @@
 import * as admin from "firebase-admin";
 import { Timestamp } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
+import { buildFcmPayload, buildMulticastFcmPayload } from "../utils/fcmPayload";
 
 // 정산 세션 인터페이스
 interface SettlementSession {
@@ -437,7 +438,8 @@ export async function notifyDriversSettlementFinalized(
     }
 
     // FCM 알림 전송
-    const payload = {
+    const finalizeBody = `오늘 업무가 마감되었습니다. 총 ${totals.callCount}건, ${totals.totalFare.toLocaleString()}원`;
+    const response = await admin.messaging().sendEachForMulticast(buildMulticastFcmPayload({
       data: {
         type: "SETTLEMENT_FINALIZED",
         sessionDate: sessionDate,
@@ -445,17 +447,12 @@ export async function notifyDriversSettlementFinalized(
         totalFare: String(totals.totalFare),
         totalDeposit: String(totals.totalDeposit),
         title: "업무 마감 안내",
-        body: `오늘 업무가 마감되었습니다. 총 ${totals.callCount}건, ${totals.totalFare.toLocaleString()}원`
+        body: finalizeBody,
       },
-      android: {
-        priority: "high" as const
-      }
-    };
-
-    const response = await admin.messaging().sendEachForMulticast({
-      tokens: tokens,
-      ...payload
-    });
+      title: "업무 마감 안내",
+      body: finalizeBody,
+      level: "active",
+    }, tokens));
 
     logger.info(`[Settlement] Finalization notification sent. Success: ${response.successCount}, Failure: ${response.failureCount}`);
 
@@ -501,11 +498,13 @@ export async function notifySettlementDiscrepancy(
       return;
     }
 
-    // 알림 전송
-    const payload = {
+    // 알림 전송 (예외: 기존 최상위 notification 유지, apns 블록 추가)
+    const discBody = `${sessionDate} 정산에서 불일치가 발견되었습니다. 확인이 필요합니다.`;
+    const response = await admin.messaging().sendEachForMulticast({
+      tokens: tokens,
       notification: {
         title: "정산 불일치 감지",
-        body: `${sessionDate} 정산에서 불일치가 발견되었습니다. 확인이 필요합니다.`
+        body: discBody
       },
       data: {
         type: "SETTLEMENT_DISCREPANCY",
@@ -514,12 +513,22 @@ export async function notifySettlementDiscrepancy(
       },
       android: {
         priority: "high" as const
-      }
-    };
-
-    const response = await admin.messaging().sendEachForMulticast({
-      tokens: tokens,
-      ...payload
+      },
+      apns: {
+        headers: {
+          "apns-push-type": "alert" as const,
+          "apns-priority": "10" as const,
+        },
+        payload: {
+          aps: {
+            alert: { title: "정산 불일치 감지", body: discBody },
+            sound: "default" as const,
+            "content-available": 1,
+            "mutable-content": 1,
+            "interruption-level": "active" as const,
+          },
+        },
+      },
     });
 
     logger.info(`[Settlement] Discrepancy notification sent. Success: ${response.successCount}, Failure: ${response.failureCount}`);
@@ -568,16 +577,17 @@ export async function notifyDriverSettlementResultHandler(data: any): Promise<{ 
       ? "매니저가 정산을 확인했습니다. 퇴근할 수 있습니다."
       : "매니저가 정산을 거절했습니다. 재제출해주세요.";
 
-    await admin.messaging().send({
-      token: fcmToken,
+    await admin.messaging().send(buildFcmPayload({
       data: {
         type: isConfirmed ? "SETTLEMENT_CONFIRMED" : "SETTLEMENT_REJECTED",
         driverId: driverId,
         title: title,
         body: body,
       },
-      android: { priority: "high" },
-    });
+      title: title,
+      body: body,
+      level: "active",
+    }, fcmToken));
 
     logger.info(`[notifyDriverSettlementResult] FCM sent: ${result} to driver ${driverId}`);
     return { success: true };

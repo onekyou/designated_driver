@@ -48,6 +48,7 @@ exports.notifyDriverSettlementResultHandler = notifyDriverSettlementResultHandle
 const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-admin/firestore");
 const logger = __importStar(require("firebase-functions/logger"));
+const fcmPayload_1 = require("../utils/fcmPayload");
 /**
  * 근무일 계산 (새벽 6시 이전은 전날로 처리)
  * UTC 입력을 KST로 변환 후 판단
@@ -369,7 +370,8 @@ async function notifyDriversSettlementFinalized(provinceId, cityId, officeId, se
             return { sent: 0, skipped: skippedCount };
         }
         // FCM 알림 전송
-        const payload = {
+        const finalizeBody = `오늘 업무가 마감되었습니다. 총 ${totals.callCount}건, ${totals.totalFare.toLocaleString()}원`;
+        const response = await admin.messaging().sendEachForMulticast((0, fcmPayload_1.buildMulticastFcmPayload)({
             data: {
                 type: "SETTLEMENT_FINALIZED",
                 sessionDate: sessionDate,
@@ -377,13 +379,12 @@ async function notifyDriversSettlementFinalized(provinceId, cityId, officeId, se
                 totalFare: String(totals.totalFare),
                 totalDeposit: String(totals.totalDeposit),
                 title: "업무 마감 안내",
-                body: `오늘 업무가 마감되었습니다. 총 ${totals.callCount}건, ${totals.totalFare.toLocaleString()}원`
+                body: finalizeBody,
             },
-            android: {
-                priority: "high"
-            }
-        };
-        const response = await admin.messaging().sendEachForMulticast(Object.assign({ tokens: tokens }, payload));
+            title: "업무 마감 안내",
+            body: finalizeBody,
+            level: "active",
+        }, tokens));
         logger.info(`[Settlement] Finalization notification sent. Success: ${response.successCount}, Failure: ${response.failureCount}`);
         return { sent: response.successCount, skipped: skippedCount };
     }
@@ -417,11 +418,13 @@ async function notifySettlementDiscrepancy(provinceId, cityId, officeId, session
         if (tokens.length === 0) {
             return;
         }
-        // 알림 전송
-        const payload = {
+        // 알림 전송 (예외: 기존 최상위 notification 유지, apns 블록 추가)
+        const discBody = `${sessionDate} 정산에서 불일치가 발견되었습니다. 확인이 필요합니다.`;
+        const response = await admin.messaging().sendEachForMulticast({
+            tokens: tokens,
             notification: {
                 title: "정산 불일치 감지",
-                body: `${sessionDate} 정산에서 불일치가 발견되었습니다. 확인이 필요합니다.`
+                body: discBody
             },
             data: {
                 type: "SETTLEMENT_DISCREPANCY",
@@ -430,9 +433,23 @@ async function notifySettlementDiscrepancy(provinceId, cityId, officeId, session
             },
             android: {
                 priority: "high"
-            }
-        };
-        const response = await admin.messaging().sendEachForMulticast(Object.assign({ tokens: tokens }, payload));
+            },
+            apns: {
+                headers: {
+                    "apns-push-type": "alert",
+                    "apns-priority": "10",
+                },
+                payload: {
+                    aps: {
+                        alert: { title: "정산 불일치 감지", body: discBody },
+                        sound: "default",
+                        "content-available": 1,
+                        "mutable-content": 1,
+                        "interruption-level": "active",
+                    },
+                },
+            },
+        });
         logger.info(`[Settlement] Discrepancy notification sent. Success: ${response.successCount}, Failure: ${response.failureCount}`);
     }
     catch (error) {
@@ -473,16 +490,17 @@ async function notifyDriverSettlementResultHandler(data) {
         const body = isConfirmed
             ? "매니저가 정산을 확인했습니다. 퇴근할 수 있습니다."
             : "매니저가 정산을 거절했습니다. 재제출해주세요.";
-        await admin.messaging().send({
-            token: fcmToken,
+        await admin.messaging().send((0, fcmPayload_1.buildFcmPayload)({
             data: {
                 type: isConfirmed ? "SETTLEMENT_CONFIRMED" : "SETTLEMENT_REJECTED",
                 driverId: driverId,
                 title: title,
                 body: body,
             },
-            android: { priority: "high" },
-        });
+            title: title,
+            body: body,
+            level: "active",
+        }, fcmToken));
         logger.info(`[notifyDriverSettlementResult] FCM sent: ${result} to driver ${driverId}`);
         return { success: true };
     }

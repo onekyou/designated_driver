@@ -41,7 +41,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getApkDownloadUrl = exports.rejectOfficeApplication = exports.approveOfficeApplication = exports.submitOfficeApplication = exports.onDriverSettlementSubmitted = exports.notifyDriverSettlementResult = exports.sendDriverNotification = exports.finalizeSettlementAndNotifyDrivers = exports.notifyDriverCancellation = exports.notifyDriverAssignment = exports.manualCheckSettlementDiscrepancy = exports.autoFinalizeSettlements = exports.onCallCompletedUpdateSettlement = exports.onDriverStatusChange = exports.getOfficeReport = exports.searchArchivedCalls = exports.getArchivedStats = exports.archiveOldCalls = exports.scheduledDataCleanup = exports.checkAssignedTimeout = exports.onCallDetectorCrash = exports.onCustomerCountChange = exports.onDriverCountChange = exports.onNewCustomerRegistered = exports.onCallCancelledByDriver = exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.notifyCustomerOnComplete = exports.notifyCustomerOnPhoneCall = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.notifyCustomerOnOfficeClosed = exports.onSharedCallCreated = exports.sendNewCallNotification = exports.oncallassigned = exports.handleFailedNotifications = exports.retryPendingNotifications = exports.acknowledgeNotification = exports.recoverCustomerAccount = exports.checkPhoneNumberDuplicate = void 0;
+exports.getApkDownloadUrl = exports.rejectOfficeApplication = exports.approveOfficeApplication = exports.submitOfficeApplication = exports.onDriverSettlementSubmitted = exports.notifyDriverSettlementResult = exports.sendDriverNotification = exports.finalizeSettlementAndNotifyDrivers = exports.notifyDriverCancellation = exports.notifyDriverAssignment = exports.manualCheckSettlementDiscrepancy = exports.autoFinalizeSettlements = exports.onCallCompletedUpdateSettlement = exports.onDriverStatusChange = exports.getOfficeReport = exports.searchArchivedCalls = exports.getArchivedStats = exports.archiveOldCalls = exports.scheduledDataCleanup = exports.checkAssignedTimeout = exports.onCallDetectorCrash = exports.onCustomerCountChange = exports.onDriverCountChange = exports.onNewCustomerRegistered = exports.onCallCancelledByDriver = exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.notifyCustomerOnComplete = exports.notifyCustomerOnPhoneCall = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.notifyCustomerOnOfficeClosed = exports.onSharedCallCreated = exports.sendNewCallNotification = exports.oncallassigned = exports.handleFailedNotifications = exports.retryPendingNotifications = exports.acknowledgeNotification = exports.recoverCustomerAccount = exports.checkPhoneNumberDuplicate = exports.aggregateMonthlyStats = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -50,6 +50,10 @@ const firestore_2 = require("firebase-admin/firestore");
 const logger = __importStar(require("firebase-functions/logger"));
 const points_1 = require("./handlers/points");
 const settlement_1 = require("./handlers/settlement");
+const fcmPayload_1 = require("./utils/fcmPayload");
+const acceptanceEvents_1 = require("./analytics/acceptanceEvents");
+var aggregateMonthly_1 = require("./analytics/aggregateMonthly");
+Object.defineProperty(exports, "aggregateMonthlyStats", { enumerable: true, get: function () { return aggregateMonthly_1.aggregateMonthlyStats; } });
 // Firebase Admin SDK 초기화
 admin.initializeApp({
     databaseURL: "https://calldetector-5d61e-default-rtdb.firebaseio.com",
@@ -339,7 +343,7 @@ async function sendNotificationFailureAlert(provinceId, cityId, officeId, callId
             : presenceStatus === "background"
                 ? "앱이 백그라운드 상태"
                 : "알림 전달 실패";
-        const payload = {
+        const payload = (0, fcmPayload_1.buildMulticastFcmPayload)({
             data: {
                 type: "NOTIFICATION_FAILURE",
                 callId: callId,
@@ -349,11 +353,10 @@ async function sendNotificationFailureAlert(provinceId, cityId, officeId, callId
                 message: `${driverName} 기사에게 알림 전달 실패: ${statusMessage}`,
                 title: "⚠️ 알림 전달 실패"
             },
-            android: {
-                priority: "high"
-            },
-            tokens: tokens
-        };
+            title: "⚠️ 알림 전달 실패",
+            body: `${driverName} 기사에게 알림 전달 실패: ${statusMessage}`,
+            level: "active",
+        }, tokens);
         await admin.messaging().sendEachForMulticast(payload);
         logger.info(`[ACK] 콜매니저에 실패 알림 전송: callId=${callId}, driver=${driverName}`);
     }
@@ -429,7 +432,7 @@ exports.oncallassigned = (0, firestore_1.onDocumentWritten)({
         // 실제 오프라인 보호는 checkAssignedTimeout 스케줄러(1분 간격)가 담당
         if (driverFcmToken) {
             const notificationId = `${callId}_${driverId}_${Date.now()}`;
-            const driverPayload = {
+            const driverPayload = (0, fcmPayload_1.buildFcmPayload)({
                 data: {
                     callId: callId,
                     notificationId: notificationId, // ACK용 ID 추가
@@ -437,12 +440,11 @@ exports.oncallassigned = (0, firestore_1.onDocumentWritten)({
                     title: "새로운 콜 배정",
                     body: "새로운 콜이 배정되었습니다. 즉시 확인해주세요!"
                 },
-                android: {
-                    priority: "high",
-                    ttl: 30000, // 30초 TTL
-                },
-                token: driverFcmToken,
-            };
+                title: "새로운 콜 배정",
+                body: "새로운 콜이 배정되었습니다. 즉시 확인해주세요!",
+                level: "time-sensitive",
+                ttlSeconds: 30,
+            }, driverFcmToken);
             // 알림 상태 저장 (ACK 추적용)
             await saveNotificationStatus(notificationId, "call_assigned", driverId, "driver", officeId, provinceId, cityId, driverFcmToken, driverPayload, callId);
             await admin.messaging().send(driverPayload);
@@ -472,7 +474,7 @@ exports.oncallassigned = (0, firestore_1.onDocumentWritten)({
                     return;
                 }
                 // 고객에게 기사 정보 포함한 알림 전송
-                const customerPayload = {
+                const customerPayload = (0, fcmPayload_1.buildFcmPayload)({
                     data: {
                         type: "DRIVER_ASSIGNED",
                         callId: callId,
@@ -481,12 +483,11 @@ exports.oncallassigned = (0, firestore_1.onDocumentWritten)({
                         vehicleNumber: vehicleNumber,
                         driverId: driverId
                     },
-                    android: {
-                        priority: "high",
-                        ttl: 60000
-                    },
-                    token: customerFcmToken
-                };
+                    title: "기사 배정 완료",
+                    body: `${driverName} 기사가 배정되었습니다. 곧 출발합니다.`,
+                    level: "time-sensitive",
+                    ttlSeconds: 60,
+                }, customerFcmToken);
                 await admin.messaging().send(customerPayload);
                 logger.info(`[${callId}] 고객에게 기사 배정 알림 전송 완료: ${customerPhone}`);
             }
@@ -513,7 +514,7 @@ exports.oncallassigned = (0, firestore_1.onDocumentWritten)({
                         managerTokens.push(token);
                 });
                 if (managerTokens.length > 0) {
-                    const managerPayload = {
+                    const managerPayload = (0, fcmPayload_1.buildMulticastFcmPayload)({
                         data: {
                             type: "CALL_STATUS_UPDATE",
                             callId: callId,
@@ -529,8 +530,10 @@ exports.oncallassigned = (0, firestore_1.onDocumentWritten)({
                             cityId: cityId,
                             officeId: officeId
                         },
-                        tokens: managerTokens
-                    };
+                        title: "콜 상태 변경",
+                        body: `${driverName} 기사에게 배차되었습니다.`,
+                        level: "active",
+                    }, managerTokens);
                     const response = await admin.messaging().sendEachForMulticast(managerPayload);
                     logger.info(`[${callId}] 콜매니저 FCM 전송 완료 - 성공: ${response.successCount}, 실패: ${response.failureCount}`);
                 }
@@ -633,7 +636,7 @@ exports.sendNewCallNotification = (0, firestore_1.onDocumentCreated)({
         }
         logger.info(`[new-call:${callId}] ${tokens.length}명의 관리자에게 알림 전송`);
         // FCM 메시지 구성
-        const message = {
+        const message = (0, fcmPayload_1.buildMulticastFcmPayload)({
             data: {
                 type: "NEW_CALL",
                 callId: callId,
@@ -646,11 +649,10 @@ exports.sendNewCallNotification = (0, firestore_1.onDocumentCreated)({
                 fromCallDetector: String(callData.fromCallDetector === true),
                 fromCallManager: String(callData.fromCallManager === true),
             },
-            android: {
-                priority: "high",
-            },
-            tokens,
-        };
+            title: "🔔 새 콜 접수",
+            body: `${callData.customerName || callData.phoneNumber || "신규 고객"} - ${callData.customerAddress || callData.departure || "위치 미확인"}`,
+            level: "time-sensitive",
+        }, tokens);
         const response = await admin.messaging().sendEachForMulticast(message);
         logger.info(`[new-call:${callId}] FCM 알림 전송 완료. 성공: ${response.successCount}, 실패: ${response.failureCount}`);
         // 실패한 토큰 정리
@@ -741,7 +743,7 @@ exports.onSharedCallCreated = (0, firestore_1.onDocumentCreated)({
             return;
         }
         // Data-only FCM 메시지 - 앱에서 커스텀 알림 생성
-        const message = {
+        const message = (0, fcmPayload_1.buildMulticastFcmPayload)({
             data: {
                 type: "NEW_SHARED_CALL",
                 sharedCallId: callId,
@@ -755,11 +757,10 @@ exports.onSharedCallCreated = (0, firestore_1.onDocumentCreated)({
                 body: `${sharedCallData.departure || "출발지"} → ${sharedCallData.destination || "도착지"}`,
                 customMessage: `${sharedCallData.departure || "출발지"} → ${sharedCallData.destination || "도착지"}\n요금: ${sharedCallData.fare || 0}원\n📞 ${sharedCallData.phoneNumber || "전화번호"}`,
             },
-            android: {
-                priority: "high", // 시스템을 깨우기 위해 필수
-            },
-            tokens,
-        };
+            title: "🔄 새로운 공유콜!",
+            body: `${sharedCallData.departure || "출발지"} → ${sharedCallData.destination || "도착지"}`,
+            level: "time-sensitive",
+        }, tokens);
         // 🚨 실제 전송되는 페이로드 확인
         const response = await admin.messaging().sendEachForMulticast(message);
         logger.info(`[shared-created:${callId}] FCM 알림 전송 완료. 성공: ${response.successCount}, 실패: ${response.failureCount}`);
@@ -851,7 +852,7 @@ exports.notifyCustomerOnOfficeClosed = (0, firestore_1.onDocumentCreated)({
             return;
         }
         // FCM 알림 전송
-        const message = {
+        const message = (0, fcmPayload_1.buildFcmPayload)({
             data: {
                 type: "OFFICE_CLOSED",
                 sharedCallId: callId,
@@ -859,12 +860,11 @@ exports.notifyCustomerOnOfficeClosed = (0, firestore_1.onDocumentCreated)({
                 title: "🏢 사무실 마감 안내",
                 body: "사무실이 마감되어 잠시후 운행가능한 다른 사무실과 연결해 드리겠습니다.",
             },
-            android: {
-                priority: "high",
-                ttl: 300000, // 5분
-            },
-            token: fcmToken
-        };
+            title: "🏢 사무실 마감 안내",
+            body: "사무실이 마감되어 잠시후 운행가능한 다른 사무실과 연결해 드리겠습니다.",
+            level: "active",
+            ttlSeconds: 300,
+        }, fcmToken);
         await admin.messaging().send(message);
         logger.info(`[customer-closed:${callId}] 고객에게 사무실 마감 알림 전송 완료: ${phoneNumber}`);
     }
@@ -896,7 +896,7 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
     region: "asia-northeast3",
     document: "shared_calls/{callId}"
 }, async (event) => {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e, _f;
     const callId = event.params.callId;
     if (!event.data) {
         logger.warn(`[shared:${callId}] 이벤트 데이터가 없습니다.`);
@@ -955,8 +955,7 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
                 }
             });
             if (tokens.length > 0) {
-                const message = {
-                    // notification 필드 완전 제거 - Android가 자동 알림 생성하지 않도록
+                const message = (0, fcmPayload_1.buildMulticastFcmPayload)({
                     data: {
                         type: "SHARED_CALL_CANCELLED",
                         callId: callId,
@@ -965,12 +964,10 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
                         alertTitle: "공유콜이 취소되었습니다",
                         alertMessage: `${afterData.cancelReason || "사유 없음"} - 콜이 대기 상태로 복구되었습니다.`,
                     },
-                    android: {
-                        priority: "high",
-                        // notification 필드 완전 제거
-                    },
-                    tokens,
-                };
+                    title: "공유콜이 취소되었습니다",
+                    body: `${afterData.cancelReason || "사유 없음"} - 콜이 대기 상태로 복구되었습니다.`,
+                    level: "active",
+                }, tokens);
                 const response = await admin.messaging().sendEachForMulticast(message);
                 logger.info(`[shared:${callId}] 원본 사무실에 취소 알림 전송 완료. 성공: ${response.successCount}`);
             }
@@ -1111,8 +1108,7 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
                         tokens.push(t);
                 });
                 if (tokens.length > 0) {
-                    const msg = {
-                        // notification 필드 완전 제거 - Android가 자동 알림 생성하지 않도록
+                    const msg = (0, fcmPayload_1.buildMulticastFcmPayload)({
                         data: {
                             sharedCallId: callId,
                             type: "SHARED_CALL_CLAIMED",
@@ -1120,12 +1116,10 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
                             alertTitle: "공유 콜 수락됨",
                             alertMessage: `${(_a = afterData.departure) !== null && _a !== void 0 ? _a : "출발"} → ${(_b = afterData.destination) !== null && _b !== void 0 ? _b : "도착"} / 요금 ${(_c = afterData.fare) !== null && _c !== void 0 ? _c : 0}원`,
                         },
-                        android: {
-                            priority: "high",
-                            // notification 필드 완전 제거
-                        },
-                        tokens,
-                    };
+                        title: "공유 콜 수락됨",
+                        body: `${(_d = afterData.departure) !== null && _d !== void 0 ? _d : "출발"} → ${(_e = afterData.destination) !== null && _e !== void 0 ? _e : "도착"} / 요금 ${(_f = afterData.fare) !== null && _f !== void 0 ? _f : 0}원`,
+                        level: "active",
+                    }, tokens);
                     const resp = await admin.messaging().sendEachForMulticast(msg);
                     logger.info(`[shared:${callId}] FCM sendEachForMulticast done. Success: ${resp.successCount}, Failure: ${resp.failureCount}`);
                 }
@@ -1270,8 +1264,7 @@ exports.onSharedCallCancelledByDriver = (0, firestore_1.onDocumentUpdated)({
                 }
             });
             if (tokens.length > 0) {
-                const message = {
-                    // notification 필드 완전 제거 - Android가 자동 알림 생성하지 않도록
+                const message = (0, fcmPayload_1.buildMulticastFcmPayload)({
                     data: {
                         type: "SHARED_CALL_CANCELLED_POPUP",
                         sharedCallId: sourceSharedCallId,
@@ -1286,12 +1279,10 @@ exports.onSharedCallCancelledByDriver = (0, firestore_1.onDocumentUpdated)({
                         phoneNumber: sharedCallData.phoneNumber || "",
                         showPopup: "true" // 팝업 표시 플래그
                     },
-                    android: {
-                        priority: "high",
-                        // notification 필드 완전 제거
-                    },
-                    tokens,
-                };
+                    title: "🚫 공유콜이 취소되었습니다!",
+                    body: `${sharedCallData.departure || "출발지"} → ${sharedCallData.destination || "도착지"}\n취소사유: ${afterData.cancelReason || "사유 없음"}`,
+                    level: "active",
+                }, tokens);
                 const response = await admin.messaging().sendEachForMulticast(message);
                 logger.info(`[call-cancelled:${callId}] 원본 사무실에 FCM 알림 전송 완료. 성공: ${response.successCount}, 실패: ${response.failureCount}`);
             }
@@ -1349,18 +1340,17 @@ exports.notifyCustomerOnPhoneCall = (0, firestore_1.onDocumentCreated)({
             return;
         }
         // FCM 알림 전송
-        await admin.messaging().send({
+        await admin.messaging().send((0, fcmPayload_1.buildFcmPayload)({
             data: {
                 type: "CALL_RECEIVED",
                 callId: callId,
                 message: "콜이 접수되었습니다. 기사 배정을 기다려주세요."
             },
-            android: {
-                priority: "high",
-                ttl: 60000
-            },
-            token: fcmToken
-        });
+            title: "콜 접수 완료",
+            body: "콜이 접수되었습니다. 기사 배정을 기다려주세요.",
+            level: "active",
+            ttlSeconds: 60,
+        }, fcmToken));
         logger.info(`[notifyCustomerOnPhoneCall:${callId}] 고객에게 접수 완료 알림 전송 완료: ${phoneNumber}`);
     }
     catch (error) {
@@ -1414,19 +1404,18 @@ exports.notifyCustomerOnComplete = (0, firestore_1.onDocumentUpdated)({
             const fcmToken = (_a = customerDoc.data()) === null || _a === void 0 ? void 0 : _a.fcmToken;
             // 1) 운행 완료 FCM 알림 전송
             if (fcmToken) {
-                await admin.messaging().send({
+                await admin.messaging().send((0, fcmPayload_1.buildFcmPayload)({
                     data: {
                         type: "RIDE_COMPLETED",
                         callId: callId,
                         fare: fare.toString(),
                         pointsUsed: pointsUsed.toString()
                     },
-                    android: {
-                        priority: "high",
-                        ttl: 60000
-                    },
-                    token: fcmToken
-                });
+                    title: "운행 완료",
+                    body: `운행이 완료되었습니다. 요금: ${fare.toLocaleString()}원`,
+                    level: "active",
+                    ttlSeconds: 60,
+                }, fcmToken));
                 logger.info(`[notifyCustomerOnComplete:${callId}] 운행 완료 알림 전송 완료: ${phoneNumber}`);
             }
             else {
@@ -1442,6 +1431,7 @@ exports.notifyCustomerOnComplete = (0, firestore_1.onDocumentUpdated)({
                 if (pointsResult.gradeUpgraded) {
                     pointsMessage = `${pointsResult.pointsEarned}P 적립! 축하합니다! ${pointsResult.previousGrade} → ${pointsResult.grade} 등급 승급! (잔액: ${pointsResult.newBalance}P)`;
                 }
+                // 예외: 기존 최상위 notification 필드 유지 (Android 고객앱 호환). apns 블록만 추가
                 await admin.messaging().send({
                     data: {
                         type: "POINTS_EARNED",
@@ -1458,6 +1448,22 @@ exports.notifyCustomerOnComplete = (0, firestore_1.onDocumentUpdated)({
                     android: {
                         priority: "high",
                         ttl: 60000
+                    },
+                    apns: {
+                        headers: {
+                            "apns-push-type": "alert",
+                            "apns-priority": "10",
+                            "apns-expiration": String(Math.floor(Date.now() / 1000) + 60),
+                        },
+                        payload: {
+                            aps: {
+                                alert: { title: "포인트 적립 완료", body: pointsMessage },
+                                sound: "default",
+                                "content-available": 1,
+                                "mutable-content": 1,
+                                "interruption-level": "active",
+                            },
+                        },
                     },
                     token: fcmToken
                 });
@@ -1477,7 +1483,7 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
     region: "asia-northeast3",
     document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/calls/{callId}",
 }, async (event) => {
-    var _a, _b, _c, _d, _e;
+    var _a, _b, _c, _d, _e, _f;
     const { provinceId, cityId, officeId, callId } = event.params;
     if (!event.data) {
         logger.warn(`[onCallStatusChanged:${callId}] No event data.`);
@@ -1522,7 +1528,7 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
                     managerTokens.push(token);
             });
             if (managerTokens.length > 0) {
-                const managerPayload = {
+                const managerPayload = (0, fcmPayload_1.buildMulticastFcmPayload)({
                     data: {
                         type: "CALL_STATUS_UPDATE",
                         callId: callId,
@@ -1539,12 +1545,11 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
                         cityId: cityId,
                         officeId: officeId
                     },
-                    android: {
-                        priority: "high",
-                        ttl: 60000
-                    },
-                    tokens: managerTokens
-                };
+                    title: "콜 상태 변경",
+                    body: `${afterData.customerName || "고객"} - ${afterData.status}`,
+                    level: "active",
+                    ttlSeconds: 60,
+                }, managerTokens);
                 const response = await admin.messaging().sendEachForMulticast(managerPayload);
                 logger.info(`[onCallStatusChanged:${callId}] 콜매니저 FCM 전송 - ${afterData.status} - 성공: ${response.successCount}`);
             }
@@ -1570,6 +1575,8 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
                     "ACCEPTED": "기사가 콜을 수락했습니다. 곧 도착합니다.",
                     "IN_PROGRESS": "운행이 시작되었습니다.",
                 };
+                // 예외: 기존 최상위 notification 필드 유지 (Android 고객앱 호환). apns 블록만 추가
+                const statusBody = statusMessages[afterData.status] || `상태가 ${afterData.status}(으)로 변경되었습니다.`;
                 await admin.messaging().send({
                     token: fcmToken,
                     data: {
@@ -1581,11 +1588,27 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
                     },
                     notification: {
                         title: "콜 상태 알림",
-                        body: statusMessages[afterData.status] || `상태가 ${afterData.status}(으)로 변경되었습니다.`,
+                        body: statusBody,
                     },
                     android: {
                         priority: "high",
                         ttl: 60000,
+                    },
+                    apns: {
+                        headers: {
+                            "apns-push-type": "alert",
+                            "apns-priority": "10",
+                            "apns-expiration": String(Math.floor(Date.now() / 1000) + 60),
+                        },
+                        payload: {
+                            aps: {
+                                alert: { title: "콜 상태 알림", body: statusBody },
+                                sound: "default",
+                                "content-available": 1,
+                                "mutable-content": 1,
+                                "interruption-level": "active",
+                            },
+                        },
                     },
                 });
                 logger.info(`[onCallStatusChanged:${callId}] 고객 FCM 전송 완료: ${afterData.status}`);
@@ -1594,6 +1617,38 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
         catch (customerError) {
             logger.error(`[onCallStatusChanged:${callId}] 고객 FCM 오류:`, customerError);
         }
+    }
+    // acceptanceEvents 기록 (Phase 6 ① B) — ASSIGNED→ACCEPTED / ASSIGNED→WAITING+rejectedByDriver
+    try {
+        const beforeStatus = beforeData.status;
+        const afterStatus = afterData.status;
+        const assignedAt = (_f = beforeData.assignedTimestamp) !== null && _f !== void 0 ? _f : firestore_2.Timestamp.now();
+        if (beforeStatus === "ASSIGNED" && afterStatus === "ACCEPTED" && afterData.assignedDriverId) {
+            await (0, acceptanceEvents_1.recordAcceptanceEvent)({
+                callId,
+                assignedDriverId: afterData.assignedDriverId,
+                provinceId,
+                cityId,
+                officeId,
+                outcome: "accepted",
+                assignedAt,
+            });
+        }
+        else if (beforeStatus === "ASSIGNED" && afterStatus === "WAITING" && afterData.rejectedByDriver) {
+            await (0, acceptanceEvents_1.recordAcceptanceEvent)({
+                callId,
+                assignedDriverId: afterData.rejectedByDriver,
+                provinceId,
+                cityId,
+                officeId,
+                outcome: "rejected",
+                assignedAt,
+                rejectReason: "driver_rejected",
+            });
+        }
+    }
+    catch (analyticsError) {
+        logger.warn(`[onCallStatusChanged:${callId}] acceptanceEvents 기록 실패`, analyticsError);
     }
 });
 // pending_drivers 컬렉션에 새 문서 생성 시 FCM 알림 전송
@@ -1629,7 +1684,7 @@ exports.onDriverSignupRequest = (0, firestore_1.onDocumentCreated)({
             logger.warn(`[onDriverSignupRequest:${driverId}] No admin tokens found for office ${targetOfficeId}`);
             return;
         }
-        // FCM 메시지 전송
+        // 예외: 기존 최상위 notification + android.notification 유지 (알림 채널 호환). apns 블록만 추가
         const payload = {
             notification: {
                 title: "🚗 새 기사 가입 신청",
@@ -1649,7 +1704,23 @@ exports.onDriverSignupRequest = (0, firestore_1.onDocumentCreated)({
                     clickAction: "com.designated.callmanager.HOME",
                     channelId: "driver_approval_channel"
                 }
-            }
+            },
+            apns: {
+                headers: {
+                    "apns-push-type": "alert",
+                    "apns-priority": "10",
+                    "apns-expiration": String(Math.floor(Date.now() / 1000) + 60),
+                },
+                payload: {
+                    aps: {
+                        alert: { title: "🚗 새 기사 가입 신청", body: `${name}님이 가입 승인을 기다리고 있습니다.` },
+                        sound: "default",
+                        "content-available": 1,
+                        "mutable-content": 1,
+                        "interruption-level": "active",
+                    },
+                },
+            },
         };
         // 모든 관리자에게 전송
         for (const token of tokens) {
@@ -2382,7 +2453,7 @@ exports.onCallCancelledByDriver = (0, firestore_1.onDocumentUpdated)({
                 // 기사에게 취소 FCM 알림
                 const driverFcmToken = driverData.fcmToken;
                 if (driverFcmToken) {
-                    const driverPayload = {
+                    const driverPayload = (0, fcmPayload_1.buildFcmPayload)({
                         data: {
                             type: "call_cancelled",
                             callId: callId,
@@ -2390,12 +2461,11 @@ exports.onCallCancelledByDriver = (0, firestore_1.onDocumentUpdated)({
                             body: "고객이 콜을 취소했습니다",
                             cancelReason: "고객이 콜을 취소했습니다"
                         },
-                        android: {
-                            priority: "high",
-                            ttl: 60000
-                        },
-                        token: driverFcmToken
-                    };
+                        title: "콜 취소",
+                        body: "고객이 콜을 취소했습니다",
+                        level: "time-sensitive",
+                        ttlSeconds: 60,
+                    }, driverFcmToken);
                     await admin.messaging().send(driverPayload);
                     logger.info(`[${callId}] 기사에게 고객 취소 알림 전송 완료`);
                 }
@@ -2453,18 +2523,17 @@ exports.onCallCancelledByDriver = (0, firestore_1.onDocumentUpdated)({
             return;
         }
         // 고객에게 취소 알림 전송
-        const customerPayload = {
+        const customerPayload = (0, fcmPayload_1.buildFcmPayload)({
             data: {
                 type: "CALL_CANCELLED",
                 callId: callId,
                 cancelReason: afterData.cancelReason || "운행취소"
             },
-            android: {
-                priority: "high",
-                ttl: 60000
-            },
-            token: customerFcmToken
-        };
+            title: "콜 취소",
+            body: `콜이 취소되었습니다: ${afterData.cancelReason || "운행취소"}`,
+            level: "time-sensitive",
+            ttlSeconds: 60,
+        }, customerFcmToken);
         await admin.messaging().send(customerPayload);
         logger.info(`[${callId}] 고객에게 취소 알림 전송 완료: ${customerPhone}`);
     }
@@ -2492,19 +2561,18 @@ exports.onCallCancelledByDriver = (0, firestore_1.onDocumentUpdated)({
                     : afterData.status === "CANCELLED_BY_DRIVER"
                         ? "기사"
                         : "관리자";
-                await admin.messaging().sendEachForMulticast({
+                await admin.messaging().sendEachForMulticast((0, fcmPayload_1.buildMulticastFcmPayload)({
                     data: {
                         type: "CALL_STATUS_UPDATE",
                         callId: callId,
                         status: afterData.status,
                         message: `${cancelledBy} 취소: ${afterData.cancelReason || "운행취소"}`
                     },
-                    android: {
-                        priority: "high",
-                        ttl: 60000
-                    },
-                    tokens: tokens
-                });
+                    title: "콜 취소",
+                    body: `${cancelledBy} 취소: ${afterData.cancelReason || "운행취소"}`,
+                    level: "active",
+                    ttlSeconds: 60,
+                }, tokens));
                 logger.info(`[${callId}] 매니저에게 취소 알림 전송 완료`);
             }
         }
@@ -2551,10 +2619,12 @@ exports.onNewCustomerRegistered = (0, firestore_1.onDocumentCreated)({
         const referralInfo = customerData.referralDriverName
             ? ` (추천: ${customerData.referralDriverName})`
             : '';
+        // 예외: 기존 최상위 notification 유지 (Android 콜매니저 호환). apns 블록 추가
+        const notifBody = `${customerData.name || '신규 회원'}님이 가입했습니다${referralInfo}`;
         const message = {
             notification: {
                 title: "🎉 새 회원 가입",
-                body: `${customerData.name || '신규 회원'}님이 가입했습니다${referralInfo}`
+                body: notifBody
             },
             data: {
                 type: "new_customer",
@@ -2563,7 +2633,22 @@ exports.onNewCustomerRegistered = (0, firestore_1.onDocumentCreated)({
                 customerPhone: customerData.phoneNumber || "",
                 referralDriverId: customerData.referralDriverId || "",
                 referralDriverName: customerData.referralDriverName || ""
-            }
+            },
+            apns: {
+                headers: {
+                    "apns-push-type": "alert",
+                    "apns-priority": "10",
+                },
+                payload: {
+                    aps: {
+                        alert: { title: "🎉 새 회원 가입", body: notifBody },
+                        sound: "default",
+                        "content-available": 1,
+                        "mutable-content": 1,
+                        "interruption-level": "active",
+                    },
+                },
+            },
         };
         // 각 토큰으로 알림 전송
         const sendResults = await Promise.allSettled(tokenDocs.map(({ token }) => admin.messaging().send(Object.assign(Object.assign({}, message), { token }))));
@@ -2747,7 +2832,7 @@ exports.onCallDetectorCrash = (0, firestore_1.onDocumentCreated)({
             crashTime: crashTime ? crashTime.toString() : "",
             priority: "CRITICAL"
         };
-        // 멀티캐스트 메시지 전송
+        // 예외: 기존 최상위 notification + emergency_alerts 채널 유지 (긴급 알림). apns 블록 추가
         const sendResults = await Promise.allSettled(fcmTokens.map(token => admin.messaging().send({
             token,
             notification,
@@ -2759,7 +2844,23 @@ exports.onCallDetectorCrash = (0, firestore_1.onDocumentCreated)({
                     priority: "max",
                     sound: "default"
                 }
-            }
+            },
+            apns: {
+                headers: {
+                    "apns-push-type": "alert",
+                    "apns-priority": "10",
+                    "apns-expiration": String(Math.floor(Date.now() / 1000) + 60),
+                },
+                payload: {
+                    aps: {
+                        alert: notification,
+                        sound: "default",
+                        "content-available": 1,
+                        "mutable-content": 1,
+                        "interruption-level": "time-sensitive",
+                    },
+                },
+            },
         })));
         // 결과 로깅
         const successCount = sendResults.filter(r => r.status === 'fulfilled').length;
@@ -2796,7 +2897,7 @@ async function sendPresenceAlert(officeDoc, provinceId, cityId, callId, driverNa
             .filter((token) => !!token);
         if (tokens.length === 0)
             return;
-        await admin.messaging().sendEachForMulticast({
+        await admin.messaging().sendEachForMulticast((0, fcmPayload_1.buildMulticastFcmPayload)({
             data: {
                 type: "NOTIFICATION_FAILURE",
                 callId: callId,
@@ -2804,9 +2905,10 @@ async function sendPresenceAlert(officeDoc, provinceId, cityId, callId, driverNa
                 title: title,
                 message: message
             },
-            android: { priority: "high" },
-            tokens: tokens
-        });
+            title: title,
+            body: message,
+            level: "active",
+        }, tokens));
         logger.info(`[PresenceAlert] ${message}`);
     }
     catch (error) {
@@ -2832,7 +2934,7 @@ exports.checkAssignedTimeout = (0, scheduler_1.onSchedule)({
     timeZone: "Asia/Seoul",
     region: "asia-northeast3",
 }, async () => {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f;
     const db = admin.firestore();
     try {
         // 모든 사무실 조회
@@ -2887,6 +2989,22 @@ exports.checkAssignedTimeout = (0, scheduler_1.onSchedule)({
                                     await driverDocSnap.ref.update({ status: "WAITING" });
                                 }
                             }
+                            // acceptanceEvents 기록 (Phase 6 ① B) — 오프라인 즉시 복구 타임아웃
+                            try {
+                                await (0, acceptanceEvents_1.recordAcceptanceEvent)({
+                                    callId: callDoc.id,
+                                    assignedDriverId: assignedDriverId,
+                                    provinceId,
+                                    cityId,
+                                    officeId: officeDoc.id,
+                                    outcome: "timeout",
+                                    assignedAt: (_b = callData.assignedTimestamp) !== null && _b !== void 0 ? _b : firestore_2.Timestamp.now(),
+                                    rejectReason: "assigned_timeout_offline",
+                                });
+                            }
+                            catch (analyticsError) {
+                                logger.warn(`[AssignedTimeout] acceptanceEvents 기록 실패 (오프라인): ${callDoc.id}`, analyticsError);
+                            }
                             // 관리자에 알림
                             await sendPresenceAlert(officeDoc, provinceId, cityId, callDoc.id, driverName, "⚠️ 기사 오프라인", `${driverName} 기사 오프라인 — 자동 재배차 대기 중`);
                             totalRecovered++;
@@ -2910,6 +3028,22 @@ exports.checkAssignedTimeout = (0, scheduler_1.onSchedule)({
                                 assignedTimestamp: firestore_2.FieldValue.delete(),
                                 timeoutRecoveredAt: firestore_2.FieldValue.serverTimestamp(),
                             });
+                            // acceptanceEvents 기록 (Phase 6 ① B) — 온라인 3분 초과 타임아웃
+                            try {
+                                await (0, acceptanceEvents_1.recordAcceptanceEvent)({
+                                    callId: callDoc.id,
+                                    assignedDriverId: assignedDriverId,
+                                    provinceId,
+                                    cityId,
+                                    officeId: officeDoc.id,
+                                    outcome: "timeout",
+                                    assignedAt: (_c = callData.assignedTimestamp) !== null && _c !== void 0 ? _c : firestore_2.Timestamp.now(),
+                                    rejectReason: "assigned_timeout_3min",
+                                });
+                            }
+                            catch (analyticsError) {
+                                logger.warn(`[AssignedTimeout] acceptanceEvents 기록 실패 (3분): ${callDoc.id}`, analyticsError);
+                            }
                             // 기사 상태 복구 + FCM
                             if (!driversQuery.empty) {
                                 const driverDocSnap = driversQuery.docs[0];
@@ -2920,15 +3054,17 @@ exports.checkAssignedTimeout = (0, scheduler_1.onSchedule)({
                                 const driverFcmToken = driverData.fcmToken;
                                 if (driverFcmToken) {
                                     try {
-                                        await admin.messaging().send({
+                                        await admin.messaging().send((0, fcmPayload_1.buildFcmPayload)({
                                             data: {
                                                 type: "call_cancelled",
                                                 callId: callDoc.id,
                                                 cancelReason: "응답 시간 초과로 배차가 해제되었습니다"
                                             },
-                                            android: { priority: "high", ttl: 60000 },
-                                            token: driverFcmToken
-                                        });
+                                            title: "콜 배차 해제",
+                                            body: "응답 시간 초과로 배차가 해제되었습니다",
+                                            level: "active",
+                                            ttlSeconds: 60,
+                                        }, driverFcmToken));
                                     }
                                     catch (fcmError) {
                                         logger.warn(`[AssignedTimeout] 기사 FCM 전송 실패: ${assignedDriverId}`, fcmError);
@@ -2942,18 +3078,20 @@ exports.checkAssignedTimeout = (0, scheduler_1.onSchedule)({
                                         .collection("customerInfo")
                                         .doc(callData.phoneNumber)
                                         .get();
-                                    const customerFcmToken = (_b = customerDoc.data()) === null || _b === void 0 ? void 0 : _b.fcmToken;
+                                    const customerFcmToken = (_d = customerDoc.data()) === null || _d === void 0 ? void 0 : _d.fcmToken;
                                     if (customerFcmToken) {
-                                        await admin.messaging().send({
+                                        await admin.messaging().send((0, fcmPayload_1.buildFcmPayload)({
                                             data: {
                                                 type: "CALL_STATUS_UPDATE",
                                                 callId: callDoc.id,
                                                 status: "WAITING",
                                                 message: "기사 재배정 중입니다"
                                             },
-                                            android: { priority: "high", ttl: 60000 },
-                                            token: customerFcmToken
-                                        });
+                                            title: "콜 상태 변경",
+                                            body: "기사 재배정 중입니다",
+                                            level: "active",
+                                            ttlSeconds: 60,
+                                        }, customerFcmToken));
                                     }
                                 }
                                 catch (custError) {
@@ -2997,7 +3135,7 @@ exports.checkAssignedTimeout = (0, scheduler_1.onSchedule)({
                         const presenceStatus = await getDriverPresenceStatus(assignedDriverId);
                         if (presenceStatus === "offline") {
                             const now = Date.now();
-                            const firstOfflineAt = ((_d = (_c = callData.firstOfflineAt) === null || _c === void 0 ? void 0 : _c.toMillis) === null || _d === void 0 ? void 0 : _d.call(_c)) || 0;
+                            const firstOfflineAt = ((_f = (_e = callData.firstOfflineAt) === null || _e === void 0 ? void 0 : _e.toMillis) === null || _f === void 0 ? void 0 : _f.call(_e)) || 0;
                             if (!firstOfflineAt) {
                                 // 첫 offline 감지 — 타임스탬프 기록
                                 await callDoc.ref.update({ firstOfflineAt: firestore_2.FieldValue.serverTimestamp() });
@@ -3892,7 +4030,7 @@ exports.onDriverStatusChange = (0, firestore_1.onDocumentUpdated)({
                 statusMessage = newStatus;
         }
         // FCM 메시지 생성
-        const message = {
+        const message = (0, fcmPayload_1.buildMulticastFcmPayload)({
             data: {
                 type: "DRIVER_STATUS_UPDATE",
                 driverId: driverId,
@@ -3907,12 +4045,11 @@ exports.onDriverStatusChange = (0, firestore_1.onDocumentUpdated)({
                 lastLoginTime: (afterData === null || afterData === void 0 ? void 0 : afterData.lastLoginTime) ? afterData.lastLoginTime.toMillis().toString() : "",
                 timestamp: Date.now().toString()
             },
-            android: {
-                priority: "high",
-                ttl: 60000
-            },
-            tokens: managerTokens
-        };
+            title: "기사 상태 변경",
+            body: `${driverName}: ${statusMessage}`,
+            level: "active",
+            ttlSeconds: 60,
+        }, managerTokens);
         // FCM 전송
         const response = await admin.messaging().sendEachForMulticast(message);
         logger.info(`[기사상태] ${driverId}: FCM 전송 완료 - 성공: ${response.successCount}, 실패: ${response.failureCount}`);
@@ -4035,19 +4172,19 @@ exports.notifyDriverAssignment = (0, https_1.onCall)({
             return { success: false, error: "No FCM token" };
         }
         // FCM 전송
-        const payload = {
+        const bodyText = customerName ? `${customerName}님 콜이 배정되었습니다.` : "새로운 콜이 배정되었습니다.";
+        const payload = (0, fcmPayload_1.buildFcmPayload)({
             data: {
                 callId: callId,
                 type: "call_assigned",
                 title: "새로운 콜 배정",
-                body: customerName ? `${customerName}님 콜이 배정되었습니다.` : "새로운 콜이 배정되었습니다.",
+                body: bodyText,
                 departure: departure || "",
             },
-            android: {
-                priority: "high",
-            },
-            token: fcmToken,
-        };
+            title: "새로운 콜 배정",
+            body: bodyText,
+            level: "time-sensitive",
+        }, fcmToken);
         await admin.messaging().send(payload);
         logger.info(`[notifyDriverAssignment] FCM 전송 성공 - ${driverName}`);
         return { success: true, driverName: driverName };
@@ -4089,18 +4226,17 @@ exports.notifyDriverCancellation = (0, https_1.onCall)({
             logger.warn(`[notifyDriverCancellation] FCM 토큰 없음 - ${driverName}`);
             return { success: false, error: "No FCM token" };
         }
-        const payload = {
+        const payload = (0, fcmPayload_1.buildFcmPayload)({
             data: {
                 callId: callId,
                 type: "call_cancelled",
                 title: "배차 취소",
                 body: "배정된 콜이 취소되었습니다.",
             },
-            android: {
-                priority: "high",
-            },
-            token: fcmToken,
-        };
+            title: "배차 취소",
+            body: "배정된 콜이 취소되었습니다.",
+            level: "time-sensitive",
+        }, fcmToken);
         await admin.messaging().send(payload);
         logger.info(`[notifyDriverCancellation] FCM 전송 성공 - ${driverName}`);
         return { success: true, driverName: driverName };
@@ -4216,17 +4352,16 @@ exports.sendDriverNotification = (0, https_1.onCall)({
             return { success: false, error: "No FCM token" };
         }
         // FCM 전송
-        const payload = {
+        const payload = (0, fcmPayload_1.buildFcmPayload)({
             data: {
                 type: type,
                 title: title,
                 body: body,
             },
-            android: {
-                priority: "high",
-            },
-            token: fcmToken,
-        };
+            title: title,
+            body: body,
+            level: "active",
+        }, fcmToken);
         await admin.messaging().send(payload);
         logger.info(`[sendDriverNotification] FCM 전송 성공 - ${driverName}, type: ${type}`);
         return { success: true, driverName: driverName };
@@ -4290,6 +4425,8 @@ exports.onDriverSettlementSubmitted = (0, firestore_1.onDocumentUpdated)({
             return;
         }
         // FCM 전송 (data-only: 백그라운드에서도 onMessageReceived 호출 보장)
+        const notifTitle = "📋 업무마감 제출";
+        const notifBody = `${driverName}님이 업무마감을 제출했습니다. (${tripCount}건, 실납입: ${realDeposit.toLocaleString()}원)`;
         const payload = {
             data: {
                 type: "SETTLEMENT_SUBMITTED",
@@ -4297,11 +4434,26 @@ exports.onDriverSettlementSubmitted = (0, firestore_1.onDocumentUpdated)({
                 driverName: driverName,
                 tripCount: String(tripCount),
                 realDeposit: String(realDeposit),
-                title: "📋 업무마감 제출",
-                body: `${driverName}님이 업무마감을 제출했습니다. (${tripCount}건, 실납입: ${realDeposit.toLocaleString()}원)`,
+                title: notifTitle,
+                body: notifBody,
             },
             android: {
                 priority: "high",
+            },
+            apns: {
+                headers: {
+                    "apns-push-type": "alert",
+                    "apns-priority": "10",
+                },
+                payload: {
+                    aps: {
+                        alert: { title: notifTitle, body: notifBody },
+                        sound: "default",
+                        "content-available": 1,
+                        "mutable-content": 1,
+                        "interruption-level": "active",
+                    },
+                },
             },
         };
         for (const token of tokens) {

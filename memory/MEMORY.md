@@ -167,5 +167,6 @@
 ## 기타 포인터
 - `memory/pending-work-customer-app.md` — 손님앱 잔여 작업
 - `memory/firestore-incident.md` — Firestore 사고 복구 + 현재 상태
+- [rejectedByDriver dead data](memory/rejected_by_driver_dead_data.md) — 기사앱 write 3곳 / 모든 consumer read 0 / 재배차 UI 필터링 누락 (Phase 6 ①에서 집계 소비처 생김, UI 필터링은 후속)
 - 복구 스크립트: `functions/scripts/restoreAll.js`
 - 지역 초기화: `functions/scripts/initProvinces.ts`
