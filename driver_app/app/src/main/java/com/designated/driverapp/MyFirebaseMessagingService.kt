@@ -52,7 +52,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 .collection(Constants.COLLECTION_OFFICES).document(officeId)
                 .collection(Constants.COLLECTION_DRIVERS).document(userId)
 
-            driverRef.update(Constants.FIELD_FCM_TOKEN, token)
+            driverRef.update(mapOf(
+                Constants.FIELD_FCM_TOKEN to token,
+                Constants.FIELD_FCM_TOKEN_PLATFORM to Constants.PLATFORM_ANDROID,
+                Constants.FIELD_PLATFORM to Constants.PLATFORM_ANDROID
+            ))
                 .addOnSuccessListener {
                     // 성공 시 pending 토큰 제거
                     sharedPreferences.edit()
@@ -93,7 +97,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                         .collection(Constants.COLLECTION_OFFICES).document(officeId)
                         .collection(Constants.COLLECTION_DRIVERS).document(userId)
 
-                    driverRef.update(Constants.FIELD_FCM_TOKEN, pendingToken)
+                    driverRef.update(mapOf(
+                        Constants.FIELD_FCM_TOKEN to pendingToken,
+                        Constants.FIELD_FCM_TOKEN_PLATFORM to Constants.PLATFORM_ANDROID,
+                        Constants.FIELD_PLATFORM to Constants.PLATFORM_ANDROID
+                    ))
                         .addOnSuccessListener {
                             sharedPreferences.edit()
                                 .remove(Constants.PREF_KEY_PENDING_FCM_TOKEN)

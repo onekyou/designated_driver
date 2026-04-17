@@ -1044,7 +1044,11 @@ class DriverViewModel @Inject constructor(
             .collection(Constants.COLLECTION_CITIES).document(cityId)
             .collection(Constants.COLLECTION_OFFICES).document(officeId)
             .collection(Constants.COLLECTION_DRIVERS).document(driverId)
-        driverRef.update(Constants.FIELD_FCM_TOKEN, token).await()
+        driverRef.update(mapOf(
+            Constants.FIELD_FCM_TOKEN to token,
+            Constants.FIELD_FCM_TOKEN_PLATFORM to Constants.PLATFORM_ANDROID,
+            Constants.FIELD_PLATFORM to Constants.PLATFORM_ANDROID
+        )).await()
         fcmTokenToRegister = null
     }
 

@@ -24,7 +24,11 @@ object Constants {
     const val FIELD_STATUS = "status"
     const val FIELD_ASSIGNED_DRIVER_ID = "assignedDriverId"
     const val FIELD_FCM_TOKEN = "fcmToken"
+    const val FIELD_FCM_TOKEN_PLATFORM = "fcmTokenPlatform"
+    const val FIELD_PLATFORM = "platform"
     const val FIELD_UPDATED_AT = "updatedAt"
+
+    const val PLATFORM_ANDROID = "android"
 
     const val FIELD_PAYMENT_METHOD = "paymentMethod"
     const val FIELD_FARE_FINAL = "fareFinal"
