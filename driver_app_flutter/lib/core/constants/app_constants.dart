@@ -24,6 +24,8 @@ class AppConstants {
   static const String fieldStatus = 'status';
   static const String fieldApprovalStatus = 'approvalStatus';
   static const String fieldFcmToken = 'fcmToken';
+  static const String fieldFcmTokenPlatform = 'fcmTokenPlatform';
+  static const String fieldPlatform = 'platform';
   static const String fieldAssignedDriverId = 'assignedDriverId';
   static const String fieldAssignedDriverName = 'assignedDriverName';
   static const String fieldCallTime = 'callTime';
@@ -58,6 +60,10 @@ class AppConstants {
   static const String approvalPending = 'PENDING';
   static const String approvalApproved = 'APPROVED';
   static const String approvalRejected = 'REJECTED';
+
+  // Platform Values (FCM 집계용 — functions/src/analytics/acceptanceEvents.ts 소비)
+  static const String platformIos = 'ios';
+  static const String platformAndroid = 'android';
 
   // Call Status (Kotlin과 완전 일치)
   static const String callStatusWaiting = 'WAITING';

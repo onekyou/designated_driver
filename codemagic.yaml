@@ -23,9 +23,23 @@ workflows:
       - name: Flutter analyze (informational)
         working_directory: driver_app_flutter
         script: flutter analyze --no-fatal-infos || true
+      - name: Flutter unit test (payload helper)
+        working_directory: driver_app_flutter
+        script: flutter test test/fcm_token_payload_test.dart
       - name: CocoaPods install
         working_directory: driver_app_flutter/ios
         script: pod install --repo-update
+      - name: Boot iOS Simulator
+        script: |
+          DEVICE=$(xcrun simctl list devices available | grep "iPhone 15" | head -1 | grep -oE "\([A-F0-9-]{36}\)" | tr -d '()')
+          echo "BOOT_ID=$DEVICE" >> $CM_ENV
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+      - name: Flutter integration_test on iOS Simulator
+        working_directory: driver_app_flutter
+        script: |
+          flutter test integration_test/platform_field_test.dart \
+            -d "$BOOT_ID"
       - name: Flutter build iOS (no codesign)
         working_directory: driver_app_flutter
         script: flutter build ios --release --no-codesign

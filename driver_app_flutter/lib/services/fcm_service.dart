@@ -4,6 +4,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/foundation.dart';
 import '../core/constants/app_constants.dart';
+import '../core/utils/fcm_token_payload.dart';
 import 'lock_screen_service.dart';
 
 /// FCM 푸시 알림 서비스 (Phase 4 — Kotlin 6종 완전 대응)
@@ -96,10 +97,7 @@ class FcmService {
           .collection(AppConstants.collectionCities).doc(cityId)
           .collection(AppConstants.collectionOffices).doc(officeId)
           .collection(AppConstants.collectionDrivers).doc(driverId)
-          .update({
-        AppConstants.fieldFcmToken: token,
-        'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
-      });
+          .update(buildTokenUpdatePayload(token: token));
       debugPrint('[FCM] 토큰 저장 성공');
     } catch (e) {
       debugPrint('[FCM] 토큰 저장 실패: $e');

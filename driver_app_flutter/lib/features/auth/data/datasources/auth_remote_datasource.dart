@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/error/exceptions.dart';
+import '../../../../core/utils/fcm_token_payload.dart';
 import '../models/user_session_model.dart';
 
 /// 인증 관련 원격 데이터 소스 (Firebase)
@@ -170,9 +171,8 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
           .doc(officeId)
           .collection(AppConstants.collectionDrivers)
           .doc(driverId)
-          .update({
-        AppConstants.fieldFcmToken: token,
-      });
+          .update(
+              buildTokenUpdatePayload(token: token, includeUpdatedAt: false));
     } on FirebaseException catch (e) {
       throw ServerException(e.message ?? 'FCM 토큰 업데이트 실패');
     }
