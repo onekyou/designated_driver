@@ -63,14 +63,53 @@ type: project
   - `functions/scripts/backfill-platform.js` 실행 — Kotlin platform 저장 코드 배포 후
   - `firestore.rules` 기존 규칙의 affectedKeys 제한 추가 — 위 배포 이후
 
-### ② 기사앱 Flutter 코드 보강 (`driver_app_flutter/lib/`)
+### ② 기사앱 클라이언트 코드 보강 (Kotlin + Flutter) — **iOS TestFlight 출시와 묶어서 진행**
 
-- [ ] **fcmTokenPlatform 메타 필드 저장** (의제 5)
+> **⚠️ 배포 순서 의존성 (역순 진행 시 회귀 발생)**
+>
+> 반드시 아래 순서대로. 한 단계라도 앞뒤 바꾸면 Firestore write 거부 → FCM 토큰 저장 전체 실패 → 배차 알림 0% 도달의 대형 회귀.
+>
+> **Day 1. Kotlin 기사앱 재배포 (platform 저장 코드 포함)**
+> - Kotlin에 `platform: "android"` + `fcmTokenPlatform: "android"` 저장 코드 추가
+> - APK 빌드 → 실기기 3대(S21+/S22/Flip4) 설치 → 로그캣 확인
+> - 이 단계 완료 전엔 절대 Day 3(rules)로 넘어가지 말 것
+>
+> **Day 2. `backfill-platform.js` 실행**
+> - `node functions/scripts/backfill-platform.js` (GOOGLE_APPLICATION_CREDENTIALS 설정 필요)
+> - 기존 기사 문서 전체에 `platform: "android"` + `fcmTokenPlatform: "android"` 일괄 추가
+> - 완료 후 Firebase Console → Firestore에서 샘플 기사 문서 확인 (필드 존재 여부)
+>
+> **Day 3. `firestore.rules` 업데이트 + 배포**
+> - `designated_drivers` 업데이트 규칙에 `platform`/`fcmTokenPlatform`/`fcmToken`/`lastLoginTime`/`status` 필드 `affectedKeys().hasOnly([...])` 허용 조항 추가
+> - `customerInfo`도 동일 방식으로 `fcmTokenPlatform` 허용
+> - `firebase deploy --only firestore:rules`
+> - 이 시점부터 Kotlin 앱이 Firestore write 시 platform 필드 필수 아니지만 허용됨
+>
+> **Day 4. Flutter iOS 코드 보강 + TestFlight 빌드**
+> - `Platform.isIOS ? "ios" : "android"` 로직으로 `platform` + `fcmTokenPlatform` 저장
+> - Info.plist 권한 사유 문자열 검토
+> - Codemagic Phase B(서명 + TestFlight)으로 빌드 + 업로드
+>
+> **Day 5. iOS 기사 테스터 초대 + 파일럿**
+> - TestFlight Internal Tester로 iOS 기사 합류
+> - 이 시점부터 `acceptanceEvents`에 `platform: "ios"` 이벤트가 쌓이기 시작
+> - `monthlyStats` 다음 집계(매월 1일) 때 Android vs iOS 수락률 비교 가능
+>
+> **역순 시 회귀 시나리오**
+> - Day 3(rules)을 Day 1(Kotlin) 전에 배포 시: Kotlin이 아직 platform 저장 코드 없으면 `affectedKeys` 허용 목록에 platform 추가 전에는 write 가능한 필드 목록 변화가 있을 수 있어 위험 (안전하게 Kotlin 먼저)
+> - Day 4(Flutter iOS)을 Day 1(Kotlin) 전에 배포 시: Android 전체가 platform 필드 없이 새 iOS 기사만 있는 상태 → Android 기사들은 CF fallback "android"로 집계되지만 첫 Android 로그인 갱신 시 필드 새로 추가되는 혼란
+
+- [ ] **Kotlin 기사앱 platform 필드 저장 추가**
+  - 파일: `driver_app/app/src/main/java/com/designated/driverapp/DriverRepository.kt` (또는 FCM 토큰 등록·기사 로그인 지점)
+  - 추가 필드: `"platform" to "android"`, `"fcmTokenPlatform" to "android"`
+  - APK 재빌드 + 사내 테스트 APK 배포 (Play Store 심사 아님 — 현재 공개 배포 전 상태)
+
+- [ ] **Flutter 기사앱 fcmTokenPlatform 메타 필드 저장** (의제 5)
   - FCM 토큰 획득 시 `Platform.isIOS ? 'ios' : 'android'` 함께 저장
   - `driver_app_flutter/lib/services/fcm_service.dart` 또는 토큰 등록 지점
-  - Firestore `designated_drivers/{uid}.fcmTokenPlatform` 필드 신규
+  - Firestore `designated_drivers/{uid}.fcmTokenPlatform` + `.platform` 필드 신규
 
-- [ ] **Platform.isIOS 분기 처리**
+- [ ] **Flutter Platform.isIOS 분기 처리**
   - 현재 `driver_app_flutter/lib/`에 `dart:io` import 0건 → iOS 특이 로직 전무
   - 필요한 분기: FCM 알림 표시 방식 (iOS는 Time Sensitive), 권한 요청, 백그라운드 모드 등
 
@@ -78,6 +117,20 @@ type: project
   - 현재 상태: 이미 5개 Privacy 사유 존재 (위치 2, 마이크, 음성인식, 사진) — 내용 적절성 검토
   - `driver_app_flutter/ios/Runner/Info.plist`
   - 필요 시 문구 수정 + App Store 심사 대응
+
+- [ ] **backfill-platform.js 실행** (Day 2)
+  - 선행 조건: Kotlin APK 재배포 완료
+  - `export GOOGLE_APPLICATION_CREDENTIALS=<service-account>.json`
+  - `node functions/scripts/backfill-platform.js`
+  - 완료 후 Firestore Console에서 샘플 확인
+
+- [ ] **firestore.rules 기존 규칙 affectedKeys 확장** (Day 3)
+  - 선행 조건: backfill 완료
+  - `designated_drivers` 업데이트 규칙에 `['fcmToken', 'fcmTokenPlatform', 'platform', 'lastLoginTime', 'status']` 허용
+  - `customerInfo` 업데이트 규칙에 `['fcmToken', 'fcmTokenPlatform']` 허용
+  - `firebase deploy --only firestore:rules`
+
+**현재 서버 동작 (Phase 6 ① 결과)**: 기사 문서에 `platform` 필드 없으면 CF가 `"android"` fallback. 모든 기사가 실제 Android라 데이터 정확. iOS 기사 0명인 한 현재 상태로 운영 가능 — Phase 6 ② 작업은 iOS 출시와 묶어서.
 
 ### ③ Bundle ID 실제 변경
 
