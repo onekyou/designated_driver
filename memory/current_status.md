@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-04-19 내일 재개 시작점
+
+**직전 커밋**: `27b02e18` Phase B 선작업 (B-5 LockScreen iOS 가드 + Runner.entitlements + pbxproj CODE_SIGN_ENTITLEMENTS)
+
+**내일 첫 할 일 후보**:
+1. **Emulator 시나리오 11 실제 실행** (30~60분) — `cd functions && npm run build` → `firebase emulators:start --only functions,firestore` → `npx ts-node functions/test/scenarios/11-acceptance-events.test.ts`. Phase A 최종 확증. 어제 시도하려다 크레딧 소진으로 보류
+2. **재배차 UI rejectedByDriver 필터링** (1~2시간, Kotlin) — Call Manager DashboardViewModel 배차 다이얼로그에 rejectedByDriver 회색 표시/제외
+3. **사용자 수동 액션 대기**: ASC API Key + APNs Authentication Key 발급 (Apple Developer Portal)
+4. **아이폰 실기기 도착 시**: Phase B RFC(`memory/phase6_day4_phaseB_rfc.md`) 기반 B-1/B-2 적용 + Codemagic Phase B 워크플로우 추가
+
+**손님앱 Flutter 초기화는 별도 세션에서 진행 중** (이 세션에서 다루지 않음).
+
+---
+
 ## 2026-04-18 저녁 — Codemagic iOS Simulator 검증 PASS (Phase A 완전 확증)
 
 **Codemagic Build** `69e285293e9d20cb0c3bd492` (Build #4, commit `7a06cba9`)
