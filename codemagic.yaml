@@ -31,10 +31,23 @@ workflows:
         script: pod install --repo-update
       - name: Boot iOS Simulator
         script: |
-          DEVICE=$(xcrun simctl list devices available | grep "iPhone 15" | head -1 | grep -oE "\([A-F0-9-]{36}\)" | tr -d '()')
+          set -e
+          echo "--- Available iPhone simulators ---"
+          xcrun simctl list devices available | grep -E "iPhone" || true
+          DEVICE=$(xcrun simctl list devices available | grep -E "iPhone 1[6-9]|iPhone 15" | grep -v unavailable | head -n1 | sed -E 's/.*\(([A-F0-9-]{36})\).*/\1/')
+          if [ -z "$DEVICE" ]; then
+            DEVICE=$(xcrun simctl list devices available | grep -E "iPhone" | grep -v unavailable | head -n1 | sed -E 's/.*\(([A-F0-9-]{36})\).*/\1/')
+          fi
+          if [ -z "$DEVICE" ]; then
+            echo "ERROR: No iPhone simulator available"
+            xcrun simctl list devices available
+            exit 1
+          fi
+          echo "Selected BOOT_ID=$DEVICE"
           echo "BOOT_ID=$DEVICE" >> $CM_ENV
-          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl boot "$DEVICE" 2>&1 || echo "(already booted or boot returned non-zero)"
           xcrun simctl bootstatus "$DEVICE" -b
+          echo "Simulator boot complete."
       - name: Flutter integration_test on iOS Simulator
         working_directory: driver_app_flutter
         script: |
