@@ -9,22 +9,21 @@
 ## 프로젝트 한줄 요약
 지방 대리운전 회사 통합 관리 플랫폼. 관리자 1명이 폰 3대로 콜 수신 + 배차 + 픽업을 처리하는 환경.
 
-## 대시보드 (2026-04-17 기준)
+## 대시보드 (2026-04-18 기준)
 - **방향**: Flutter 전환 (Swift 보류) — iOS 출시는 Codemagic 기반 5~7주
-- **현재 위치**: **설계·인프라 완료 → Phase 6 실제 iOS 코딩 보강 착수 직전**
-- **오늘 달성**:
-  1. Apple 생태계 진입 (Team `VCJD377MAU`, Bundle ID `com.designated.driverapp.app`, 앱명 `콜마당 기사`)
-  2. Codemagic 인프라 구축 + no-codesign 빌드 10m 37s 성공 (⚠️ 껍데기 검증, 서명·TestFlight 미설정)
-  3. P0 7/9 스펙 패치 (MVP .md 문서 정리, 런타임 영향 없음)
+- **현재 위치**: **Phase 6 ① 서버측 CF 보강 완료 → Phase 6 ② 클라이언트 코드 보강 진입 직전**
+- **최근 달성**:
+  - 2026-04-18: Phase 6 ① 완료 (commit `745070fa`) — FCM 34곳 apns + acceptanceEvents 집계 + rules 신규 블록. 프로덕션 배포 완료. 실기기 회귀 없음. **클라이언트 영향 0**
+  - 2026-04-17: Apple 생태계 진입 (Team `VCJD377MAU`, Bundle ID `com.designated.driverapp.app`) + Codemagic no-codesign 빌드 성공 + P0 스펙 패치
 - **Phase 6 남은 코딩 7개** (체크리스트: `memory/phase6_coding_remaining.md`):
-  1. 서버측 CF 보강 (의제 4 apns + 의제 11 acceptanceEvents)
-  2. 기사앱 iOS 코드 보강 (fcmTokenPlatform, Platform.isIOS, 권한 문구)
+  1. ✅ 서버측 CF 보강 (FCM apns + acceptanceEvents + rules 신규) — 2026-04-18 완료
+  2. 기사앱 iOS 코드 보강 + Kotlin platform 저장 + backfill + rules 기존 규칙 확장 (②의 통합 범위)
   3. Bundle ID 실제 변경 (Xcode + Firebase Console)
   4. ASC API Key + Codemagic 서명
   5. codemagic.yaml Phase B (서명 + TestFlight)
   6. TestFlight 배포 + 파일럿
   7. 손님앱 신규 포팅 (Phase 2)
-- **사용자 Week 0 잔여**: 앱 아이콘/스크린샷/설명/개인정보 URL + 기사 테스터 Apple ID
+- **사용자 Week 0 잔여**: 앱 아이콘/스크린샷/설명/개인정보 URL + 기사 테스터 Apple ID + S22 알림 권한 설정 점검 (서버 무관)
 - **날짜별 상태 상세**: `memory/current_status.md`
 
 ## 상황별 참조 파일

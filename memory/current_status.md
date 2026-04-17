@@ -4,6 +4,49 @@
 
 ---
 
+## 2026-04-18 — Phase 6 ① 서버측 CF 보강 완료 (FCM apns + acceptanceEvents + rules 신규)
+
+**성과**: iOS Flutter 기사앱 출시 전 서버 준비 완료. **클라이언트 코드 영향 0**. 프로덕션 CF 배포 후 실기기 회귀 없음 확인.
+
+### 작업 내용 (커밋 `745070fa`, 21 files, +1271/-437)
+
+**A. FCM apns 블록 (34곳 audit, 31곳 수정)**
+- `functions/src/utils/fcmPayload.ts` 헬퍼 신규 (buildFcmPayload / buildMulticastFcmPayload, time-sensitive·active 2 레벨)
+- index.ts 22곳 + handlers/settlement.ts 2곳: 헬퍼 일괄 적용
+- 예외 7곳: 기존 최상위 `notification` 유지 + apns 수동 추가 (POINTS_EARNED, call_status_update 고객용, DRIVER_APPROVAL_REQUEST, new_customer, CALL_DETECTOR_CRASH, SETTLEMENT_SUBMITTED, SETTLEMENT_DISCREPANCY — Android Kotlin 호환)
+- 스킵 2곳: 재전송 저장 payload 재사용, testFcmMessage 테스트 함수
+- **data 블록 100% 보존 → Android 회귀 0**
+
+**B. acceptanceEvents 집계 (R1_LOCKSCREEN 발동 기준)**
+- `functions/src/analytics/acceptanceEvents.ts` + `aggregateMonthly.ts` 신규
+- onCallStatusChanged ASSIGNED→ACCEPTED/REJECTED 분기 신규 추가 (dead data였던 `rejectedByDriver`의 첫 소비처)
+- checkAssignedTimeout 오프라인/3분 타임아웃 2곳 훅
+- aggregateMonthlyStats 스케줄러 배포 (매월 1일 00:00 KST, Android/iOS 각 100건 이상 + 5%p 차이 시 R1 경보)
+- `functions/scripts/backfill-platform.js` 1회성 스크립트 작성 (실행은 Phase 6 ②)
+
+**D. firestore.rules (신규 블록만)**
+- acceptanceEvents + monthlyStats 규칙 추가 (기존 규칙 건드리지 않음)
+- designated_drivers/customerInfo 기존 규칙의 affectedKeys·fcmTokenPlatform 필드 허용은 Phase 6 ②로 이관 (Kotlin platform 배포 순서 의존성 회피)
+
+**메모리**
+- `memory/rejected_by_driver_dead_data.md` 신규: 기사앱 write 3곳 / consumer 0 / 재배차 UI 필터링 후속 이슈
+
+### 검증
+
+- **TypeScript strict 컴파일**: 0 오류
+- **Firebase Emulator 8개 시나리오**: 5 PASS / 3 FAIL (1, 2, 4 = 정산 세션 검증 타임아웃)
+- **git stash로 베이스라인 재현**: 동일하게 5 PASS / 3 FAIL → 실패 3건은 **Windows + Emulator + v2 함수의 CF 트리거 대기열 지연**이 진짜 원인 (베이스라인에서도 존재하는 인프라 문제, 내 변경 무관 확증)
+- **프로덕션 배포**: `firebase deploy --only firestore:rules` + `--only functions` 성공. aggregateMonthlyStats 신규 create, 기존 47개 함수 update 전부 successful
+- **실기기 회귀 (S21+/S22/Flip4)**: 크게 문제 없음. S22에서 "알림만" 표시되고 연속 알림·FullScreenIntent 미동작 현상은 **서버 변경 무관** — Android 14+ FullScreenIntent 권한 / 배터리 최적화 / 알림 채널 설정 이슈 (Flip4는 정상)
+
+### 남은 작업
+
+- **Phase 6 ② (다음 세션)**: Kotlin 기사앱 platform 필드 저장 + Flutter iOS 코드 보강 (fcmTokenPlatform, Platform.isIOS, 권한 문구) + backfill-platform.js 실행 + firestore.rules 기존 규칙 affectedKeys 제한
+- **후속 이슈**: Call Manager/Detector 재배차 UI에서 rejectedByDriver 기반 기사 필터링 (dead data 완전 해소)
+- **S22 기기 세팅 확인 (사용자 액션)**: FullScreenIntent 권한 / 배터리 최적화 / 알림 채널 중요도 Flip4와 동일 설정
+
+---
+
 ## 2026-04-17 — Apple 생태계 진입 + iOS 빌드 인프라 구축 (Phase 6 코딩 진입 직전)
 
 **⚠️ 중요 프레이밍**: 오늘 "빌드 성공"은 **기존 3/27 코드가 iOS 컴파일된다는 껍데기 검증**이지, **iOS 대응 코드 보강이 끝난 것이 아님**. 실제 iOS 출시까지는 Phase 6 코딩 보강(7개 항목)이 남아있음. 상세: `memory/phase6_coding_remaining.md`

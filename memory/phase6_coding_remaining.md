@@ -40,24 +40,28 @@ type: project
 
 ## 7개 코딩 보강 항목 (권장 순서)
 
-### ① 서버측 보강 (CF) — 우선
-**왜 먼저**: 배포만 하면 끝. 클라이언트 코드 영향 적음.
+### ① 서버측 보강 (CF) — ✅ 완료 (2026-04-18, commit 745070fa)
 
-- [ ] **의제 4 FCM `apns` 블록 추가** (28곳+ CF 함수)
-  - `oncallassigned`, `onCallStatusChanged`, `onCallCancelled*` 등 모든 FCM 송신 함수
-  - `payload.aps.'content-available': 1` + `payload.aps.'mutable-content': 1`
-  - 상세: `flutter/SERVER_TASKS.md` A 섹션
+- [x] **의제 4 FCM `apns` 블록 추가** — 34곳 audit, 헬퍼 적용 24곳 + 예외 처리 7곳 + 스킵 2곳(재전송/testFcmMessage)
+  - `functions/src/utils/fcmPayload.ts` 신규 (buildFcmPayload / buildMulticastFcmPayload)
+  - 예외 7곳 (기존 최상위 notification 유지 + apns 수동 추가): POINTS_EARNED, call_status_update 고객용, DRIVER_APPROVAL_REQUEST, new_customer, CALL_DETECTOR_CRASH, SETTLEMENT_SUBMITTED, SETTLEMENT_DISCREPANCY
+  - data 블록 100% 보존 → Android 회귀 0
 
-- [ ] **의제 11 `acceptanceEvents` 컬렉션 + 월 집계** (신규 모듈 ~300 LOC)
-  - `recordAcceptanceEvent` 함수 구현 (P0-D.1 패치 완료된 스펙)
-  - `onCallStatusChanged`에서 ACCEPTED/REJECTED 시 호출
-  - `checkAssignedTimeout`에서 타임아웃 시 호출
-  - R1_LOCKSCREEN 발동 판단용 iOS vs Android 수락률 집계
-  - 상세: `flutter/SERVER_TASKS.md` B 섹션
+- [x] **의제 11 `acceptanceEvents` 컬렉션 + 월 집계**
+  - `functions/src/analytics/acceptanceEvents.ts` + `aggregateMonthly.ts` 신규
+  - onCallStatusChanged ASSIGNED→ACCEPTED/REJECTED 분기 신규 추가 (dead data였던 rejectedByDriver 첫 소비처)
+  - checkAssignedTimeout 오프라인/3분 타임아웃 2곳 훅
+  - aggregateMonthlyStats 스케줄러 배포 완료 (매월 1일 00:00 KST)
+  - R1_LOCKSCREEN 자동 평가 로직 (Android/iOS 각 100건 이상일 때만 5%p 판정)
 
-- [ ] **Firestore 보안 규칙 갱신** (customerInfo fcmTokenPlatform 필드 write 허용)
-  - 상세: `flutter/SERVER_TASKS.md` D 섹션
+- [x] **Firestore 보안 규칙 갱신 (신규 블록만)**
+  - `acceptanceEvents`, `monthlyStats` 규칙 추가 (기존 규칙 건드리지 않음)
+  - **미완료**: designated_drivers/customerInfo 기존 규칙의 `affectedKeys` + fcmTokenPlatform 필드 write 허용은 **Phase 6 ②로 이관** (Kotlin platform 배포 순서 의존성 회피)
   - E.1(b) customerInfo 권한 취약점은 **별도 보안 설계 세션** 필요 (phone-uid 매핑)
+
+- [ ] **남은 ①번 후속** (②와 함께 진행):
+  - `functions/scripts/backfill-platform.js` 실행 — Kotlin platform 저장 코드 배포 후
+  - `firestore.rules` 기존 규칙의 affectedKeys 제한 추가 — 위 배포 이후
 
 ### ② 기사앱 Flutter 코드 보강 (`driver_app_flutter/lib/`)
 
