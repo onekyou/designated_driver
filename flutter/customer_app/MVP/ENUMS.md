@@ -150,40 +150,81 @@ if (state.isCancellable) {
 ## 2. CustomerGrade (손님 등급 4종)
 
 ### Kotlin 원본
-경로: `customer_app/app/src/main/java/com/designated/customer/data/model/CustomerGrade.kt:13-40`
+경로: `customer_app/app/src/main/java/com/designated/customer/data/model/CustomerGrade.kt:7-94`
 
-4개 등급 + 적립률 + 계산 로직:
-- `BRONZE` (기본, 0~9 이용): 3% 적립
-- `SILVER` (10~29 이용): 5% 적립
-- `GOLD` (30~49 이용): 7% 적립
-- `VIP` (50+ 이용): 9% 적립
+Kotlin `enum class` 6 필드 보유:
+- **4개 등급**: `BRONZE`(0+, 3%) / `SILVER`(10+, 5%) / `GOLD`(30+, 7%) / `VIP`(50+, 9%)
+- **필드**: `displayName` (한글), `icon` (이모지), `pointRate` (Double), `minCalls` (Int), `color` (Long ARGB)
+- **메서드**: `fromCallCount`, `fromString`, `nextGrade`, `getCallsToNextGrade`, `calculatePoints`
+- **직렬화**: Firestore 저장은 Kotlin enum `.name` 그대로 (별도 매핑 필드 없음)
 
 ### Flutter Dart enhanced enum
+
+> Dart enum 값 이름(`bronze`)과 Firestore 저장값(`BRONZE`) 차이 때문에 `json` 매핑 필드 추가. 이외 필드는 Kotlin과 1:1 대응.
 
 ```dart
 // lib/domain/enums/customer_grade.dart
 
 enum CustomerGrade {
-  bronze('BRONZE', '브론즈', 0.03, 0),
-  silver('SILVER', '실버', 0.05, 10),
-  gold('GOLD', '골드', 0.07, 30),
-  vip('VIP', 'VIP', 0.09, 50);
+  bronze(
+    json: 'BRONZE',
+    displayName: '브론즈',
+    icon: '🥉',
+    pointRate: 0.03,
+    minCalls: 0,
+    colorArgb: 0xFFCD7F32,
+  ),
+  silver(
+    json: 'SILVER',
+    displayName: '실버',
+    icon: '🥈',
+    pointRate: 0.05,
+    minCalls: 10,
+    colorArgb: 0xFFC0C0C0,
+  ),
+  gold(
+    json: 'GOLD',
+    displayName: '골드',
+    icon: '🥇',
+    pointRate: 0.07,
+    minCalls: 30,
+    colorArgb: 0xFFFFD700,
+  ),
+  vip(
+    json: 'VIP',
+    displayName: 'VIP',
+    icon: '⭐',
+    pointRate: 0.09,
+    minCalls: 50,
+    colorArgb: 0xFFFF6B6B,
+  );
 
-  const CustomerGrade(this.json, this.displayName, this.earningRate, this.minCalls);
+  const CustomerGrade({
+    required this.json,
+    required this.displayName,
+    required this.icon,
+    required this.pointRate,
+    required this.minCalls,
+    required this.colorArgb,
+  });
 
-  /// Firestore 저장 문자열 (Kotlin과 동일, 대문자)
+  /// Firestore 저장 문자열 (Kotlin enum `.name`과 동일, 대문자)
   final String json;
   /// UI 표시 한글
   final String displayName;
-  /// 포인트 적립률 (fare × earningRate)
-  final double earningRate;
+  /// UI 표시 이모지 (Kotlin icon)
+  final String icon;
+  /// 포인트 적립률 (fare × pointRate, Kotlin과 동일 네이밍)
+  final double pointRate;
   /// 승격 기준 최소 콜 수
   final int minCalls;
+  /// 등급별 테마 색상 (ARGB Long, Kotlin color와 동일 값)
+  final int colorArgb;
 
-  /// Firestore 저장 문자열 → enum
-  static CustomerGrade fromString(String value) =>
+  /// Firestore 저장 문자열 → enum (Kotlin fromString 포팅, null/미매칭은 BRONZE)
+  static CustomerGrade fromString(String? value) =>
       CustomerGrade.values.firstWhere(
-        (e) => e.json == value,
+        (e) => e.json == value?.toUpperCase(),
         orElse: () => CustomerGrade.bronze,
       );
 
@@ -198,15 +239,22 @@ enum CustomerGrade {
   }
 
   /// 포인트 적립 계산 (Kotlin `calculatePoints` 포팅)
-  int calculatePoints(int fare) => (fare * earningRate).toInt();
+  int calculatePoints(int fare) => (fare * pointRate).toInt();
 
-  /// 다음 등급까지 남은 콜 수
-  int callsUntilNextGrade(int currentCalls) => switch (this) {
-        CustomerGrade.bronze => 10 - currentCalls,
-        CustomerGrade.silver => 30 - currentCalls,
-        CustomerGrade.gold => 50 - currentCalls,
-        CustomerGrade.vip => 0,  // 최고 등급
+  /// 다음 등급 (Kotlin `nextGrade` 포팅, VIP는 null)
+  CustomerGrade? get nextGrade => switch (this) {
+        CustomerGrade.bronze => CustomerGrade.silver,
+        CustomerGrade.silver => CustomerGrade.gold,
+        CustomerGrade.gold => CustomerGrade.vip,
+        CustomerGrade.vip => null,
       };
+
+  /// 다음 등급까지 남은 콜 수 (Kotlin `getCallsToNextGrade` 포팅, VIP는 null)
+  int? callsToNext(int currentCalls) {
+    final next = nextGrade;
+    if (next == null) return null;
+    return next.minCalls - currentCalls;
+  }
 }
 ```
 
@@ -217,13 +265,14 @@ enum CustomerGrade {
 final grade = CustomerGrade.fromCallCount(customer.totalCalls);
 final earnedPoints = grade.calculatePoints(callFare);
 
-// UI 표시
-Text(grade.displayName); // "실버"
-Text('${(grade.earningRate * 100).toInt()}% 적립'); // "5% 적립"
+// UI 표시 (등급 뱃지)
+Text('${grade.icon} ${grade.displayName}'); // "🥈 실버"
+Text('${(grade.pointRate * 100).toInt()}% 적립'); // "5% 적립"
+Container(color: Color(grade.colorArgb));
 
 // 승격 유도 UX
-final remaining = grade.callsUntilNextGrade(customer.totalCalls);
-if (remaining > 0 && remaining <= 3) {
+final remaining = grade.callsToNext(customer.totalCalls);
+if (remaining != null && remaining <= 3) {
   showUpgradeBanner('다음 등급까지 $remaining회 남았어요');
 }
 ```

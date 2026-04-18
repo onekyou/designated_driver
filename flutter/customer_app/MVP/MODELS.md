@@ -508,117 +508,21 @@ class CustomerGradeConverter implements JsonConverter<CustomerGrade, String?> {
 
 ## 4. CustomerGrade (enum → Dart enum with behavior)
 
-### Kotlin 원본 (`data/model/CustomerGrade.kt:7-95`)
+> **단일 원본**: `flutter/customer_app/MVP/ENUMS.md §2` 참조.
+>
+> 구현 위치: `lib/domain/enums/customer_grade.dart` (6 필드 enhanced enum: `json` / `displayName` / `icon` / `pointRate` / `minCalls` / `colorArgb` + 메서드 `fromCallCount` / `fromString` / `toJson` / `calculatePoints` / `nextGrade` / `callsToNext`).
+>
+> MODELS에서는 import만:
+> ```dart
+> import '../enums/customer_grade.dart';
+> ```
 
-Kotlin은 **enum class with fields + methods**:
+### Kotlin 원본 요약 (`data/model/CustomerGrade.kt:7-94`)
+
 - 4단계: BRONZE(3%, 0+) / SILVER(5%, 10+) / GOLD(7%, 30+) / VIP(9%, 50+)
-- `fromCallCount(count)`, `fromString(grade)`, `nextGrade()`, `getCallsToNextGrade(currentCalls)`, `calculatePoints(amount)`
-- 디스플레이: `displayName` (한글), `icon` (이모지), `pointRate` (0.03 등), `minCalls`, `color` (Long ARGB)
-
-### Dart 매핑 — enhanced enum (Dart 2.17+)
-
-```dart
-// lib/domain/enums/customer_grade.dart (ENUMS.md §C1로 승격 권장)
-
-enum CustomerGrade {
-  bronze(
-    displayName: '브론즈',
-    icon: '🥉',
-    pointRate: 0.03,
-    minCalls: 0,
-    colorArgb: 0xFFCD7F32,
-    jsonValue: 'BRONZE',
-  ),
-  silver(
-    displayName: '실버',
-    icon: '🥈',
-    pointRate: 0.05,
-    minCalls: 10,
-    colorArgb: 0xFFC0C0C0,
-    jsonValue: 'SILVER',
-  ),
-  gold(
-    displayName: '골드',
-    icon: '🥇',
-    pointRate: 0.07,
-    minCalls: 30,
-    colorArgb: 0xFFFFD700,
-    jsonValue: 'GOLD',
-  ),
-  vip(
-    displayName: 'VIP',
-    icon: '⭐',
-    pointRate: 0.09,
-    minCalls: 50,
-    colorArgb: 0xFFFF6B6B,
-    jsonValue: 'VIP',
-  );
-
-  const CustomerGrade({
-    required this.displayName,
-    required this.icon,
-    required this.pointRate,
-    required this.minCalls,
-    required this.colorArgb,
-    required this.jsonValue,
-  });
-
-  final String displayName;
-  final String icon;
-  final double pointRate;
-  final int minCalls;
-  final int colorArgb;
-  final String jsonValue;
-
-  /// Kotlin fromCallCount 등가
-  static CustomerGrade fromCallCount(int callCount) {
-    if (callCount >= 50) return CustomerGrade.vip;
-    if (callCount >= 30) return CustomerGrade.gold;
-    if (callCount >= 10) return CustomerGrade.silver;
-    return CustomerGrade.bronze;
-  }
-
-  /// Kotlin fromString 등가 (대소문자 무관, 기본 BRONZE)
-  static CustomerGrade fromString(String? grade) {
-    if (grade == null) return CustomerGrade.bronze;
-    return switch (grade.toUpperCase()) {
-      'VIP' => CustomerGrade.vip,
-      'GOLD' => CustomerGrade.gold,
-      'SILVER' => CustomerGrade.silver,
-      _ => CustomerGrade.bronze,
-    };
-  }
-
-  /// Firestore 저장값 (Kotlin grade.name 과 일치)
-  String toJson() => jsonValue;
-
-  /// Kotlin nextGrade 등가
-  CustomerGrade? get nextGrade => switch (this) {
-    CustomerGrade.bronze => CustomerGrade.silver,
-    CustomerGrade.silver => CustomerGrade.gold,
-    CustomerGrade.gold => CustomerGrade.vip,
-    CustomerGrade.vip => null,
-  };
-
-  /// Kotlin getCallsToNextGrade 등가
-  int? callsToNext(int currentCalls) {
-    final next = nextGrade;
-    if (next == null) return null;
-    return next.minCalls - currentCalls;
-  }
-
-  /// Kotlin calculatePoints 등가
-  int calculatePoints(int amount) => (amount * pointRate).toInt();
-}
-```
-
-### ENUMS.md §C1 승격 권장
-
-손님앱 ENUMS.md (차기 작성) §C1 로 이 정의를 단일 원본 유지. MODELS.md에서는 import만:
-
-```dart
-import '../enums/customer_grade.dart';
-```
+- 필드: displayName, icon(이모지), pointRate, minCalls, color(Long ARGB)
+- 메서드: fromCallCount, fromString, nextGrade, getCallsToNextGrade, calculatePoints
+- Firestore 저장: Kotlin enum `.name` 그대로 (별도 매핑 필드 없음)
 
 ### 기사앱 MODELS.md §5 `CustomerPoints.grade: String` 과의 차이
 
@@ -696,31 +600,11 @@ class PointTransaction with _$PointTransaction {
 
 ### TransactionType enum + Converter
 
+> **단일 원본**: `flutter/customer_app/MVP/ENUMS.md §3` 참조.
+>
+> 구현 위치: `lib/domain/enums/transaction_type.dart` (3 필드 enhanced enum: `json` / `displayName` / `sign` + 메서드 `fromString` / `toJson` / `isValidAmount` / `formatAmount`). `sign` 필드는 Kotlin 원본에 없는 Flutter 확장 (amount 부호 UI 포맷팅 용).
+
 ```dart
-// lib/domain/enums/transaction_type.dart (ENUMS.md §C2 신규)
-
-enum TransactionType {
-  earn('EARN', '적립'),
-  use('USE', '사용'),
-  expire('EXPIRE', '만료'),
-  cancel('CANCEL', '취소'),     // 환불 시 (PointService.refundPoints)
-  admin('ADMIN', '관리자 조정');
-
-  const TransactionType(this.jsonValue, this.displayName);
-  final String jsonValue;
-  final String displayName;
-
-  static TransactionType fromString(String? v) => switch (v?.toUpperCase()) {
-    'USE' => TransactionType.use,
-    'EXPIRE' => TransactionType.expire,
-    'CANCEL' => TransactionType.cancel,
-    'ADMIN' => TransactionType.admin,
-    _ => TransactionType.earn,
-  };
-
-  String toJson() => jsonValue;
-}
-
 // lib/domain/models/converters/transaction_type_converter.dart
 
 import 'package:json_annotation/json_annotation.dart';
@@ -1104,7 +988,7 @@ BRONZE / SILVER / GOLD / VIP
 ### C2. TransactionType (5종)
 EARN / USE / EXPIRE / CANCEL / ADMIN
 
-상세: §5. 단순 Dart enum + `jsonValue`. amount 부호 관용구 주의.
+상세: §5 (TransactionTypeConverter) + `ENUMS.md §3` (enum 정의). amount 부호 관용구 주의.
 
 ---
 
