@@ -242,12 +242,17 @@ type: project
 
 ## 손님앱 Phase 2 (기사앱 안정화 후)
 
-**현 상태**: 손님앱 Flutter 프로젝트 자체가 아직 없음 (`customer_app_flutter/` 미존재)
+**현 상태**: Week 0~1 스캐폴딩 완료 (2026-04-19, commit `69295495`). 실제 포팅(Week 1~3)은 다음 세션부터.
 
-- [ ] Flutter 프로젝트 초기화 (`flutter create customer_app_flutter`)
-- [ ] MVP 매핑 문서 27개 중 customer_app 9개 기반 실제 Dart 코드 작성
-- [ ] 기존 Kotlin `customer_app/` 기능 1:1 포팅
-- [ ] QR/Install Referrer 핵심 온보딩 플로우
+- [x] Flutter 프로젝트 초기화 (`flutter create customer_app_flutter`) — 2026-04-19
+- [x] pubspec.yaml + iOS Podfile/Info.plist/PrivacyInfo.xcprivacy + Android build.gradle.kts/Manifest + Bundle ID `com.designated.customer.app` 통일 — 2026-04-19
+- [x] MVP 매핑 문서 P0 enum 드리프트 해소 (CustomerGrade/TransactionType 단일 원본) — 2026-04-19 commit `1e909768`
+- [ ] iOS `GoogleService-Info.plist`: Firebase Console에서 Bundle ID `com.designated.customer.app` iOS 앱 신규 등록 → 다운로드 → `customer_app_flutter/ios/Runner/GoogleService-Info.plist` 배치 (**사용자 수동 액션**)
+- [ ] Codemagic `customer_app_flutter` 워크플로 추가 (별도 세션)
+- [ ] Week 1~3: 6 Freezed 모델 (`lib/domain/entities/`) + 4 Riverpod Notifier + 11 화면 포팅
+- [ ] FCM 5종 핸들러 (FCM.md §6)
+- [ ] Anonymous + Phone Auth `linkWithCredential` (AUTH.md §3.4, Kotlin 원본 버그 패치 포함)
+- [ ] QR/Install Referrer 핵심 온보딩 플로우 (ATTRIBUTION.md B+C)
 - [ ] Phase 2 App Clip (Mac 도착 후)
 
 ---

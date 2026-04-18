@@ -9,11 +9,12 @@
 ## 프로젝트 한줄 요약
 지방 대리운전 회사 통합 관리 플랫폼. 관리자 1명이 폰 3대로 콜 수신 + 배차 + 픽업을 처리하는 환경.
 
-## 대시보드 (2026-04-18 기준)
+## 대시보드 (2026-04-19 기준)
 - **방향**: Flutter 전환 (Swift 보류) — iOS 출시는 Codemagic 기반 5~7주
-- **현재 위치**: **Phase 6 ② Day 4 Phase A 완료 → 아이폰 실기기 도착 대기(2-3일) → Phase B 진입**
+- **현재 위치**: **기사앱 Phase B 대기(아이폰 도착) + 손님앱 Flutter Week 0~1 스캐폴딩 완료**
 - **최근 달성**:
-  - 2026-04-18 오후: Phase 6 ② Day 4 Phase A 완료 (commit `fab1050c`) — Flutter 기사앱 platform 저장 + Codemagic iOS Simulator integration_test 경로 구축. Unit test 3/3 PASS. 팀원 3명 리뷰 PASS
+  - 2026-04-19: 손님앱 Flutter 스캐폴딩 완료 (commit `69295495`) — `customer_app_flutter/` 신규, Bundle ID 통일(`com.designated.customer.app`), Android APK 빌드 PASS. ENUMS/MODELS enum 드리프트 해소(commit `1e909768`)
+  - 2026-04-18 오후: Phase 6 ② Day 4 Phase A 완료 (commit `fab1050c`) — Flutter 기사앱 platform 저장 + Codemagic iOS Simulator integration_test 경로 구축
   - 2026-04-18 오전: Phase 6 ① 완료 (commit `745070fa`) — FCM 34곳 apns + acceptanceEvents 집계 + rules 신규 블록. 프로덕션 배포 완료
   - 2026-04-17: Apple 생태계 진입 (Team `VCJD377MAU`, Bundle ID `com.designated.driverapp.app`) + Codemagic no-codesign 빌드 성공 + P0 스펙 패치
 - **Phase 6 남은 코딩 7개** (체크리스트: `memory/phase6_coding_remaining.md`):
@@ -23,8 +24,8 @@
   4. ASC API Key + Codemagic 서명
   5. codemagic.yaml Phase B (서명 + TestFlight)
   6. TestFlight 배포 + 파일럿
-  7. 손님앱 신규 포팅 (Phase 2)
-- **사용자 Week 0 잔여**: 앱 아이콘/스크린샷/설명/개인정보 URL + 기사 테스터 Apple ID + S22 알림 권한 설정 점검 (서버 무관)
+  7. 손님앱 신규 포팅 (Phase 2) — **Week 0~1 스캐폴딩 ✅ 완료 (2026-04-19). Week 1~3 포팅 착수 가능**
+- **사용자 Week 0 잔여**: 앱 아이콘/스크린샷/설명/개인정보 URL + 기사 테스터 Apple ID + S22 알림 권한 설정 점검 + **손님앱 iOS Firebase Console 등록 (Bundle ID `com.designated.customer.app` → GoogleService-Info.plist 다운로드)**
 - **날짜별 상태 상세**: `memory/current_status.md`
 
 ## 상황별 참조 파일

@@ -4,6 +4,63 @@
 
 ---
 
+## 2026-04-19 손님앱 Flutter Week 0~1 스캐폴딩 완료 + P0 enum 드리프트 해소
+
+**두 커밋**: `1e909768` → `69295495` (`manager-direct-drive`)
+
+### 1. MVP 문서 정리 (`1e909768`)
+
+REVIEW_FINDINGS.md P0 B.1~B.3 재검증 결과:
+- **B.1 AuthUiState 9필드**: MODELS.md:1030 이미 정의 완료 (사실상 해소 상태)
+- **B.2 CustomerPoints.calculateEarnPoints**: MODELS.md:448 `_();` + :481 메서드 이미 구현
+- **B.3 grade.jsonValue**: NOTIFIERS.md:257 이미 `grade.json`으로 통일
+
+실제 미해결 드리프트 발견 → 이번 세션에서 해소:
+- `ENUMS.md §2` CustomerGrade: Kotlin 원본의 `icon` (이모지) + `color` (ARGB) **누락**
+- `MODELS.md §4/§5`: CustomerGrade/TransactionType 중복 정의, 속성명 `jsonValue` vs `json` 드리프트
+
+해결:
+- ENUMS.md §2: named constructor + 6필드 (json/displayName/icon/pointRate/minCalls/colorArgb) + 메서드 (fromCallCount/fromString/toJson/calculatePoints/nextGrade/callsToNext)
+- MODELS.md §4/§5: 본문 삭제 → ENUMS.md 포인터로 축약 (단일 원본 강제)
+- NOTIFIERS.md `grade.json` 참조와 정합
+
+### 2. Flutter 프로젝트 스캐폴딩 (`69295495`)
+
+**핵심 결정 (사용자 확정)**:
+- iOS Bundle ID: `com.designated.customer.app` (Android와 통일, 의제 2 결정과 일치)
+- 브랜치: `manager-direct-drive` 계속
+- 디렉토리: repo root `customer_app_flutter/` (driver와 대칭)
+
+**스캐폴드**: `flutter create --org com.designated --project-name customer_app_flutter --platforms=android,ios` (Flutter 3.41.6 / Dart 3.11.4)
+
+**변경 상세**:
+- pubspec.yaml: FCM.md §0 기준, firebase analytics/crashlytics/remote_config + go_router + mobile_scanner + in_app_update 추가. 드라이버 대비 firebase_database/flutter_foreground_task/qr_flutter 제외 (Presence/Foreground Service/QR 생성 불필요)
+- iOS Podfile: platform 15.0 + post_install IPHONEOS_DEPLOYMENT_TARGET 15.0
+- iOS Info.plist: CFBundleDisplayName=손님앱, 권한 한글 4종 (Location WhenInUse only / Camera QR 신규 / Microphone R2 / SpeechRecognition R2). UIBackgroundModes=fetch+remote-notification (location 제거, 의제 8)
+- iOS PrivacyInfo.xcprivacy 선제 작성 (TestFlight 대비)
+- Android build.gradle.kts: applicationId=com.designated.customer.app, Compose 블록 제거 (LockScreen 없음), google-services plugin
+- AndroidManifest.xml: 손님 권한 subset (Camera/Location WhenInUse 추가, FOREGROUND_SERVICE/FULL_SCREEN_INTENT/RECEIVE_BOOT_COMPLETED 제외)
+- pbxproj Bundle ID 6곳 치환
+
+**검증**:
+- flutter pub get: 143 deps 해결
+- flutter analyze: 0 issues
+- flutter test: 1/1 PASS (기본 widget_test)
+- flutter build apk --debug: app-debug.apk 생성 (24분, JAVA_HOME=Android Studio jbr)
+
+**미완료 (후속)**:
+- iOS `GoogleService-Info.plist`: Firebase Console에서 Bundle ID `com.designated.customer.app` iOS 앱 신규 등록 후 다운로드 배치 (사용자 수동)
+- Codemagic `customer_app_flutter` 워크플로 추가 (별도 세션)
+- Week 1~3 실제 포팅 (6 Freezed 모델 + 4 Riverpod Notifier + 11 화면)
+
+**다음 세션 시작점**:
+- Week 1~3 Phase 1 포팅 시작 (MODELS.md §1~6 Freezed 모델부터)
+- 병렬: 사용자가 Firebase Console에서 iOS 앱 등록 + GoogleService-Info.plist 다운로드
+
+**플랜 문서**: `C:\Users\kala1\.claude\plans\jazzy-swinging-meadow.md`
+
+---
+
 ## 2026-04-18 재개 세션 — 작업 없이 종료 (다음 세션 시작점 재정리)
 
 **세션 요약**: git pull 동기화 완료. 어제 기록한 후보 4건 중 사용자 확인을 거쳐 아래와 같이 재분류. 실제 코드/배포 변경 없음.
