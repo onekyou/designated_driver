@@ -1737,7 +1737,7 @@ void main() {
 ## 10. Phase 6 작업 순서
 
 ### Week 1 — 기반
-1. `lib/domain/state/` — CallUiState / PointUiState / ProfileUiState / AuthUiState 4 Freezed (MODELS.md §7.4)
+1. `lib/features/{call,point,profile,auth}/presentation/state/` — CallUiState / PointUiState / ProfileUiState / AuthUiState 4 Freezed (MODELS.md §7.4, 각 feature presentation 레이어에 배치)
 2. Service Provider 정의 (`callServiceProvider`, `pointServiceProvider`, `locationServiceProvider`)
 
 ### Week 2 — Notifier 4종

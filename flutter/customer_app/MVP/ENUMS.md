@@ -61,7 +61,7 @@ CallState mapFirestoreStatusToUi(String firestoreStatus) => switch (firestoreSta
 ### Flutter Dart sealed class
 
 ```dart
-// lib/domain/enums/call_state.dart
+// lib/core/domain/enums/call_state.dart
 
 sealed class CallState {
   const CallState();
@@ -163,7 +163,7 @@ Kotlin `enum class` 6 필드 보유:
 > Dart enum 값 이름(`bronze`)과 Firestore 저장값(`BRONZE`) 차이 때문에 `json` 매핑 필드 추가. 이외 필드는 Kotlin과 1:1 대응.
 
 ```dart
-// lib/domain/enums/customer_grade.dart
+// lib/core/domain/enums/customer_grade.dart
 
 enum CustomerGrade {
   bronze(
@@ -296,7 +296,7 @@ if (remaining != null && remaining <= 3) {
 ### Flutter Dart enum
 
 ```dart
-// lib/domain/enums/transaction_type.dart
+// lib/core/domain/enums/transaction_type.dart
 
 enum TransactionType {
   earn('EARN', '적립', 1),
@@ -355,7 +355,7 @@ enum TransactionType {
 | `CallStatus` (11종) | `driver_app/MVP/ENUMS.md` §1 | CF/Firestore 상태 파싱 (CallState 매핑 전 단계) |
 | `PaymentMethod` (5종) | `driver_app/MVP/ENUMS.md` §5 | 손님이 콜 요청 시 결제 방식 선택 |
 
-**공유 원칙**: enum은 `lib/domain/enums/` 단일 위치. 기사앱/손님앱 각 Flutter 프로젝트에서 상대 경로 import.
+**공유 원칙**: enum은 `lib/core/domain/enums/` 단일 위치. 기사앱/손님앱 각 Flutter 프로젝트에서 상대 경로 import.
 
 **중복 금지**: `CustomerGrade`, `TransactionType`, `CallState`는 **손님앱 전용** — 기사앱 ENUMS.md에 추가하지 않음.
 

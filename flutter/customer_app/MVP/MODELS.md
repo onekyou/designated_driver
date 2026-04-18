@@ -111,7 +111,7 @@ data class CustomerCall(
 ### Flutter Freezed 매핑
 
 ```dart
-// lib/domain/models/customer_call.dart
+// lib/features/call/domain/entities/customer_call.dart
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -301,7 +301,7 @@ data class CustomerInfo(
 ### Flutter Freezed 매핑
 
 ```dart
-// lib/domain/models/customer_info.dart
+// lib/features/profile/domain/entities/customer_info.dart
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -432,7 +432,7 @@ data class CustomerPoints(
 ### Flutter Freezed 매핑
 
 ```dart
-// lib/domain/models/customer_points.dart (손님앱 버전)
+// lib/features/point/domain/entities/customer_points.dart (손님앱 버전)
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -488,7 +488,7 @@ class CustomerPoints with _$CustomerPoints {
 ### CustomerGradeConverter (신규)
 
 ```dart
-// lib/domain/models/converters/customer_grade_converter.dart
+// lib/core/domain/converters/customer_grade_converter.dart
 
 import 'package:json_annotation/json_annotation.dart';
 import '../../enums/customer_grade.dart';
@@ -510,7 +510,7 @@ class CustomerGradeConverter implements JsonConverter<CustomerGrade, String?> {
 
 > **단일 원본**: `flutter/customer_app/MVP/ENUMS.md §2` 참조.
 >
-> 구현 위치: `lib/domain/enums/customer_grade.dart` (6 필드 enhanced enum: `json` / `displayName` / `icon` / `pointRate` / `minCalls` / `colorArgb` + 메서드 `fromCallCount` / `fromString` / `toJson` / `calculatePoints` / `nextGrade` / `callsToNext`).
+> 구현 위치: `lib/core/domain/enums/customer_grade.dart` (6 필드 enhanced enum: `json` / `displayName` / `icon` / `pointRate` / `minCalls` / `colorArgb` + 메서드 `fromCallCount` / `fromString` / `toJson` / `calculatePoints` / `nextGrade` / `callsToNext`).
 >
 > MODELS에서는 import만:
 > ```dart
@@ -562,7 +562,7 @@ enum class TransactionType { EARN, USE, EXPIRE, CANCEL, ADMIN }
 ### Flutter Freezed 매핑
 
 ```dart
-// lib/domain/models/point_transaction.dart
+// lib/features/point/domain/entities/point_transaction.dart
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -602,10 +602,10 @@ class PointTransaction with _$PointTransaction {
 
 > **단일 원본**: `flutter/customer_app/MVP/ENUMS.md §3` 참조.
 >
-> 구현 위치: `lib/domain/enums/transaction_type.dart` (3 필드 enhanced enum: `json` / `displayName` / `sign` + 메서드 `fromString` / `toJson` / `isValidAmount` / `formatAmount`). `sign` 필드는 Kotlin 원본에 없는 Flutter 확장 (amount 부호 UI 포맷팅 용).
+> 구현 위치: `lib/core/domain/enums/transaction_type.dart` (3 필드 enhanced enum: `json` / `displayName` / `sign` + 메서드 `fromString` / `toJson` / `isValidAmount` / `formatAmount`). `sign` 필드는 Kotlin 원본에 없는 Flutter 확장 (amount 부호 UI 포맷팅 용).
 
 ```dart
-// lib/domain/models/converters/transaction_type_converter.dart
+// lib/core/domain/converters/transaction_type_converter.dart
 
 import 'package:json_annotation/json_annotation.dart';
 import '../../enums/transaction_type.dart';
@@ -659,7 +659,7 @@ data class BannerAdData(
 ### Flutter Freezed 매핑 (R2)
 
 ```dart
-// lib/domain/models/banner_ad_data.dart (R2 — 선택)
+// lib/features/ad/domain/entities/banner_ad_data.dart (R2 — 선택)
 
 @freezed
 class BannerAdData with _$BannerAdData {
@@ -727,7 +727,7 @@ data class DriverInfo(
 ### 7.2 ENUMS.md §C0 `CallState` sealed class (신규 승격 권장)
 
 ```dart
-// lib/domain/enums/call_state.dart (ENUMS.md §C0 신규)
+// lib/core/domain/enums/call_state.dart (ENUMS.md §C0 신규)
 
 sealed class CallState {
   const CallState();
@@ -803,7 +803,7 @@ class CallStateUnknown extends CallState {
 ### 7.3 CallStatus + DriverInfo Freezed
 
 ```dart
-// lib/domain/state/call_status.dart
+// lib/features/call/presentation/state/call_status.dart
 
 import 'package:freezed_annotation/freezed_annotation.dart';
 import '../enums/call_state.dart';
@@ -950,8 +950,8 @@ val isRecordingDestination: Boolean = false,
 ## 9. 마이그레이션 작업 순서 (Phase 6)
 
 ### Week 1 — 기반 구조
-1. `lib/domain/models/converters/` — TimestampConverter (기사앱 공유) / CustomerGradeConverter / TransactionTypeConverter / CallStateConverter (옵션) 4종
-2. `lib/domain/enums/customer_grade.dart` + `transaction_type.dart` + `call_state.dart` (ENUMS.md §C0~C2)
+1. `lib/core/domain/converters/` — TimestampConverter (기사앱 공유) / CustomerGradeConverter / TransactionTypeConverter / CallStateConverter (옵션) 4종
+2. `lib/core/domain/enums/customer_grade.dart` + `transaction_type.dart` + `call_state.dart` (ENUMS.md §C0~C2)
 
 ### Week 1~2 — 6 Freezed 모델
 3. `CustomerCall` — 복합 필드 매핑 최우선 (§1 ⚠️ 필드 중복 저장 주의)
@@ -996,8 +996,8 @@ EARN / USE / EXPIRE / CANCEL / ADMIN
 
 기사앱 MODELS.md (`flutter/driver_app/MVP/MODELS.md`) 와 **동일 파일 공유** (복제 금지):
 
-- `lib/domain/models/converters/timestamp_converter.dart` — TimestampConverter
-- `lib/domain/models/converters/server_timestamp_converter.dart` — ServerTimestampConverter
+- `lib/core/domain/converters/timestamp_converter.dart` — TimestampConverter
+- `lib/core/domain/converters/server_timestamp_converter.dart` — ServerTimestampConverter
 
 손님앱 전용 converter:
 - `customer_grade_converter.dart`
