@@ -4,15 +4,20 @@
 
 ---
 
-## 2026-04-19 내일 재개 시작점
+## 2026-04-18 재개 세션 — 작업 없이 종료 (다음 세션 시작점 재정리)
+
+**세션 요약**: git pull 동기화 완료. 어제 기록한 후보 4건 중 사용자 확인을 거쳐 아래와 같이 재분류. 실제 코드/배포 변경 없음.
 
 **직전 커밋**: `27b02e18` Phase B 선작업 (B-5 LockScreen iOS 가드 + Runner.entitlements + pbxproj CODE_SIGN_ENTITLEMENTS)
 
-**내일 첫 할 일 후보**:
-1. **Emulator 시나리오 11 실제 실행** (30~60분) — `cd functions && npm run build` → `firebase emulators:start --only functions,firestore` → `npx ts-node functions/test/scenarios/11-acceptance-events.test.ts`. Phase A 최종 확증. 어제 시도하려다 크레딧 소진으로 보류
-2. **재배차 UI rejectedByDriver 필터링** (1~2시간, Kotlin) — Call Manager DashboardViewModel 배차 다이얼로그에 rejectedByDriver 회색 표시/제외
-3. **사용자 수동 액션 대기**: ASC API Key + APNs Authentication Key 발급 (Apple Developer Portal)
-4. **아이폰 실기기 도착 시**: Phase B RFC(`memory/phase6_day4_phaseB_rfc.md`) 기반 B-1/B-2 적용 + Codemagic Phase B 워크플로우 추가
+**다음 세션 시작점 (재분류)**:
+
+1. **[보류] Emulator 시나리오 11 실제 실행** (30~60분) — Codemagic Build #4에서 `Platform.isIOS == true` + payload "ios" 저장이 이미 런타임 확증됨. 시나리오 11 실행은 **중복 확증** 성격이므로 필수 아님. 필요 시 `cd functions && npm run build` → `firebase emulators:start --only functions,firestore` → `npx ts-node functions/test/scenarios/11-acceptance-events.test.ts`.
+2. **[보류, 사용자 결정 2026-04-18]** 재배차 UI rejectedByDriver 필터링 — 사용자가 "지금 작업할 필요없어"로 명시. dead data 상태는 유지되지만 이번 세션에서 다루지 않음. 운영 데이터 누적 후 필요성 재판단. 상세: `memory/rejected_by_driver_dead_data.md`
+3. **[대기] 사용자 수동 액션**: ASC API Key + APNs Authentication Key 발급 (Apple Developer Portal)
+4. **[대기] 아이폰 실기기 도착 시**: Phase B RFC(`memory/phase6_day4_phaseB_rfc.md`) 기반 B-1/B-2 적용 + Codemagic Phase B 워크플로우 추가
+
+**즉시 착수 가능한 코딩 작업 없음** — 모두 외부 의존(기기 도착/사용자 수동) 대기 혹은 보류.
 
 **손님앱 Flutter 초기화는 별도 세션에서 진행 중** (이 세션에서 다루지 않음).
 
