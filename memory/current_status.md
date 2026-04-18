@@ -4,6 +4,67 @@
 
 ---
 
+## 2026-04-19 (이어서) — 손님앱 Flutter Week 1~3 Chunk 1 완료 (Domain Foundation)
+
+**커밋 2건**: `e59d13fa` + `b4d68ae6` (`manager-direct-drive`)
+
+### 배경
+
+Week 0~1 스캐폴딩 완료 후 실제 포팅 첫 chunk. MVP 매핑 문서는 중앙 `lib/domain/` 구조를 권장했으나, 실전 검증된 기사앱은 **feature-based Clean Architecture** (`lib/features/{f}/domain/entities/` + shared는 `lib/core/`) 사용. 손님앱도 이 검증된 패턴 미러링으로 확정.
+
+리스크 최소화 위해 Week 1~3을 2 chunk 분산:
+- **Chunk 1 (이번 세션)**: Converters 3 + Enums 3 + MVP 문서 경로 보정 (파일 상호 의존 적어 rollback 안전)
+- **Chunk 2 (다음 세션)**: Freezed Models 6종 (CustomerCall 20필드, CustomerInfo 17필드 등). 인프라 검증된 상태에서 진입
+
+### 1. MVP 문서 경로 보정 (`e59d13fa`)
+
+`flutter/customer_app/MVP/` 20곳 경로 이관:
+- `lib/domain/enums/` → `lib/core/domain/enums/`
+- `lib/domain/models/converters/` → `lib/core/domain/converters/`
+- `lib/domain/models/xxx.dart` → `lib/features/{call,profile,point,ad}/domain/entities/xxx.dart`
+- `lib/domain/state/` → `lib/features/{call,point,profile,auth}/presentation/state/` (UI state per-feature)
+
+실제 앱 동작 변경 0. Chunk 2 Models 작성 시 문서 참조와 코드 경로 일치 확보.
+
+### 2. Domain Foundation 코드 작성 (`b4d68ae6`)
+
+#### pubspec.yaml
+- `dependencies.json_annotation: ^4.9.0`
+- `dev_dependencies.json_serializable: ^6.8.0`
+- Chunk 2 `@JsonSerializable` 인프라 선제 준비
+
+#### `lib/core/domain/enums/` 3 파일
+- **call_state.dart** — sealed class (Dart 3), 6 하위타입. Firestore 11종 → UI 6종 축소 매핑. `fromFirestoreStatus` / `displayName` / `isCancellable` / `isFinal`
+- **customer_grade.dart** — enhanced enum 6 named 필드 (json/displayName/icon/pointRate/minCalls/colorArgb). Kotlin 1:1 포팅 + Dart 관용 메서드
+- **transaction_type.dart** — enhanced enum 3 필드 (json/displayName/sign). Kotlin 단순 enum + Flutter UI 포맷팅 확장(formatAmount/isValidAmount)
+
+#### `lib/core/domain/converters/` 3 파일
+- **timestamp_converter.dart** — `JsonConverter<DateTime?, dynamic>`. Firestore Timestamp / int(ms) / ISO String 모두 대응
+- **customer_grade_converter.dart** — null 폴백 bronze
+- **transaction_type_converter.dart** — 미매칭 폴백 earn
+
+#### `test/core/domain/enums/` 3 파일 (34 assertions)
+- Firestore status 매핑 / round-trip / 경계값 / 부호 포맷 전수 검증
+
+### 검증
+- `flutter pub get` → 145 deps 해결
+- `flutter analyze` → 0 issues
+- `flutter test` → **35/35 PASS** (34 신규 assertions + 1 기본 widget_test)
+- `grep -rc "lib/domain/" flutter/customer_app/` → **0 hits**
+
+### Chunk 2 진입 조건 충족
+
+다음 세션에서 착수:
+1. Freezed 6 모델 (`lib/features/{call,profile,point,ad}/domain/entities/`) + `@JsonSerializable`
+2. `build_runner build --delete-conflicting-outputs` → `.freezed.dart` + `.g.dart` 생성
+3. CustomerCall Firestore 3중복 필드 custom fromFirestore factory
+4. CustomerInfo 2경로 저장 구조 (`customers/{uid}` + `customerInfo/{phone}`)
+5. Firestore 샘플 round-trip 테스트
+
+**플랜 문서**: `C:\Users\kala1\.claude\plans\jazzy-swinging-meadow.md`
+
+---
+
 ## 2026-04-19 손님앱 Flutter Week 0~1 스캐폴딩 완료 + P0 enum 드리프트 해소
 
 **두 커밋**: `1e909768` → `69295495` (`manager-direct-drive`)
