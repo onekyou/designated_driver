@@ -11,9 +11,11 @@
 
 ## 대시보드 (2026-04-19 기준)
 - **방향**: Flutter 전환 (Swift 보류) — iOS 출시는 Codemagic 기반 5~7주
-- **현재 위치**: **기사앱 Phase B 대기(아이폰 도착) + 손님앱 Flutter Week 1~3 Chunk 4 완료 (AuthNotifier 본체 + mocktail 테스트)**
+- **현재 위치**: 🚨 **[긴급] Flutter MVP ↔ Kotlin 매핑 불일치 발견 — 손님앱 Chunk 5 영구 대기 + MVP 재작성 선행 필수** (감사 완료: `memory/customer_app_auth_mismatch_audit_2026-04-19.md`). Chunk 5 로컬 변경은 미커밋 상태로 보존. 원격 마지막 커밋 `7c06f6cd`.
 - **최근 달성**:
-  - 2026-04-19 (이어서⁴): 손님앱 Week 1~3 Chunk 4 완료 — AuthNotifier 본체(Anonymous signIn + Phone Auth verifyPhoneNumber/verifyCode + linkWithCredential 핵심 + credential-already-in-use fallback + FCM 토큰 구독/등록 골격) + fcm_token_payload 헬퍼(기사앱 패턴, isIos 주입) + formatKoreanPhoneNumber(010→+82) + mocktail/firebase_auth_mocks/mock_exceptions 테스트 16 신규. **92/92 PASS**. NDK 28.2 upgrade로 APK 빌드 2배 단축(75s). Crashlytics 생략(기사앱 선례). _registerFcmToken Firestore 저장 블록은 Chunk 5 ProfileNotifier 완성 후 활성화(TODO)
+  - 🚨 2026-04-19 (긴급): Flutter MVP ↔ Kotlin 매핑 불일치 통합 감사 완료 — 19개 MVP 전수 감사, **High 4 / Medium 7 / Low 4**. Customer: `recoverCustomerAccount` CF 누락 + `linkWithCredential` 오류(Kotlin 은 `signInWithCredential`) + `checkPhoneNumberDuplicate` Phase 2 미룸. Driver: `checkPendingStatusAndProceed` 누락(승인 대기 계정 진입 가능) + 자동로그인 옵션 A/B 불일치. 근본 원인 = "의제 N 결정 = 개선안" 이라는 이름의 Kotlin 이탈. 사용자 판단 "코틀린 매핑이 진짜 목적" 확정. 보고서: `memory/customer_app_auth_mismatch_audit_2026-04-19.md`. Chunk 5 영구 대기. 다음 세션: driver_app_flutter 기존 구현 감사(읽기만) → MVP 재작성 → Chunk 4 패치 → Chunk 5 재설계 (옵션 A 순차)
+  - 2026-04-19 (이어서⁵): 손님앱 Week 1~3 Chunk 5 완료 — ProfileNotifier 본체(loadProfile + updateProfile 2a 리팩토링 + reloadOfficeInfo + acceptTerms + updateHomeAddress + ref.listen uid watch) + AuthNotifier `_registerFcmToken` Firestore 저장 활성화 + ProfileUiState error/isSaving 필드 추가 + 테스트 18 신규. **111/111 PASS**. 호출 순서 검증(saveCallOrder), 부분 실패 테스트(subclass override). **순환 의존 회피** — AuthNotifier 는 ProfileNotifier 대신 SharedPreferences 직접 읽음. CF checkPhoneNumberDuplicate 제외(복원 트리거: 30일/100명/문의1건)
+  - 2026-04-19 (이어서⁴): 손님앱 Week 1~3 Chunk 4 완료 — AuthNotifier 본체(Anonymous signIn + Phone Auth verifyPhoneNumber/verifyCode + linkWithCredential 핵심 + credential-already-in-use fallback + FCM 토큰 구독/등록 골격) + fcm_token_payload 헬퍼(기사앱 패턴, isIos 주입) + formatKoreanPhoneNumber(010→+82) + mocktail/firebase_auth_mocks/mock_exceptions 테스트 16 신규. **92/92 PASS**. NDK 28.2 upgrade로 APK 빌드 2배 단축(75s). Crashlytics 생략(기사앱 선례)
   - 2026-04-19 (이어서³): 손님앱 Week 1~3 Chunk 3 완료 — UI State 4종(call/point/profile/auth) Freezed + core/providers.dart(Firebase singletons + SharedPrefs + SecureStorage) + core/routing(GoRouter 11 routes + MainShell BottomNav 4탭 + PlaceholderScreen) + AuthNotifier 껍데기(생성자+update stubs+UnimplementedError) + main.dart Firebase 부팅. **76/76 PASS**. ProfileUiState는 FCM 경로용 provinceId/cityId/officeId 3필드 선제 포함. smoke test는 MockFirebaseAuth/FakeFirestore/mocktail messaging — Chunk 4 본격 테스트 디딤돌
   - 2026-04-19 (이어서²): 손님앱 Week 1~3 Chunk 2 완료 (commit `0d284b1f`) — Freezed 5 모델 (CustomerPoints/PointTransaction/BannerAdData/CustomerCall/CustomerInfo) + build_runner 10 generated + 29 신규 assertions. 64/64 PASS. CustomerCall 3중복 필드 + @JsonKey assignedDriverId 매핑 + timestamp 양방향 전수 검증
   - 2026-04-19 (이어서): 손님앱 Week 1~3 Chunk 1 완료 (commit `b4d68ae6` + `e59d13fa`) — Enums 3 (CallState sealed / CustomerGrade / TransactionType) + Converters 3 (Timestamp/Grade/TxType) + unit test 34/34 PASS. MVP 경로 20곳 feature-based 구조로 이관
@@ -28,8 +30,8 @@
   4. ASC API Key + Codemagic 서명
   5. codemagic.yaml Phase B (서명 + TestFlight)
   6. TestFlight 배포 + 파일럿
-  7. 손님앱 신규 포팅 (Phase 2) — **Week 0~1 스캐폴딩 ✅ 완료 (2026-04-19). Week 1~3 포팅 착수 가능**
-- **사용자 Week 0 잔여**: 앱 아이콘/스크린샷/설명/개인정보 URL + 기사 테스터 Apple ID + S22 알림 권한 설정 점검 + **손님앱 iOS Firebase Console 등록 (Bundle ID `com.designated.customer.app` → GoogleService-Info.plist 다운로드)**
+  7. 손님앱 신규 포팅 (Phase 2) — 🚨 **감사 결과 MVP 재작성 선행 필수** (High 4건). Chunk 1~4 원격 반영 완료, Chunk 5 로컬 보존(미커밋). 세부: `memory/customer_app_auth_mismatch_audit_2026-04-19.md` §5
+- **사용자 Week 0 잔여**: 앱 아이콘/스크린샷/설명/개인정보 URL + 기사 테스터 Apple ID + S22 알림 권한 설정 점검 (✅ 2026-04-19 손님앱 iOS Firebase Console 등록 + GoogleService-Info.plist 배치 완료 — commit `7c06f6cd`)
 - **날짜별 상태 상세**: `memory/current_status.md`
 
 ## 상황별 참조 파일
@@ -67,6 +69,7 @@
 | `flutter/REVIEW_FINDINGS.md` | 교차 리뷰 P0 9건 — **코딩 진입 전 필수** |
 | `flutter/driver_app/MVP/` | 기사앱 매핑 문서 10개 + PLAN.md |
 | `flutter/customer_app/MVP/` | 손님앱 매핑 문서 9개 + PLAN.md |
+| 🚨 `memory/customer_app_auth_mismatch_audit_2026-04-19.md` | **MVP ↔ Kotlin 매핑 불일치 통합 감사 + 수정 플랜 — 다음 세션 최우선 진입점** |
 | `memory/plan_flutter_driver_app.md` | Flutter Phase 1~5 구현 이력 (로직 참조) |
 | `.agent-teams/kotlin-expert.md` + `flutter-expert.md` | Flutter 전환 팀 (idle) |
 
@@ -157,7 +160,8 @@
 - [Apple iOS 식별자](memory/apple_ios_ids.md) — Team ID `VCJD377MAU`, Bundle ID `com.designated.driverapp.app`
 
 ## P0 진행 상태 + Phase 6 체크리스트
-- [Phase 6 남은 코딩 ⭐](memory/phase6_coding_remaining.md) — iOS 출시 전 7개 항목 체크리스트. **다음 세션 시작점**
+- 🚨 [MVP Kotlin 매핑 불일치 감사 ⭐⭐](memory/customer_app_auth_mismatch_audit_2026-04-19.md) — **2026-04-19 긴급 발견**. Flutter 진행 전 MVP 재작성 선행 필수. **다음 세션 최우선 진입점**
+- [Phase 6 남은 코딩 ⭐](memory/phase6_coding_remaining.md) — iOS 출시 전 7개 항목 체크리스트
 - [Phase 6 Day 4 Phase B RFC ⭐](memory/phase6_day4_phaseB_rfc.md) — 아이폰 도착 시 즉시 착수 가능한 5건 수정 스니펫 + Entitlement + Codemagic Phase B yaml
 - [P0 재검증 2026-04-17](memory/p0_status_2026-04-17.md) — MVP 매핑 스펙 문서(.md) 패치 현황. 런타임 영향 없음, Phase 6 진입 시 실제 코드에 반영 필요
 
