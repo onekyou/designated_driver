@@ -70,5 +70,10 @@ dev_dependencies:
   json_serializable: ^6.8.0
   riverpod_generator: ^2.4.3
 
+  # Test mocks (Chunk 3~: AuthNotifier smoke + Chunk 4 본격 테스트 디딤돌)
+  firebase_auth_mocks: ^0.14.0
+  fake_cloud_firestore: ^3.0.3
+  mocktail: ^1.0.4
+
 flutter:
   uses-material-design: true
