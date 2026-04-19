@@ -11,8 +11,9 @@
 
 ## 대시보드 (2026-04-19 기준)
 - **방향**: Flutter 전환 (Swift 보류) — iOS 출시는 Codemagic 기반 5~7주
-- **현재 위치**: **기사앱 Phase B 대기(아이폰 도착) + 손님앱 Flutter Week 1~3 Chunk 1 완료 (Domain foundation)**
+- **현재 위치**: **기사앱 Phase B 대기(아이폰 도착) + 손님앱 Flutter Week 1~3 Chunk 2 완료 (Freezed Models 5종)**
 - **최근 달성**:
+  - 2026-04-19 (이어서²): 손님앱 Week 1~3 Chunk 2 완료 (commit `0d284b1f`) — Freezed 5 모델 (CustomerPoints/PointTransaction/BannerAdData/CustomerCall/CustomerInfo) + build_runner 10 generated + 29 신규 assertions. 64/64 PASS. CustomerCall 3중복 필드 + @JsonKey assignedDriverId 매핑 + timestamp 양방향 전수 검증
   - 2026-04-19 (이어서): 손님앱 Week 1~3 Chunk 1 완료 (commit `b4d68ae6` + `e59d13fa`) — Enums 3 (CallState sealed / CustomerGrade / TransactionType) + Converters 3 (Timestamp/Grade/TxType) + unit test 34/34 PASS. MVP 경로 20곳 feature-based 구조로 이관
   - 2026-04-19: 손님앱 Flutter 스캐폴딩 완료 (commit `69295495`) — `customer_app_flutter/` 신규, Bundle ID 통일(`com.designated.customer.app`), Android APK 빌드 PASS. ENUMS/MODELS enum 드리프트 해소(commit `1e909768`)
   - 2026-04-18 오후: Phase 6 ② Day 4 Phase A 완료 (commit `fab1050c`) — Flutter 기사앱 platform 저장 + Codemagic iOS Simulator integration_test 경로 구축

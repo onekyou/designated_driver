@@ -249,10 +249,11 @@ type: project
 - [x] MVP 매핑 문서 P0 enum 드리프트 해소 (CustomerGrade/TransactionType 단일 원본) — 2026-04-19 commit `1e909768`
 - [x] **Week 1~3 Chunk 1**: Domain foundation (Enums 3 + Converters 3 + unit test 3, 35/35 PASS) — 2026-04-19 commit `b4d68ae6`
 - [x] MVP 경로 보정 (20곳, feature-based 구조 반영) — 2026-04-19 commit `e59d13fa`
+- [x] **Week 1~3 Chunk 2**: Freezed 5 모델 (CustomerPoints/PointTransaction/BannerAdData/CustomerCall/CustomerInfo) + build_runner 10 generated + unit test 29 assertions. 64/64 PASS — 2026-04-19 commit `0d284b1f`
 - [ ] iOS `GoogleService-Info.plist`: Firebase Console에서 Bundle ID `com.designated.customer.app` iOS 앱 신규 등록 → 다운로드 → `customer_app_flutter/ios/Runner/GoogleService-Info.plist` 배치 (**사용자 수동 액션**)
 - [ ] Codemagic `customer_app_flutter` 워크플로 추가 (별도 세션)
-- [ ] **Week 1~3 Chunk 2**: Freezed 6 모델 (`lib/features/{call,profile,point,ad}/domain/entities/`) + build_runner + Firestore round-trip 테스트
-- [ ] Week 2~3: 4 Riverpod Notifier (Auth/Profile/Call/Point) + UI State 구조체
+- [ ] **Week 2 Chunk 3**: UI State 구조체 4종 (CallUiState/PointUiState/ProfileUiState/AuthUiState) + Service Provider + GoRouter 골격
+- [ ] **Week 2~3 Chunk 4~7**: 4 Riverpod Notifier (Auth → Profile → Call → Point 순)
 - [ ] Week 3~5: 11 화면 포팅
 - [ ] FCM 5종 핸들러 (FCM.md §6)
 - [ ] Anonymous + Phone Auth `linkWithCredential` (AUTH.md §3.4, Kotlin 원본 버그 패치 포함)

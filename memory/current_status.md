@@ -4,6 +4,52 @@
 
 ---
 
+## 2026-04-19 (이어서²) — 손님앱 Flutter Week 1~3 Chunk 2 완료 (Freezed Models 5종)
+
+**커밋**: `0d284b1f`
+
+### 결과물 (21 files staged)
+
+#### 5 Freezed 모델 (lib/features/{f}/domain/entities/)
+
+**Medium risk (표준 Converter)**:
+- `point/customer_points.dart` 9필드 — @CustomerGradeConverter + @TimestampConverter + 비즈니스 메서드 5종 (shouldUpdateGrade/updatedGrade/canUsePoints/calculateEarnPoints/callsToNextGrade)
+- `point/point_transaction.dart` 10필드 — @TransactionTypeConverter + @TimestampConverter. amount 부호 Kotlin 관용 유지
+
+**Low risk (R2 뼈대)**:
+- `ad/banner_ad_data.dart` 11필드 — Phase 1 미사용, R2_BANNER_AD 발동 시 Notifier 연동
+
+**High risk (custom fromFirestore + toFirestore factory)**:
+- `call/customer_call.dart` 20필드 — `@JsonKey(name: 'assignedDriverId')` on driverId, 3중복 필드 fallback(customerAddress→departure), toFirestore가 currentLocation을 customerAddress+departure+departure_set 3곳 + destinationLocation을 destination+destination_set 2곳에 중복 저장, timestamp Timestamp↔int 양방향
+- `profile/customer_info.dart` 17필드 — 2경로 저장(customers/{uid} + customerInfo/{phone}) 대응, legacy `address`→`homeAddress` fallback
+
+#### build_runner generated (10 files)
+- `.freezed.dart` × 5 + `.g.dart` × 5. `dart run build_runner build --delete-conflicting-outputs`. 기사앱 정책 일치하여 git commit.
+
+#### Unit test 5 files (29 assertions 신규)
+- customer_call_test 핵심: 3중복 필드 저장 / @JsonKey assignedDriverId 매핑 / timestamp 변환 / 부호 유지
+- 나머지 4개: fromJson round-trip + 비즈니스 메서드 + Defaults
+
+### 수정 (main.dart)
+Dart 3.11 dot-shorthand(`colorScheme: .fromSeed(...)`, `mainAxisAlignment: .center`)이 build_runner 내부 analyzer 3.9 미지원 → 명시 표기로 수정.
+
+### 특수 처리
+`customer_call.dart` 상단에 `// ignore_for_file: invalid_annotation_target` — Freezed 2.x + json_annotation 4.x 공식 패턴의 analyzer lint false positive 억제.
+
+### 검증
+- `flutter analyze`: 0 issues (10 generated 파일 포함)
+- `flutter test`: **64/64 PASS** (기존 35 + 신규 29)
+- `dart run build_runner`: 10 outputs written
+
+### 다음 세션 (Chunk 3 후보)
+1. UI State 구조체 4종 (CallUiState / PointUiState / ProfileUiState / AuthUiState)
+2. Service/Repository Provider 정의 + GoRouter 골격
+3. 첫 Notifier — AuthNotifier 권장 (Anonymous + Phone Auth `linkWithCredential`, AUTH.md §3.4)
+
+**플랜 문서**: `C:\Users\kala1\.claude\plans\jazzy-swinging-meadow.md` (Chunk 3 시 overwrite)
+
+---
+
 ## 2026-04-19 (이어서) — 손님앱 Flutter Week 1~3 Chunk 1 완료 (Domain Foundation)
 
 **커밋 2건**: `e59d13fa` + `b4d68ae6` (`manager-direct-drive`)
