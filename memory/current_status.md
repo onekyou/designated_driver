@@ -4,6 +4,59 @@
 
 ---
 
+## 2026-04-19 (이어서⁴) — 손님앱 Flutter Week 1~3 Chunk 4 완료 (AuthNotifier 본체 + mocktail 테스트)
+
+**커밋**: (Chunk 4 단일 commit)
+
+### 결과물
+
+#### 신규 파일 (4)
+- `lib/core/utils/fcm_token_payload.dart` — `buildCustomerFcmPayload(token, phoneNumber, isIos?)` 헬퍼 (기사앱 패턴 재사용). 의제 5 fcmTokenPlatform 메타 포함. Platform.isIOS 주입 가능
+- `lib/features/auth/presentation/notifiers/phone_formatter.dart` — `formatKoreanPhoneNumber` top-level (010 → +82, PhoneAuthViewModel.kt:127-135 이관)
+- `test/core/utils/fcm_token_payload_test.dart` — 4 cases (isIos 양방향, 4필드 존재, phoneNumber 원본 보존)
+- `test/features/auth/presentation/notifiers/phone_formatter_test.dart` — 4 cases (hyphen/공백/이미 +82 edge)
+
+#### 개편 파일
+- **auth_notifier.dart** 껍데기 → 본체 (+180 LOC)
+  - 생성자에서 `_initAnonymousAuth()` + `_subscribeFcmToken()` 자동 호출 2줄 추가
+  - `_initAnonymousAuth` (MainActivity.kt:397-411): currentUser 상속 우선 + null 시 signInAnonymously + 실패 시 error state (Crashlytics 생략, 기사앱 선례 따름)
+  - `sendVerificationCode` (PhoneAuthViewModel.kt:43-87): verifyPhoneNumber + 4 콜백 (completed/failed/codeSent/timeout)
+  - `verifyCode` + `_signInWithCredential` (PhoneAuthViewModel.kt:89-124): **linkWithCredential 핵심** (Anonymous uid 보존, Kotlin 원본 대비 개선)
+  - `_handleCredentialAlreadyInUse` (§3.5): credential-already-in-use fallback → signInWithCredential 전환
+  - `_subscribeFcmToken` + `_registerFcmToken` + `initialFcmTokenRegistration`: phone 체크까지 구현, Firestore 저장 블록은 **Chunk 5 ProfileNotifier 완성 후 활성화** (TODO 주석)
+- **auth_notifier_test.dart** (smoke 흡수 + 본체 테스트 11 cases)
+- **android/app/build.gradle.kts**: ndkVersion 27.0 → 28.2.13676358 (jni plugin 요구)
+- **pubspec.yaml**: dev_dependencies 에 `mock_exceptions: ^0.8.2` 추가 (firebase_auth_mocks 예외 주입용)
+
+#### 삭제
+- `test/features/auth/presentation/notifiers/auth_notifier_smoke_test.dart` (본체 테스트로 흡수)
+
+### 검증 3관문 통과
+- **flutter analyze**: 0 issues
+- **flutter test**: **92/92 PASS** (기존 76 + 신규 16 — AuthNotifier 11 + fcm_token_payload 4 + phone_formatter 4 - smoke 3 제거)
+- **flutter build apk --debug**: app-debug.apk 생성 (**75.1s**, Chunk 3 대비 **2배 단축** — NDK 경고 해소 효과)
+
+### 결정 기록
+1. **Crashlytics 호출 생략**: 기사앱 선례에 따라 `FirebaseCrashlytics.instance.recordError` 호출 미포함. try/catch + debugPrint 로 대체. 테스트 환경 호환성 확보
+2. **linkWithCredential happy path 테스트 불가**: firebase_auth_mocks 0.14.2 라이브러리 버그 — `MockUser.linkWithCredential` 내부 `MockUserCredential(false, mockUser: anonymous_this)` 에서 assert 실패. 우회로 **비-익명 currentUser + signInWithCredential 경로** 검증 (test #6)
+3. **`_registerFcmToken` Firestore 저장 블록 보류**: ProfileNotifier (Chunk 5) 의 provinceId/cityId/officeId 필요. 현재는 phone 체크 후 debugPrint + TODO 주석. Chunk 5에서 ref.read(profileNotifierProvider) 로 활성화
+4. **NDK 버전 upgrade 선반영**: jni plugin 28.2 요구 충족. APK 빌드 시간 2배 단축
+5. **mock_exceptions 직접 의존**: firebase_auth_mocks 에 transitive 로 포함되지만 import 경로 명시화 위해 pubspec 등록
+
+### 다음 세션 (Chunk 5)
+1. **ProfileNotifier 본체** (~200 LOC):
+   - customers/{uid} Firestore 로드/저장 (AuthNotifier.anonymousUid 기반)
+   - customerInfo/{phone} 2경로 저장 (FCM 토큰 + 사무실 연락처)
+   - 사무실 정보 SharedPreferences 연계 (provinceId/cityId/officeId)
+   - 약관 동의 저장 (SharedPreferences)
+2. **AuthNotifier._registerFcmToken Firestore 저장 블록 활성화**: `ref.read(profileNotifierProvider)` 로 provinceId 등 읽어서 `buildCustomerFcmPayload` + `.set(merge)` 수행
+3. **ProfileNotifier 테스트 10+** (FakeFirestore round-trip)
+4. (병렬) 사용자: iOS GoogleService-Info.plist 완료되면 Codemagic iOS 빌드 시도
+
+**플랜 문서**: `C:\Users\kala1\.claude\plans\jazzy-swinging-meadow.md`
+
+---
+
 ## 2026-04-19 (이어서³) — 손님앱 Flutter Week 1~3 Chunk 3 완료 (Infra + AuthNotifier 껍데기)
 
 **커밋**: (Chunk 3 commit + 직후 일괄 push 8→9)

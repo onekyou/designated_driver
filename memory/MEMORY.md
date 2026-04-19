@@ -11,8 +11,9 @@
 
 ## 대시보드 (2026-04-19 기준)
 - **방향**: Flutter 전환 (Swift 보류) — iOS 출시는 Codemagic 기반 5~7주
-- **현재 위치**: **기사앱 Phase B 대기(아이폰 도착) + 손님앱 Flutter Week 1~3 Chunk 3 완료 (Infra + AuthNotifier 껍데기)**
+- **현재 위치**: **기사앱 Phase B 대기(아이폰 도착) + 손님앱 Flutter Week 1~3 Chunk 4 완료 (AuthNotifier 본체 + mocktail 테스트)**
 - **최근 달성**:
+  - 2026-04-19 (이어서⁴): 손님앱 Week 1~3 Chunk 4 완료 — AuthNotifier 본체(Anonymous signIn + Phone Auth verifyPhoneNumber/verifyCode + linkWithCredential 핵심 + credential-already-in-use fallback + FCM 토큰 구독/등록 골격) + fcm_token_payload 헬퍼(기사앱 패턴, isIos 주입) + formatKoreanPhoneNumber(010→+82) + mocktail/firebase_auth_mocks/mock_exceptions 테스트 16 신규. **92/92 PASS**. NDK 28.2 upgrade로 APK 빌드 2배 단축(75s). Crashlytics 생략(기사앱 선례). _registerFcmToken Firestore 저장 블록은 Chunk 5 ProfileNotifier 완성 후 활성화(TODO)
   - 2026-04-19 (이어서³): 손님앱 Week 1~3 Chunk 3 완료 — UI State 4종(call/point/profile/auth) Freezed + core/providers.dart(Firebase singletons + SharedPrefs + SecureStorage) + core/routing(GoRouter 11 routes + MainShell BottomNav 4탭 + PlaceholderScreen) + AuthNotifier 껍데기(생성자+update stubs+UnimplementedError) + main.dart Firebase 부팅. **76/76 PASS**. ProfileUiState는 FCM 경로용 provinceId/cityId/officeId 3필드 선제 포함. smoke test는 MockFirebaseAuth/FakeFirestore/mocktail messaging — Chunk 4 본격 테스트 디딤돌
   - 2026-04-19 (이어서²): 손님앱 Week 1~3 Chunk 2 완료 (commit `0d284b1f`) — Freezed 5 모델 (CustomerPoints/PointTransaction/BannerAdData/CustomerCall/CustomerInfo) + build_runner 10 generated + 29 신규 assertions. 64/64 PASS. CustomerCall 3중복 필드 + @JsonKey assignedDriverId 매핑 + timestamp 양방향 전수 검증
   - 2026-04-19 (이어서): 손님앱 Week 1~3 Chunk 1 완료 (commit `b4d68ae6` + `e59d13fa`) — Enums 3 (CallState sealed / CustomerGrade / TransactionType) + Converters 3 (Timestamp/Grade/TxType) + unit test 34/34 PASS. MVP 경로 20곳 feature-based 구조로 이관
