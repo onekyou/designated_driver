@@ -4,6 +4,71 @@
 
 ---
 
+## 2026-04-19 (이어서³) — 손님앱 Flutter Week 1~3 Chunk 3 완료 (Infra + AuthNotifier 껍데기)
+
+**커밋**: (Chunk 3 commit + 직후 일괄 push 8→9)
+
+### 결과물 (신규 13 파일 + 개편 3 파일)
+
+#### UI State 4종 (lib/features/{f}/presentation/state/)
+- **call_ui_state.dart** — 6필드 (MODELS.md §7.4, `callStatus` 제외 → CallStatus Freezed 동반 필요한 Chunk 4+에서 동시 추가)
+- **point_ui_state.dart** — 8필드. CustomerPoints? 참조
+- **profile_ui_state.dart** — 9필드 (MVP 6 + `provinceId/cityId/officeId` nullable 3 추가). 주석으로 "NOTIFIERS.md §5.5 _registerFcmToken 경로 구성용" 명시. Chunk 4 null→값 transition 테스트 예정
+- **auth_ui_state.dart** — 9필드 (P0 B.1 확정. Anonymous + Phone Auth 통합)
+
+#### Core Infra
+- **lib/core/providers.dart** — Firebase singletons 3 (firestore/auth/messaging) + SharedPreferences (override) + SecureStorage
+- **lib/core/routing/app_router.dart** — GoRouter 골격 (SCREENS.md §2.1 1:1 이관). 11 routes + ShellRoute + 4 BottomNav
+- **lib/core/routing/main_shell.dart** — SCREENS.md §2.2 BottomNavigation 4탭 + BackHandler 홈복귀 (onPopInvokedWithResult)
+- **lib/core/routing/placeholder_screen.dart** — 공용 placeholder. Chunk 4+에서 실제 화면으로 교체
+
+#### AuthNotifier 껍데기
+- **lib/features/auth/presentation/notifiers/auth_notifier.dart** — 생성자 + Firebase 4주입 + updatePhoneNumber/updateVerificationCode (구현) + sendVerificationCode/verifyCode/initialFcmTokenRegistration (UnimplementedError stub) + authNotifierProvider
+- **⚠️ 생성자에서 `_initAnonymousAuth()` / `_subscribeFcmToken()` 호출 제외** — 빈 껍데기 상태 유지. Chunk 4에서 2줄 추가
+
+#### main.dart 개편
+- Firebase.initializeApp + ProviderScope + SharedPreferences override + MaterialApp.router + GoRouter 연결
+- 기본 Counter 앱 코드 전량 제거
+
+#### build_runner generated (4)
+- `.freezed.dart` × 4 (UI State). `.g.dart` 미생성 (UI State는 JSON 직렬화 불필요)
+
+#### 단위 테스트 (5 파일, 12 신규 assertions)
+- UI State 4종: defaults + copyWith (8 cases)
+- AuthNotifier smoke: `ProviderContainer` + `MockFirebaseAuth` + `FakeFirebaseFirestore` + `_MockFirebaseMessaging` (mocktail) — provider 배선 / update 메서드 / UnimplementedError 검증 (3 cases)
+- widget_test.dart: 기본 Counter 테스트 제거 (MyApp 삭제됨) → trivial placeholder
+
+### 의존성 추가 (dev_dependencies)
+- `firebase_auth_mocks: ^0.14.0`
+- `fake_cloud_firestore: ^3.0.3`
+- `mocktail: ^1.0.4`
+
+### 검증 3관문 통과
+- **flutter analyze**: 0 issues (13 info → onPopInvoked/`(_, __)` deprecated 수정 후 0)
+- **flutter test**: **76/76 PASS** (기존 64 + 신규 12)
+- **flutter build apk --debug**: app-debug.apk 생성 (162.5s)
+  - ⚠️ NDK 버전 경고 (jni 28.2 vs 프로젝트 27.0) — backward-compatible 작동, Chunk 3 범위 외
+
+### 결정 기록
+1. **callStatus 필드 제외**: CallStatus/DriverInfo Freezed 동반 필요 → scope creep. Chunk 4에서 필드+모델 동시 추가
+2. **ProfileUiState 3필드 확장**: FCM 경로 구성 필요 → Chunk 4 재편 방지
+3. **AuthNotifier smoke 보강**: mocktail + firebase_auth_mocks로 provider 배선 assertion → Chunk 4 본격 테스트 디딤돌
+4. **iOS build deferred**: GoogleService-Info.plist 미배치 (사용자 Week 0 잔여). Android APK만 검증
+5. **providers.dart 단일 유지** (~25 LOC): 분할 트리거는 (a)100+LOC (b)다른 SDK 혼재 (c)merge 충돌 3회+
+
+### 다음 세션 (Chunk 4)
+1. AuthNotifier 본체 로직:
+   - `_initAnonymousAuth` + 생성자 호출 추가
+   - `sendVerificationCode` + `verifyCode` + `_signInWithCredential` (linkWithCredential 핵심)
+   - `_handleCredentialAlreadyInUse` fallback (`credential-already-in-use`)
+   - `_subscribeFcmToken` + `_registerFcmToken` + `initialFcmTokenRegistration` (의제 5 fcmTokenPlatform 메타)
+2. AuthNotifier 테스트 10+ cases (currentUser 상속 / signInAnonymously / linkWithCredential / fallback / FCM 토큰 등록)
+3. (병렬) 사용자: iOS Firebase Console 앱 등록 + GoogleService-Info.plist 배치
+
+**플랜 문서**: `C:\Users\kala1\.claude\plans\jazzy-swinging-meadow.md`
+
+---
+
 ## 2026-04-19 (이어서²) — 손님앱 Flutter Week 1~3 Chunk 2 완료 (Freezed Models 5종)
 
 **커밋**: `0d284b1f`
