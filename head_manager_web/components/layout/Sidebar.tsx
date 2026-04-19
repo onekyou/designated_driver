@@ -14,7 +14,8 @@ import {
   Search,
   FileText,
   ClipboardList,
-  Package
+  Package,
+  UserCog
 } from 'lucide-react';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
@@ -70,6 +71,11 @@ const menuItems = [
     title: '월간 리포트',
     href: '/archive/report',
     icon: FileText
+  },
+  {
+    title: '사장님 대시보드',
+    href: '/owner/dashboard',
+    icon: UserCog
   },
 ];
 

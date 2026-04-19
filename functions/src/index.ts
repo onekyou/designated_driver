@@ -5549,22 +5549,23 @@ export const approveOfficeApplication = onCall(
       throw new Error(`이미 처리된 신청입니다 (상태: ${appData.status})`);
     }
 
-    // 1. Firebase Auth 계정 생성
-    const email = `${appData.phone}@callmadang.internal`;
-    const tempPassword = `cm${appData.phone.slice(-4)}!${Date.now().toString(36).slice(-4)}`;
+    // 1. Firebase Auth 계정 생성 (Gmail 기반, 비번 없음 — Google OAuth 전용)
+    const gmail = (appData.gmail || "").trim().toLowerCase();
+    if (!gmail) {
+      throw new Error("신청서에 Gmail 주소가 없습니다.");
+    }
 
     let userRecord;
     try {
       userRecord = await admin.auth().createUser({
-        email,
-        password: tempPassword,
+        email: gmail,
+        emailVerified: true, // Google 로그인 시 동일 이메일 자동 연결 허용
         displayName: appData.ownerName,
       });
-      logger.info(`[approveOfficeApplication] Auth 계정 생성 - uid: ${userRecord.uid}, email: ${email}`);
+      logger.info(`[approveOfficeApplication] Auth 계정 생성 - uid: ${userRecord.uid}, email: ${gmail}`);
     } catch (authError: any) {
       if (authError.code === "auth/email-already-exists") {
-        // 이미 존재하는 계정이면 가져오기
-        userRecord = await admin.auth().getUserByEmail(email);
+        userRecord = await admin.auth().getUserByEmail(gmail);
         logger.info(`[approveOfficeApplication] 기존 Auth 계정 사용 - uid: ${userRecord.uid}`);
       } else {
         throw authError;
@@ -5590,7 +5591,7 @@ export const approveOfficeApplication = onCall(
 
     // 3. admins 문서 생성 (OFFICE_OWNER 역할)
     await admin.firestore().doc(`admins/${userRecord.uid}`).set({
-      email,
+      email: gmail,
       name: appData.ownerName,
       phoneNumber: appData.phone,
       role: "OFFICE_OWNER",
@@ -5618,8 +5619,7 @@ export const approveOfficeApplication = onCall(
       success: true,
       ownerUid: userRecord.uid,
       officeId: officeRef.id,
-      loginEmail: email,
-      tempPassword,
+      loginEmail: gmail,
       officePath: `provinces/${provinceId}/cities/${cityId}/offices/${officeRef.id}`,
     };
   }

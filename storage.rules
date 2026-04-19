@@ -1,0 +1,34 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // --- Helper functions (admins 컬렉션 기준) ---
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isHeadManager() {
+      return isAuthenticated()
+        && firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/admins/$(request.auth.uid)).data.role in ['HEAD_MANAGER', 'SUPER_ADMIN'];
+    }
+
+    function isOfficeOwner() {
+      return isAuthenticated()
+        && firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/admins/$(request.auth.uid)).data.role == 'OFFICE_OWNER';
+    }
+
+    // --- APK 릴리즈 파일 ---
+    //  • 업로드(쓰기): 총관리자(HEAD_MANAGER/SUPER_ADMIN)만
+    //  • 다운로드(읽기): 총관리자 + 사장님(OFFICE_OWNER)
+    //  • 200MB 제한 + APK 확장자 강제
+    match /apks/{appName}/{fileName} {
+      allow read: if isHeadManager() || isOfficeOwner();
+      allow write: if isHeadManager()
+        && request.resource.size < 200 * 1024 * 1024
+        && fileName.matches('.*\\.apk');
+    }
+  }
+}
