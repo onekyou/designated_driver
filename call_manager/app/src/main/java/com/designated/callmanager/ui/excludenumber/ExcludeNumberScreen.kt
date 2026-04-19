@@ -4,6 +4,7 @@ import android.Manifest
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -49,6 +50,7 @@ fun ExcludeNumberScreen(
     var showRestoreDialog by remember { mutableStateOf(false) }
     var showBackupInfoDialog by remember { mutableStateOf(false) }
     var showClearAllDialog by remember { mutableStateOf(false) }
+    var showSearch by remember { mutableStateOf(false) }
 
     val contactPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -161,64 +163,130 @@ fun ExcludeNumberScreen(
                     modifier = Modifier.padding(16.dp)
                 ) {
 
-                    OutlinedTextField(
-                        value = uiState.searchQuery,
-                        onValueChange = { viewModel.updateSearchQuery(it) },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("이름 또는 번호로 검색", color = Color.Gray) },
-                        leadingIcon = {
-                            Icon(Icons.Default.Search, contentDescription = null)
+                    Button(
+                        onClick = {
+                            contactPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
                         },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedBorderColor = Color.White,
-                            unfocusedBorderColor = Color.Gray,
-                            focusedLabelColor = Color.White,
-                            unfocusedLabelColor = Color.Gray
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFFFAB00),
+                            contentColor = Color.Black
                         ),
-                        singleLine = true
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
-                            text = "총 ${uiState.totalCount}개의 개인번호",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White
+                            "전화번호부에서 선택",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
                         )
+                    }
 
-                        TextButton(
-                            onClick = {
-                                contactPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    TextButton(
+                        onClick = {
+                            showSearch = !showSearch
+                            if (!showSearch) {
+                                viewModel.updateSearchQuery("")
                             }
-                        ) {
-                            Text(
-                                "전화번호부에서 선택",
-                                color = Color(0xFFFFAB00)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = null,
+                            tint = Color.LightGray,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            "등록된 번호 검색",
+                            color = Color.LightGray,
+                            fontSize = 14.sp
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = if (showSearch) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = Color.LightGray,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    AnimatedVisibility(visible = showSearch) {
+                        Column {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            OutlinedTextField(
+                                value = uiState.searchQuery,
+                                onValueChange = { viewModel.updateSearchQuery(it) },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("이름 또는 번호로 검색", color = Color.Gray) },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Search, contentDescription = null)
+                                },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedBorderColor = Color.White,
+                                    unfocusedBorderColor = Color.Gray,
+                                    focusedLabelColor = Color.White,
+                                    unfocusedLabelColor = Color.Gray
+                                ),
+                                singleLine = true
                             )
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "총 ${uiState.totalCount}개의 개인번호",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White
+                    )
                 }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            if (uiState.filteredNumbers.isNotEmpty()) {
-
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(vertical = 8.dp)
-                ) {
-                    items(uiState.filteredNumbers) { item ->
-                        ExcludeNumberItem(
-                            item = item,
-                            onDeleteClick = { showDeleteDialog = item }
+            when {
+                uiState.filteredNumbers.isNotEmpty() -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(vertical = 8.dp)
+                    ) {
+                        items(uiState.filteredNumbers) { item ->
+                            ExcludeNumberItem(
+                                item = item,
+                                onDeleteClick = { showDeleteDialog = item }
+                            )
+                        }
+                    }
+                }
+                uiState.allNumbers.isEmpty() -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "등록된 개인번호가 없습니다\n+ 버튼 또는 '전화번호부에서 선택'으로 추가하세요",
+                            color = Color.Gray,
+                            fontSize = 14.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+                else -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "검색 결과가 없습니다",
+                            color = Color.Gray,
+                            fontSize = 14.sp
                         )
                     }
                 }

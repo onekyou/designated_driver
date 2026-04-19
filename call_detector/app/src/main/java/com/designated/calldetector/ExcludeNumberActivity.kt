@@ -31,6 +31,7 @@ class ExcludeNumberActivity : AppCompatActivity() {
     private lateinit var countTextView: TextView
     private lateinit var addButton: FloatingActionButton
     private lateinit var contactsButton: Button
+    private lateinit var searchToggleButton: Button
     
     private var allNumbers = mutableListOf<ExcludeNumberItem>()
     private var filteredNumbers = mutableListOf<ExcludeNumberItem>()
@@ -52,7 +53,8 @@ class ExcludeNumberActivity : AppCompatActivity() {
         countTextView = findViewById(R.id.countTextView)
         addButton = findViewById(R.id.addButton)
         contactsButton = findViewById(R.id.contactsButton)
-        
+        searchToggleButton = findViewById(R.id.searchToggleButton)
+
         // Setup RecyclerView
         adapter = ExcludeNumberAdapter(
             onDeleteClick = { item ->
@@ -61,7 +63,7 @@ class ExcludeNumberActivity : AppCompatActivity() {
         )
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
-        
+
         // Setup search
         searchEditText.addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) {
@@ -70,12 +72,26 @@ class ExcludeNumberActivity : AppCompatActivity() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
         })
-        
+
+        // Setup search toggle
+        searchToggleButton.setOnClickListener {
+            val isVisible = searchEditText.visibility == View.VISIBLE
+            if (isVisible) {
+                searchEditText.setText("")
+                searchEditText.visibility = View.GONE
+                searchToggleButton.text = "🔍  등록된 번호 검색  ▼"
+            } else {
+                searchEditText.visibility = View.VISIBLE
+                searchToggleButton.text = "🔍  등록된 번호 검색  ▲"
+                searchEditText.requestFocus()
+            }
+        }
+
         // Setup buttons
         addButton.setOnClickListener {
             showAddNumberDialog()
         }
-        
+
         contactsButton.setOnClickListener {
             openContactSelection()
         }

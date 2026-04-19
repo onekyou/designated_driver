@@ -36,7 +36,8 @@ class ExcludeNumberViewModel(application: Application) : AndroidViewModel(applic
             _uiState.update { state ->
                 state.copy(
                     allNumbers = numbers,
-                    filteredNumbers = filterNumbers(numbers, state.searchQuery),
+                    searchQuery = "",
+                    filteredNumbers = numbers,
                     totalCount = numbers.size,
                     isLoading = false
                 )

@@ -10,7 +10,7 @@
         android:background="#FF121212"
         android:orientation="vertical">
 
-        <!-- 검색바 -->
+        <!-- 상단 액션 영역 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -19,10 +19,37 @@
             android:orientation="vertical"
             android:padding="16dp">
 
+            <!-- 1. 전화번호부에서 선택 (대형 노란 버튼) -->
+            <Button
+                android:id="@+id/contactsButton"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:text="전화번호부에서 선택"
+                android:textColor="#FF000000"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textAllCaps="false"
+                android:backgroundTint="#FFFFAB00" />
+
+            <!-- 2. 등록된 번호 검색 토글 버튼 -->
+            <Button
+                android:id="@+id/searchToggleButton"
+                style="@style/Widget.AppCompat.Button.Borderless"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="🔍  등록된 번호 검색  ▼"
+                android:textColor="#FFCCCCCC"
+                android:textSize="14sp"
+                android:textAllCaps="false" />
+
+            <!-- 3. 검색바 (초기에는 GONE, 토글로 표시) -->
             <EditText
                 android:id="@+id/searchEditText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:visibility="gone"
                 android:background="@drawable/search_background"
                 android:drawableStart="@android:drawable/ic_menu_search"
                 android:drawableTint="#FFFFFFFF"
@@ -34,30 +61,15 @@
                 android:inputType="text"
                 android:padding="12dp" />
 
-            <LinearLayout
+            <!-- 4. 카운트 -->
+            <TextView
+                android:id="@+id/countTextView"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:id="@+id/countTextView"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="총 0개의 개인번호"
-                    android:textColor="#FFFFFFFF"
-                    android:textSize="14sp" />
-
-                <Button
-                    android:id="@+id/contactsButton"
-                    style="@style/Widget.AppCompat.Button.Borderless"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="전화번호부에서 선택"
-                    android:textColor="#FFFFAB00" />
-
-            </LinearLayout>
+                android:text="총 0개의 개인번호"
+                android:textColor="#FFFFFFFF"
+                android:textSize="14sp" />
 
         </LinearLayout>
 
