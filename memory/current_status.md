@@ -4,6 +4,92 @@
 
 ---
 
+## 2026-04-23 — 정산 이월금(carryOver) 중복 합산 fix 커밋 + 1004 사무실 실기기 테스트 준비
+
+**커밋**: `607c6bb7 fix(settlement): 이월금(carryOver) 중복 합산 제거`
+
+### 배경
+여러 세션에 걸쳐 미커밋 상태로 남아있던 정산 관련 5 파일의 WIP 를 파악·검증·커밋한 세션. 상황 분석 플랜: `C:\Users\kala1\.claude\plans\reactive-dazzling-wind.md`
+
+### 커밋된 파일 5종
+- `call_manager/.../SettlementViewModel.kt` — `transferCarryOver` (balance+todayUnpaid → balance 단독), `confirmDailySettlement` (TRANSFERRED 상태 유지)
+- `call_manager/.../AllTripsScreen.kt` — `managerFinalized` 판정 도입 (TRANSFERRED/SETTLED/isConfirmed)
+- `call_manager/.../DriverSummaryScreen.kt` — `isConfirmedOrLater` / `hasSubmitted` 단계 분기
+- `driver_app/.../HistorySettlementScreen.kt` — `managerFinalized` 시 adjustedDeposit/usedFromCarryOver=0
+- `driver_app/.../DriverViewModel.kt` — carryOverListener 에서 `status=TRANSFERRED` 시 calculatedCarryOver masking 제외
+
+### 공통 설계 원리
+`balance` 에 오늘분이 이미 포함된 확정 시점(TRANSFERRED / SETTLED / CONFIRMED / PENDING_CONFIRM+balance>0)을 판정해 재가산·재공제를 단락. 오늘분이 두 번 더해지는 다섯 경로를 한 번에 차단.
+
+### 실기기 준비 상태
+- **설치 완료**: driver_app → S21+ / S22 / Z Flip4, call_detector → S21+
+- **테스트 사무실**: 1004@naver.com 사장 — `provinces/gyeonggi/cities/yangpyeong/offices/RUbeBEvGGYP5wMhJHhMF`
+- **제로 베이스**: `functions/scripts/reset-office-1004.js --execute` 로 calls(10)+settlementSessions(1) 삭제 + 2 기사 carryOver=0/dailySettlement 삭제. admins/settings/managerTokens 유지
+- **로컬 캐시**: 옵션 B 선택 (Firestore 만 정리, pm clear 없음)
+
+### 미커밋 남은 3 시나리오 검증 대기
+1. 정상: 기사 콜 1건 완료 → submit → 매니저 정산확인 → 이체 → 수령
+2. 스킵: submit → 정산확인 skip → 바로 이체
+3. 누적: 어제 수령완료 상태에서 오늘 새 submit (하루 뒤 가능)
+
+### 부수적 관찰 기록
+`AllTripsScreen` 의 `todayUnpaidByDriver` 는 Room DB 기반 `trips` 에서 파생되므로, **기사 콜 완료 즉시는 실시간 반영 안 됨** (carryOverList/dailySettlementList 는 Firestore 리스너로 실시간). 기사 업무마감 시점에 집계 재동기화되어 최종 숫자가 맞춰진다. 의도된 Local-First 절충, 기능상 문제 없음 (사용자 판정).
+
+### 확인된 기존 제약
+- call_detector + call_manager 동일 기기 공존 시 배차 팝업 충돌 (`memory/session_2026-04-20_evening_test.md` 기록). 이번 테스트에서 S21+ 에 두 앱이 모두 설치되어 있으므로 주의 필요
+
+---
+
+## 2026-04-19 (이어서⁵) — 손님앱 Flutter Week 1~3 Chunk 5 완료 (ProfileNotifier 본체 + FCM 저장 활성화)
+
+**커밋**: (Chunk 5 단일 commit + 메모리 commit)
+
+### 결과물
+
+#### 신규 파일
+- **profile_notifier.dart** (~240 LOC) — loadProfile / updateProfile (2a 리팩토링) / reloadOfficeInfo / acceptTerms / updateHomeAddress + ref.listen(authNotifierProvider) uid watch
+- **profile_notifier_test.dart** (~430 LOC, 18 cases)
+
+#### 개편
+- **profile_ui_state.dart**: `error` + `isSaving` 2필드 추가 → build_runner freezed 재생성
+- **auth_notifier.dart** `_registerFcmToken`: Firestore 저장 블록 활성화. **순환 의존 회피 — SharedPreferences 직접 읽기** (ProfileNotifier 경유 시 CircularDependencyError 발생). 사무실 정보 source of truth 는 SharedPreferences
+- **auth_notifier_test.dart**: test #10 "저장 안 함" → "저장 함" 으로 업데이트 + #10b "사무실 정보 없음 스킵" 신규
+
+### 테스트 18 cases (+Chunk 4 #10 업데이트)
+1~3: SharedPreferences office 로드/리로드
+4~7: loadProfile (문서 있음/없음/빈 uid/사무실 정보 없음)
+8~10: updateProfile (성공/fcmToken null/인증 부족)
+11: **호출 순서 검증** — customers 선저장 → customerInfo 후저장 (saveCallOrder 리스트)
+12: **부분 실패** — `_FailingCustomerInfoProfileNotifier` subclass 로 customerInfo 쓰기 예외 주입 → customers 는 저장됨 + false 반환 (rollback 없음 — Kotlin 일치)
+13~14: acceptTerms (4키 저장 + 매번 갱신)
+15: updateHomeAddress
+16~18: uid watch (null→값 / A→B / listener 등록)
+
+### 검증 3관문 통과
+- `flutter analyze`: 0 issues
+- `flutter test`: **111/111 PASS** (기존 92 + 신규 20 (ProfileNotifier 18 + AuthNotifier #10b) - smoke 1 제거 경로 정리)
+- `flutter build apk --debug`: **17.4s** (캐시 활용)
+
+### 결정 기록
+1. **순환 의존 회피**: `AuthNotifier._registerFcmToken` 에서 `ref.read(profileNotifierProvider)` 대신 `ref.read(sharedPreferencesProvider)` 직접 사용. ProfileNotifier 도 동일 SharedPreferences 로부터 읽으므로 source of truth 일관성 유지. **교훈**: Notifier 간 상호 참조는 순환 위험. shared infra (SharedPreferences / Secure Storage) 를 middle layer 로 두는 편이 안전
+2. **호출 순서 검증**: `saveCallOrder` 공개 리스트 (`@visibleForTesting`) 로 append → 테스트 쉬움. 비용 최소
+3. **부분 실패 테스트**: ProfileNotifier subclass (`_FailingCustomerInfoProfileNotifier`) 로 `saveCustomerInfoForTest` 오버라이드. provider override 로 주입. FakeFirestore 한계 우회
+4. **CF `checkPhoneNumberDuplicate` 제외**: 복원 트리거 플랜 파일 명시 — 30일 경과 OR 손님 100명 초과 OR 고객문의 1건. 복원 위치: AuthNotifier.verifyPhoneNumber 직전 또는 ProfileNotifier.updateProfile 초입
+
+### 범위 밖 메모 (Chunk 6+)
+- FCM onTokenRefresh rotate 실제 emission 테스트 (Stream.fromIterable 활용)
+- Chunk 8 OfficeCodeScreen 체크리스트: QR/코드 입력 → SharedPreferences 저장 → `profileNotifierProvider.notifier.reloadOfficeInfo()` **필수 호출**
+- `designated_customer_flutter` 폴더 조사 — 과거 flutterfire configure 흔적 가능성
+
+### 다음 세션 (Chunk 6)
+1. **PointNotifier 본체** (~200 LOC): customerPoints/{phone} 실시간 리스너 + earn/use/cancel + PointService.kt 이식
+2. FCM onTokenRefresh emission 실제 테스트
+3. `designated_customer_flutter` 폴더 1차 조사
+
+**플랜 문서**: `C:\Users\kala1\.claude\plans\jazzy-swinging-meadow.md`
+
+---
+
 ## 2026-04-19 (이어서⁴) — 손님앱 Flutter Week 1~3 Chunk 4 완료 (AuthNotifier 본체 + mocktail 테스트)
 
 **커밋**: (Chunk 4 단일 commit)
