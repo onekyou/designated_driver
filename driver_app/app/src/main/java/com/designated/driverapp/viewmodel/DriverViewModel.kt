@@ -1287,13 +1287,16 @@ class DriverViewModel @Inject constructor(
                 // 일일 정산 상태 emit (UI에서 대기/확인/거절 상태 표시용)
                 _dailySettlementStatus.value = dailySettlement.status
 
-                val effectiveCarryOver = if (dailySettlement.status == DailySettlementStatus.PENDING_CONFIRM) {
+                // 매니저가 이체한 carryOver(status=TRANSFERRED)는 Firestore 원본값이 확정값이므로 마스킹하지 않음
+                // SETTLED는 "어제 수령완료 후 오늘 제출"인 케이스가 있어 PENDING_CONFIRM 시 계속 masking 필요
+                val alreadyProcessedByManager = carryOver.status == CarryOverStatus.TRANSFERRED
+                val effectiveCarryOver = if (dailySettlement.status == DailySettlementStatus.PENDING_CONFIRM && !alreadyProcessedByManager) {
                     // 업무마감 후 매니저 확인 대기 중 - 계산된 carryOver 사용
                     val calculatedBalance = dailySettlement.calculatedCarryOver
                     Log.d(TAG, "Using calculatedCarryOver from dailySettlement: $calculatedBalance (original: ${carryOver.balance})")
                     carryOver.copy(balance = calculatedBalance)
                 } else {
-                    // 일반 상태 - 원본 carryOver 사용
+                    // 일반 상태 또는 매니저 처리 완료 - 원본 carryOver 사용
                     carryOver
                 }
 

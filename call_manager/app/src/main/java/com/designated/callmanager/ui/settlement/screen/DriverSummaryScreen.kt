@@ -208,16 +208,19 @@ private fun DriverDetailCard(
     }
 
     // 상태별 남은 미지급금 계산
-    val remainingCarryOver = when (status) {
-        CarryOverStatus.SETTLED -> 0L  // 수령 완료 → 0
-        CarryOverStatus.TRANSFERRED -> carryOverBalance  // 이체됨 → 저장된 balance 사용
+    // confirm 또는 이체 이후에는 balance에 오늘분이 이미 반영된 확정값이므로 todayUnpaid 재합산 금지
+    val isConfirmedOrLater = dailySettlement?.isConfirmed == true
+    val calcCarryOver = dailySettlement?.dailySettlement?.calculatedCarryOver ?: carryOverBalance
+    val remainingCarryOver = when {
+        status == CarryOverStatus.SETTLED -> 0L
+        status == CarryOverStatus.TRANSFERRED -> carryOverBalance
+        isConfirmedOrLater -> carryOverBalance  // CONFIRMED 후 PENDING 분기: balance 신뢰
+        dailySettlement?.hasSubmitted == true -> calcCarryOver  // PENDING_CONFIRM: 기사앱 계산값 표시
         else -> {
-            // PENDING: 통합 계산 로직 적용 (기사앱과 동일)
+            // 마감 전: 이월분 + 오늘 발생분
             if (rawFinalDeposit > 0) {
-                // 납입액이 있으면 carryOver에서 공제
                 maxOf(0L, carryOverBalance - rawFinalDeposit)
             } else {
-                // 납입액이 없거나 음수면 이월분 + 오늘 발생분
                 carryOverBalance + calculatedTodayUnpaid
             }
         }

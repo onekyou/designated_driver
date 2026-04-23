@@ -328,14 +328,26 @@ fun HistorySettlementScreen(
             // 최종 납입액 계산 (사무실 몫 - 외상) - 미환급금 적용 전
             val rawFinalDeposit = SettlementCalc.calculateRawFinalDeposit(officeDeposit, totalCredit)
 
+            // balance에 오늘분이 이미 반영된 확정값인지 판단
+            // - carryOverStatus==TRANSFERRED: 매니저 이체 완료 → balance 확정
+            // - settlementStatus==CONFIRMED: 매니저 정산확인 완료 → balance=calculatedCarryOver (오늘 포함)
+            // - settlementStatus==PENDING_CONFIRM + balance>0: processCarryOverOnFinalize 이후 이미 확정
+            // (SETTLED는 "어제 수령완료 후 오늘 새 제출 중" 케이스가 있어 제외 — 기사 listener가 calculatedCarryOver로 masking 제공)
+            val managerFinalized = carryOverStatus == CarryOverStatus.TRANSFERRED ||
+                    settlementStatus == DailySettlementStatus.CONFIRMED ||
+                    (settlementStatus == DailySettlementStatus.PENDING_CONFIRM && carryOverBalance > 0)
+
             // 미환급금/미납금에서 공제 후 실제 납입해야 할 금액
-            val adjustedDeposit = SettlementCalc.calculateAdjustedDeposit(rawFinalDeposit, carryOverBalance)
+            val adjustedDeposit = if (managerFinalized) 0
+                else SettlementCalc.calculateAdjustedDeposit(rawFinalDeposit, carryOverBalance)
 
             // 오늘 운행 후 남은 이월금
-            val remainingCarryOver = SettlementCalc.calculateRemainingCarryOver(rawFinalDeposit, carryOverBalance)
+            val remainingCarryOver = if (managerFinalized) carryOverBalance
+                else SettlementCalc.calculateRemainingCarryOver(rawFinalDeposit, carryOverBalance)
 
             // 미환급금에서 공제된 금액
-            val usedFromCarryOver = SettlementCalc.calculateUsedFromCarryOver(rawFinalDeposit, carryOverBalance)
+            val usedFromCarryOver = if (managerFinalized) 0
+                else SettlementCalc.calculateUsedFromCarryOver(rawFinalDeposit, carryOverBalance)
 
             // 실납입 상태 (입력 필드 없이 기본값 표시 + 확인/정정)
             var isDepositEdited by remember { mutableStateOf(false) }

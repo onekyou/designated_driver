@@ -1601,8 +1601,9 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
             .collection("offices").document(officeId)
             .collection("designated_drivers").document(driverId)
 
-        // 총 미지급금 = 기존 이월분 + 오늘분
-        val totalBalance = carryOverBalance + todayUnpaid
+        // confirmDailySettlement가 이미 carryOver.balance에 오늘분 포함된 calculatedCarryOver를 저장함
+        // 이체 시 todayUnpaid를 재합산하면 오늘분이 두 번 더해지므로 balance 그대로 사용
+        val totalBalance = carryOverBalance
 
         // set + merge 사용 (carryOver 필드가 없어도 생성됨)
         val carryOverData = mapOf(
@@ -1889,7 +1890,8 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
             firestore.runTransaction { transaction ->
                 val doc = transaction.get(driverRef)
 
-                // 기사앱이 계산한 calculatedCarryOver를 직접 사용 (중복 계산 방지)
+                // 기사앱이 계산한 calculatedCarryOver(originalCarryOver - finalDeposit + realDeposit)를 직접 사용
+                // 오늘 환급금이 반영된 최종 누적 미지급액. 이 값은 transferCarryOver에서 그대로 유지되어야 함
                 @Suppress("UNCHECKED_CAST")
                 val dailySettlementMap = doc.get("dailySettlement") as? Map<String, Any?>
                 val newBalance = if (dailySettlementMap != null) {
@@ -1902,10 +1904,15 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                 }
 
                 // carryOver 상태 결정
+                // 기존 TRANSFERRED 상태는 유지 (매니저가 이체 후 재확인해도 이체 플래그 증발 방지)
+                @Suppress("UNCHECKED_CAST")
+                val currentCarryOverMap = doc.get("carryOver") as? Map<String, Any?>
+                val currentCarryOverStatusStr = currentCarryOverMap?.get("status") as? String
                 val newCarryOverStatus = when {
-                    newBalance > 0 -> CarryOverStatus.PENDING.name  // 환급 대기
-                    newBalance < 0 -> CarryOverStatus.PENDING.name  // 미납 (실제로는 사무실이 기사에게 받아야 함)
-                    else -> CarryOverStatus.SETTLED.name            // 정산 완료
+                    currentCarryOverStatusStr == CarryOverStatus.TRANSFERRED.name -> CarryOverStatus.TRANSFERRED.name
+                    newBalance > 0 -> CarryOverStatus.PENDING.name
+                    newBalance < 0 -> CarryOverStatus.PENDING.name
+                    else -> CarryOverStatus.SETTLED.name
                 }
 
                 val updateData = mapOf(

@@ -61,16 +61,25 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel(), onHome: (() -> Unit)? 
         val status: CarryOverStatus
     )
 
-    val driverUnpaidList = remember(carryOverList, todayUnpaidByDriver, trips) {
+    val driverUnpaidList = remember(carryOverList, todayUnpaidByDriver, trips, dailySettlementList) {
         // 이월분이 있는 기사
         val fromCarryOver = carryOverList.map { co ->
             val todayAmount = todayUnpaidByDriver[co.driverId] ?: 0
+            val ds = dailySettlementList.find { it.driverId == co.driverId }
+            // balance가 확정값(오늘 포함)인 경우 todayAmount 재합산 금지:
+            // - TRANSFERRED/SETTLED: 매니저 이체/기사 수령 후 확정
+            // - dailySettlement.isConfirmed: 매니저 정산확인으로 calculatedCarryOver 저장됨
+            val managerFinalized = co.status == CarryOverStatus.TRANSFERRED ||
+                    co.status == CarryOverStatus.SETTLED ||
+                    ds?.isConfirmed == true
+            val displayTodayUnpaid = if (managerFinalized) 0 else todayAmount
+            val displayTotal = if (managerFinalized) co.balance else co.balance + todayAmount
             DriverUnpaidSummary(
                 driverId = co.driverId,
                 driverName = co.driverName,
                 carryOver = co.balance,
-                todayUnpaid = todayAmount,
-                total = co.balance + todayAmount,
+                todayUnpaid = displayTodayUnpaid,
+                total = displayTotal,
                 status = co.status
             )
         }
