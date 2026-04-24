@@ -1,0 +1,107 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'com.google.gms.google-services'
+    id 'kotlin-kapt'
+    id 'dagger.hilt.android.plugin'
+}
+
+android {
+    namespace 'com.designated.pickupdriver'
+    compileSdk 36
+    buildToolsVersion "36.0.0"
+
+    defaultConfig {
+        applicationId "com.designated.pickupapp"
+        minSdk 24
+        targetSdk 36
+        versionCode 1
+        versionName "1.0.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables {
+            useSupportLibrary true
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+    buildFeatures {
+        compose true
+    }
+    composeOptions {
+        kotlinCompilerExtensionVersion '1.5.8'
+    }
+    packagingOptions {
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+        }
+    }
+}
+
+dependencies {
+    // Hilt
+    implementation libs.hilt.android
+    kapt libs.hilt.compiler
+    implementation libs.hilt.navigation.compose
+
+    // Lifecycle + Compose 통합
+    implementation libs.lifecycle.runtime.compose
+    // Firebase Task await() 사용
+    implementation libs.kotlinx.coroutines.play.services
+    implementation libs.kotlinx.coroutines.android
+
+    implementation libs.core.ktx
+    implementation libs.lifecycle.runtime.ktx
+    implementation libs.activity.compose
+
+    // Material Components (XML themes 용)
+    implementation libs.material
+
+    // Compose - BOM
+    implementation platform(libs.compose.bom)
+    implementation libs.compose.ui
+    implementation libs.compose.ui.graphics
+    implementation libs.compose.ui.tooling.preview
+    implementation libs.compose.material3
+    implementation libs.compose.material.icons.core
+    implementation libs.compose.material.icons.extended
+
+    // Navigation
+    implementation libs.navigation.compose
+
+    // ViewModel Compose
+    implementation libs.lifecycle.viewmodel.compose
+
+    // Firebase
+    implementation platform(libs.firebase.bom)
+    implementation libs.firebase.auth.ktx
+    implementation libs.firebase.firestore.ktx
+    // FCM dependency 유지 — Phase 2 FCM 수신 진입 시 즉시 사용 가능 (MVP에선 서비스 파일 없음)
+    implementation libs.firebase.messaging.ktx
+
+    // Testing
+    testImplementation libs.junit
+    androidTestImplementation libs.androidx.test.ext.junit
+    androidTestImplementation libs.espresso.core
+    androidTestImplementation platform(libs.compose.bom)
+    androidTestImplementation libs.compose.ui.test.junit4
+    debugImplementation libs.compose.ui.tooling
+    debugImplementation libs.compose.ui.test.manifest
+}
+
+kapt {
+    correctErrorTypes true
+}
