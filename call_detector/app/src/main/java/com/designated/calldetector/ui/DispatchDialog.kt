@@ -1,6 +1,10 @@
 package com.designated.calldetector.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -19,6 +23,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.designated.calldetector.util.CallMemoParser
 import com.designated.calldetector.util.ParsedMemo
 import com.designated.calldetector.util.VoiceInputHelper
@@ -69,6 +74,27 @@ fun DispatchDialog(
 
     // STT 진행/저장 중에는 배차/삭제/공유/나중에 버튼 disable
     val actionsDisabled = memoSttState != MemoSttState.Idle
+
+    // RECORD_AUDIO 런타임 권한 launcher — MainActivity 를 거치지 않고
+    // DispatchActivity 가 직접 뜨는 경로(통화 종료 → SYSTEM_ALERT_WINDOW 바로 실행)를
+    // 지원하기 위해 이 Composable 내부에서 직접 요청.
+    val audioPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            Toast.makeText(
+                context,
+                "마이크 권한 허용됨. 다시 길게 눌러 메모를 입력하세요",
+                Toast.LENGTH_SHORT
+            ).show()
+        } else {
+            Toast.makeText(
+                context,
+                "마이크 권한이 필요합니다 (STT 메모)",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
 
     // STT recognizer leak 방지 — 팝업 dismiss 시 자동 destroy
     DisposableEffect(Unit) {
@@ -121,6 +147,15 @@ fun DispatchDialog(
                                 Modifier.combinedClickable(
                                     onClick = {},
                                     onLongClick = {
+                                        // 권한 체크 — 없으면 요청 후 종료 (사용자가 허용 후 다시 롱프레스)
+                                        val hasAudioPerm = ContextCompat.checkSelfPermission(
+                                            context,
+                                            Manifest.permission.RECORD_AUDIO
+                                        ) == PackageManager.PERMISSION_GRANTED
+                                        if (!hasAudioPerm) {
+                                            audioPermLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                            return@combinedClickable
+                                        }
                                         if (memoSttState == MemoSttState.Idle) {
                                             memoSttState = MemoSttState.Recording
                                             voiceHelper.startListening { recognized ->
