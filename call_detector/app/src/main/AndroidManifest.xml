@@ -11,6 +11,9 @@
     <!-- 연락처 읽기 권한: 전화번호로 저장된 이름을 찾기 위해 필요해요 -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
 
+    <!-- 마이크 권한: 배차 메모 STT 음성 입력용 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
     <!-- 일반 권한 - 런타임 권한 필요 없음 -->
     <!-- 포그라운드 서비스 권한: 앱이 꺼져도 계속 전화 감지를 하기 위해 필요해요 (안드로이드 최신 버전 필수) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

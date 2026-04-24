@@ -11,10 +11,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import android.widget.Toast
+import com.designated.calldetector.util.ParsedMemo
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.functions.ktx.functions
 import com.google.firebase.ktx.Firebase
+import kotlinx.coroutines.tasks.await
 
 class DispatchActivity : ComponentActivity() {
 
@@ -129,11 +131,58 @@ class DispatchActivity : ComponentActivity() {
                         },
                         onDismiss = {
                             finish()
-                        }
+                        },
+                        onMemoUpdate = if (callId != null && !callId.startsWith("temp_")) {
+                            { text, parsed ->
+                                updateCallMemo(callId, provinceId, cityId, officeId, text, parsed)
+                            }
+                        } else null
                     )
                 }
             }
         }
+    }
+
+    /**
+     * 콜 문서에 memoText + 파싱된 4필드(departure_set/waypoints_set/destination_set/fare_set) 저장.
+     * WAITING 상태에서만 가능 (타 기기 동시 배차 race 차단).
+     * 파싱 실패 필드는 null → 해당 필드 update 안 함(기존 값 보존).
+     *
+     * suspend — 호출자가 await 해야 재-STT/배차 race 차단.
+     */
+    private suspend fun updateCallMemo(
+        callId: String,
+        provinceId: String,
+        cityId: String,
+        officeId: String,
+        memoText: String?,
+        parsed: ParsedMemo
+    ) {
+        val callRef = FirebaseFirestore.getInstance()
+            .document("provinces/$provinceId/cities/$cityId/offices/$officeId/calls/$callId")
+
+        FirebaseFirestore.getInstance().runTransaction { tx ->
+            val snap = tx.get(callRef)
+            val status = snap.getString("status")
+            if (status != "WAITING") {
+                throw IllegalStateException("메모 수정은 WAITING 상태에서만 가능 (현재: $status)")
+            }
+
+            val updates = mutableMapOf<String, Any?>("memoText" to memoText)
+            if (!parsed.departure.isNullOrBlank()) updates["departure_set"] = parsed.departure
+            if (!parsed.waypoints.isNullOrBlank()) updates["waypoints_set"] = parsed.waypoints
+            if (!parsed.destination.isNullOrBlank()) updates["destination_set"] = parsed.destination
+            if (parsed.fare != null && parsed.fare > 0L) updates["fare_set"] = parsed.fare
+
+            @Suppress("UNCHECKED_CAST")
+            tx.update(callRef, updates as Map<String, Any>)
+        }.await()
+
+        Log.d(
+            "DispatchActivity",
+            "메모 저장: callId=$callId, memoLen=${memoText?.length ?: 0}, " +
+                "dep=${parsed.departure}, way=${parsed.waypoints}, dest=${parsed.destination}, fare=${parsed.fare}"
+        )
     }
 
     /**
