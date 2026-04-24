@@ -13,6 +13,7 @@
 - **방향**: 🚨 **전략 피벗 — 병렬 낚싯대** (2026-04-21 첫 영업 후). 대리는 최소 유지, 필라테스/미용실 Tier 1 demand test 병렬. iOS 출시·손님앱 MVP 재작성 **보류**. 세부: `memory/strategy_pivot_2026-04-21.md`
 - **현재 위치**: 🎯 **첫 대면 영업 완료 (박상준/양평) + 전략 피벗** (2026-04-21) — 테스터 친구 조언 3건: 병렬 낚시대 / 20~40대 타겟 / 귀속노드가 진짜 자산. Tier 1 랜딩 2종(필라테스, 미용실) 제작이 다음 단계. 영업 중 아이디 오타 현장 체크리스트 필요. 2026-04-22 캐나다 VFX 친구(아바타 CG팀 경력) 방문 → 시나리오 파일럿 논의 예정. **Phase 6 iOS 출시 관련 작업은 피벗 전까지 보류**.
 - **최근 달성**:
+  - ✅ 2026-04-24 (픽업기사앱 MVP 완성 + 실기기 검증 + commit `58428830`): `pickup_driver_app/` 5번째 앱 스캐폴딩 + 빌드 + Z Flip4 설치 + 로그인/회원가입/읽기전용 대시보드 엔드투엔드 동작 확인. driver_app fork 기반, applicationId `com.designated.pickupapp` (Firebase Console 기존 등록 재사용). **서버측 변경 0** — 기존 `approveDriver()` 가 `driverType="픽업기사"` → pickup_drivers 자동 라우팅, firestore.rules 이미 완비. Dashboard: 진행중 콜 5상태 snapshot listener 단일 + `departure_set → waypoints_set → destination_set` headlineSmall+Bold 경로 + 요금 포맷. **구조**: 순수 Firestore snapshot listener (FCM/Room 없음, 앱 열려있을 때만 실시간). 사용자 요청: Phase 2 준비 — 세부 로드맵: `memory/pickup_app_phase2_plan.md`. MVP 플랜: `C:\Users\kala1\.claude\plans\tranquil-puzzling-squirrel.md`
   - ✅ 2026-04-23 (정산 fix 커밋 + 실기기 테스트 준비): 여러 세션 미커밋 WIP 였던 **이월금(carryOver) 중복 합산** 5 파일 fix 확정 commit (`607c6bb7`). 공통 원리: `balance` 확정 시점(TRANSFERRED/SETTLED/CONFIRMED/PENDING_CONFIRM+balance>0) 판정해 재가산·재공제 단락. driver_app → S21+/S22/Z Flip4 설치 완료, call_detector → S21+ 설치 (동일기기 공존 주의). 1004 사무실(`RUbeBEvGGYP5wMhJHhMF`, yangpyeong) 제로 베이스: calls(10)+settlementSessions(1) 삭제 + 2기사 carryOver=0 리셋 + dailySettlement 필드 삭제. 신규 스크립트: `functions/scripts/reset-office-1004.js`. 3 시나리오 실기기 검증 대기 중. 세부: `memory/current_status.md` + 플랜 `C:\Users\kala1\.claude\plans\reactive-dazzling-wind.md`
   - 🎯 2026-04-21 (전략 피벗 + 첫 영업): 박상준 사장님 대면 설치 방문 → 테스터 친구 조언 흡수 → **병렬 낚싯대 Tier 구조** 확정 (Tier 1 랜딩 demand test 병렬, Tier 2부터 신호 강한 1개만). 후보: 필라테스/요가 PT ⭐ / 미용실·네일샵 / 대리 유지. 제외: 카페·식당·학원. 1주 실행 계획 확정. VFX 친구 방문 대비. 세부: `memory/strategy_pivot_2026-04-21.md`
   - ✅ 2026-04-20 저녁 (실테스트 통과): S22 에서 **call_detector + call_manager 동일기기 충돌** 발견 → call_detector 제거로 배차 팝업 정상화. FCM 알림 미도달은 테스트 중 토큰 꼬임 → 재로그인으로 managerTokens+admins.fcmToken 동기화되어 해결. Firestore 검증: 두 컬렉션 fcmToken 일치 확인. call_manager APK v1.0.2 업로드 + public/ hosting 재배포. LoginViewModel 에러 메시지 명확화 + SignUpScreen 초대 토큰 붙여넣기 버튼 추가. **오진단 정정**: admins.fcmToken 실제로 정상 저장됨 (MyFirebaseMessagingService.onNewToken Phase 1), onDriverSignupRequest CF 정상 작동. **미해결**: CallDetectorService.kt:684 `fromCallManager=true` 삭제는 오진단이었음 — 롤백 검토 필요 (긴급도 낮음, 별도 기기 분리 시 영향 없음). 세부: `memory/session_2026-04-20_evening_test.md`
@@ -95,7 +96,8 @@
 ### 기타
 | 파일 | 내용 |
 |------|------|
-| `memory/plan_pickup_driver_app.md` | 픽업기사앱 기획 (3/17 승인) |
+| `memory/plan_pickup_driver_app.md` | 픽업기사앱 구 기획 (3/17 승인) — Phase 2 참조용 |
+| `memory/pickup_app_phase2_plan.md` | 픽업기사앱 Phase 2 로드맵 (MVP 완성 후 확장 플랜, 2026-04-24) |
 | `memory/plan_homepage_showcase.md` | 홈페이지 앱 쇼케이스 데모 WIP (4/7) |
 | `memory/plan_settlement_dedup.md` | 정산 중복/미지급금 분리 — 미커밋 |
 | `memory/settlement_dedup_full_log.md` | 정산 분리 전체 대화 기록 |
