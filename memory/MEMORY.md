@@ -13,6 +13,7 @@
 - **방향**: 🚨 **전략 피벗 — 병렬 낚싯대** (2026-04-21 첫 영업 후). 대리는 최소 유지, 필라테스/미용실 Tier 1 demand test 병렬. iOS 출시·손님앱 MVP 재작성 **보류**. 세부: `memory/strategy_pivot_2026-04-21.md`
 - **현재 위치**: 🎯 **첫 대면 영업 완료 (박상준/양평) + 전략 피벗** (2026-04-21) — 테스터 친구 조언 3건: 병렬 낚시대 / 20~40대 타겟 / 귀속노드가 진짜 자산. Tier 1 랜딩 2종(필라테스, 미용실) 제작이 다음 단계. 영업 중 아이디 오타 현장 체크리스트 필요. 2026-04-22 캐나다 VFX 친구(아바타 CG팀 경력) 방문 → 시나리오 파일럿 논의 예정. **Phase 6 iOS 출시 관련 작업은 피벗 전까지 보류**.
 - **최근 달성**:
+  - ✅ 2026-04-24 (배차 STT 메모 + 운행준비 필드 자동 분배, commits `f9d0f0d0`/`ae89b970`/`b63ce85f`): 콜매니저·콜디텍터 배차 팝업 정보카드 **길게 누르기** → STT 녹음 → "에서/경유/까지/원" 토큰 파싱 → Firestore `calls/{id}` 에 `memoText` + `departure_set`/`waypoints_set`/`destination_set`/`fare_set` 한 번에 저장 → 기사앱 `TripPreparationScreen` **자동 pre-fill** (기사앱 수정 0). 출발지 파싱 실패 시 `customerAddress` 폴백. 콜매니저(13 파일 +1332) + 콜디텍터 동형 포팅(6 파일 +811) + 콜디텍터 `DispatchDialog` RECORD_AUDIO 런타임 권한 launcher fix (MainActivity 미경유 경로 대응). Firebase Hosting `calldetector-5d61e` 에 3 APK 배포 (`calldetector-5d61e.web.app/apk_downloads/`), SHA256 3-way 일치 검증. 실기기: S21+ 콜매니저/driver_app, Z Flip4 driver_app, S22 콜디텍터. 세부: `memory/plan_dispatch_memo_2026-04-24.md`
   - ✅ 2026-04-24 (픽업기사앱 MVP 완성 + 실기기 검증 + commit `58428830`): `pickup_driver_app/` 5번째 앱 스캐폴딩 + 빌드 + Z Flip4 설치 + 로그인/회원가입/읽기전용 대시보드 엔드투엔드 동작 확인. driver_app fork 기반, applicationId `com.designated.pickupapp` (Firebase Console 기존 등록 재사용). **서버측 변경 0** — 기존 `approveDriver()` 가 `driverType="픽업기사"` → pickup_drivers 자동 라우팅, firestore.rules 이미 완비. Dashboard: 진행중 콜 5상태 snapshot listener 단일 + `departure_set → waypoints_set → destination_set` headlineSmall+Bold 경로 + 요금 포맷. **구조**: 순수 Firestore snapshot listener (FCM/Room 없음, 앱 열려있을 때만 실시간). 사용자 요청: Phase 2 준비 — 세부 로드맵: `memory/pickup_app_phase2_plan.md`. MVP 플랜: `C:\Users\kala1\.claude\plans\tranquil-puzzling-squirrel.md`
   - ✅ 2026-04-23 (정산 fix 커밋 + 실기기 테스트 준비): 여러 세션 미커밋 WIP 였던 **이월금(carryOver) 중복 합산** 5 파일 fix 확정 commit (`607c6bb7`). 공통 원리: `balance` 확정 시점(TRANSFERRED/SETTLED/CONFIRMED/PENDING_CONFIRM+balance>0) 판정해 재가산·재공제 단락. driver_app → S21+/S22/Z Flip4 설치 완료, call_detector → S21+ 설치 (동일기기 공존 주의). 1004 사무실(`RUbeBEvGGYP5wMhJHhMF`, yangpyeong) 제로 베이스: calls(10)+settlementSessions(1) 삭제 + 2기사 carryOver=0 리셋 + dailySettlement 필드 삭제. 신규 스크립트: `functions/scripts/reset-office-1004.js`. 3 시나리오 실기기 검증 대기 중. 세부: `memory/current_status.md` + 플랜 `C:\Users\kala1\.claude\plans\reactive-dazzling-wind.md`
   - 🎯 2026-04-21 (전략 피벗 + 첫 영업): 박상준 사장님 대면 설치 방문 → 테스터 친구 조언 흡수 → **병렬 낚싯대 Tier 구조** 확정 (Tier 1 랜딩 demand test 병렬, Tier 2부터 신호 강한 1개만). 후보: 필라테스/요가 PT ⭐ / 미용실·네일샵 / 대리 유지. 제외: 카페·식당·학원. 1주 실행 계획 확정. VFX 친구 방문 대비. 세부: `memory/strategy_pivot_2026-04-21.md`
@@ -185,6 +186,9 @@
 | `memory/feedback_simplest_fix.md` | 최소 수정 우선 원칙 |
 | `memory/feedback_customer_app_install.md` | 손님앱 ADB 설치 금지, SharedPrefs 주입 |
 | `memory/customer_app_auth_analysis.md` | 손님앱 Anonymous Auth + QR 전용 온보딩 |
+| `memory/feedback_keep_existing_conventions.md` | 기존 관례(스타일/값 체계) 변경은 실질적 근거 필수 — 일반 모범 근거만으로 제안 금지 |
+| `memory/feedback_purpose_based_adaptation.md` | 다른 앱 패턴 참고 시 목적 기반 취사선택 — 맹목 복사·맹목 거부 모두 금지 |
+| `memory/feedback_scope_exact.md` | "딱 거기까지만" 스코프 디시플린 — 사용자 명시 경계 엄격 준수, 플랜 임의 확장 금지 |
 
 ## 기타 포인터
 - `memory/pending-work-customer-app.md` — 손님앱 잔여 작업
