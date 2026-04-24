@@ -27,7 +27,7 @@ data class CallInfo(
     @PropertyName("trip_summary") var trip_summary: String? = null,
     @get:PropertyName("regionId") @set:PropertyName("regionId") var regionId: String? = null,
     @get:PropertyName("officeId") @set:PropertyName("officeId") var officeId: String? = null,
-    @get:Exclude @set:Exclude var memo: String? = null,
+    @get:PropertyName("memoText") @set:PropertyName("memoText") var memoText: String? = null,
     @get:PropertyName("departure_set") @set:PropertyName("departure_set") var departure_set: String? = null,
     @get:PropertyName("destination_set") @set:PropertyName("destination_set") var destination_set: String? = null,
     @get:PropertyName("waypoints_set") @set:PropertyName("waypoints_set") var waypoints_set: String? = null,

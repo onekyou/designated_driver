@@ -576,8 +576,8 @@ class MainActivity : ComponentActivity() {
                             onDriverSelect = { driver ->
                                 dashboardViewModel.assignNewCall(driver.id)
                             },
-                            onDriverSelectWithInfo = { driver, departure, destination, fare ->
-                                dashboardViewModel.assignNewCallWithInfo(driver.id, departure, destination, fare)
+                            onDriverSelectWithInfo = { driver, departure, destination, fare, memoText ->
+                                dashboardViewModel.assignNewCallWithInfo(driver.id, departure, destination, fare, memoText)
                             },
                             onDelete = {
                                 dashboardViewModel.deleteCall(newCallInfo!!.id)
@@ -588,6 +588,18 @@ class MainActivity : ComponentActivity() {
                             onDirectRun = {
                                 newCallInfo?.let { dashboardViewModel.requestDirectRun(it) }
                                 dashboardViewModel.dismissNewCallPopup()
+                            },
+                            onMemoUpdate = { memoText, parsed ->
+                                newCallInfo?.let { call ->
+                                    dashboardViewModel.updateCallMemo(
+                                        callId = call.id,
+                                        memoText = memoText,
+                                        departure = parsed.departure,
+                                        waypoints = parsed.waypoints,
+                                        destination = parsed.destination,
+                                        fare = parsed.fare
+                                    )
+                                }
                             }
                         )
                     }
@@ -1082,23 +1094,16 @@ class MainActivity : ComponentActivity() {
 
 
     private fun startCallManagerServiceIfNeeded() {
-        val hasLocationPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-
-        if (hasLocationPermission && !CallManagerService.isServiceRunning) {
-            try {
-                val serviceIntent = Intent(this, CallManagerService::class.java)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(serviceIntent)
-                } else {
-                    startService(serviceIntent)
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("MainActivity", "Service start failed", e)
+        if (CallManagerService.isServiceRunning) return
+        try {
+            val serviceIntent = Intent(this, CallManagerService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
             }
-        } else if (!hasLocationPermission) {
-             Toast.makeText(this, "위치 권한이 없어 콜 서비스를 시작할 수 없습니다.", Toast.LENGTH_LONG).show()
-             val serviceIntent = Intent(this, CallManagerService::class.java)
-             stopService(serviceIntent)
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Service start failed", e)
         }
     }
 

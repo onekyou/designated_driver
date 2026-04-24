@@ -174,7 +174,8 @@ class CallRepository(
                         assignedDriverName = data["assignedDriverName"] as? String,
                         assignedDriverPhone = data["assignedDriverPhone"] as? String,
                         callType = data["callType"] as? String,
-                        fromCallDetector = data["fromCallDetector"] as? Boolean
+                        fromCallDetector = data["fromCallDetector"] as? Boolean,
+                        memoText = data["memoText"] as? String
                     )
 
                     callInfo.toLocalCallInfo(provinceId, officeId)
@@ -268,23 +269,27 @@ class CallRepository(
         assignedDriverPhone: String? = null
     ) = withContext(Dispatchers.IO) {
         try {
+            // 기존 DB 레코드가 있으면 memoText 보존 (FCM payload 는 callId/상태만 포함, memoText 는 Firestore 단일 진실)
+            val existing = callDao.getCallById(callId)
+
             val localCall = LocalCallInfo(
                 id = callId,
                 phoneNumber = phoneNumber,
                 customerName = customerName,
                 customerAddress = customerAddress,
                 status = status,
-                timestamp = System.currentTimeMillis(),
-                departure_set = null,
-                destination_set = null,
-                waypoints_set = null,
-                fare_set = null,
+                timestamp = existing?.timestamp ?: System.currentTimeMillis(),
+                departure_set = existing?.departure_set,
+                destination_set = existing?.destination_set,
+                waypoints_set = existing?.waypoints_set,
+                fare_set = existing?.fare_set,
                 assignedDriverId = assignedDriverId,
                 assignedDriverName = assignedDriverName,
                 assignedDriverPhone = assignedDriverPhone,
                 callType = callType,
                 fromCallDetector = fromCallDetector,
                 fromCallManager = fromCallManager,
+                memoText = existing?.memoText, // 기존 memoText 보존 (REPLACE 전략으로 인한 소실 방지)
                 regionId = provinceId, // regionId 필드에 provinceId 저장
                 officeId = officeId,
                 synced = true,
@@ -292,7 +297,7 @@ class CallRepository(
             )
 
             callDao.upsertCall(localCall)
-            Log.d(TAG, "[FCM] 새 콜 로컬 DB 삽입 완료: $callId")
+            Log.d(TAG, "[FCM] 새 콜 로컬 DB 삽입 완료: $callId (memoText 보존: ${existing?.memoText != null})")
         } catch (e: Exception) {
             Log.e(TAG, "[FCM] 새 콜 삽입 실패: $callId", e)
         }

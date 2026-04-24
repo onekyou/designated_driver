@@ -667,6 +667,60 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /**
+     * 콜에 메모(memoText) + 파싱된 4필드(departure_set/waypoints_set/destination_set/fare_set)를 저장.
+     * WAITING 상태에서만 가능 (타 매니저 동시 배차 race 방지).
+     *
+     * STT 파싱으로 구조화된 값이 있으면 해당 필드도 함께 Firestore 에 저장 → 기사앱 운행 준비 카드에 자동 반영.
+     * 파싱 실패 필드는 null 로 전달 → 해당 필드는 건드리지 않음(기존 값 보존).
+     *
+     * @throws IllegalStateException status != WAITING 인 경우
+     * @throws Exception Firestore 트랜잭션 실패 등
+     */
+    suspend fun updateCallMemo(
+        callId: String,
+        memoText: String?,
+        departure: String? = null,
+        waypoints: String? = null,
+        destination: String? = null,
+        fare: Long? = null
+    ) {
+        val provinceId = _provinceId.value
+            ?: throw IllegalStateException("provinceId null — 로그인 정보 없음")
+        val cityId = _cityId.value
+            ?: throw IllegalStateException("cityId null")
+        val officeId = _officeId.value
+            ?: throw IllegalStateException("officeId null")
+
+        val callRef = firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
+            .collection("offices").document(officeId)
+            .collection("calls").document(callId)
+
+        firestore.runTransaction { tx ->
+            val snap = tx.get(callRef)
+            val status = snap.getString("status")
+            if (status != CallStatus.WAITING.firestoreValue) {
+                throw IllegalStateException("메모 수정은 WAITING 상태에서만 가능 (현재: $status)")
+            }
+
+            val updates = mutableMapOf<String, Any?>("memoText" to memoText)
+            if (!departure.isNullOrBlank()) updates["departure_set"] = departure
+            if (!waypoints.isNullOrBlank()) updates["waypoints_set"] = waypoints
+            if (!destination.isNullOrBlank()) updates["destination_set"] = destination
+            if (fare != null && fare > 0L) updates["fare_set"] = fare
+
+            @Suppress("UNCHECKED_CAST")
+            tx.update(callRef, updates as Map<String, Any>)
+        }.await()
+
+        Log.d(
+            TAG,
+            "메모 저장 완료: callId=$callId, memoLen=${memoText?.length ?: 0}, " +
+                "dep=$departure, way=$waypoints, dest=$destination, fare=$fare"
+        )
+    }
+
     fun assignCallToDriver(callInfo: CallInfo, driverId: String) {
         Log.d(TAG, "🚀🚀🚀 assignCallToDriver 호출됨! callId=${callInfo.id}, driverId=$driverId")
 
@@ -1178,7 +1232,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     /**
      * 내부호출(fromCallManager) 배차 시 출발지/도착지/요금 정보를 먼저 업데이트한 후 배차
      */
-    fun assignNewCallWithInfo(driverId: String, departure: String, destination: String, fare: Long) {
+    fun assignNewCallWithInfo(driverId: String, departure: String, destination: String, fare: Long, memoText: String? = null) {
         val callInfo = _newCallInfo.value ?: return
         val province = _provinceId.value ?: return
         val city = _cityId.value ?: return
@@ -1186,7 +1240,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
         viewModelScope.launch {
             try {
-                // Firestore에 출발지/도착지/요금 업데이트
+                // Firestore에 출발지/도착지/요금/메모 업데이트
                 val callRef = firestore.collection("provinces").document(province)
                     .collection("cities").document(city)
                     .collection("offices").document(office)
@@ -1196,7 +1250,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     "customerAddress" to departure.ifBlank { "" },
                     "departure_set" to departure.ifBlank { null },
                     "destination_set" to destination.ifBlank { null },
-                    "fare_set" to if (fare > 0) fare else null
+                    "fare_set" to if (fare > 0) fare else null,
+                    "memoText" to memoText?.ifBlank { null }
                 )
                 callRef.update(updateData as Map<String, Any>).await()
 
@@ -1205,7 +1260,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     customerAddress = departure.ifBlank { null },
                     departure_set = departure.ifBlank { null },
                     destination_set = destination.ifBlank { null },
-                    fare_set = if (fare > 0) fare else null
+                    fare_set = if (fare > 0) fare else null,
+                    memoText = memoText?.ifBlank { null }
                 )
                 assignCallToDriver(updatedCall, driverId)
                 dismissNewCallPopup()

@@ -40,6 +40,9 @@ data class LocalCallInfo(
     val fromCallDetector: Boolean?,
     val fromCallManager: Boolean? = null,
 
+    // 배차 임시 메모 (매니저 STT/키보드 입력) — 일반전화 콜 전용
+    val memoText: String? = null,
+
     // 사무실 정보
     val regionId: String,
     val officeId: String,
@@ -69,7 +72,8 @@ fun LocalCallInfo.toCallInfo(): CallInfo {
         assignedDriverPhone = assignedDriverPhone,
         callType = callType,
         fromCallDetector = fromCallDetector,
-        fromCallManager = fromCallManager
+        fromCallManager = fromCallManager,
+        memoText = memoText
     )
 }
 
@@ -94,6 +98,7 @@ fun CallInfo.toLocalCallInfo(regionId: String, officeId: String): LocalCallInfo 
         callType = callType,
         fromCallDetector = fromCallDetector,
         fromCallManager = fromCallManager,
+        memoText = memoText,
         regionId = regionId,
         officeId = officeId,
         synced = true,

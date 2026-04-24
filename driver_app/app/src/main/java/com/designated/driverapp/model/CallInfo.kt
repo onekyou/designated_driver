@@ -46,7 +46,7 @@ data class CallInfo(
     val cityId: String = "",
     val callType: String? = null,  // ✅ nullable로 변경 (Firebase에서 null이 올 수 있음)
     val isAppCustomer: Boolean = false,  // ✅ 추가: 앱 회원 여부
-    val memo: String = "",
+    val memoText: String? = null,
     val departure_set: String? = null,  // ✅ nullable로 변경 (Firebase에서 null이 올 수 있음)
     val destination_set: String? = null,  // ✅ nullable로 변경 (Firebase에서 null이 올 수 있음)
     val waypoints_set: String? = null,  // ✅ nullable로 변경 (Firebase에서 null이 올 수 있음)

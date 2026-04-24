@@ -15,7 +15,9 @@ import android.view.WindowManager
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -75,10 +77,14 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Edit
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Divider
 import androidx.compose.foundation.verticalScroll
 import com.designated.callmanager.util.VoiceInputHelper
 import com.designated.callmanager.util.AddressSearchHelper
+import com.designated.callmanager.util.CallMemoParser
+import com.designated.callmanager.util.ParsedMemo
 import com.designated.callmanager.data.AddressSearchResult
 import android.speech.SpeechRecognizer
 import android.content.BroadcastReceiver
@@ -87,6 +93,13 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.designated.callmanager.data.Constants
 
 private const val TAG = "DashboardScreen"
+
+/**
+ * NewCallAssignmentDialog 정보카드 STT 메모 상태.
+ * Idle → (long press) → Recording → (release) → Saving → Idle
+ * Saving 중에는 팝업 내 액션 버튼(수락/거절/공유/직접운행) 모두 disabled.
+ */
+enum class MemoSttState { Idle, Recording, Saving }
 
 // SpeechRecognizer 확장 함수
 fun Context.createSpeechRecognizer(): SpeechRecognizer {
@@ -1463,15 +1476,17 @@ fun InfoPopup(title: String, content: String, onDismiss: () -> Unit) {
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 fun NewCallAssignmentDialog(
     callInfo: CallInfo,
     availableDrivers: List<DriverInfo>,
     onDismiss: () -> Unit,
     onDriverSelect: (DriverInfo) -> Unit,
-    onDriverSelectWithInfo: ((DriverInfo, String, String, Long) -> Unit)? = null,
+    onDriverSelectWithInfo: ((DriverInfo, String, String, Long, String?) -> Unit)? = null,
     onDelete: () -> Unit,
     onShare: (departure: String, destination: String, fare: Int) -> Unit,
-    onDirectRun: (() -> Unit)? = null
+    onDirectRun: (() -> Unit)? = null,
+    onMemoUpdate: (suspend (String, ParsedMemo) -> Unit)? = null
 ) {
     val context = LocalContext.current
 
@@ -1493,6 +1508,9 @@ fun NewCallAssignmentDialog(
     var isRecordingDeparture by remember { mutableStateOf(false) }
     var isRecordingDestination by remember { mutableStateOf(false) }
     var isRecordingFare by remember { mutableStateOf(false) }
+    // fromCallManager 분기 메모 입력용
+    var manualMemoText by remember { mutableStateOf(callInfo.memoText ?: "") }
+    var isRecordingMemo by remember { mutableStateOf(false) }
 
     // Kakao 주소 검색 결과
     var departureSearchResults by remember { mutableStateOf<List<AddressSearchResult>>(emptyList()) }
@@ -1507,6 +1525,63 @@ fun NewCallAssignmentDialog(
     // 음성인식/주소검색 헬퍼 (fromCallManager일 때만 사용되지만 항상 생성)
     val voiceHelper = remember { VoiceInputHelper(context) }
     val addressSearchHelper = remember { AddressSearchHelper() }
+
+    // ========================================
+    // 정보카드 STT 메모 기능 (일반전화 콜 전용)
+    // ========================================
+    val coroutineScope = rememberCoroutineScope()
+    val showMemoUi = !isFromCallManager && callInfo.createdFrom != "customer_app"
+    var memoSttState by remember { mutableStateOf(MemoSttState.Idle) }
+    var currentMemoText by remember(callInfo.id) { mutableStateOf(callInfo.memoText) }
+    // 파싱 결과 — 구조화 프리뷰 표시용
+    var currentParsed by remember(callInfo.id) {
+        mutableStateOf<ParsedMemo?>(
+            if (!callInfo.memoText.isNullOrBlank() ||
+                !callInfo.departure_set.isNullOrBlank() ||
+                !callInfo.destination_set.isNullOrBlank()
+            ) {
+                ParsedMemo(
+                    departure = callInfo.departure_set ?: callInfo.customerAddress,
+                    waypoints = callInfo.waypoints_set,
+                    destination = callInfo.destination_set,
+                    fare = callInfo.fare_set,
+                    rawText = callInfo.memoText ?: ""
+                )
+            } else null
+        )
+    }
+    var showMemoEditDialog by remember { mutableStateOf(false) }
+    // 액션 버튼(수락/거절/공유/직접운행) disable 조건 — STT 진행/저장 중이면 true
+    val actionsDisabled = memoSttState != MemoSttState.Idle
+
+    // STT recognizer leak 방지 — 팝업 dismiss 시 자동 destroy
+    DisposableEffect(Unit) {
+        onDispose {
+            voiceHelper.destroy()
+        }
+    }
+
+    // 메모 수정 다이얼로그 (정보카드 프리뷰 탭 진입)
+    if (showMemoEditDialog && onMemoUpdate != null) {
+        MemoInputDialog(
+            initialText = currentMemoText,
+            customerAddress = callInfo.customerAddress,
+            onConfirm = { text, parsed ->
+                currentMemoText = text
+                currentParsed = parsed
+                showMemoEditDialog = false
+                coroutineScope.launch {
+                    try {
+                        onMemoUpdate(text, parsed)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "메모 수정 실패", e)
+                        Toast.makeText(context, "메모 수정 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            onDismiss = { showMemoEditDialog = false }
+        )
+    }
 
     AlertDialog(
         onDismissRequest = {
@@ -1529,11 +1604,53 @@ fun NewCallAssignmentDialog(
                 verticalArrangement = Arrangement.spacedBy(if (isFromCallManager) 8.dp else 12.dp),
                 modifier = if (isFromCallManager) Modifier.verticalScroll(rememberScrollState()) else Modifier
             ) {
-                // 일반 콜: 기존 정보 카드 표시
+                // 일반 콜: 정보 카드 표시 (일반전화 콜은 길게 누르기로 STT 메모 입력 가능)
                 if (!isFromCallManager) {
+                    val cardBgColor = when (memoSttState) {
+                        MemoSttState.Recording -> Color(0xFFD32F2F) // 녹음 중: 빨간 톤
+                        MemoSttState.Saving -> Color(0xFF757575)    // 저장 중: 회색 톤
+                        MemoSttState.Idle -> MaterialTheme.colorScheme.primary
+                    }
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (showMemoUi && onMemoUpdate != null) {
+                                    Modifier.combinedClickable(
+                                        onClick = {},
+                                        onLongClick = {
+                                            if (memoSttState == MemoSttState.Idle) {
+                                                memoSttState = MemoSttState.Recording
+                                                voiceHelper.startListening { recognized ->
+                                                    memoSttState = MemoSttState.Saving
+                                                    currentMemoText = recognized
+                                                    val parsed = CallMemoParser.parse(
+                                                        text = recognized,
+                                                        customerAddress = callInfo.customerAddress,
+                                                        voiceHelper = voiceHelper
+                                                    )
+                                                    currentParsed = parsed
+                                                    coroutineScope.launch {
+                                                        try {
+                                                            onMemoUpdate(recognized, parsed)
+                                                        } catch (e: Exception) {
+                                                            Log.e(TAG, "메모 저장 실패", e)
+                                                            Toast.makeText(
+                                                                context,
+                                                                "메모 저장 실패: ${e.message}",
+                                                                Toast.LENGTH_SHORT
+                                                            ).show()
+                                                        } finally {
+                                                            memoSttState = MemoSttState.Idle
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    )
+                                } else Modifier
+                            ),
+                        colors = CardDefaults.cardColors(containerColor = cardBgColor)
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
@@ -1546,6 +1663,81 @@ fun NewCallAssignmentDialog(
                             }
                             callInfo.customerAddress?.let {
                                 Text(text = it, color = Color.White)
+                            }
+
+                            // 메모 프리뷰 / STT 상태 표시
+                            if (showMemoUi && onMemoUpdate != null) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                when (memoSttState) {
+                                    MemoSttState.Recording -> {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                Icons.Default.Mic,
+                                                contentDescription = null,
+                                                tint = Color.White
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "말씀하세요...",
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                    MemoSttState.Saving -> {
+                                        Text(
+                                            text = "💾 저장 중...",
+                                            color = Color.White
+                                        )
+                                    }
+                                    MemoSttState.Idle -> {
+                                        val parsedSnapshot = currentParsed
+                                        val hasAnyContent = !currentMemoText.isNullOrBlank() ||
+                                            (parsedSnapshot?.hasStructuredFields == true)
+                                        if (hasAnyContent) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable { showMemoEditDialog = true },
+                                                verticalAlignment = Alignment.Top
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Edit,
+                                                    contentDescription = "메모 수정",
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Column {
+                                                    // 구조화 프리뷰 (파싱 성공 시)
+                                                    if (parsedSnapshot?.hasStructuredFields == true) {
+                                                        Text(
+                                                            text = "📋 ${parsedSnapshot.toPreview()}",
+                                                            color = Color.White,
+                                                            fontWeight = FontWeight.Bold,
+                                                            fontSize = 13.sp
+                                                        )
+                                                    }
+                                                    // 원문 (항상 표시)
+                                                    if (!currentMemoText.isNullOrBlank()) {
+                                                        Text(
+                                                            text = "📝 ${currentMemoText}",
+                                                            color = Color.White.copy(alpha = 0.85f),
+                                                            maxLines = 2,
+                                                            fontSize = 12.sp
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            Text(
+                                                text = "💡 길게 눌러 메모 추가 (STT)",
+                                                color = Color.White.copy(alpha = 0.7f),
+                                                fontSize = 12.sp
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -1771,6 +1963,50 @@ fun NewCallAssignmentDialog(
                         },
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Number,
+                            imeAction = ImeAction.Next
+                        )
+                    )
+
+                    Spacer(Modifier.height(4.dp))
+
+                    // 메모 입력 (선택) — STT + 키보드
+                    OutlinedTextField(
+                        value = manualMemoText,
+                        onValueChange = { manualMemoText = it },
+                        label = { Text("메모 (선택)") },
+                        placeholder = { Text("예: 시장에서 용문 이만오천원") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 1,
+                        maxLines = 3,
+                        trailingIcon = {
+                            Row {
+                                IconButton(onClick = {
+                                    if (!isRecordingMemo) {
+                                        voiceHelper.startListening { result ->
+                                            manualMemoText = result
+                                            isRecordingMemo = false
+                                        }
+                                        isRecordingMemo = true
+                                    } else {
+                                        voiceHelper.stopListening()
+                                        isRecordingMemo = false
+                                    }
+                                }) {
+                                    Icon(
+                                        Icons.Default.Mic,
+                                        contentDescription = "음성 입력",
+                                        tint = if (isRecordingMemo) Color.Red else MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                if (manualMemoText.isNotEmpty()) {
+                                    IconButton(onClick = { manualMemoText = "" }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "지우기")
+                                    }
+                                }
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Text,
                             imeAction = ImeAction.Done
                         )
                     )
@@ -1789,15 +2025,21 @@ fun NewCallAssignmentDialog(
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable {
+                                    .clickable(enabled = !actionsDisabled) {
                                         if (isFromCallManager && onDriverSelectWithInfo != null) {
                                             val fare = fareText.toLongOrNull() ?: 0L
-                                            onDriverSelectWithInfo(driver, departure, destination, fare)
+                                            val memo = manualMemoText.ifBlank { null }
+                                            onDriverSelectWithInfo(driver, departure, destination, fare, memo)
                                         } else {
                                             onDriverSelect(driver)
                                         }
                                     },
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (actionsDisabled)
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    else
+                                        MaterialTheme.colorScheme.surface
+                                )
                             ) {
                                 Row(
                                     modifier = Modifier.padding(12.dp),
@@ -1829,6 +2071,7 @@ fun NewCallAssignmentDialog(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (onDirectRun != null && callInfo.status == "WAITING") {
                     Button(
+                        enabled = !actionsDisabled,
                         onClick = {
                             try {
                                 val stickyR = RingtoneManager.getRingtone(context.applicationContext, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI)
@@ -1845,22 +2088,29 @@ fun NewCallAssignmentDialog(
                     ) { Text("직접운행", fontWeight = FontWeight.Bold) }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = {
-                        try {
-                            val stickyR = RingtoneManager.getRingtone(context.applicationContext, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI)
-                            if (stickyR.isPlaying) stickyR.stop()
-                            val defaultR = RingtoneManager.getRingtone(context.applicationContext, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
-                            if (defaultR.isPlaying) defaultR.stop()
-                        } catch (e: Exception) {
+                    TextButton(
+                        enabled = !actionsDisabled,
+                        onClick = {
+                            try {
+                                val stickyR = RingtoneManager.getRingtone(context.applicationContext, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI)
+                                if (stickyR.isPlaying) stickyR.stop()
+                                val defaultR = RingtoneManager.getRingtone(context.applicationContext, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+                                if (defaultR.isPlaying) defaultR.stop()
+                            } catch (e: Exception) {
+                            }
+                            onDismiss()
                         }
-                        onDismiss()
-                    }) { Text(if (isFromCallManager) "취소" else "나중에") }
+                    ) { Text(if (isFromCallManager) "취소" else "나중에") }
 
                     if (!isFromCallManager) {
-                        TextButton(onClick = { showShareDialog = true }) { Text("공유") }
+                        TextButton(
+                            enabled = !actionsDisabled,
+                            onClick = { showShareDialog = true }
+                        ) { Text("공유") }
                     }
 
                     TextButton(
+                        enabled = !actionsDisabled,
                         onClick = {
                             try {
                                 val stickyR = RingtoneManager.getRingtone(context.applicationContext, android.provider.Settings.System.DEFAULT_NOTIFICATION_URI)

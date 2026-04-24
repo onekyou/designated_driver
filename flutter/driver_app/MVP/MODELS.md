@@ -84,7 +84,7 @@ data class CallInfo(
     val cityId: String = "",
     val callType: String? = null,
     val isAppCustomer: Boolean = false,
-    val memo: String = "",
+    val memoText: String? = null,
     val departure_set: String? = null,
     val destination_set: String? = null,
     val waypoints_set: String? = null,
@@ -160,7 +160,7 @@ class CallInfo with _$CallInfo {
     String? deviceName,
     String? callType,
     @Default(false) bool isAppCustomer,
-    @Default('') String memo,
+    String? memoText,
 
     // 운행 세부 (기사 입력, snake_case 필드명 Kotlin 원본 보존)
     @JsonKey(name: 'departure_set') String? departureSet,
@@ -275,7 +275,7 @@ class CallStatusConverter implements JsonConverter<CallStatus, String> {
 
 1. **`id` 필드 특수 처리**: Firestore 문서 ID는 `data()`에 포함되지 않음 → `fromFirestore` 팩토리에서 `{...data, 'id': doc.id}` 머지 필수
 2. **snake_case 5필드 (`departure_set`, `destination_set`, `waypoints_set`, `fare_set`, `trip_summary`)**: Kotlin 원본이 snake_case로 Firestore 저장 → **반드시 `@JsonKey(name: ...)` 유지**. 무단 camelCase 변환 금지 (Firestore 호환 깨짐)
-3. **`memo` 필드 기본값 빈 문자열**: Firestore null 가능성 → `as String? ?? ''` fromJson 안전 처리 자동 생성 확인 필요
+3. **`memoText` 필드 (배차 임시 메모, 일반전화 콜 전용)**: nullable String. 매니저가 롱프레스 STT 로 입력 → 기사 NewCallPopup 에 표시. `createdFrom != "customer_app"` 콜에만 노출
 4. **`isActive` getter**: `statusEnum` Kotlin getter를 Dart에서는 sealed class의 `isActive` 파생 속성으로 직접 노출 (ENUMS.md §1 정의)
 
 ---
