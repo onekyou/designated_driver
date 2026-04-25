@@ -77,6 +77,9 @@ android {
     composeOptions {
         kotlinCompilerExtensionVersion '1.5.8' // Updated to match Kotlin 1.9.22
     }
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
     packaging {
         resources {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'

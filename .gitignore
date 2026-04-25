@@ -124,3 +124,6 @@ call_manager_current_broken/
 Walkietalkie/
 pickup_app_ptt/
 firestore-export-json/
+
+# --- Local cache for external data extraction (Phase B Kiwi etc.) ---
+functions/scripts/.kiwi-cache/

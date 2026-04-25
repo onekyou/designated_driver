@@ -97,6 +97,7 @@
 ### 기타
 | 파일 | 내용 |
 |------|------|
+| `memory/plan_voice_parsing_external_data_2026-04-26.md` | 보이스 파싱 외부 데이터 흡수 보강 플랜 (Phase A~G, 2026-04-26 승인, Phase A 진행 대기) |
 | `memory/plan_pickup_driver_app.md` | 픽업기사앱 구 기획 (3/17 승인) — Phase 2 참조용 |
 | `memory/pickup_app_phase2_plan.md` | 픽업기사앱 Phase 2 로드맵 (MVP 완성 후 확장 플랜, 2026-04-24) |
 | `memory/plan_homepage_showcase.md` | 홈페이지 앱 쇼케이스 데모 WIP (4/7) |
@@ -189,6 +190,8 @@
 | `memory/feedback_keep_existing_conventions.md` | 기존 관례(스타일/값 체계) 변경은 실질적 근거 필수 — 일반 모범 근거만으로 제안 금지 |
 | `memory/feedback_purpose_based_adaptation.md` | 다른 앱 패턴 참고 시 목적 기반 취사선택 — 맹목 복사·맹목 거부 모두 금지 |
 | `memory/feedback_scope_exact.md` | "딱 거기까지만" 스코프 디시플린 — 사용자 명시 경계 엄격 준수, 플랜 임의 확장 금지 |
+| `memory/feedback_user_intent_first.md` | 사용자 명시 의도(외부 자료/데이터 흡수)를 추측 우회로 대체 금지 — 데이터 출처 미확보 시 그 사실 보고하고 데이터 확보부터 |
+| `memory/dispatch_memo_speaker_context.md` | 배차 STT 메모는 관리자(사장님) 발화 (손님 발화 아님) — 룰/테스트 설계 시 핵심 가정 |
 
 ## 기타 포인터
 - `memory/pending-work-customer-app.md` — 손님앱 잔여 작업

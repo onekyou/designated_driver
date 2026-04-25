@@ -1626,8 +1626,7 @@ fun NewCallAssignmentDialog(
                                                     currentMemoText = recognized
                                                     val parsed = CallMemoParser.parse(
                                                         text = recognized,
-                                                        customerAddress = callInfo.customerAddress,
-                                                        voiceHelper = voiceHelper
+                                                        customerAddress = callInfo.customerAddress
                                                     )
                                                     currentParsed = parsed
                                                     coroutineScope.launch {

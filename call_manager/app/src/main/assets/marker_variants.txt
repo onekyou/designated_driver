@@ -1,0 +1,34 @@
+# 마커 변형 사전 — Phase B + 큐레이션
+#
+# 출처:
+#   - Kiwi morphemes.txt: github.com/bab2min/Kiwi (LGPL v3)
+#     Kiwi commit: unknown
+#   - 우리말샘 표제어: opendict.korean.go.kr (국립국어원 공공 데이터)
+#   - 한국어 표준 동사 활용: Kiwi 어간/어미 등재된 항목의 결합 surface
+#
+# 추출 일시: 2026-04-25
+# 형식: <kind>\t<variant>\t<weight>\t<source>
+#
+# Kiwi 추출 정책:
+#   - DEPARTURE: JKB 태그 중 의미 = 장소/출처 ('에서','서')
+#   - DESTINATION: JX 태그 중 의미 = 한계/도달점 ('까지')
+#   - SENTENCE_ENDING: EF 태그, 표면형 ≥ 2글자, 빈도 ≥ 30000, 받침결합형 제외
+#
+# 큐레이션 (Kiwi 외 출처) 정책:
+#   - 모든 변형은 사전/문법서/표준 활용으로 검증 가능한 출처 명시
+#   - 추측 변형 0 (한국어 화자가 검증 가능한 표준)
+DEPARTURE	에서	2407135	kiwi:JKB
+DEPARTURE	서	131218	kiwi:JKB
+DESTINATION	까지	484890	kiwi:JX
+SENTENCE_ENDING	습니다	624298	kiwi:EF
+SENTENCE_ENDING	어요	432512	kiwi:EF
+SENTENCE_ENDING	에요	57281	kiwi:EF
+SENTENCE_ENDING	네요	57121	kiwi:EF
+SENTENCE_ENDING	예요	43950	kiwi:EF
+SENTENCE_ENDING	거든요	32357	kiwi:EF
+DESTINATION	까정	0	urimalsam:dialect
+DESTINATION	꺼정	0	urimalsam:dialect
+WAYPOINT	거쳐	0	kiwi:VV-거치다+어
+WAYPOINT	거치	0	kiwi:VV-거치다-stem
+SENTENCE_ENDING	입니다	0	kiwi:이+ㅂ니다
+SENTENCE_ENDING	이에요	0	kiwi:이+에요

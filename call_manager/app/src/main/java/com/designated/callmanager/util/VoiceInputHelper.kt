@@ -19,6 +19,110 @@ class VoiceInputHelper(private val context: Context) {
 
     companion object {
         private const val TAG = "VoiceInputHelper"
+
+        /**
+         * 한국어 숫자를 아라비아 숫자로 변환
+         * 예: "삼만원" -> "30000", "이만오천원" -> "25000"
+         *
+         * Context 의존 없는 순수 함수 — JVM 단위 테스트에서 직접 호출 가능.
+         * 인스턴스 메서드는 이 함수에 위임.
+         */
+        fun convertKoreanNumberToDigit(text: String): String {
+            var result = text
+                .replace("영", "0")
+                .replace("일", "1")
+                .replace("이", "2")
+                .replace("삼", "3")
+                .replace("사", "4")
+                .replace("오", "5")
+                .replace("육", "6")
+                .replace("칠", "7")
+                .replace("팔", "8")
+                .replace("구", "9")
+
+            // 단위 처리
+            val units = listOf(
+                "십만" to "100000",
+                "만" to "0000",
+                "천" to "000",
+                "백" to "00",
+                "십" to "0"
+            )
+
+            // 복잡한 한국어 숫자 처리 — "만" 앞뒤로 분할 후 각각 단위 적용
+            // 예: "2만5천" → manPart=2, restPart=5000 → 25000
+            // 이전 버그: restPart 에서 "5천" 의 천 단위가 무시되어 5 만 추출 → 20005 반환
+            if (result.contains("만")) {
+                val parts = result.split("만")
+                if (parts.size == 2) {
+                    val manPartStr = parts[0]
+                    val restPartStr = parts[1].replace("원", "")
+
+                    // "만" 앞 — 비어있으면 1 (예: "만원" → 10000)
+                    val manNumber = if (manPartStr.isEmpty()) 1 else convertSubManUnits(manPartStr)
+                    // "만" 뒤 — 천/백/십 단위 적용
+                    val restNumber = convertSubManUnits(restPartStr)
+
+                    return (manNumber * 10000 + restNumber).toString()
+                }
+            }
+
+            // 단순 처리
+            for ((korean, digit) in units) {
+                if (result.contains(korean)) {
+                    val beforeUnit = result.substringBefore(korean)
+                    val numberBefore = if (beforeUnit.isEmpty() || beforeUnit == result) {
+                        "1"
+                    } else {
+                        beforeUnit.filter { it.isDigit() }.ifEmpty { "1" }
+                    }
+
+                    if (korean == "만" && !result.contains("십만")) {
+                        val afterMan = result.substringAfter("만").replace("원", "")
+                        val afterNumber = afterMan.filter { it.isDigit() }.toIntOrNull() ?: 0
+                        val manNumber = numberBefore.toIntOrNull() ?: 1
+                        return (manNumber * 10000 + afterNumber).toString()
+                    } else {
+                        result = result.replace(korean, digit)
+                    }
+                }
+            }
+
+            // "원" 제거 및 숫자만 추출
+            result = result.replace("원", "").replace(" ", "")
+
+            // 숫자만 남기기
+            return result.filter { it.isDigit() }
+        }
+
+        /**
+         * "만" 미만 단위(천/백/십) 처리.
+         * 예: "5천" → 5000, "5천5백" → 5500, "5천5백5십5" → 5555, "5" → 5, "" → 0
+         *
+         * convertKoreanNumberToDigit 내부에서 "만" 앞뒤 분할 후 각 부분 처리에 사용.
+         */
+        private fun convertSubManUnits(text: String): Int {
+            if (text.isEmpty()) return 0
+
+            var sum = 0
+            var current = text
+            val subUnits = listOf("천" to 1000, "백" to 100, "십" to 10)
+
+            for ((unit, multiplier) in subUnits) {
+                if (current.contains(unit)) {
+                    val before = current.substringBefore(unit)
+                    val n = before.filter { it.isDigit() }.toIntOrNull() ?: 1
+                    sum += n * multiplier
+                    current = current.substringAfter(unit)
+                }
+            }
+
+            // 남은 자리 (단위 없는 일의 자리)
+            val ones = current.filter { it.isDigit() }.toIntOrNull() ?: 0
+            sum += ones
+
+            return sum
+        }
     }
 
     fun createSpeechRecognizer(): SpeechRecognizer {
@@ -122,68 +226,11 @@ class VoiceInputHelper(private val context: Context) {
     }
 
     /**
-     * 한국어 숫자를 아라비아 숫자로 변환
-     * 예: "삼만원" -> "30000", "이만오천원" -> "25000"
+     * 인스턴스 메서드 호환용 — companion 함수에 위임.
+     * 기존 호출자(`voiceHelper.convertKoreanNumberToDigit(...)`) 영향 0.
      */
-    fun convertKoreanNumberToDigit(text: String): String {
-        var result = text
-            .replace("영", "0")
-            .replace("일", "1")
-            .replace("이", "2")
-            .replace("삼", "3")
-            .replace("사", "4")
-            .replace("오", "5")
-            .replace("육", "6")
-            .replace("칠", "7")
-            .replace("팔", "8")
-            .replace("구", "9")
-
-        // 단위 처리
-        val units = listOf(
-            "십만" to "100000",
-            "만" to "0000",
-            "천" to "000",
-            "백" to "00",
-            "십" to "0"
-        )
-
-        // 복잡한 한국어 숫자 처리
-        if (result.contains("만")) {
-            val parts = result.split("만")
-            if (parts.size == 2) {
-                val manPart = parts[0].filter { it.isDigit() }.toIntOrNull() ?: 0
-                val restPart = parts[1].replace("원", "").filter { it.isDigit() }.toIntOrNull() ?: 0
-                return (manPart * 10000 + restPart).toString()
-            }
-        }
-
-        // 단순 처리
-        for ((korean, digit) in units) {
-            if (result.contains(korean)) {
-                val beforeUnit = result.substringBefore(korean)
-                val numberBefore = if (beforeUnit.isEmpty() || beforeUnit == result) {
-                    "1"
-                } else {
-                    beforeUnit.filter { it.isDigit() }.ifEmpty { "1" }
-                }
-
-                if (korean == "만" && !result.contains("십만")) {
-                    val afterMan = result.substringAfter("만").replace("원", "")
-                    val afterNumber = afterMan.filter { it.isDigit() }.toIntOrNull() ?: 0
-                    val manNumber = numberBefore.toIntOrNull() ?: 1
-                    return (manNumber * 10000 + afterNumber).toString()
-                } else {
-                    result = result.replace(korean, digit)
-                }
-            }
-        }
-
-        // "원" 제거 및 숫자만 추출
-        result = result.replace("원", "").replace(" ", "")
-
-        // 숫자만 남기기
-        return result.filter { it.isDigit() }
-    }
+    fun convertKoreanNumberToDigit(text: String): String =
+        VoiceInputHelper.convertKoreanNumberToDigit(text)
 
     /**
      * 전화번호 형식 정리

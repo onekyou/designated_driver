@@ -51,7 +51,7 @@ fun MemoInputDialog(
     var text by remember { mutableStateOf(initialText ?: "") }
     var isListening by remember { mutableStateOf(false) }
     val previewParsed by remember(text) {
-        mutableStateOf(CallMemoParser.parse(text, customerAddress, voiceHelper))
+        mutableStateOf(CallMemoParser.parse(text, customerAddress))
     }
 
     // STT recognizer leak 방지
@@ -120,7 +120,7 @@ fun MemoInputDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                val parsed = CallMemoParser.parse(text, customerAddress, voiceHelper)
+                val parsed = CallMemoParser.parse(text, customerAddress)
                 onConfirm(text, parsed)
             }) {
                 Text("완료")
