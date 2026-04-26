@@ -21,6 +21,7 @@
 ## 도메인별 진입점
 | 도메인 | 인덱스 | 상태 |
 |--------|--------|------|
+| **운영 매뉴얼 (Cowork Claude Charter)** | `memory/operating_model/cowork_claude_charter.md` | v1.0 단일 원본 |
 | OS 마스터 | `memory/callmadang_master_2026-04-27.md` | 정본 |
 | OS 체크리스트 | `memory/callmadang_checklist_2026-04-27.md` | 매일 도구 |
 | 대리운전 (대리/픽업, 첫 사용 케이스) | `memory/designated_drive/README.md` | 운영 중 (양평 1곳) |
