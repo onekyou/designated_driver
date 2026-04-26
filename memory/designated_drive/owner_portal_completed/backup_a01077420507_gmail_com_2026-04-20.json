@@ -1,0 +1,62 @@
+{
+  "backedUpAt": "2026-04-20T06:00:43.422Z",
+  "target": {
+    "uid": "hpKCSyX7UTRfrewYpYvAn4VAfSH2",
+    "email": "a01077420507@gmail.com"
+  },
+  "authUser": {
+    "uid": "hpKCSyX7UTRfrewYpYvAn4VAfSH2",
+    "email": "a01077420507@gmail.com",
+    "displayName": "박상준",
+    "emailVerified": true,
+    "disabled": false,
+    "providers": [],
+    "createdAt": "2026-04-19T19:40:21.877Z",
+    "lastLoginAt": null,
+    "customClaims": null
+  },
+  "adminDoc": {
+    "id": "hpKCSyX7UTRfrewYpYvAn4VAfSH2",
+    "createdAt": "2026-04-19T19:40:22.570Z",
+    "associatedOfficeId": "dCpkIUrhITn2iEdgB6Io",
+    "associatedCityId": "yangpyeong",
+    "name": "박상준",
+    "associatedProvinceId": "gyeonggi",
+    "phoneNumber": "01077420507",
+    "updatedAt": "2026-04-19T19:40:22.570Z",
+    "email": "a01077420507@gmail.com",
+    "role": "OFFICE_OWNER",
+    "apkDownloadEnabled": true,
+    "applicationId": "fBYwlqQwgqHggMvHXgky"
+  },
+  "officeApplications": [
+    {
+      "id": "fBYwlqQwgqHggMvHXgky",
+      "region": "양평",
+      "dailyCalls": "",
+      "message": "",
+      "gmail": "a01077420507@gmail.com",
+      "status": "approved",
+      "officeRef": "provinces/gyeonggi/cities/yangpyeong/offices/dCpkIUrhITn2iEdgB6Io",
+      "reviewedBy": "vK9X9OJ9dZWgUvlvwT48KTG3ljS2",
+      "reviewedAt": "2026-04-19T19:40:22.605Z",
+      "ownerAuthUid": "hpKCSyX7UTRfrewYpYvAn4VAfSH2",
+      "phone": "01077420507",
+      "createdAt": "2026-04-19T12:45:28.518Z",
+      "ref": "direct",
+      "officeName": "총알대리",
+      "ownerName": "박상준"
+    }
+  ],
+  "officeDoc": {
+    "id": "dCpkIUrhITn2iEdgB6Io",
+    "ownerName": "박상준",
+    "createdBy": "hpKCSyX7UTRfrewYpYvAn4VAfSH2",
+    "region": "양평",
+    "createdAt": "2026-04-19T19:40:22.530Z",
+    "name": "총알대리",
+    "phone": "01077420507",
+    "status": "active"
+  },
+  "officePath": "provinces/gyeonggi/cities/yangpyeong/offices/dCpkIUrhITn2iEdgB6Io"
+}

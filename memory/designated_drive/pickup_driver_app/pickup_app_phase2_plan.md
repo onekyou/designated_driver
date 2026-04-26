@@ -12,6 +12,25 @@ type: project
 - MVP 스코프 밖이었던 구 PLAN(`pickup_driver_app/PLAN.md`)의 핵심 기능 재진입 준비
 - MVP에서 의도적으로 제거/연기한 모든 기능이 여기 모임
 
+## Phase 2 핵심 아키텍처 방향 — 알림기반 로컬 트리거
+
+**"Firestore listener 단일 의존 (관찰만)" → "알림기반 로컬 트리거"** 구조로 재편.
+- Room DB = 단일 진실 소스, UI 는 Room Flow 로만 구독
+- FCM 알림 = 변경 신호 (트리거). 서버가 폰에게 톡 두드려 깨우는 역할
+- Firestore = 초기 로드 + 주기 동기화 보조 (계속 listen 하지 않음)
+- **스코프 제약**: "내 담당" 만 신규 로컬 우선 구조. 기존 MVP 대시보드(calls listener) 는 유지. "딱 거기까지만".
+
+## Step 1 (A1~A3) 완료 기록 — 2026-04-24
+
+- **A1**: `pickup_assignments` 스키마 6필드 확정 (pickupDriverId, pickupDriverName, driverId, driverName, status, assignedAt, completedAt?). 원안 그대로. 첫 문서 쓰기는 Step 4 C1 에서.
+- **A2**: `firestore.rules` 에 pickup_assignments 블록 추가 → **프로덕션 배포 완료** (L216-240). 관리자 read/create/update/delete 전권, 픽업기사 본인 read + ACTIVE→COMPLETED 전환만.
+- **A3**: `pickup_drivers` 스키마 확장 — 문서화만. 실제 쓰기는 Step 2/3.
+  - `status`: **한글 체계 유지** (D1 결정) — `"오프라인" | "대기중" | "임무중"`. 기존 `DRIVER_STATUS_OFFLINE = "오프라인"` 유지 + `DRIVER_STATUS_WAITING = "대기중"`, `DRIVER_STATUS_ON_TASK = "임무중"` 2개 추가 예정. backfill 불필요.
+  - `fcmToken: string?` — B2 에서 최초 쓰기.
+- **D2**: `pickup_assignments` collectionGroup 규칙 **추가 안 함** (YAGNI). 향후 필요 시 추가.
+- **상수 네이밍 주의**: `pickup_driver_app/Constants.kt:21-25` 에 이미 **콜 상태용** `STATUS_WAITING = "WAITING"` 등 5개 존재. 드라이버 상태 상수는 반드시 `DRIVER_STATUS_*` prefix 로 구분.
+- Step 1 플랜: `C:\Users\kala1\.claude\plans\curried-tickling-lake.md`
+
 ## 핵심 재사용 포인트 (MVP 산출물)
 
 | 항목 | 경로 |

@@ -6,6 +6,20 @@ type: project
 
 # 사장님 포털 운영 인프라 구축 — 2026-04-19
 
+> ⚠️ **SUPERSEDED by H2 (2026-04-20)** — Gmail + Google OAuth 단일 진입점 전략은 Android 앱 로그인 불가 문제를 유발해 하루 만에 재설계됨.
+> 새 설계: `memory/h2_invite_signup_2026-04-20.md`
+> 주요 변경:
+>  - `approveOfficeApplication` CF: Auth 계정 생성 제거, `downloadInvites/{token}` 발급만
+>  - `/owner/login`: Google OAuth 제거, email+비밀번호 폼
+>  - `/owner/download?t=xxx`: 공개 토큰 기반 APK 다운로드 페이지 신규
+>  - call_manager SignUp 화면: 토큰 기반 `registerOwner` CF 호출로 전환
+>  - 아래 문서의 "Gmail OAuth 전제" 섹션은 모두 비활성
+> 유지되는 내용:
+>  - Firebase Storage 활성화 / `storage.rules`
+>  - `upload-apk-release.js` OAuth 기반 업로드
+>  - Sidebar "사장님 대시보드" 링크
+>  - Gmail 필드는 Play Store 테스터 등록용으로만 유지 (Auth 계정과 무관)
+
 ## 배경
 사장님 가입 후 APK(call_detector, call_manager) 배포와 재로그인 시 비번 관리 부담을 제거하기 위해 전체 흐름을 Gmail 중심으로 재설계. 아직 실제 사장님 가입자 0명 상태라 마이그레이션 걱정 없이 전면 전환.
 

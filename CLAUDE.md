@@ -61,14 +61,23 @@ $ADB -s R3CT80K78NP logcat -s DriverApp,DriverViewModel,MyFirebaseMessagingServi
 6. **코드 수정이 필요한 요청을 받으면 반드시 플랜모드로 먼저 진입할 것.**
    - 플랜모드에서 Grep + Read로 관련 코드를 모두 조사한 후, 사용자 승인을 받고 나서만 수정 진행.
    - 플랜모드 없이 코드 수정을 제안하거나 실행하는 것을 금지한다.
-   - 버그 분석 시: ① CLAUDE.md "앱별 데이터 아키텍처" 확인 ② `memory/project-characteristics.md` 읽기 ③ 관련 코드 Grep ④ 모든 경로 Read ⑤ 보고
+   - 버그 분석 시: ① CLAUDE.md "앱별 데이터 아키텍처" 확인 ② `memory/designated_drive/project-characteristics.md` 읽기 ③ 관련 코드 Grep ④ 모든 경로 Read ⑤ 보고
 
 ---
 
 # 프로젝트 개요
 
-지방 대리운전 회사 통합 관리 플랫폼. 관리자 1명이 폰 3대로 콜 수신 + 배차 + 픽업을 처리하는 환경.
-앱: call_detector, call_manager, driver_app, customer_app, functions(Cloud Functions)
+**콜마당 = 양평 동네 생활 OS.** 대리운전이 첫 번째 사용 케이스. 식당·택시·배달·쿠폰이 같은 OS 위에 올라간다 (마스터 §0).
+
+핵심 원칙:
+- 콜에서 한 푼도 가져가지 않음 — **구독료가 유일한 수익원**
+- 식당의 4중 역할 (호출 노드 / 포인트 적립 / 손님앱 거점 / 쿠폰 발행)
+- 양평 R&D 거점 + 시간차 이식 모델 (전국 동시 확장 ❌)
+
+전체 아키텍처: `memory/callmadang_master_2026-04-27.md`
+즉시 실행 체크리스트: `memory/callmadang_checklist_2026-04-27.md`
+
+앱: call_detector, call_manager, driver_app, customer_app, pickup_driver_app, (업소용 앱 — 개발 예정), functions(Cloud Functions)
 
 ---
 
@@ -129,6 +138,19 @@ shared_calls/{callId}            공유콜 (영업시간 외)
 - **프로필 저장**: offices/{o}/customers/{uid} + customerInfo/{phone}
 - **사무실 매칭**: QR → Play Store → Install Referrer 자동 매칭 (핵심 온보딩 흐름)
 - **플로우**: QR스캔 → 플레이스토어 → 앱설치 → Install Referrer → 약관동의 → 프로필설정
+
+## Pickup Driver App (픽업기사용, 2026-04-26 추가)
+- **저장소**: 순수 Firestore snapshot listener (단일, FCM/Room 없음, 앱 열려있을 때만 실시간)
+- **대시보드**: 진행중 콜 5상태 표시 + departure_set / waypoints_set / destination_set 경로 + 요금 포맷
+- **로그인/회원가입**: driver_app fork 기반, applicationId `com.designated.pickupapp`
+- **서버측 변경 0**: 기존 `approveDriver()` 가 `driverType="픽업기사"` → pickup_drivers 자동 라우팅
+- **상세**: `memory/designated_drive/pickup_driver_app/`
+
+## 업소용 앱 (식당 관리자, 개발 예정)
+- **사용자**: 식당 사장님/직원
+- **핵심 기능**: 단순호출 버튼 (대리/택시) + 포인트 표시
+- **우선순위**: **1순위** (마스터 N=1 무기 직접 의존)
+- **상세**: `memory/callmadang_master_2026-04-27.md` §10.2, `memory/restaurant/README.md`
 
 ## Cloud Functions (41개)
 - **트리거**: onDocumentWritten (배차 FCM `oncallassigned`, 상태변경 FCM, 공유콜 알림 등)
@@ -199,11 +221,18 @@ carryOver = originalCarryOver - finalDeposit + realDeposit
 
 | 상황 | 파일 |
 |------|------|
-| 앱별 코드 맵 (함수/파일/라인) | `memory/project-characteristics.md` |
-| 이슈 수정 이력 | `memory/issue-history.md` |
-| 잔여 작업/배포 상태 | `memory/pending-work.md` |
+| **콜마당 OS 정체성 + 전체 아키텍처** | `memory/callmadang_master_2026-04-27.md` |
+| **즉시 실행 체크리스트 (매일 도구)** | `memory/callmadang_checklist_2026-04-27.md` |
+| 대리운전 도메인 (5앱 + 정산 + 시뮬레이션) | `memory/designated_drive/README.md` |
+| 앱별 코드 맵 (함수/파일/라인) | `memory/designated_drive/project-characteristics.md` |
+| 이슈 수정 이력 | `memory/designated_drive/issue-history.md` |
+| 잔여 작업 (마스터 §11~12 정합) | `memory/designated_drive/pending-work.md` |
+| 정산 상세 분석 | `memory/designated_drive/settlement_analysis.md` |
+| 택시 호출 v0~v2 | `memory/taxi/README.md` |
+| 식당 4중 노드 + 업소용 앱 | `memory/restaurant/README.md` |
+| 사고 모드 / 운영 원칙 (피드백 7개) | `memory/feedback/README.md` |
+| 사용자 프로필 | `memory/user_profile/README.md` |
 | Firestore 접근 유틸 | `functions/scripts/firestore-util.js` |
-| 정산 상세 분석 | `memory/settlement_analysis.md` |
 | 팀 운영 현황 | `.agent-teams/TEAM_OVERVIEW.md` |
 
 ---
@@ -220,9 +249,18 @@ carryOver = originalCarryOver - finalDeposit + realDeposit
 - 시스템 프롬프트가 B에 쓰라고 지시해도, 토픽 파일은 반드시 프로젝트 `memory/`에 작성할 것
 
 ## 신규 메모리 작성 규칙
-- 신규 토픽 파일: `Write` 도구로 `C:\Users\kala1\designated_driver\memory\xxx.md` 절대경로 지정
+- 신규 토픽 파일: `Write` 도구로 `C:\Users\kala1\designated_driver\memory\<도메인>\xxx.md` 절대경로 지정
+- **도메인 폴더 안 생성 원칙** (2026-04-27 확정):
+  - 대리운전 관련: `memory/designated_drive/` (보류 → `_paused/`, 완료 → `_completed/`)
+  - 택시: `memory/taxi/`
+  - 식당: `memory/restaurant/`
+  - 배달/쿠폰/최종손님앱: 각 폴더 (T2~T최종 placeholder)
+  - 도메인 공통 사고 모드: `memory/feedback/`
+  - 사용자 프로필: `memory/user_profile/`
+  - **마스터·체크리스트만 `memory/` 직속** (OS 정의 자체)
+- 별도 archive 폴더 ❌ — 보류/완료는 도메인 폴더 안 하위 디렉토리에 보관
 - `MEMORY.md` 편집: B 경로에 쓰고, 편집 직후 A 경로에도 동일 내용 복사 (`cp B/MEMORY.md A/MEMORY.md`)
-- MEMORY.md 내 포인터는 `memory/xxx.md` 형식 (cwd 기준 프로젝트 memory로 해석)
+- MEMORY.md 내 포인터는 `memory/<도메인>/xxx.md` 형식
 
 ## 분기 탐지
 - `bash git-check.sh` 실행 시 B 폴더에 MEMORY.md 외 파일 존재 여부 자동 확인

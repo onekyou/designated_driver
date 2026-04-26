@@ -242,3 +242,21 @@ carryOver = originalCarryOver - finalDeposit + realDeposit
 - online/background는 동일 취급, offline만 문제로 판단
 
 **3/18 보정**: `#1 offline 즉시 복귀 → 타임아웃 적용` (1분 유예로 FCM 도달 기회 보장)
+
+---
+
+## 5번째 앱: Pickup Driver App (2026-04-26 추가, 운영 중)
+
+- **applicationId**: `com.designated.pickupapp` (Firebase Console 기존 등록 재사용)
+- **저장소**: 순수 Firestore snapshot listener (단일, FCM/Room 없음, 앱 열려있을 때만 실시간)
+- **대시보드**: 진행중 콜 5상태 표시 + `departure_set → waypoints_set → destination_set` headlineSmall+Bold 경로 + 요금 포맷
+- **로그인/회원가입**: driver_app fork 기반
+- **서버측 변경 0**: 기존 `approveDriver()` 가 `driverType="픽업기사"` → pickup_drivers 자동 라우팅, firestore.rules 이미 완비
+- **상세 플랜**: `memory/designated_drive/pickup_driver_app/plan_pickup_driver_app.md`, `pickup_app_phase2_plan.md`
+
+## 6번째 앱: 업소용 앱 (개발 예정, 마스터 N=1 무기 직접 의존)
+
+- **사용자**: 식당 사장님/직원
+- **핵심 기능**: 단순호출 버튼 (대리/택시) + 포인트 표시
+- **우선순위**: **1순위** (체크리스트 B-3 클코 작업 지시 항목)
+- **상세**: `memory/callmadang_master_2026-04-27.md` §10.2 + `memory/restaurant/README.md`
