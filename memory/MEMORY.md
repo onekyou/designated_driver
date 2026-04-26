@@ -35,12 +35,12 @@
 | 사용자 프로필 | `memory/user_profile/README.md` | 도메인 공통 |
 
 ## 최근 달성 (5개)
-- ✅ 2026-04-27 클코 에이전시화 결정 + 본 에이전시 헌장 v1.0 작성. Cowork→보조 도구 재정의, CLAUDE.md 헌장·운영 매뉴얼·실행 규칙 갱신 (`memory/operating_model/clcode_agency_charter.md`)
+- ✅ 2026-04-27 식당업소앱 변환 PLAN 1쪽 + R1~R5 결정 확정 (`memory/restaurant/owner_app_pivot_plan_2026-04-27.md`). **다음 트리거: 첫 식당 미팅 약속 → 백업 + Flutter MVP 진입**
+- ✅ 2026-04-27 클코 에이전시화 결정 + 본 에이전시 헌장 v1.0 작성. Cowork→보조 도구 재정의 (`memory/operating_model/clcode_agency_charter.md`)
 - ✅ 2026-04-27 손님앱(Kotlin+Flutter) → 식당업소앱 변환 결정 (`memory/restaurant/owner_app_pivot_2026-04-27.md`)
 - ✅ 2026-04-27 마스터 정리(v1.1 R1~R8) + 메모리 OS 레이어 재구조화
 - ✅ 2026-04-26 픽업앱 MVP + 배차 STT 메모 (commits `f9d0f0d0`/`58428830`)
 - ✅ 2026-04-23 정산 carryOver 중복 합산 fix (commit `607c6bb7`)
-- ✅ 2026-04-21 첫 대면 영업 박상준/양평 + 전략 피벗
 
 ## 보류 트랙 (대리 도메인 안, 양평 자기추진 입증 후 복귀)
 - 손님앱 코드(Kotlin+Flutter) → 식당업소앱 변환됨 (2026-04-27): 백업본 기점으로 부활. `memory/designated_drive/customer_app/customer_app_to_owner_app_2026-04-27.md`
