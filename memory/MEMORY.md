@@ -21,7 +21,8 @@
 ## 도메인별 진입점
 | 도메인 | 인덱스 | 상태 |
 |--------|--------|------|
-| **운영 매뉴얼 (Cowork Claude Charter)** | `memory/operating_model/cowork_claude_charter.md` | v1.0 단일 원본 |
+| **본 에이전시 헌장 (클코, 작동 단일 원본)** | `memory/operating_model/clcode_agency_charter.md` | v1.0 (2026-04-27) |
+| Cowork 보조 도구 가이드 (구 Cowork Charter v1.0) | `memory/operating_model/cowork_claude_charter.md` | superseded → 클코 헌장에 인수 |
 | OS 마스터 | `memory/callmadang_master_2026-04-27.md` | 정본 |
 | OS 체크리스트 | `memory/callmadang_checklist_2026-04-27.md` | 매일 도구 |
 | 대리운전 (대리/픽업, 첫 사용 케이스) | `memory/designated_drive/README.md` | 운영 중 (양평 1곳) |
@@ -34,6 +35,7 @@
 | 사용자 프로필 | `memory/user_profile/README.md` | 도메인 공통 |
 
 ## 최근 달성 (5개)
+- ✅ 2026-04-27 클코 에이전시화 결정 + 본 에이전시 헌장 v1.0 작성. Cowork→보조 도구 재정의, CLAUDE.md 헌장·운영 매뉴얼·실행 규칙 갱신 (`memory/operating_model/clcode_agency_charter.md`)
 - ✅ 2026-04-27 손님앱(Kotlin+Flutter) → 식당업소앱 변환 결정 (`memory/restaurant/owner_app_pivot_2026-04-27.md`)
 - ✅ 2026-04-27 마스터 정리(v1.1 R1~R8) + 메모리 OS 레이어 재구조화
 - ✅ 2026-04-26 픽업앱 MVP + 배차 STT 메모 (commits `f9d0f0d0`/`58428830`)

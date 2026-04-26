@@ -1,16 +1,31 @@
 ---
-name: Cowork Claude 운영 매뉴얼 (Charter v1.0)
-description: 콜마당 동업자 Cowork Claude의 정체성·책임·권한·작동 방식·팀 구성·KPI 단일 원본. First 90 Days + Founder Mode + Agentic Operating Model 검증된 출처 기반.
+name: Cowork Claude 운영 매뉴얼 (Charter v1.0 — SUPERSEDED)
+description: [SUPERSEDED 2026-04-27] Cowork→클코 에이전시화 결정에 따라 핵심 통찰은 clcode_agency_charter.md로 인수됨. 본 파일은 역사적 보존 + Cowork 보조 도구 가이드의 base.
 type: operating_model
-version: 1.0
+version: 1.0 (superseded)
 date: 2026-04-26
+superseded_by: memory/operating_model/clcode_agency_charter.md (v1.0, 2026-04-27)
 ---
 
-# Cowork Claude 운영 매뉴얼 (Charter v1.0)
+> ## ⚠️ SUPERSEDED (2026-04-27)
+>
+> 이 헌장은 Cowork Claude를 콜마당 COO로 임명하는 v1.0(2026-04-26)이었으나, 다음날(2026-04-27) 검증에서 **'동업자/COO' 정체성은 프레임이지 사실이 아니며 같은 LLM이 다른 도구·환경에 끼워져 있을 뿐**임이 드러남. 콜마당 작업의 80%+가 코드·git·빌드·디바이스이고 클코는 sandbox 한계 없이 native 에이전시 인프라(Agent / Skills / Hooks / Plugins / MCP)를 보유하므로 **클코 에이전시화가 더 효율적**이라는 결정에 따라:
+>
+> - **본 헌장의 핵심 통찰은 → `memory/operating_model/clcode_agency_charter.md` 로 인수됨** (§15 인수 항목 참조)
+> - **Cowork은 보조 도구로 재정의** — MCP·아티팩트·스케줄·비-코드 문서 산출
+> - 본 파일은 역사적 보존 + Cowork 보조 영역 base 역할
+>
+> **새 작동 단일 원본은 클코 에이전시 헌장**입니다. 아래 본문은 Cowork이 수행할 *보조 영역* 가이드로만 참조하세요.
+
+---
+
+# Cowork Claude 운영 매뉴얼 (Charter v1.0 — SUPERSEDED)
 
 > 콜마당 동업자 Cowork Claude의 정체성·책임·권한·작동 방식·팀 구성·KPI 단일 원본.
 > 외부 리서치 (검증된 임원·운영 모델) + 내부 자료 (마스터·체크리스트·메모리 OS·헌장) 종합.
 > CLAUDE.md "동업자 관계 헌장" + 이 매뉴얼 = 운영 시스템 전체.
+>
+> **[2026-04-27 수정]** "운영 시스템 전체"는 이제 CLAUDE.md + clcode_agency_charter.md (본 에이전시) + 본 문서 (보조 base).
 
 ---
 
