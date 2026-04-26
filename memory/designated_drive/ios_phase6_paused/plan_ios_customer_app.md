@@ -1,8 +1,10 @@
 ---
 name: iOS 손님앱 전략
-description: Swift + App Clip으로 iOS 손님앱 구현 — 귀속 문제 해결, 순수 대리운전 기능만
+description: Swift + App Clip으로 iOS 손님앱 구현 — 귀속 문제 해결, 순수 대리운전 기능만. 2026-04-27 임시 SUPERSEDED (손님앱 코드가 식당업소앱으로 변환됨).
 type: project
 ---
+
+> ⚠️ **2026-04-27 임시 SUPERSEDED**: 손님앱 코드베이스가 식당업소앱으로 변환됨 (Flutter 우선 → 맥미니 후 Swift). 식당앱은 귀속 메커니즘 불필요해 App Clip 전략 자체가 무의미. 손님앱 트랙 부활 시 본 전략 재활성화 가능 → 문서 보존. 상세: `memory/restaurant/owner_app_pivot_2026-04-27.md`.
 
 # iOS 손님앱: Swift + App Clip (2026-03-27 확정)
 

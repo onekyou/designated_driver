@@ -25,7 +25,7 @@
 | OS 체크리스트 | `memory/callmadang_checklist_2026-04-27.md` | 매일 도구 |
 | 대리운전 (대리/픽업, 첫 사용 케이스) | `memory/designated_drive/README.md` | 운영 중 (양평 1곳) |
 | 택시 (마스터 §6) | `memory/taxi/README.md` | v0 진입 준비 |
-| 식당 (마스터 §3.4 4중 노드) | `memory/restaurant/README.md` | 영업 시작 준비 (업소용 앱 1순위) |
+| 식당 (마스터 §3.4 4중 노드) | `memory/restaurant/README.md` | 업소용 앱 1순위 (손님앱 코드 변환 결정 2026-04-27) |
 | 배달 (T2) | `memory/delivery/README.md` | placeholder |
 | 쿠폰 (T2) | `memory/coupon/README.md` | placeholder |
 | 최종 손님앱 (T최종) | `memory/customer_super_app/README.md` | placeholder |
@@ -33,14 +33,15 @@
 | 사용자 프로필 | `memory/user_profile/README.md` | 도메인 공통 |
 
 ## 최근 달성 (5개)
-- ✅ 2026-04-27 마스터 정리(v1.1 R1~R8 리스크) + 메모리 OS 레이어 재구조화 (이 작업)
+- ✅ 2026-04-27 손님앱(Kotlin+Flutter) → 식당업소앱 변환 결정 (`memory/restaurant/owner_app_pivot_2026-04-27.md`)
+- ✅ 2026-04-27 마스터 정리(v1.1 R1~R8) + 메모리 OS 레이어 재구조화
 - ✅ 2026-04-26 픽업앱 MVP + 배차 STT 메모 (commits `f9d0f0d0`/`58428830`)
 - ✅ 2026-04-23 정산 carryOver 중복 합산 fix (commit `607c6bb7`)
 - ✅ 2026-04-21 첫 대면 영업 박상준/양평 + 전략 피벗
-- ✅ 2026-04-20 H2 사장님 포털 배포 (`memory/designated_drive/owner_portal_completed/`)
 
 ## 보류 트랙 (대리 도메인 안, 양평 자기추진 입증 후 복귀)
-- Phase 6 iOS 출시: `memory/designated_drive/ios_phase6_paused/`
+- 손님앱 코드(Kotlin+Flutter) → 식당업소앱 변환됨 (2026-04-27): 백업본 기점으로 부활. `memory/designated_drive/customer_app/customer_app_to_owner_app_2026-04-27.md`
+- Phase 6 iOS 출시 (App Clip 전략 임시 SUPERSEDED): `memory/designated_drive/ios_phase6_paused/`
 - Flutter 전환: `memory/designated_drive/flutter_paused/`
 - 대리 손님앱 MVP 재작성: `memory/designated_drive/customer_app/`
 
