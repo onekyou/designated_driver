@@ -1753,6 +1753,109 @@ fun NewCallAssignmentDialog(
 
                 // fromCallManager 콜: 출발지/도착지/요금 입력 필드 (음성입력 + Kakao 주소검색)
                 if (isFromCallManager) {
+                    // 길게-누르기 STT 정보카드 — 한 번 발화로 4필드 일괄 채우기
+                    val manualCardBgColor = when (memoSttState) {
+                        MemoSttState.Recording -> Color(0xFFD32F2F)
+                        MemoSttState.Saving -> Color(0xFF757575)
+                        MemoSttState.Idle -> MaterialTheme.colorScheme.primary
+                    }
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .combinedClickable(
+                                onClick = {},
+                                onLongClick = {
+                                    if (memoSttState == MemoSttState.Idle) {
+                                        memoSttState = MemoSttState.Recording
+                                        voiceHelper.startListening { recognized ->
+                                            val parsed = CallMemoParser.parse(
+                                                text = recognized,
+                                                customerAddress = ""
+                                            )
+                                            if (!parsed.departure.isNullOrBlank()) {
+                                                departure = parsed.departure!!
+                                                addressSearchHelper.searchAddress(parsed.departure!!) { r ->
+                                                    departureSearchResults = r
+                                                    showDepartureResults = r.isNotEmpty()
+                                                }
+                                            }
+                                            if (!parsed.destination.isNullOrBlank()) {
+                                                destination = parsed.destination!!
+                                                addressSearchHelper.searchAddress(parsed.destination!!) { r ->
+                                                    destinationSearchResults = r
+                                                    showDestinationResults = r.isNotEmpty()
+                                                }
+                                            }
+                                            if (parsed.fare != null && parsed.fare!! > 0) {
+                                                fareText = parsed.fare.toString()
+                                            }
+                                            manualMemoText = recognized
+                                            memoSttState = MemoSttState.Idle
+                                        }
+                                    }
+                                }
+                            ),
+                        colors = CardDefaults.cardColors(containerColor = manualCardBgColor)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            when (memoSttState) {
+                                MemoSttState.Recording -> {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Default.Mic,
+                                            contentDescription = null,
+                                            tint = Color.White
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "말씀하세요...",
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                                MemoSttState.Saving -> {
+                                    Text(text = "💾 저장 중...", color = Color.White)
+                                }
+                                MemoSttState.Idle -> {
+                                    val hasAny = departure.isNotBlank() ||
+                                        destination.isNotBlank() ||
+                                        fareText.isNotBlank() ||
+                                        manualMemoText.isNotBlank()
+                                    if (hasAny) {
+                                        val route = listOf(departure, destination)
+                                            .filter { it.isNotBlank() }
+                                            .joinToString(" → ")
+                                        val fareLong = fareText.toLongOrNull() ?: 0L
+                                        val fareStr = if (fareLong > 0) " / ${"%,d".format(fareLong)}원" else ""
+                                        if (route.isNotBlank() || fareStr.isNotBlank()) {
+                                            Text(
+                                                text = "📋 $route$fareStr",
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp
+                                            )
+                                        }
+                                        if (manualMemoText.isNotBlank()) {
+                                            Text(
+                                                text = "📝 $manualMemoText",
+                                                color = Color.White.copy(alpha = 0.85f),
+                                                maxLines = 2,
+                                                fontSize = 12.sp
+                                            )
+                                        }
+                                    } else {
+                                        Text(
+                                            text = "💡 길게 눌러 STT로 한번에 입력 (예: '시장에서 용문 이만오천원')",
+                                            color = Color.White.copy(alpha = 0.85f),
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // 출발지 입력
                     OutlinedTextField(
                         value = departure,
