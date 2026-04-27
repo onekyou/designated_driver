@@ -327,12 +327,15 @@ fun DispatchDialog(
             }
         },
         confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+            ) {
                 TextButton(
                     enabled = !actionsDisabled,
                     onClick = onHold
                 ) {
-                    Text("나중에")
+                    Text("보류")
                 }
 
                 TextButton(
