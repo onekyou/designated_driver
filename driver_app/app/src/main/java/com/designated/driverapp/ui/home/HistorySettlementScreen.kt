@@ -59,6 +59,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -255,11 +257,11 @@ fun HistorySettlementScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
         ) {
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
+                modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A)),
                 shape = RoundedCornerShape(8.dp)
             ) {
@@ -278,21 +280,20 @@ fun HistorySettlementScreen(
                             color = Color.White
                         )
                     }
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                        contentPadding = PaddingValues(bottom = 16.dp)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         if (tripHistory.isEmpty()) {
-                            item {
-                                Text(
-                                    "운행내역이 없습니다.",
-                                    color = Color.Gray,
-                                    modifier = Modifier.padding(16.dp)
-                                )
-                            }
+                            Text(
+                                "운행내역이 없습니다.",
+                                color = Color.Gray,
+                                modifier = Modifier.padding(16.dp)
+                            )
                         } else {
-                            items(tripHistory) { summary ->
+                            tripHistory.forEach { summary ->
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = CardDefaults.cardColors(containerColor = Color(0xFF3A3A3A)),
