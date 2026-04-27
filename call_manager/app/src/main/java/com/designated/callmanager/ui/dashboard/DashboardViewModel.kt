@@ -40,6 +40,7 @@ import com.google.firebase.database.ktx.database
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -153,6 +154,15 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val _allSharedCalls = MutableStateFlow<List<com.designated.callmanager.data.SharedCallInfo>>(emptyList())
     val allSharedCalls: StateFlow<List<com.designated.callmanager.data.SharedCallInfo>> = _allSharedCalls.asStateFlow()
+
+    // 공유콜 30분 자동 필터 + 로컬 dismiss
+    private val sharedMap = mutableMapOf<String, com.designated.callmanager.data.SharedCallInfo>()
+    private val dismissedSharedPrefs =
+        application.getSharedPreferences("dismissed_shared_calls", Context.MODE_PRIVATE)
+    private val dismissedIds: MutableSet<String> =
+        dismissedSharedPrefs.getStringSet("ids", emptySet())?.toMutableSet() ?: mutableSetOf()
+    private var sharedCallTickerJob: Job? = null
+    private val SHARED_CALL_MAX_AGE_MS = 30L * 60L * 1000L
 
     private val _showSharedCallTakenDialog = MutableStateFlow(false)
     val showSharedCallTakenDialog: StateFlow<Boolean> = _showSharedCallTakenDialog.asStateFlow()
@@ -355,11 +365,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
 
-        val sharedMap = mutableMapOf<String, com.designated.callmanager.data.SharedCallInfo>()
-
-        fun emitSharedCalls() {
-            _sharedCalls.value = sharedMap.values.sortedByDescending { it.timestamp?.seconds ?: 0 }
-        }
+        sharedMap.clear()
+        startSharedCallTicker()
 
         val listenerA = firestore.collection("shared_calls")
             .whereEqualTo("sourceProvinceId", provinceId)
@@ -1692,6 +1699,33 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         startCallDetectorIfEnabled()
     }
 
+    private fun emitSharedCalls() {
+        val cutoff = System.currentTimeMillis() - SHARED_CALL_MAX_AGE_MS
+        _sharedCalls.value = sharedMap.values
+            .filter { sc ->
+                val ts = sc.timestamp?.toDate()?.time ?: 0L
+                ts >= cutoff && sc.id !in dismissedIds
+            }
+            .sortedByDescending { it.timestamp?.seconds ?: 0 }
+    }
+
+    private fun startSharedCallTicker() {
+        sharedCallTickerJob?.cancel()
+        sharedCallTickerJob = viewModelScope.launch {
+            while (isActive) {
+                delay(60_000L)
+                emitSharedCalls()
+            }
+        }
+    }
+
+    fun dismissSharedCall(id: String) {
+        if (dismissedIds.add(id)) {
+            dismissedSharedPrefs.edit().putStringSet("ids", dismissedIds.toSet()).apply()
+            emitSharedCalls()
+        }
+    }
+
     private fun stopListening() {
         callsListener?.remove()
         driversListener?.remove()
@@ -1699,6 +1733,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         sharedCallsListener?.remove()
         allSharedCallsListener?.remove()
         activeCallsListener?.remove()
+        sharedCallTickerJob?.cancel()
+        sharedCallTickerJob = null
+        sharedMap.clear()
         // Repository 패턴으로 변경됨 - Firebase 리스너 제거
         callsListener = null
         driversListener = null

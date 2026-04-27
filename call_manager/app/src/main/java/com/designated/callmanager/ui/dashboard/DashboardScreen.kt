@@ -603,6 +603,11 @@ fun DashboardScreen(
                 showSharedAcceptDialog = false
                 selectedSharedCall = null
             },
+            onDismissCard = {
+                viewModel.dismissSharedCall(call.id)
+                showSharedAcceptDialog = false
+                selectedSharedCall = null
+            },
             onConfirm = { dep, dest, fare, driver ->
                 viewModel.claimSharedCallWithDetails(
                     sharedCallId = call.id,
@@ -631,6 +636,10 @@ fun DashboardScreen(
             sharedCall = call,
             availableDrivers = waitingDrivers,
             onDismiss = {
+                viewModel.dismissNewSharedCallPopup()
+            },
+            onDismissCard = {
+                viewModel.dismissSharedCall(call.id)
                 viewModel.dismissNewSharedCallPopup()
             },
             onConfirm = { dep, dest, fare, driver ->
@@ -2086,7 +2095,10 @@ fun NewCallAssignmentDialog(
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB8860B))
                     ) { Text("직접운행", fontWeight = FontWeight.Bold) }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+                ) {
                     TextButton(
                         enabled = !actionsDisabled,
                         onClick = {
@@ -2099,7 +2111,7 @@ fun NewCallAssignmentDialog(
                             }
                             onDismiss()
                         }
-                    ) { Text(if (isFromCallManager) "취소" else "나중에") }
+                    ) { Text(if (isFromCallManager) "취소" else "보류") }
 
                     if (!isFromCallManager) {
                         TextButton(
@@ -2534,7 +2546,15 @@ fun SharedCallCard(
         else -> Color(0xFF2A2A2A)
     }
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (sharedCall.status == "OPEN") {
+                    Modifier.clickable { onAccept(sharedCall) }
+                } else {
+                    Modifier
+                }
+            ),
         colors = CardDefaults.cardColors(containerColor = bgColor),
         shape = RoundedCornerShape(0.dp)
     ) {
@@ -2865,6 +2885,7 @@ fun SharedCallAcceptDialog(
     sharedCall: SharedCallInfo,
     availableDrivers: List<DriverInfo>,
     onDismiss: () -> Unit,
+    onDismissCard: () -> Unit,
     onConfirm: (departure: String, destination: String, fare: Int, driver: DriverInfo?) -> Unit
 ) {
     Log.d("SharedCallAcceptDialog", "🔍 [FCM_DEBUG] SharedCallAcceptDialog 컴포넌트 진입 - sharedCall: ${sharedCall.id}, drivers: ${availableDrivers.size}개")
@@ -3014,7 +3035,12 @@ fun SharedCallAcceptDialog(
             }) { Text("확인") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("취소") }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = onDismissCard) {
+                    Text("삭제", color = Color(0xFFE57373))
+                }
+                TextButton(onClick = onDismiss) { Text("취소") }
+            }
         }
     )
 }
