@@ -35,7 +35,7 @@
 | 사용자 프로필 | `memory/user_profile/README.md` | 도메인 공통 |
 
 ## 최근 달성 (5개)
-- ✅ 2026-04-28 사무실 단톡방 채팅 V1 PLAN rev3 승인 + 메모리 저장 (`memory/designated_drive/chat_feature_plan_2026-04-28.md`, `yangpyeong_chat_data_2026-04-28.md`, `chat_v2_call_embed_idea_2026-04-28.md`). 양평 단톡방 실측 4시간 80메시지 기반. BottomSheet 패턴, FCM+로컬 트리거, 90일 PII cleanup, 운행 중 사용 핵심 use case. ~4.5주 (V1.1 분리 시 ~3주). **다음 트리거: Step 1 docs/chat-shared-spec.md 진입**
+- ✅ 2026-04-28 사무실 단톡방 채팅 V1 — PLAN rev3 + Step 1~4 + Step 5 데이터 레이어 commit (commit `7290ab17`, origin/manager-direct-drive 푸시 완료). CF + 보안규칙 + Room v6 + ChatRepository. 양평 실측 4시간 80메시지 기반. BottomSheet 패턴, FCM+로컬 트리거, 90일 PII cleanup. **다음 트리거: Step 5 UI 진입 — `memory/designated_drive/chat_v1_handoff_2026-04-28.md` 정독 후 ChatViewModel/ChatScreen/BottomSheetScaffold/FCM분기/알림채널/로그아웃 토큰삭제 (5개 commit 단위)**
 - ✅ 2026-04-27 식당업소앱 변환 PLAN 1쪽 + R1~R5 결정 확정 (`memory/restaurant/owner_app_pivot_plan_2026-04-27.md`). **다음 트리거: 첫 식당 미팅 약속 → 백업 + Flutter MVP 진입**
 - ✅ 2026-04-27 클코 에이전시화 결정 + 본 에이전시 헌장 v1.0 작성. Cowork→보조 도구 재정의 (`memory/operating_model/clcode_agency_charter.md`)
 - ✅ 2026-04-27 손님앱(Kotlin+Flutter) → 식당업소앱 변환 결정 (`memory/restaurant/owner_app_pivot_2026-04-27.md`)
