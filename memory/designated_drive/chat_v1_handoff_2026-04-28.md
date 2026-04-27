@@ -1,14 +1,27 @@
-# 사무실 단톡방 채팅 V1 — Step 5 UI 진입 직전 인계 (2026-04-28)
+# 사무실 단톡방 채팅 V1 — Step 5 UI 완료 (2026-04-28 갱신)
 
 > 다음 세션 첫 응답 전에 본 문서 + PLAN + SPEC 정독 권장.
 > "시작해줘" 트리거로 들어온 클코가 어디서부터 이어갈지 즉시 파악할 수 있게 작성.
 
 ## 완료 상태
 
-### Commit 7290ab17 (origin/manager-direct-drive)
-`feat(chat): 사무실 단톡방 V1 — CF + 보안규칙 + 데이터 레이어`
+### Step 5 UI (call_manager) — 2026-04-28 5 commit 추가 완료
 
-완료된 단계:
+| # | Commit | 내용 |
+|---|---|---|
+| 1 | `ad6f11a7` | FCM NEW_CHAT_MESSAGE 분기 + chat_messages 알림 채널 (IMPORTANCE_HIGH, default sound, DND 우회 X) |
+| 2 | `3651f97d` | ChatViewModel + ChatScreen 기본 (SharedPreferences p/c/o, admins/{uid}.name) |
+| 3 | `215d937d` | UI 디테일 (5분 그룹화, sendStatus ✓회색/✓파랑/✗빨강+retry, 시간 "오후 8:32") |
+| 4 | `d01e5b63` | BottomSheetScaffold 통합 (DashboardWithChatSheet, peek 56dp + Expanded) |
+| 5 | `6ef6770b` | 로그아웃 시 managerTokens/{uid} 삭제 (logoutAndExit best-effort) |
+
+각 commit 후 `./gradlew :app:compileDebugKotlin` 통과. WIP 파일 (LoginViewModel, SignUp 등) 미터치.
+
+### V1.5로 deferred (이번 세션 결정)
+- **50% 중간 anchor**: Material 3 BottomSheetScaffold 기본은 peek+Expanded 2-state. 50% 추가하려면 AnchoredDraggable 커스텀 구현 필요 → 운영 학습 후 재검토
+- **새 메시지 도착 시 peek 56→80 부풀음 + 진동**: 시각/촉각 피드백. V1.5 안전 보강 시 추가
+
+### Step 1~4 (기존, commit 7290ab17 origin/manager-direct-drive)
 - ✅ Phase A: 메모리 저장 (PLAN + 양평 단톡방 데이터 + V2 후보)
 - ✅ Step 1: `docs/chat-shared-spec.md` SSOT
 - ✅ Step 2: `firestore.rules` chatRoom 매치 블록 + collectionGroup messages 인덱스
@@ -19,7 +32,34 @@
 빌드 검증:
 - TypeScript: `npx tsc --noEmit` 통과
 - Firebase rules: `firebase deploy --only firestore:rules --dry-run` 통과
-- Kotlin: `./gradlew :app:compileDebugKotlin` 통과
+- Kotlin (call_manager): `./gradlew :app:compileDebugKotlin` 통과 (각 commit별)
+
+## 다음 작업 — Step 6 (driver_app) 진입
+
+call_manager Step 5 완료. 다음은 driver_app에 동일 구조 이식:
+- ChatRepository (driver_app 데이터 레이어)
+- ChatViewModel + ChatScreen (driver_app용, senderRole=DESIGNATED_DRIVER 고정)
+- BottomSheetScaffold 통합 (driver_app MainActivity)
+- FCM NEW_CHAT_MESSAGE 분기 + chat_messages 채널 (driver_app FCM service)
+- 로그아웃 시 driver_app FCM token 삭제
+
+⚠️ **driver_app Compose BOM = 2023.10.01** — Material 3 BottomSheetScaffold 호환 여부 확인 필수. 비호환 시 BOM 업그레이드 또는 Material 3 ModalBottomSheet으로 대체 검토.
+
+## 디바이스 검증 (Step 5 → Step 6 전 권장)
+
+3 기기 (S21+ R3CR312MB1L, S22 R5CT41TJZFP, Z Flip4 R3CT80K78NP) 중 **call_manager 단독 검증**:
+- backfillChatMembers 1회 호출 (firebase functions:shell): `backfillChatMembers({provinceId, cityId, officeId})`
+- S21+(call_manager 설치 기기) 로그인 → Dashboard 진입
+- BottomSheet peek 56dp 보임 → 위로 끌어올리기 → Expanded 전환
+- 입력바에서 메시지 발송 → Firestore 콘솔 `messages/` 도큐먼트 생성 확인
+- Optimistic UI: 발송 직후 ✓회색 → 1초 내 ✓파랑 전환
+- 비행기 모드 → 발송 → ✗빨강 → 비행기 OFF + ✗ 탭 → ✓파랑 전환
+- 다른 기기에서 답장 시 (단, Step 6/7 후): peek 미리보기 갱신
+- 로그아웃("종료") 시 Firestore managerTokens/{uid} 문서 삭제 확인
+
+## Archive — Step 5 진입 전 인계 (이하는 참고용 원본 보존)
+
+---
 
 ## 다음 작업 — Step 5 UI
 
