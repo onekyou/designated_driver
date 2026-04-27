@@ -428,8 +428,8 @@ class MainActivity : ComponentActivity() {
                                         TextButton(onClick = {
                                             showLogoutConfirmDialog = false
                                             // auto_login 설정은 유지 (체크박스 해제 시에만 변경됨)
-                                            auth.signOut()
-                                            finishAffinity()
+                                            // 종료 전에 managerTokens/{uid} 삭제 후 signOut + finishAffinity
+                                            logoutAndExit()
                                         }) {
                                             Text("종료")
                                         }
@@ -1177,6 +1177,44 @@ class MainActivity : ComponentActivity() {
                     }
             } catch (e: Exception) {
             }
+        }
+    }
+
+    /**
+     * 로그아웃 시 managerTokens/{uid} 문서 삭제 후 signOut + finishAffinity.
+     * 이전 기기 토큰 잔류 방지 (스펙 §14 체크리스트 "로그아웃 시 fcmToken 삭제").
+     * 삭제 실패 시에도 signOut/finishAffinity는 진행 (best-effort cleanup).
+     */
+    private fun logoutAndExit() {
+        val uid = auth.currentUser?.uid
+        val prefs = getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
+        val p = provinceId ?: prefs.getString("provinceId", null)
+        val c = cityId ?: prefs.getString("cityId", null)
+        val o = officeId ?: prefs.getString("officeId", null)
+
+        val finalize = {
+            auth.signOut()
+            finishAffinity()
+        }
+
+        if (uid != null && !p.isNullOrBlank() && !c.isNullOrBlank() && !o.isNullOrBlank()) {
+            FirebaseFirestore.getInstance()
+                .collection("provinces").document(p)
+                .collection("cities").document(c)
+                .collection("offices").document(o)
+                .collection("managerTokens").document(uid)
+                .delete()
+                .addOnSuccessListener {
+                    Log.d("MainActivity", "[logoutAndExit] managerTokens/$uid 삭제 성공")
+                    finalize()
+                }
+                .addOnFailureListener { e ->
+                    Log.w("MainActivity", "[logoutAndExit] managerTokens 삭제 실패 (signOut 진행): ${e.message}")
+                    finalize()
+                }
+        } else {
+            Log.w("MainActivity", "[logoutAndExit] 토큰 식별 정보 부족 (uid=$uid, p=$p, c=$c, o=$o) - 토큰 삭제 스킵")
+            finalize()
         }
     }
 
