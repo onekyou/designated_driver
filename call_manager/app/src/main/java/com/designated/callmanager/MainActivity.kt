@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -77,6 +78,8 @@ import com.designated.callmanager.data.DriverStatus
 import com.designated.callmanager.ui.drivermanagement.DriverManagementScreen
 import com.designated.callmanager.ui.customer.CustomerManagementScreen
 import com.designated.callmanager.ui.attribution.AttributionManagementScreen
+import com.designated.callmanager.ui.chat.ChatBottomSheetContent
+import com.designated.callmanager.ui.chat.ChatViewModel
 import com.designated.callmanager.ui.login.LoginScreen
 import com.designated.callmanager.ui.login.LoginViewModel
 import com.designated.callmanager.ui.pendingdrivers.PendingDriversScreen
@@ -439,8 +442,8 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
 
-                            DashboardScreen(
-                                viewModel = dashboardViewModel,
+                            DashboardWithChatSheet(
+                                dashboardViewModel = dashboardViewModel,
                                 onLogout = { showLogoutConfirmDialog = true },
                                 onNavigateToSettings = { screenState = Screen.Settings }
                             )
@@ -1258,6 +1261,40 @@ class MainActivity : ComponentActivity() {
             }
     }
 
+}
+
+/**
+ * Dashboard 화면 위에 사무실 단톡방 BottomSheet를 동거시키는 래퍼.
+ *
+ * V1: peek 56dp + Expanded (≈95%) 2-state. Material 3 BottomSheetScaffold 기본 동작.
+ * V1.5: 50% 중간 anchor 추가 검토 (AnchoredDraggable 커스텀 필요).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DashboardWithChatSheet(
+    dashboardViewModel: DashboardViewModel,
+    onLogout: () -> Unit,
+    onNavigateToSettings: () -> Unit,
+) {
+    val chatViewModel: ChatViewModel = viewModel()
+    BottomSheetScaffold(
+        sheetContent = {
+            ChatBottomSheetContent(viewModel = chatViewModel)
+        },
+        sheetPeekHeight = 56.dp,
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .padding(paddingValues)
+                .fillMaxSize()
+        ) {
+            DashboardScreen(
+                viewModel = dashboardViewModel,
+                onLogout = onLogout,
+                onNavigateToSettings = onNavigateToSettings,
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

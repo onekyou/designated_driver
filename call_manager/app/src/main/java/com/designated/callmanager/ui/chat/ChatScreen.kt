@@ -2,11 +2,14 @@ package com.designated.callmanager.ui.chat
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -250,6 +253,103 @@ private fun ChatInputBar(
         ) {
             Text("전송")
         }
+    }
+}
+
+/**
+ * BottomSheetScaffold에서 사용할 단톡방 내용물.
+ *
+ * 구조:
+ *  - 상단 56dp peek bar (latestMessage 미리보기) — sheet peek 상태에서 유일하게 보임
+ *  - 그 아래 LazyColumn 메시지 리스트 + 입력바 — sheet expanded 시 노출
+ *
+ * 주의: sheet가 충분히 expand되어야 LazyColumn weight(1f)가 영역 확보.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChatBottomSheetContent(
+    viewModel: ChatViewModel = viewModel(),
+) {
+    val messages by viewModel.messages.collectAsState()
+    val latestMessage by viewModel.latestMessage.collectAsState()
+    val currentUserId = viewModel.currentUserId
+    var inputText by remember { mutableStateOf("") }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        ChatPeekPreviewBar(latestMessage = latestMessage, currentUserId = currentUserId)
+
+        HorizontalDivider()
+
+        LazyColumn(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            reverseLayout = true,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            itemsIndexed(items = messages, key = { _, msg -> msg.id }) { index, msg ->
+                val prevMsg = messages.getOrNull(index + 1)
+                val nextMsg = messages.getOrNull(index - 1)
+                val showName = prevMsg == null ||
+                    prevMsg.senderId != msg.senderId ||
+                    (msg.createdAt - prevMsg.createdAt) > GROUP_THRESHOLD_MS
+                val showTime = nextMsg == null ||
+                    nextMsg.senderId != msg.senderId ||
+                    (nextMsg.createdAt - msg.createdAt) > GROUP_THRESHOLD_MS
+
+                ChatMessageRow(
+                    message = msg,
+                    isOwn = msg.senderId == currentUserId,
+                    showName = showName,
+                    showTime = showTime,
+                    onRetry = { viewModel.retryMessage(msg) },
+                )
+            }
+        }
+
+        HorizontalDivider()
+
+        ChatInputBar(
+            value = inputText,
+            onValueChange = { inputText = it },
+            onSend = {
+                val trimmed = inputText.trim()
+                if (trimmed.isNotEmpty()) {
+                    viewModel.sendMessage(trimmed)
+                    inputText = ""
+                }
+            }
+        )
+    }
+}
+
+/**
+ * Sheet peek 상태(56dp)에서 보이는 미리보기 카드.
+ * "💬 [발신자]: [메시지 1줄]" 형식 (스펙 §11)
+ */
+@Composable
+private fun ChatPeekPreviewBar(
+    latestMessage: LocalChatMessage?,
+    currentUserId: String,
+) {
+    val previewText = when {
+        latestMessage == null -> "💬 사무실 단톡방 (메시지 없음)"
+        latestMessage.senderId == currentUserId -> "💬 나: ${latestMessage.text}"
+        else -> "💬 ${latestMessage.senderName}: ${latestMessage.text}"
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(
+            text = previewText,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+        )
     }
 }
 
