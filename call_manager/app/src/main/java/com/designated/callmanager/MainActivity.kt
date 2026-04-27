@@ -319,22 +319,13 @@ class MainActivity : ComponentActivity() {
         }
         window.setBackgroundDrawableResource(android.R.color.transparent)
 
-        // 자동 로그인 설정과 Firebase Auth 상태 모두 확인
-        val loginPrefs = getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
-        val autoLoginEnabled = loginPrefs.getBoolean("auto_login", false)
-
-        screenState = if (auth.currentUser == null || !autoLoginEnabled) {
-            // Firebase Auth 세션이 없거나 자동 로그인이 비활성화면 로그인 화면
-            if (auth.currentUser != null && !autoLoginEnabled) {
-                // 자동 로그인 비활성화 상태인데 세션이 있으면 로그아웃
-                auth.signOut()
-            }
+        screenState = if (auth.currentUser == null) {
             Screen.Login
         } else {
             Screen.Dashboard
         }
 
-        if (auth.currentUser != null && autoLoginEnabled) {
+        if (auth.currentUser != null) {
             syncCallDetectorSettingsOnStartup()
         }
 
