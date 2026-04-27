@@ -40,8 +40,12 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getApkDownloadUrl = exports.rejectOfficeApplication = exports.approveOfficeApplication = exports.submitOfficeApplication = exports.onDriverSettlementSubmitted = exports.notifyDriverSettlementResult = exports.sendDriverNotification = exports.finalizeSettlementAndNotifyDrivers = exports.notifyDriverCancellation = exports.notifyDriverAssignment = exports.manualCheckSettlementDiscrepancy = exports.autoFinalizeSettlements = exports.onCallCompletedUpdateSettlement = exports.onDriverStatusChange = exports.getOfficeReport = exports.searchArchivedCalls = exports.getArchivedStats = exports.archiveOldCalls = exports.scheduledDataCleanup = exports.checkAssignedTimeout = exports.onCallDetectorCrash = exports.onCustomerCountChange = exports.onDriverCountChange = exports.onNewCustomerRegistered = exports.onCallCancelledByDriver = exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.notifyCustomerOnComplete = exports.notifyCustomerOnPhoneCall = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.notifyCustomerOnOfficeClosed = exports.onSharedCallCreated = exports.sendNewCallNotification = exports.oncallassigned = exports.handleFailedNotifications = exports.retryPendingNotifications = exports.acknowledgeNotification = exports.recoverCustomerAccount = exports.checkPhoneNumberDuplicate = exports.aggregateMonthlyStats = void 0;
+exports.rejectOfficeApplication = exports.registerOwner = exports.redeemDownloadToken = exports.approveOfficeApplication = exports.submitOfficeApplication = exports.onDriverSettlementSubmitted = exports.notifyDriverSettlementResult = exports.sendDriverNotification = exports.finalizeSettlementAndNotifyDrivers = exports.notifyDriverCancellation = exports.notifyDriverAssignment = exports.manualCheckSettlementDiscrepancy = exports.autoFinalizeSettlements = exports.onCallCompletedUpdateSettlement = exports.onDriverStatusChange = exports.getOfficeReport = exports.searchArchivedCalls = exports.getArchivedStats = exports.archiveOldCalls = exports.scheduledDataCleanup = exports.checkAssignedTimeout = exports.onCallDetectorCrash = exports.onCustomerCountChange = exports.onDriverCountChange = exports.onNewCustomerRegistered = exports.onCallCancelledByDriver = exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.notifyCustomerOnComplete = exports.notifyCustomerOnPhoneCall = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.notifyCustomerOnOfficeClosed = exports.onSharedCallCreated = exports.sendNewCallNotification = exports.oncallassigned = exports.handleFailedNotifications = exports.retryPendingNotifications = exports.acknowledgeNotification = exports.recoverCustomerAccount = exports.checkPhoneNumberDuplicate = exports.aggregateMonthlyStats = void 0;
+exports.homepageGate = exports.getApkDownloadUrl = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -54,6 +58,12 @@ const fcmPayload_1 = require("./utils/fcmPayload");
 const acceptanceEvents_1 = require("./analytics/acceptanceEvents");
 var aggregateMonthly_1 = require("./analytics/aggregateMonthly");
 Object.defineProperty(exports, "aggregateMonthlyStats", { enumerable: true, get: function () { return aggregateMonthly_1.aggregateMonthlyStats; } });
+const express_1 = __importDefault(require("express"));
+const express_basic_auth_1 = __importDefault(require("express-basic-auth"));
+const nodePath = __importStar(require("node:path"));
+const params_1 = require("firebase-functions/params");
+const HOMEPAGE_USER = (0, params_1.defineSecret)("HOMEPAGE_USER");
+const HOMEPAGE_PASS = (0, params_1.defineSecret)("HOMEPAGE_PASS");
 // Firebase Admin SDK 초기화
 admin.initializeApp({
     databaseURL: "https://calldetector-5d61e-default-rtdb.firebaseio.com",
@@ -389,6 +399,12 @@ exports.oncallassigned = (0, firestore_1.onDocumentWritten)({
         logger.info(`[${callId}] 직접운행 콜 - 배차 알림 스킵`);
         return;
     }
+    // 기사 자가배차 콜: 기사 본인은 이미 운행준비 진입, 고객은 이미 통화 완료 →
+    // 기사 FCM + 고객 FCM 만 스킵, 콜매니저 FCM 은 그대로 발송
+    const isSelfAssigned = afterData.selfAssigned === true;
+    if (isSelfAssigned) {
+        logger.info(`[${callId}] 자가배차 콜 감지 - 기사/고객 FCM 스킵, 콜매니저 FCM 만 발송`);
+    }
     const beforeData = (_a = event.data.before) === null || _a === void 0 ? void 0 : _a.data();
     // 2. assignedDriverId가 유효하게 할당/변경되었는지 확인
     // 공유콜의 경우 새 문서 생성 시에는 알림을 보내지 않음 (중복 알림 방지)
@@ -430,7 +446,7 @@ exports.oncallassigned = (0, firestore_1.onDocumentWritten)({
         // Note: 배차 직후 presence 즉시 체크 제거 — 도즈모드/화면꺼짐 시 오탐 발생
         // (FCM high priority가 기기를 깨우기 전에 offline으로 판단하여 불필요한 경고 전송)
         // 실제 오프라인 보호는 checkAssignedTimeout 스케줄러(1분 간격)가 담당
-        if (driverFcmToken) {
+        if (driverFcmToken && !isSelfAssigned) {
             const notificationId = `${callId}_${driverId}_${Date.now()}`;
             const driverPayload = (0, fcmPayload_1.buildFcmPayload)({
                 data: {
@@ -450,13 +466,13 @@ exports.oncallassigned = (0, firestore_1.onDocumentWritten)({
             await admin.messaging().send(driverPayload);
             logger.info(`[${callId}] 기사 [${driverId}]에게 성공적으로 알림을 보냈습니다. notificationId=${notificationId}`);
         }
-        else {
+        else if (!isSelfAssigned) {
             logger.warn(`[${callId}] 기사 [${driverId}]의 FCM 토큰이 없습니다.`);
         }
-        // 5. 고객에게도 기사 배정 알림 전송 (앱 고객만)
+        // 5. 고객에게도 기사 배정 알림 전송 (앱 고객만, 자가배차 제외)
         const isAppCustomer = afterData.isAppCustomer || false;
         const customerPhone = afterData.phoneNumber;
-        if (isAppCustomer && customerPhone) {
+        if (isAppCustomer && customerPhone && !isSelfAssigned) {
             logger.info(`[${callId}] 고객에게 기사 배정 알림 전송 시작 - phoneNumber: ${customerPhone}`);
             try {
                 // 고객 FCM 토큰 조회
@@ -495,7 +511,7 @@ exports.oncallassigned = (0, firestore_1.onDocumentWritten)({
                 logger.error(`[${callId}] 고객 알림 전송 오류:`, customerError);
             }
         }
-        else {
+        else if (!isSelfAssigned) {
             logger.info(`[${callId}] 앱 고객이 아니거나 전화번호 없음 - 고객 알림 스킵. isAppCustomer: ${isAppCustomer}, phoneNumber: ${customerPhone}`);
         }
         // 6. 콜매니저에게도 배차 상태 변경 알림 전송
@@ -1028,6 +1044,7 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
                     .collection("calls")
                     .doc(callId);
                 // 공유콜 생성 - 기사 배정이 있으면 바로 ASSIGNED 상태로 생성
+                // memoText 포함 — spread 복사로 자동 전달. 수임 사무실 기사도 원본 메모("시장에서 용문 25000") 확인 가능
                 const callDoc = Object.assign(Object.assign(Object.assign({}, afterData), { status: assignedDriverId ? "ASSIGNED" : "WAITING", departure_set: (_a = afterData.departure) !== null && _a !== void 0 ? _a : null, destination_set: (_b = afterData.destination) !== null && _b !== void 0 ? _b : null, fare_set: (_c = afterData.fare) !== null && _c !== void 0 ? _c : null, callType: "SHARED", sourceSharedCallId: callId, createdAt: firestore_2.FieldValue.serverTimestamp() }), (assignedDriverId && {
                     assignedDriverId: assignedDriverId,
                     assignedDriverName: assignedDriverName,
@@ -1226,6 +1243,7 @@ exports.onSharedCallCancelledByDriver = (0, firestore_1.onDocumentUpdated)({
                     if (originalCallSnap.exists) {
                         const originalCallData = originalCallSnap.data();
                         logger.info(`[call-cancelled:${callId}] 원본 콜 현재 상태: ${originalCallData === null || originalCallData === void 0 ? void 0 : originalCallData.status}`);
+                        // memoText 는 명시적으로 삭제하지 않음 — 원본 사무실 매니저가 입력한 메모는 복구 후에도 유지
                         const updateData = {
                             status: "HOLD", // 공유콜 취소 시 보류 상태로 변경
                             callType: null,
@@ -1316,6 +1334,11 @@ exports.notifyCustomerOnPhoneCall = (0, firestore_1.onDocumentCreated)({
     const phoneNumber = callData.phoneNumber;
     const isAppCustomer = callData.isAppCustomer || false;
     logger.info(`[notifyCustomerOnPhoneCall:${callId}] 콜 생성 감지 - isAppCustomer: ${isAppCustomer}, phoneNumber: ${phoneNumber}`);
+    // 자가배차 콜은 이미 기사가 배정된 상태 → "배정 기다려주세요" 알림이 거짓 정보가 됨, 스킵
+    if (callData.selfAssigned === true) {
+        logger.info(`[notifyCustomerOnPhoneCall:${callId}] 자가배차 콜 - 고객 알림 스킵`);
+        return;
+    }
     // 앱 고객이 아니면 알림 스킵
     if (!isAppCustomer) {
         logger.info(`[notifyCustomerOnPhoneCall:${callId}] 앱 고객이 아님 - 알림 스킵`);
@@ -4526,8 +4549,18 @@ exports.submitOfficeApplication = (0, https_1.onRequest)({ region: "asia-northea
     }
 });
 /**
- * approveOfficeApplication - 총관리자가 신청을 승인
- * Firebase Auth 계정 생성 + admins 문서 생성 + 사무실 문서 생성
+ * approveOfficeApplication - 총관리자가 신청을 승인 (H2 설계)
+ *
+ * 변경 이력:
+ *  - 2026-04-19: Gmail + emailVerified:true 로 Auth 계정 즉시 생성 (Google OAuth 전제)
+ *  - 2026-04-20 (H2): Auth 계정 생성 제거. downloadInvites/{token} 발급만 수행.
+ *    사장님이 call_manager 앱에서 직접 가입(registerOwner) 시 Auth 계정이 만들어짐.
+ *
+ * 처리 순서:
+ *  1) offices/{officeId} 미리 생성 (ownerAuthUid=null)
+ *  2) downloadInvites/{token} 생성 (active, usesRemaining=1, expires=+7d)
+ *  3) office_applications 상태 업데이트 (approved, inviteToken 저장)
+ *  4) 응답: inviteUrl, inviteToken, officeId 반환
  */
 exports.approveOfficeApplication = (0, https_1.onCall)({ region: "asia-northeast3" }, async (request) => {
     var _a;
@@ -4553,30 +4586,7 @@ exports.approveOfficeApplication = (0, https_1.onCall)({ region: "asia-northeast
     if (appData.status !== "pending") {
         throw new Error(`이미 처리된 신청입니다 (상태: ${appData.status})`);
     }
-    // 1. Firebase Auth 계정 생성 (Gmail 기반, 비번 없음 — Google OAuth 전용)
-    const gmail = (appData.gmail || "").trim().toLowerCase();
-    if (!gmail) {
-        throw new Error("신청서에 Gmail 주소가 없습니다.");
-    }
-    let userRecord;
-    try {
-        userRecord = await admin.auth().createUser({
-            email: gmail,
-            emailVerified: true, // Google 로그인 시 동일 이메일 자동 연결 허용
-            displayName: appData.ownerName,
-        });
-        logger.info(`[approveOfficeApplication] Auth 계정 생성 - uid: ${userRecord.uid}, email: ${gmail}`);
-    }
-    catch (authError) {
-        if (authError.code === "auth/email-already-exists") {
-            userRecord = await admin.auth().getUserByEmail(gmail);
-            logger.info(`[approveOfficeApplication] 기존 Auth 계정 사용 - uid: ${userRecord.uid}`);
-        }
-        else {
-            throw authError;
-        }
-    }
-    // 2. 사무실 문서 생성
+    // 1) 사무실 문서 미리 생성 (ownerAuthUid=null, 사장님 가입 시 채워짐)
     const officeRef = admin.firestore()
         .collection(`provinces/${provinceId}/cities/${cityId}/offices`)
         .doc();
@@ -4586,39 +4596,285 @@ exports.approveOfficeApplication = (0, https_1.onCall)({ region: "asia-northeast
         phone: appData.phone,
         region: appData.region,
         status: "active",
+        ownerAuthUid: null, // H2: 사장님 앱 가입 시 registerOwner 가 채움
         createdAt: firestore_2.FieldValue.serverTimestamp(),
-        createdBy: userRecord.uid,
+        createdBy: request.auth.uid, // H2: 총관리자 UID (이전엔 ownerUid 였음)
     });
     logger.info(`[approveOfficeApplication] 사무실 생성 - officeId: ${officeRef.id}`);
-    // 3. admins 문서 생성 (OFFICE_OWNER 역할)
-    await admin.firestore().doc(`admins/${userRecord.uid}`).set({
-        email: gmail,
-        name: appData.ownerName,
-        phoneNumber: appData.phone,
-        role: "OFFICE_OWNER",
-        associatedProvinceId: provinceId,
-        associatedCityId: cityId,
-        associatedOfficeId: officeRef.id,
+    // 2) invite 토큰 생성 (URL-safe 43자, base64url)
+    const crypto = require("crypto");
+    const token = crypto.randomBytes(32).toString("base64url");
+    const expiresAt = firestore_2.Timestamp.fromMillis(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await admin.firestore().doc(`downloadInvites/${token}`).set({
+        status: "active",
         applicationId,
-        apkDownloadEnabled: true,
+        officeId: officeRef.id,
+        provinceId,
+        cityId,
+        officeName: officeName || appData.officeName,
+        ownerName: appData.ownerName,
+        phone: appData.phone,
+        gmail: appData.gmail || "",
+        usesRemaining: 1,
+        expiresAt,
         createdAt: firestore_2.FieldValue.serverTimestamp(),
-        updatedAt: firestore_2.FieldValue.serverTimestamp(),
+        createdBy: request.auth.uid,
     });
-    // 4. 신청 상태 업데이트
+    logger.info(`[approveOfficeApplication] invite 토큰 발급 - token: ${token.substring(0, 8)}..., expires: ${expiresAt.toDate().toISOString()}`);
+    // 3) 신청 상태 업데이트
     await appRef.update({
         status: "approved",
         reviewedAt: firestore_2.FieldValue.serverTimestamp(),
         reviewedBy: request.auth.uid,
-        ownerAuthUid: userRecord.uid,
+        inviteToken: token,
+        ownerAuthUid: null, // H2: 가입 시점에 채워짐
         officeRef: `provinces/${provinceId}/cities/${cityId}/offices/${officeRef.id}`,
     });
     logger.info(`[approveOfficeApplication] 승인 완료 - applicationId: ${applicationId}`);
+    const inviteUrl = `https://head-manager-web.web.app/owner/download?t=${token}`;
     return {
         success: true,
-        ownerUid: userRecord.uid,
+        inviteToken: token,
+        inviteUrl,
         officeId: officeRef.id,
-        loginEmail: gmail,
         officePath: `provinces/${provinceId}/cities/${cityId}/offices/${officeRef.id}`,
+    };
+});
+/**
+ * redeemDownloadToken - 초대 토큰으로 APK 다운로드 URL 을 받는다 (H2, 인증 불필요)
+ *
+ * 호출 시점: /owner/download?t=xxx 페이지 진입 시 (로그인 없음)
+ * 토큰 상태 변경 안 함 — 다운로드 재시도 허용. 실제 invalidate 는 registerOwner 에서.
+ *
+ * 응답 에러 코드:
+ *   - token_invalid : 존재하지 않는 토큰
+ *   - token_expired : 7일 만료
+ *   - token_used    : 이미 사용됨 (가입 완료)
+ */
+exports.redeemDownloadToken = (0, https_1.onRequest)({ region: "asia-northeast3", cors: true }, async (req, res) => {
+    var _a, _b, _c, _d;
+    if (req.method !== "POST") {
+        res.status(405).json({ error: "Method not allowed" });
+        return;
+    }
+    try {
+        const { token } = req.body || {};
+        if (!token || typeof token !== "string") {
+            res.status(400).json({ error: "token 파라미터가 필요합니다.", code: "token_invalid" });
+            return;
+        }
+        // 1) invite 문서 조회
+        const inviteRef = admin.firestore().doc(`downloadInvites/${token}`);
+        const inviteSnap = await inviteRef.get();
+        if (!inviteSnap.exists) {
+            res.status(404).json({ error: "유효하지 않은 링크입니다.", code: "token_invalid" });
+            return;
+        }
+        const invite = inviteSnap.data();
+        // 2) 상태/만료/사용횟수 검증
+        if (invite.status === "used" || ((_a = invite.usesRemaining) !== null && _a !== void 0 ? _a : 0) <= 0) {
+            res.status(400).json({ error: "이미 사용된 링크입니다.", code: "token_used" });
+            return;
+        }
+        if (invite.status !== "active") {
+            res.status(400).json({ error: "유효하지 않은 링크입니다.", code: "token_invalid" });
+            return;
+        }
+        const expiresMs = (_d = (_c = (_b = invite.expiresAt) === null || _b === void 0 ? void 0 : _b.toMillis) === null || _c === void 0 ? void 0 : _c.call(_b)) !== null && _d !== void 0 ? _d : 0;
+        if (expiresMs && expiresMs < Date.now()) {
+            res.status(400).json({ error: "만료된 링크입니다 (7일).", code: "token_expired" });
+            return;
+        }
+        // 3) apk_releases 조회 (isLatest=true) - call_manager, call_detector 각 1건
+        const releasesSnap = await admin.firestore()
+            .collection("apk_releases")
+            .where("isLatest", "==", true)
+            .get();
+        const byApp = {};
+        releasesSnap.forEach((d) => {
+            const r = d.data();
+            if (r.appName)
+                byApp[r.appName] = r;
+        });
+        const callManagerRel = byApp["call_manager"];
+        const callDetectorRel = byApp["call_detector"];
+        if (!callManagerRel || !callDetectorRel) {
+            logger.error("[redeemDownloadToken] apk_releases 부족", { hasCallManager: !!callManagerRel, hasCallDetector: !!callDetectorRel });
+            res.status(500).json({ error: "APK 릴리즈 정보가 준비되지 않았습니다. 관리자에게 문의하세요." });
+            return;
+        }
+        // 4) Storage signed URL 생성 (1시간)
+        //    responseDisposition: 모바일 브라우저가 inline 렌더하지 않고 다운로드하도록 강제
+        const bucket = admin.storage().bucket();
+        const oneHour = Date.now() + 60 * 60 * 1000;
+        const cmFileName = `call_manager_${callManagerRel.version}.apk`;
+        const cdFileName = `call_detector_${callDetectorRel.version}.apk`;
+        const [cmUrl] = await bucket.file(callManagerRel.storagePath).getSignedUrl({
+            action: "read",
+            expires: oneHour,
+            responseDisposition: `attachment; filename="${cmFileName}"`,
+        });
+        const [cdUrl] = await bucket.file(callDetectorRel.storagePath).getSignedUrl({
+            action: "read",
+            expires: oneHour,
+            responseDisposition: `attachment; filename="${cdFileName}"`,
+        });
+        logger.info(`[redeemDownloadToken] 서명 URL 발급 - token: ${token.substring(0, 8)}..., office: ${invite.officeName}`);
+        res.status(200).json({
+            success: true,
+            token, // 앱 가입 시 재입력 편의용
+            officeName: invite.officeName,
+            ownerName: invite.ownerName,
+            callManager: {
+                url: cmUrl,
+                version: callManagerRel.version,
+                fileSize: callManagerRel.fileSize,
+                releaseNotes: callManagerRel.releaseNotes || "",
+            },
+            callDetector: {
+                url: cdUrl,
+                version: callDetectorRel.version,
+                fileSize: callDetectorRel.fileSize,
+                releaseNotes: callDetectorRel.releaseNotes || "",
+            },
+        });
+    }
+    catch (error) {
+        logger.error("[redeemDownloadToken] 오류:", error);
+        res.status(500).json({ error: "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요." });
+    }
+});
+/**
+ * registerOwner - 사장님이 앱에서 이메일+비번+초대토큰으로 가입 (H2, 인증 불필요)
+ *
+ * 호출 시점: call_manager SignUpScreen "가입" 버튼
+ *
+ * 처리 순서:
+ *   1) 토큰 검증 (active / 만료 / 사용횟수)
+ *   2) admin.auth().createUser({email, password})
+ *   3) Firestore 트랜잭션:
+ *      - admins/{uid} 생성
+ *      - offices/{officeId}.ownerAuthUid = uid
+ *      - office_applications/{applicationId}.ownerAuthUid = uid
+ *      - downloadInvites/{token} → status=used, usesRemaining=0
+ *   4) 실패 시 admin.auth().deleteUser(uid) 롤백
+ */
+exports.registerOwner = (0, https_1.onCall)({ region: "asia-northeast3" }, async (request) => {
+    var _a, _b, _c, _d;
+    // unauthenticated 허용 (가입 전이므로)
+    const { token, email, password } = request.data || {};
+    if (!token || typeof token !== "string") {
+        throw new Error("초대 토큰이 필요합니다.");
+    }
+    if (!email || typeof email !== "string") {
+        throw new Error("이메일이 필요합니다.");
+    }
+    if (!password || typeof password !== "string" || password.length < 6) {
+        throw new Error("비밀번호는 6자 이상이어야 합니다.");
+    }
+    // 1) 초대 토큰 검증
+    const inviteRef = admin.firestore().doc(`downloadInvites/${token}`);
+    const inviteSnap = await inviteRef.get();
+    if (!inviteSnap.exists) {
+        throw new Error("유효하지 않은 초대 토큰입니다.");
+    }
+    const invite = inviteSnap.data();
+    if (invite.status === "used" || ((_a = invite.usesRemaining) !== null && _a !== void 0 ? _a : 0) <= 0) {
+        throw new Error("이미 사용된 초대 토큰입니다.");
+    }
+    if (invite.status !== "active") {
+        throw new Error("유효하지 않은 초대 토큰입니다.");
+    }
+    const expiresMs = (_d = (_c = (_b = invite.expiresAt) === null || _b === void 0 ? void 0 : _b.toMillis) === null || _c === void 0 ? void 0 : _c.call(_b)) !== null && _d !== void 0 ? _d : 0;
+    if (expiresMs && expiresMs < Date.now()) {
+        throw new Error("만료된 초대 토큰입니다. 총관리자에게 재발급을 요청해주세요.");
+    }
+    const normalizedEmail = email.trim().toLowerCase();
+    // 2) Auth 계정 생성
+    let userRecord;
+    try {
+        userRecord = await admin.auth().createUser({
+            email: normalizedEmail,
+            password,
+            emailVerified: false,
+            displayName: invite.ownerName,
+        });
+        logger.info(`[registerOwner] Auth 계정 생성 - uid: ${userRecord.uid}, email: ${normalizedEmail}`);
+    }
+    catch (authError) {
+        if (authError.code === "auth/email-already-exists") {
+            throw new Error("이미 사용 중인 이메일입니다. 다른 이메일을 사용하거나 로그인해주세요.");
+        }
+        if (authError.code === "auth/invalid-email") {
+            throw new Error("유효하지 않은 이메일 형식입니다.");
+        }
+        if (authError.code === "auth/weak-password") {
+            throw new Error("비밀번호가 너무 약합니다 (6자 이상).");
+        }
+        logger.error("[registerOwner] Auth 계정 생성 오류:", authError);
+        throw new Error("계정 생성 중 오류가 발생했습니다.");
+    }
+    const uid = userRecord.uid;
+    const db = admin.firestore();
+    const adminsRef = db.doc(`admins/${uid}`);
+    const officeRef = db.doc(`provinces/${invite.provinceId}/cities/${invite.cityId}/offices/${invite.officeId}`);
+    const appRef = invite.applicationId ? db.doc(`office_applications/${invite.applicationId}`) : null;
+    // 3) Firestore 트랜잭션 — 실패 시 Auth 계정 롤백
+    try {
+        await db.runTransaction(async (tx) => {
+            var _a;
+            // 토큰 재확인 (경합 방지)
+            const freshInvite = await tx.get(inviteRef);
+            if (!freshInvite.exists) {
+                throw new Error("초대 토큰이 사라졌습니다.");
+            }
+            const fi = freshInvite.data();
+            if (fi.status !== "active" || ((_a = fi.usesRemaining) !== null && _a !== void 0 ? _a : 0) <= 0) {
+                throw new Error("이미 사용된 초대 토큰입니다.");
+            }
+            tx.set(adminsRef, {
+                email: normalizedEmail,
+                name: invite.ownerName,
+                phoneNumber: invite.phone,
+                role: "OFFICE_OWNER",
+                associatedProvinceId: invite.provinceId,
+                associatedCityId: invite.cityId,
+                associatedOfficeId: invite.officeId,
+                applicationId: invite.applicationId || null,
+                apkDownloadEnabled: true,
+                createdAt: firestore_2.FieldValue.serverTimestamp(),
+                updatedAt: firestore_2.FieldValue.serverTimestamp(),
+            });
+            tx.update(officeRef, { ownerAuthUid: uid });
+            if (appRef) {
+                tx.update(appRef, { ownerAuthUid: uid });
+            }
+            tx.update(inviteRef, {
+                status: "used",
+                usedAt: firestore_2.FieldValue.serverTimestamp(),
+                usedBy: uid,
+                usesRemaining: 0,
+            });
+        });
+    }
+    catch (txError) {
+        // 롤백: Auth 계정 삭제
+        logger.error("[registerOwner] 트랜잭션 실패, Auth 계정 롤백:", txError);
+        try {
+            await admin.auth().deleteUser(uid);
+            logger.info(`[registerOwner] Auth 계정 롤백 완료 - uid: ${uid}`);
+        }
+        catch (delErr) {
+            logger.error(`[registerOwner] Auth 롤백 실패 - uid: ${uid}`, delErr);
+        }
+        throw new Error(txError.message || "가입 처리 중 오류가 발생했습니다.");
+    }
+    logger.info(`[registerOwner] 가입 완료 - uid: ${uid}, officeId: ${invite.officeId}`);
+    return {
+        success: true,
+        uid,
+        officeId: invite.officeId,
+        officePath: `provinces/${invite.provinceId}/cities/${invite.cityId}/offices/${invite.officeId}`,
     };
 });
 /**
@@ -4705,4 +4961,24 @@ exports.getApkDownloadUrl = (0, https_1.onCall)({ region: "asia-northeast3" }, a
         fileSize: releaseData.fileSize,
     };
 });
+// ─────────────────────────────────────────────────────────────
+// calllink.io.kr 임시 Basic Auth 게이트 (homepage/public 서빙)
+// ─────────────────────────────────────────────────────────────
+const homepageApp = (0, express_1.default)();
+homepageApp.use((req, res, next) => {
+    (0, express_basic_auth_1.default)({
+        users: { [HOMEPAGE_USER.value()]: HOMEPAGE_PASS.value() },
+        challenge: true,
+        realm: "calllink",
+    })(req, res, next);
+});
+homepageApp.use(express_1.default.static(nodePath.join(__dirname, "public"), {
+    extensions: ["html"],
+    setHeaders: (res) => res.setHeader("Cache-Control", "no-cache"),
+}));
+exports.homepageGate = (0, https_1.onRequest)({
+    region: "asia-northeast3",
+    memory: "256MiB",
+    secrets: [HOMEPAGE_USER, HOMEPAGE_PASS],
+}, homepageApp);
 //# sourceMappingURL=index.js.map

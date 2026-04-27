@@ -22,8 +22,11 @@ fun WaitingScreen(
     driverStatus: DriverStatus,
     onGoOnline: () -> Unit,
     onCheckPendingDispatch: () -> Unit = {},
-    onShowReferralQR: () -> Unit = {}
+    onShowReferralQR: () -> Unit = {},
+    onSelfDispatch: () -> Unit = {}
 ) {
+    val canSelfDispatch = driverStatus == DriverStatus.ONLINE || driverStatus == DriverStatus.WAITING
+
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.SpaceBetween,
@@ -59,6 +62,22 @@ fun WaitingScreen(
         }
 
         Spacer(modifier = Modifier.weight(1f))
+
+        // 자가배차 버튼 (ONLINE/WAITING 상태에서만)
+        if (canSelfDispatch) {
+            Button(
+                onClick = onSelfDispatch,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 8.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondary
+                )
+            ) {
+                Text("수동 콜 입력", style = MaterialTheme.typography.titleMedium)
+            }
+        }
 
         // 하단 고객 추천 버튼
         Button(

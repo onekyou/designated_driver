@@ -8,6 +8,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -207,12 +208,20 @@ fun TripPreparationScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("운행 준비", color = Color.White) },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DarkBackground
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(DarkBackground)
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Text(
+                    "운행 준비",
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
                 )
-            )
+            }
         },
         containerColor = DarkBackground
     ) { paddingValues ->
@@ -221,9 +230,9 @@ fun TripPreparationScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
                 .verticalScroll(scrollState),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
 
             if (callInfo.callType == "SHARED") {
@@ -260,6 +269,8 @@ fun TripPreparationScreen(
                     }
                 }
             }
+
+            CallInfoSummaryCard(callInfo)
 
             OutlinedTextField(
                 value = departure,
@@ -695,5 +706,55 @@ fun TripPreparationScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun CallInfoSummaryCard(callInfo: CallInfo) {
+    val nameValue = callInfo.customerName.takeIf { it.isNotBlank() }
+    val memoValue = callInfo.memoText?.takeIf { it.isNotBlank() }
+
+    if (nameValue == null && memoValue == null) {
+        return
+    }
+
+    val labelColor = Color.Gray
+    val valueColor = Color.White
+    val accent = Color(0xFF2196F3)
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = accent.copy(alpha = 0.10f)),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                "전달받은 콜 정보",
+                fontWeight = FontWeight.Bold,
+                color = accent
+            )
+
+            nameValue?.let {
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "고객명",
+                        color = labelColor,
+                        modifier = Modifier.width(64.dp),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(it, color = valueColor, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+            memoValue?.let {
+                if (nameValue != null) Spacer(modifier = Modifier.height(2.dp))
+                Text("음성 메모", color = labelColor, style = MaterialTheme.typography.bodySmall)
+                Text(it, color = valueColor, style = MaterialTheme.typography.bodySmall)
+            }
+        }
     }
 }

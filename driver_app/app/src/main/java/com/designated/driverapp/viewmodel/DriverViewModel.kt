@@ -92,6 +92,10 @@ class DriverViewModel @Inject constructor(
     private val _isAccepting = MutableStateFlow(false)
     val isAccepting: StateFlow<Boolean> = _isAccepting.asStateFlow()
 
+    // 자가배차 콜 생성 중 (중복 클릭 방지)
+    private val _isCreatingSelfCall = MutableStateFlow(false)
+    val isCreatingSelfCall: StateFlow<Boolean> = _isCreatingSelfCall.asStateFlow()
+
     // 업무마감 중 (중복 클릭 방지)
     private val _isSubmittingSettlement = MutableStateFlow(false)
     val isSubmittingSettlement: StateFlow<Boolean> = _isSubmittingSettlement.asStateFlow()
@@ -470,6 +474,112 @@ class DriverViewModel @Inject constructor(
                 }
             } finally {
                 _isAccepting.value = false
+            }
+        }
+    }
+
+    /**
+     * 기사 자가배차: 빈 콜을 즉시 만들고 운행준비 화면으로 직행한다.
+     * - 출발지/목적지/경유지/요금/메모 입력은 운행준비 화면의 기존 TextField + STT + 주소검색을 그대로 사용
+     * - 콜 신규 생성: status=ACCEPTED, assignedDriverId=내uid, selfAssigned=true (모든 정보는 빈값)
+     * - 본인 designated_drivers status: WAITING/ONLINE → PREPARING (acceptCall 패턴과 동일)
+     * - UI: activeCall 즉시 세팅 + driverStatus=ACCEPTED → HomeScreen 이 자동으로 TripPreparationScreen 라우팅
+     * - Cloud Functions oncallassigned/notifyCustomerOnPhoneCall 가 selfAssigned 가드로 기사/고객 FCM 스킵
+     */
+    fun startSelfAssignedTrip() {
+        if (_isCreatingSelfCall.value) {
+            Log.w(TAG, "⚠️ 이미 자가배차 처리 중. 중복 클릭 무시.")
+            return
+        }
+        _isCreatingSelfCall.value = true
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val (provinceId, cityId, officeId) = getDriverLocationInfo()
+                val driverAuthUid = auth.currentUser?.uid
+                    ?: throw IllegalStateException("로그인이 필요합니다.")
+
+                val officeRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                    .collection(Constants.COLLECTION_CITIES).document(cityId)
+                    .collection(Constants.COLLECTION_OFFICES).document(officeId)
+                val callRef = officeRef.collection(Constants.COLLECTION_CALLS).document()
+                val driverRef = officeRef.collection(Constants.COLLECTION_DRIVERS).document(driverAuthUid)
+
+                val nowTs = Timestamp.now()
+                val nowMillis = System.currentTimeMillis()
+                val expireAt = Timestamp(java.util.Date(nowMillis + 30L * 24 * 60 * 60 * 1000))
+
+                // 트랜잭션: driver 상태 검증 + 빈 콜 생성 + driver 상태 업데이트
+                val createdCall = firestore.runTransaction { tx ->
+                    val driverSnap = tx.get(driverRef)
+                    if (!driverSnap.exists()) {
+                        throw IllegalStateException("기사 정보를 찾을 수 없습니다.")
+                    }
+                    val driverStatusStr = driverSnap.getString(Constants.FIELD_STATUS)
+                    if (driverStatusStr != DriverStatus.WAITING.value &&
+                        driverStatusStr != DriverStatus.ONLINE.value) {
+                        throw IllegalStateException(
+                            "현재 상태(${driverStatusStr ?: "?"})에서는 자가배차할 수 없습니다."
+                        )
+                    }
+
+                    val driverName = driverSnap.getString("name") ?: ""
+                    val driverPhone = driverSnap.getString("phoneNumber") ?: ""
+
+                    val data = hashMapOf<String, Any?>(
+                        "phoneNumber" to "",
+                        "customerName" to "",
+                        Constants.FIELD_STATUS to Constants.STATUS_ACCEPTED,
+                        Constants.FIELD_ASSIGNED_DRIVER_ID to driverAuthUid,
+                        "assignedDriverName" to driverName,
+                        "assignedDriverPhone" to driverPhone,
+                        "assignedTimestamp" to nowTs,
+                        "timestamp" to nowTs,
+                        "timestampClient" to nowMillis,
+                        "provinceId" to provinceId,
+                        "cityId" to cityId,
+                        "officeId" to officeId,
+                        "createdBy" to driverAuthUid,
+                        "createdFrom" to "driver_self",
+                        "selfAssigned" to true,
+                        "expireAt" to expireAt
+                    )
+                    tx.set(callRef, data)
+                    tx.update(driverRef, Constants.FIELD_STATUS, DriverStatus.PREPARING.value)
+
+                    CallInfo(
+                        id = callRef.id,
+                        customerName = "",
+                        phoneNumber = "",
+                        timestamp = nowTs,
+                        status = Constants.STATUS_ACCEPTED,
+                        assignedDriverId = driverAuthUid,
+                        assignedDriverName = driverName,
+                        assignedDriverPhone = driverPhone,
+                        assignedTimestamp = nowTs,
+                        officeId = officeId,
+                        provinceId = provinceId,
+                        cityId = cityId
+                    )
+                }.await()
+
+                _uiState.update { current ->
+                    current.copy(
+                        activeCall = createdCall,
+                        driverStatus = DriverStatus.ACCEPTED,
+                        newCallPopup = null,
+                        errorMessage = null
+                    )
+                }
+                Log.d(TAG, "✅ 자가배차(빈 콜) 생성 완료: ${createdCall.id}")
+
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ 자가배차 실패: ${e.message}", e)
+                _uiState.update {
+                    it.copy(errorMessage = e.message ?: "자가배차 중 오류가 발생했습니다.")
+                }
+            } finally {
+                _isCreatingSelfCall.value = false
             }
         }
     }

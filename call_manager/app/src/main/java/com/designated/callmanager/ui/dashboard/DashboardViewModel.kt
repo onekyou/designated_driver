@@ -611,7 +611,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             .collection("cities").document(cityId)
             .collection("offices").document(officeId)
             .collection("calls")
-            .whereIn("status", listOf("OPEN", "WAITING", "ASSIGNED", "IN_PROGRESS"))
+            .whereIn("status", listOf("OPEN", "WAITING", "ASSIGNED", "ACCEPTED", "IN_PROGRESS"))
             .whereGreaterThan("timestamp", twelveHoursAgo)
             .addSnapshotListener { snapshots, e ->
                 if (e != null) {

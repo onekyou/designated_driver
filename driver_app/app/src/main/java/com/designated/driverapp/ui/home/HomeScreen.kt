@@ -325,7 +325,8 @@ fun HomeScreen(
                                 driverStatus = uiState.driverStatus,
                                 onGoOnline = { viewModel.updateDriverStatus(DriverStatus.ONLINE) },
                                 onCheckPendingDispatch = { viewModel.checkForPendingDispatch() },
-                                onShowReferralQR = { navController.navigate(AppDestinations.REFERRAL_QR_ROUTE) }
+                                onShowReferralQR = { navController.navigate(AppDestinations.REFERRAL_QR_ROUTE) },
+                                onSelfDispatch = { viewModel.startSelfAssignedTrip() }
                             )
                         }
                     }
@@ -344,7 +345,8 @@ fun HomeScreen(
                         driverStatus = uiState.driverStatus,
                         onGoOnline = { viewModel.updateDriverStatus(DriverStatus.ONLINE) },
                         onCheckPendingDispatch = { viewModel.checkForPendingDispatch() },
-                        onShowReferralQR = { navController.navigate(AppDestinations.REFERRAL_QR_ROUTE) }
+                        onShowReferralQR = { navController.navigate(AppDestinations.REFERRAL_QR_ROUTE) },
+                        onSelfDispatch = { viewModel.startSelfAssignedTrip() }
                     )
                 }
             }
@@ -371,6 +373,7 @@ fun HomeScreen(
                     }
                 )
             }
+
         }
         } // Column
     }
