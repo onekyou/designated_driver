@@ -36,6 +36,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         private const val STATUS_CHANGE_CHANNEL_ID = "status_change_fcm_channel_v2"
         private const val DRIVER_UPDATE_CHANNEL_ID = "driver_update_fcm_channel_v3"
         private const val SHARED_CALL_CHANNEL_ID = "shared_call_fcm_channel_v3"  // v3로 변경하여 새 채널 생성
+        private const val CHAT_MESSAGE_CHANNEL_ID = "chat_messages"  // 사무실 단톡방 (스펙 §10)
     }
 
     override fun onCreate() {
@@ -71,7 +72,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             "CALL_STATUS_UPDATE",    // 콜 상태 업데이트는 항상 처리
             "STATUS_CHANGE",         // 운행 시작/완료 알림은 항상 처리
             "NOTIFICATION_FAILURE",  // 알림 전달 실패 경고는 항상 처리
-            "SETTLEMENT_SUBMITTED"   // 기사 업무마감 제출 알림
+            "SETTLEMENT_SUBMITTED",  // 기사 업무마감 제출 알림
+            "NEW_CHAT_MESSAGE"       // 사무실 단톡방 메시지 (포그라운드도 Room INSERT 필요)
         )
         val shouldProcessInForeground = alwaysProcessTypes.contains(messageType)
 
@@ -111,6 +113,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 isSettlement = true,
                 timeoutAfter = 0
             )
+            return
+        }
+
+        // NEW_CHAT_MESSAGE는 callId 없으므로 별도 처리 (callId 체크 전에 분기)
+        if (messageType == "NEW_CHAT_MESSAGE") {
+            handleChatMessage(remoteMessage)
             return
         }
 
@@ -537,6 +545,31 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 }
             }
 
+            // 사무실 단톡방 채널 (스펙 §10) — 콜 채널과 차별화: HIGH/일반알림음/DND 우회 X
+            if (notificationManager.getNotificationChannel(CHAT_MESSAGE_CHANNEL_ID) == null) {
+                val chatChannel = NotificationChannel(
+                    CHAT_MESSAGE_CHANNEL_ID,
+                    "단톡방 메시지",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "사무실 단톡방 메시지 알림"
+                    enableVibration(true)
+                    vibrationPattern = longArrayOf(0, 250)  // 단일 진동 (콜은 1초 반복)
+                    setShowBadge(true)
+                    lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+                    setBypassDnd(false)  // 콜과 차별 (콜은 true)
+                    setSound(
+                        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
+                        AudioAttributes.Builder()
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                            .build()
+                    )
+                }
+                notificationManager.createNotificationChannel(chatChannel)
+                Log.d(TAG, "🔧✅ [CHANNEL] CHAT_MESSAGE_CHANNEL 생성 완료")
+            }
+
         }
     }
 
@@ -603,6 +636,84 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             isNewCall = false,
             timeoutAfter = 0
         )
+    }
+
+    /**
+     * 사무실 단톡방 메시지 처리 (NEW_CHAT_MESSAGE)
+     * 1) Room INSERT — Repository에서 본인 senderId면 내부적으로 skip
+     * 2) 알림 표시 — 본인 메시지 + 포그라운드 시 skip (포그라운드는 BottomSheet UI가 처리)
+     * 알림 채널: CHAT_MESSAGE_CHANNEL_ID (콜 채널과 차별, CATEGORY_MESSAGE)
+     */
+    private fun handleChatMessage(remoteMessage: RemoteMessage) {
+        val data = remoteMessage.data
+        val messageId = data["messageId"] ?: run {
+            Log.w(TAG, "[handleChatMessage] messageId 없음 - 스킵")
+            return
+        }
+        val senderId = data["senderId"] ?: return
+        val senderName = data["senderName"] ?: "알 수 없음"
+        val senderRole = data["senderRole"] ?: "MANAGER"
+        val text = data["text"] ?: return
+
+        Log.d(TAG, "[handleChatMessage] 수신 - id=$messageId, from=$senderName ($senderRole)")
+
+        // 1) Room INSERT (Repository가 본인 메시지면 자동 skip)
+        val app = applicationContext as? com.designated.callmanager.CallManagerApplication
+        if (app == null) {
+            Log.e(TAG, "[handleChatMessage] CallManagerApplication 가져올 수 없음")
+            return
+        }
+        app.chatRepository.onRemoteMessageReceived(data)
+
+        // 2) 알림 표시 조건 — 본인 메시지면 skip + 포그라운드면 skip
+        val currentUid = FirebaseAuth.getInstance().currentUser?.uid
+        if (currentUid != null && currentUid == senderId) {
+            Log.d(TAG, "[handleChatMessage] 본인 메시지 - 알림 스킵")
+            return
+        }
+        if (isAppInForeground()) {
+            Log.d(TAG, "[handleChatMessage] 포그라운드 - 알림 스킵 (UI가 처리)")
+            return
+        }
+
+        // 3) 백그라운드 알림 (chat_messages 채널, CATEGORY_MESSAGE)
+        val roleKorean = when (senderRole) {
+            "MANAGER" -> "매니저"
+            "DESIGNATED_DRIVER" -> "대리기사"
+            "PICKUP_DRIVER" -> "픽업기사"
+            else -> ""
+        }
+        val title = if (roleKorean.isNotEmpty()) "$senderName ($roleKorean)" else senderName
+
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            messageId.hashCode(),
+            intent,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+        )
+
+        val notification = NotificationCompat.Builder(this, CHAT_MESSAGE_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .build()
+
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(messageId.hashCode(), notification)
+        Log.d(TAG, "[handleChatMessage] 알림 표시 완료")
     }
 
     private fun handleNewCall(remoteMessage: RemoteMessage, callId: String) {
