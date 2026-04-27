@@ -31,10 +31,11 @@
 | 배달 (T2) | `memory/delivery/README.md` | placeholder |
 | 쿠폰 (T2) | `memory/coupon/README.md` | placeholder |
 | 최종 손님앱 (T최종) | `memory/customer_super_app/README.md` | placeholder |
-| 사고 모드 (피드백 7개) | `memory/feedback/README.md` | 도메인 공통 |
+| 사고 모드 (피드백 8개) | `memory/feedback/README.md` | 도메인 공통 |
 | 사용자 프로필 | `memory/user_profile/README.md` | 도메인 공통 |
 
 ## 최근 달성 (5개)
+- ✅ 2026-04-28 사무실 단톡방 채팅 V1 PLAN rev3 승인 + 메모리 저장 (`memory/designated_drive/chat_feature_plan_2026-04-28.md`, `yangpyeong_chat_data_2026-04-28.md`, `chat_v2_call_embed_idea_2026-04-28.md`). 양평 단톡방 실측 4시간 80메시지 기반. BottomSheet 패턴, FCM+로컬 트리거, 90일 PII cleanup, 운행 중 사용 핵심 use case. ~4.5주 (V1.1 분리 시 ~3주). **다음 트리거: Step 1 docs/chat-shared-spec.md 진입**
 - ✅ 2026-04-27 식당업소앱 변환 PLAN 1쪽 + R1~R5 결정 확정 (`memory/restaurant/owner_app_pivot_plan_2026-04-27.md`). **다음 트리거: 첫 식당 미팅 약속 → 백업 + Flutter MVP 진입**
 - ✅ 2026-04-27 클코 에이전시화 결정 + 본 에이전시 헌장 v1.0 작성. Cowork→보조 도구 재정의 (`memory/operating_model/clcode_agency_charter.md`)
 - ✅ 2026-04-27 손님앱(Kotlin+Flutter) → 식당업소앱 변환 결정 (`memory/restaurant/owner_app_pivot_2026-04-27.md`)
@@ -52,7 +53,7 @@
 - iOS App Store 무경험, Android 숙련 (`memory/user_profile/user_ios_experience.md`)
 - Apple Team ID `VCJD377MAU` / Bundle `com.designated.driverapp.app` (`memory/user_profile/apple_ios_ids.md`)
 
-## 주요 피드백 (사고 모드, 7개)
+## 주요 피드백 (사고 모드, 8개)
 | 피드백 | 핵심 |
 |--------|------|
 | user_intent_first | 사용자 명시 의도를 추측 우회로 대체 금지 |
@@ -62,6 +63,7 @@
 | keep_existing_conventions | 기존 관례 변경은 실질 근거 필수 |
 | purpose_based_adaptation | 다른 앱 패턴은 목적 기반 취사선택 |
 | simplest_fix | 최소 수정 우선 |
+| listener_vs_fcm | 신규 기능 설계 시 리스너 vs FCM+로컬 트리거 자동 비교, 기본값 FCM |
 
 ## 자주 쓰는 단축 정보
 

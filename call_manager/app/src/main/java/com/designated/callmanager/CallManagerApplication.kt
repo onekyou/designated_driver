@@ -7,6 +7,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.designated.callmanager.data.local.AppDatabase
 import com.designated.callmanager.data.repository.CallRepository
+import com.designated.callmanager.data.repository.ChatRepository
 import com.designated.callmanager.data.repository.DriverRepository
 import com.designated.callmanager.service.PresenceManager
 import com.google.firebase.FirebaseApp
@@ -74,6 +75,13 @@ class CallManagerApplication : Application() {
      */
     val driverRepository: DriverRepository by lazy {
         DriverRepository(database, firestore, applicationScope)
+    }
+
+    /**
+     * ChatRepository 인스턴스 (사무실 단톡방 V1)
+     */
+    val chatRepository: ChatRepository by lazy {
+        ChatRepository(database, firestore, applicationScope)
     }
 
     override fun onCreate() {

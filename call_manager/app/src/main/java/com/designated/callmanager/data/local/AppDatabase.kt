@@ -16,9 +16,10 @@ import android.content.Context
         LocalPointTransaction::class,
         LocalPointsInfo::class,
         LocalCallInfo::class,
-        LocalDriverInfo::class
+        LocalDriverInfo::class,
+        LocalChatMessage::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -27,6 +28,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun pointsInfoDao(): PointsInfoDao
     abstract fun callDao(): CallDao
     abstract fun driverDao(): DriverDao
+    abstract fun chatMessageDao(): ChatMessageDao
 
     companion object {
         private const val DATABASE_NAME = "call_manager_db"
@@ -44,7 +46,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     DATABASE_NAME
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .fallbackToDestructiveMigration() // 개발 단계에서는 데이터 손실 허용
                 .build()
                 INSTANCE = instance
@@ -117,6 +119,37 @@ abstract class AppDatabase : RoomDatabase() {
         private val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE calls ADD COLUMN memoText TEXT")
+            }
+        }
+
+        /**
+         * v5 → v6 마이그레이션: chat_messages 테이블 추가 (사무실 단톡방 V1)
+         */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS chat_messages (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        provinceId TEXT NOT NULL,
+                        cityId TEXT NOT NULL,
+                        officeId TEXT NOT NULL,
+                        senderId TEXT NOT NULL,
+                        senderName TEXT NOT NULL,
+                        senderRole TEXT NOT NULL,
+                        text TEXT NOT NULL,
+                        createdAt INTEGER NOT NULL,
+                        clientCreatedAt INTEGER NOT NULL,
+                        sendStatus TEXT NOT NULL DEFAULT 'SENT'
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_chat_messages_office_time
+                    ON chat_messages (provinceId, cityId, officeId, createdAt)
+                    """.trimIndent()
+                )
             }
         }
 
