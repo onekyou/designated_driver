@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.designated.driverapp.ui.theme.DriverAppTheme
 
 /**
  * 잠금화면 위에 표시되는 배차 알림 Activity
@@ -78,17 +79,19 @@ class LockScreenActivity : ComponentActivity() {
         Log.d(TAG, "callId=$callId, title=$title, body=$body")
 
         setContent {
-            LockScreenContent(
-                title = title,
-                body = body,
-                onConfirm = {
-                    Log.d(TAG, "확인 버튼 클릭")
-                    stopAlertSound()
-                    stopVibration()
-                    cancelNotification(notificationId)
-                    openMainActivity(callId)
-                }
-            )
+            DriverAppTheme {
+                LockScreenContent(
+                    title = title,
+                    body = body,
+                    onConfirm = {
+                        Log.d(TAG, "확인 버튼 클릭")
+                        stopAlertSound()
+                        stopVibration()
+                        cancelNotification(notificationId)
+                        openMainActivity(callId)
+                    }
+                )
+            }
         }
     }
 
