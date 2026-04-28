@@ -151,6 +151,9 @@ fun HomeScreen(
     }
 
     Scaffold(
+        // HomeScreenWithChatSheet wrapper의 BottomSheet peek(76dp+nav) 영역을 가리지 않도록
+        // navigation bar inset 흡수 비활성. status bar는 topBar에서 statusBarsPadding으로 처리.
+        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
         topBar = {
             Surface(
                 modifier = Modifier
