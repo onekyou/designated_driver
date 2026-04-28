@@ -1,7 +1,67 @@
-# 사무실 단톡방 채팅 V1 — Step 5 UI 완료 (2026-04-28 갱신)
+# 사무실 단톡방 채팅 V1 — Step 5 UI 완료 (2026-04-28 후반 갱신)
 
 > 다음 세션 첫 응답 전에 본 문서 + PLAN + SPEC 정독 권장.
 > "시작해줘" 트리거로 들어온 클코가 어디서부터 이어갈지 즉시 파악할 수 있게 작성.
+
+## ⚠️ 2026-04-28 후반 세션 결과 (commit `b190a2bc` 후)
+
+### 사용자 추가 보고 4종
+1. **본문 multi-line 입력 시 글자 안 보임** — 사용자: "메시지 입력 시 위로 치고 올라가야 하는데 위가 막혀있어 아래로 작성됨"
+2. **Peek 상태에서 시스템 nav bar 영역에 chat 침범** — 사용자: "비활성 상태에도 nav bar에 chat 보임"
+3. **메시지 전송 시 새 메시지 안 보임** (시각적으로 입력창 뒤에 생성)
+4. **Expanded 상태에서 swipe down으로 sheet 안 닫힘** — drag handle 영역만 작동, list 영역은 두 번 swipe 필요
+
+### 7번 fix 시도 모두 실패 → 이전 commit `b190a2bc` 상태로 복원
+
+| # | 시도 fix | 결과 |
+|---|----------|------|
+| 1 | ChatInputBar Row `verticalAlignment = Bottom` (CenterVertically→Bottom) | 무효 |
+| 2 | ChatBottomSheetContent peek/expanded 완전 분리 (`if (!isExpanded) PeekColumn else ExpandedColumn`) | sheet 활성화 자체 안 됨 |
+| 3 | 외곽 Column `fillMaxHeight()` (0.95f 제거) + Spacer weight | sheet 활성화 복원, 다른 증상 그대로 |
+| 4 | 외곽 Column에 `imePadding()` 추가 + Row `imePadding` 제거 (사용자 직관 "본문 페이지가 메시지 입력란 위에 한정 안 됨") | 효과 없음 |
+| 5 | `rememberLazyListState` + `LaunchedEffect(messages.size) animateScrollToItem(0)` | (전송 시 자동 스크롤은 의도 — 별도 fix로 보존 검토) |
+| 6 | `NestedScrollConnection` 적용 (LazyColumn에) | **잘못된 사용** — `Offset(0f, available.y)` 반환이 swipe consume → sheet drag 차단 |
+| 7 | `sheetDragHandle` 활성화 (default M3 drag handle) + `sheetContainerColor` Transparent 제거 | drag handle 영역만 sheet drag 작동, list 영역 미해결 |
+
+### 측정 결과 (logcat onGloballyPositioned + onSizeChanged + sheet state)
+- **layout 자체 정상 stack**: 키보드 ON 시 OuterColumn(0,0)/1080x1374 + LazyColumn(24,12)/1032x1155 + ChatInputBar(24,1194)/1032x168. ChatInputBar(1194)가 LazyColumn 끝(1167) 아래에 정확히 정렬 — 침범 0
+- **TextField height 1줄만 측정**: text length 0↔1 반복, lines=1만. multi-line 시나리오 측정 못 함 (사용자 시나리오에서 enter로 multi-line 입력 안 함 또는 enter 동작 자체 의문)
+- **sheet drag 0회 위임 측정**: `b190a2bc` 상태에서 사용자 모든 swipe 시도가 sheet drag로 0번 전달. NestedScrollConnection 잘못 사용 + sheetContainerColor=Transparent + drag handle null 조합 의심
+- **drag handle 활성화 후 sheet drag 작동 시작** — 다만 list 영역에서는 nested scroll 자동 위임 안 됨
+
+### 복원 결정 (사용자 명시 2026-04-28 후반)
+- 사용자: "현재 상태가 이전 커밋과 큰 차이 없음. 오히려 이전 커밋으로 되돌리는 게 불필요한 수정 제거 가능"
+- `git restore` 로 ChatScreen.kt + MainActivity.kt 만 `b190a2bc` 상태로 복원 (다른 트랙 WIP 그대로)
+
+### 미해결 (다음 세션 정밀 진단 필요)
+
+#### A. BottomSheetScaffold + LazyColumn nestedScroll 정합 패턴
+- 현재(b190a2bc): drag handle null + sheetContainerColor Transparent → sheet drag 자체 미작동 측정 확인됨
+- WebFetch reference: "LazyColumn이 sheet content 내에서는 자동 nested scroll 위임 안 됨 — 명시적 NestedScrollConnection 구현 필요"
+- 정합 적용 위치 미확정 (LazyColumn에 적용 ≠ 외곽 Column에 적용. nestedScroll modifier 동작 정확히 이해 필요)
+- 비교 대상: M3 1.4.0-alpha14+ `lineLimits.MultiLine` API or `ModalBottomSheet` 변경 검토
+
+#### B. 본문 multi-line auto-grow
+- legacy `TextField(value, onValueChange, maxLines=3, singleLine=false)` API + `Modifier.weight(1f)` 조합
+- 공식 docs: "weight(1f)이 height 차지 강제 → TextField auto-grow와 상충 가능"
+- 진단: TextField 자체에 `onSizeChanged` 측정 → multi-line 시 height 자라는지 확인 + `Modifier.weight(1f, fill = false)` 또는 `BasicTextField` 교체 시도
+
+#### C. Peek 상태 nav bar 영역 침범
+- 외곽 Column `background(surfaceContainer).navigationBarsPadding()` 순서 — Compose modifier chain (background → padding) 표준 권장이지만 결과적으로 background가 nav inset 영역까지 색칠됨
+- 의도된 design? 또는 nav inset 영역에 색칠 안 하려면 순서 반전 — sheet의 시각 hit area와 visual 영역 분리 가능
+
+#### D. 자동 스크롤 (전송 시)
+- `rememberLazyListState` + `LaunchedEffect(messages.size) animateScrollToItem(0)` 패턴 — reverseLayout=true 정합 권장 패턴
+- 단독 fix로 검토 (다른 7번 fix와 분리)
+
+### 다음 세션 작업 권장
+1. 본 문서 + `b190a2bc` commit 정독
+2. plan mode + WebFetch 정밀 reference (M3 BottomSheetScaffold nested scroll API + multi-line TextField alpha API)
+3. 측정 강화 후 단일 fix 검증 사이클 (한 번에 하나만 변경 후 검증)
+4. PERMISSION_DENIED on `loadInitialMessages` 처리 (firestore.rules 배포 거부 사유)
+5. Step 6 driver_app 진입
+
+
 
 ## 완료 상태
 
