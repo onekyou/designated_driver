@@ -92,6 +92,11 @@ dependencies {
     // FCM dependency 유지 — Phase 2 FCM 수신 진입 시 즉시 사용 가능 (MVP에선 서비스 파일 없음)
     implementation libs.firebase.messaging.ktx
 
+    // Room (사무실 단톡방 V1)
+    implementation libs.room.runtime
+    implementation libs.room.ktx
+    kapt libs.room.compiler
+
     // Testing
     testImplementation libs.junit
     androidTestImplementation libs.androidx.test.ext.junit

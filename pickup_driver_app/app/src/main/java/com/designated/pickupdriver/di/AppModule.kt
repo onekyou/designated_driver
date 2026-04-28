@@ -3,6 +3,7 @@ package com.designated.pickupdriver.di
 import android.content.Context
 import android.content.SharedPreferences
 import com.designated.pickupdriver.data.Constants
+import com.designated.pickupdriver.data.local.AppDatabase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import dagger.Module
@@ -28,4 +29,9 @@ object AppModule {
     @Singleton
     fun provideSharedPreferences(@ApplicationContext context: Context): SharedPreferences =
         context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+
+    @Provides
+    @Singleton
+    fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase =
+        AppDatabase.getDatabase(context)
 }

@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.designated.pickupdriver.data.Constants
+import com.designated.pickupdriver.ui.chat.ChatCard
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -47,27 +48,40 @@ fun DashboardScreen(
             )
         }
     ) { paddingValues ->
-        if (calls.isEmpty()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues),
+        ) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = if (calls.isEmpty()) Alignment.Center else Alignment.TopStart,
             ) {
-                Text("진행 중인 콜이 없습니다", style = MaterialTheme.typography.bodyLarge)
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentPadding = PaddingValues(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(items = calls, key = { it.callId }) { call ->
-                    CallCard(call = call)
+                if (calls.isEmpty()) {
+                    Text("진행 중인 콜이 없습니다", style = MaterialTheme.typography.bodyLarge)
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(items = calls, key = { it.callId }) { call ->
+                            CallCard(call = call)
+                        }
+                    }
                 }
             }
+
+            HorizontalDivider()
+
+            ChatCard(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(8.dp),
+            )
         }
     }
 }
