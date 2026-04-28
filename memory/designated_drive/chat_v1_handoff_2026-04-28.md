@@ -59,7 +59,44 @@
 2. plan mode + WebFetch 정밀 reference (M3 BottomSheetScaffold nested scroll API + multi-line TextField alpha API)
 3. 측정 강화 후 단일 fix 검증 사이클 (한 번에 하나만 변경 후 검증)
 4. PERMISSION_DENIED on `loadInitialMessages` 처리 (firestore.rules 배포 거부 사유)
-5. Step 6 driver_app 진입
+5. **Step 6: driver_app + pickup_driver_app chat 이식** (사용자 명시 2026-04-28 후반)
+
+## Step 6 — driver_app + pickup_driver_app 이식 가이드 (다음 세션 우선)
+
+### 이식 범위 (call_manager Step 5 commit `b190a2bc` 기준)
+
+| 영역 | call_manager 파일 (reference) | driver_app / pickup_driver_app 이식 위치 |
+|------|------------------------------|------------------------------------------|
+| 데이터 레이어 | `data/local/AppDatabase.kt` (v5→v6) + `LocalChatMessage.kt` + `ChatMessageDao.kt` + `data/repository/ChatRepository.kt` | 동일 구조, package 변경 |
+| ViewModel | `ui/chat/ChatViewModel.kt` | senderRole 고정값 변경 (driver_app="DESIGNATED_DRIVER", pickup_driver_app="PICKUP_DRIVER") |
+| Compose UI | `ui/chat/ChatScreen.kt` (`ChatBottomSheetContent` + `ChatPeekPreviewBar` + `ChatInputBar` + `ChatMessageRow`) | 그대로 이식 |
+| MainActivity 통합 | `MainActivity.kt` (`DashboardWithChatSheet`) | driver_app 메인 화면 / pickup_driver_app 메인 화면에 통합 |
+| FCM 알림 | `service/MyFirebaseMessagingService.kt` (NEW_CHAT_MESSAGE 분기 + `chat_messages_ptt` 채널 + ptt 효과음) | 동일 패턴 + 알림음 (raw resource) |
+| Manifest | `AndroidManifest.xml` `windowSoftInputMode="adjustResize"` | 메인 Activity에 동일 적용 |
+| 로그아웃 | `MainActivity.logoutAndExit()` (managerTokens 삭제) | 각 앱은 다른 collection (designated_drivers/pickup_drivers의 fcmToken 필드) |
+| 알림음 raw | `res/raw/ptt_start.m4a` | 동일 파일 복사 |
+
+### 호환성 체크 (선행)
+
+⚠️ **driver_app Compose BOM = 2023.10.01** — Material 3 BottomSheetScaffold 호환 여부 확인 필수
+- 비호환 시: BOM 업그레이드 또는 Material 3 `ModalBottomSheet`으로 대체
+- pickup_driver_app도 BOM 확인
+
+### 이식 전 권장 (call_manager 미해결 4종 먼저 정밀 진단)
+
+이식 전에 call_manager의 미해결 4종 (위 미해결 섹션 A~D) 정밀 진단 + fix가 안정되면 그 fix를 driver_app/pickup_driver_app에도 동시 이식. 그렇지 않으면 같은 증상이 3 앱에서 동일 발생 → 3중 디버깅.
+
+### 단계적 이식 순서 권장
+1. call_manager 미해결 4종 정밀 진단 + fix 검증 (한 번에 하나씩)
+2. 안정된 ChatBottomSheetContent / ChatInputBar / NestedScroll 패턴 확정
+3. driver_app Compose BOM 호환성 확인 → 필요 시 업그레이드
+4. driver_app에 데이터 레이어 → ViewModel → UI → MainActivity 순서 이식
+5. pickup_driver_app에도 동일 패턴 이식
+6. 3 앱 동시 동작 검증 (S21+/S22/Z Flip4)
+
+### Step 6 알림음
+- `res/raw/ptt_start.m4a` 파일 driver_app + pickup_driver_app `res/raw/`에 복사
+- `MyFirebaseMessagingService` (또는 동등) 의 chat 채널 ID = `chat_messages_ptt` (call_manager와 동일 ID 사용 가능 — 앱별 채널은 패키지 단위 분리됨)
 
 
 

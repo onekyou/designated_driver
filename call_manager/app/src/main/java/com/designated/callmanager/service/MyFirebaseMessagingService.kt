@@ -36,7 +36,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         private const val STATUS_CHANGE_CHANNEL_ID = "status_change_fcm_channel_v2"
         private const val DRIVER_UPDATE_CHANNEL_ID = "driver_update_fcm_channel_v3"
         private const val SHARED_CALL_CHANNEL_ID = "shared_call_fcm_channel_v3"  // v3로 변경하여 새 채널 생성
-        private const val CHAT_MESSAGE_CHANNEL_ID = "chat_messages"  // 사무실 단톡방 (스펙 §10)
+        private const val CHAT_MESSAGE_CHANNEL_ID = "chat_messages_ptt"  // 사무실 단톡방 (스펙 §10) — ptt 효과음 적용 (v2 ID)
     }
 
     override fun onCreate() {
@@ -559,7 +559,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
                     setBypassDnd(false)  // 콜과 차별 (콜은 true)
                     setSound(
-                        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
+                        android.net.Uri.parse("android.resource://$packageName/${com.designated.callmanager.R.raw.ptt_start}"),
                         AudioAttributes.Builder()
                             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                             .setUsage(AudioAttributes.USAGE_NOTIFICATION)
@@ -567,7 +567,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     )
                 }
                 notificationManager.createNotificationChannel(chatChannel)
-                Log.d(TAG, "🔧✅ [CHANNEL] CHAT_MESSAGE_CHANNEL 생성 완료")
+                Log.d(TAG, "🔧✅ [CHANNEL] CHAT_MESSAGE_CHANNEL 생성 완료 (ptt_start)")
             }
 
         }
