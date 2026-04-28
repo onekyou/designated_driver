@@ -39,11 +39,15 @@ fun logoutUserAndExitApp(context: Context, scope: CoroutineScope, viewModel: Dri
             val correctPath = "provinces/$provinceId/cities/$cityId/offices/$officeId/designated_drivers/$userId"
             val driverRef = firestore.document(correctPath)
 
-            Log.d("DriverAppUtils", "🔴 [LOGOUT] status를 OFFLINE으로 업데이트: $correctPath")
+            Log.d("DriverAppUtils", "🔴 [LOGOUT] status를 OFFLINE으로 업데이트 + fcmToken 삭제: $correctPath")
 
-            driverRef.update("status", Constants.DRIVER_STATUS_OFFLINE)
+            // 사무실 단톡방 V1: 로그아웃 시 fcmToken 필드 삭제 (다른 사무실 메시지 수신 방지)
+            driverRef.update(mapOf(
+                "status" to Constants.DRIVER_STATUS_OFFLINE,
+                Constants.FIELD_FCM_TOKEN to com.google.firebase.firestore.FieldValue.delete()
+            ))
                 .addOnSuccessListener {
-                    Log.d("DriverAppUtils", "✅ [LOGOUT] OFFLINE 업데이트 성공")
+                    Log.d("DriverAppUtils", "✅ [LOGOUT] OFFLINE 업데이트 + fcmToken 삭제 성공")
                     performSignOut(context, scope)
                 }
                 .addOnFailureListener { e ->
