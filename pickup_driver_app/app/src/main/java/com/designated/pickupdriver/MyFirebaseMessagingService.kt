@@ -7,8 +7,10 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.designated.pickupdriver.data.Constants
 import com.designated.pickupdriver.data.repository.ChatRepository
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import dagger.hilt.android.AndroidEntryPoint
@@ -25,10 +27,38 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
     @Inject lateinit var chatRepository: ChatRepository
     @Inject lateinit var auth: FirebaseAuth
+    @Inject lateinit var firestore: FirebaseFirestore
 
     companion object {
         private const val TAG = "PickupApp_FCM"
         const val CHAT_MESSAGE_CHANNEL_ID = "chat_messages_ptt"
+    }
+
+    /**
+     * FCM 토큰 갱신 시 pickup_drivers/{uid}.fcmToken 동기화.
+     * 로그인된 상태에서만 동작 — 로그인 전이면 LoginViewModel이 로그인 직후 fetch+저장.
+     */
+    override fun onNewToken(token: String) {
+        super.onNewToken(token)
+        val uid = auth.currentUser?.uid ?: run {
+            Log.d(TAG, "[onNewToken] 미로그인 상태 - 토큰 저장 스킵")
+            return
+        }
+        Log.d(TAG, "[onNewToken] uid=$uid 토큰 동기화 시작")
+        firestore.collectionGroup(Constants.COLLECTION_GROUP_PICKUP_DRIVERS)
+            .whereEqualTo(Constants.FIELD_AUTH_UID, uid)
+            .limit(1)
+            .get()
+            .addOnSuccessListener { qs ->
+                val doc = qs.documents.firstOrNull() ?: run {
+                    Log.w(TAG, "[onNewToken] pickup_drivers 문서 못 찾음 (uid=$uid)")
+                    return@addOnSuccessListener
+                }
+                doc.reference.update(Constants.FIELD_FCM_TOKEN, token)
+                    .addOnSuccessListener { Log.d(TAG, "[onNewToken] fcmToken 업데이트 성공") }
+                    .addOnFailureListener { e -> Log.e(TAG, "[onNewToken] fcmToken 업데이트 실패", e) }
+            }
+            .addOnFailureListener { e -> Log.e(TAG, "[onNewToken] pickup_drivers 조회 실패", e) }
     }
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {

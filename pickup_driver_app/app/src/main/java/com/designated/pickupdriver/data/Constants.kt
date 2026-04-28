@@ -18,6 +18,9 @@ object Constants {
 
     const val DRIVER_TYPE_PICKUP = "픽업기사"
 
+    const val FIELD_FCM_TOKEN = "fcmToken"
+    const val FIELD_AUTH_UID = "authUid"
+
     const val STATUS_WAITING = "WAITING"
     const val STATUS_ASSIGNED = "ASSIGNED"
     const val STATUS_ACCEPTED = "ACCEPTED"

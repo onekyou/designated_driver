@@ -11,6 +11,7 @@ import com.designated.pickupdriver.data.Constants
 import com.designated.pickupdriver.model.DriverApprovalStatus
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -130,6 +131,21 @@ class LoginViewModel @Inject constructor(
                     putString(Constants.PREF_KEY_OFFICE_ID, officeId)
                     putString(Constants.PREF_KEY_DRIVER_ID, userId)
                     apply()
+                }
+
+                // FCM 토큰 fetch + pickup_drivers/{uid}.fcmToken 저장
+                // (수신 채팅이 본 기기로 오려면 필수 — onNewToken은 토큰 갱신 시만 호출됨)
+                FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        val fcmToken = task.result
+                        if (!fcmToken.isNullOrBlank()) {
+                            doc.reference.update(Constants.FIELD_FCM_TOKEN, fcmToken)
+                                .addOnSuccessListener { Log.d(TAG, "fcmToken 저장 성공") }
+                                .addOnFailureListener { e -> Log.e(TAG, "fcmToken 저장 실패", e) }
+                        }
+                    } else {
+                        Log.w(TAG, "FCM 토큰 fetch 실패", task.exception)
+                    }
                 }
 
                 Log.d(TAG, "로그인 성공: office=$officeId")

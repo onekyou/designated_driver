@@ -51,7 +51,8 @@ fun DashboardScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues),
+                .padding(paddingValues)
+                .imePadding(),
         ) {
             Box(
                 modifier = Modifier
