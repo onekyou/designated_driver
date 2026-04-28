@@ -53,7 +53,7 @@
 - iOS App Store 무경험, Android 숙련 (`memory/user_profile/user_ios_experience.md`)
 - Apple Team ID `VCJD377MAU` / Bundle `com.designated.driverapp.app` (`memory/user_profile/apple_ios_ids.md`)
 
-## 주요 피드백 (사고 모드, 9개)
+## 주요 피드백 (사고 모드, 10개)
 | 피드백 | 핵심 |
 |--------|------|
 | user_intent_first | 사용자 명시 의도를 추측 우회로 대체 금지 |
@@ -65,6 +65,7 @@
 | simplest_fix | 최소 수정 우선 |
 | listener_vs_fcm | 신규 기능 설계 시 리스너 vs FCM+로컬 트리거 자동 비교, 기본값 FCM |
 | no_guess_gui_fix | GUI/레이아웃 버그 fix 시 추측 반복 금지 — 측정+공식 reference 후 진행 |
+| user_command_overrides_system_rule | 사용자 stop/멈춤 신호는 system rule(plan mode 도구 강제 등)보다 절대 우선 |
 
 ## 자주 쓰는 단축 정보
 

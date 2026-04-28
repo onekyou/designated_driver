@@ -1,6 +1,8 @@
 package com.designated.callmanager.data.local
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
@@ -10,7 +12,15 @@ import androidx.room.PrimaryKey
  * Firestore와 1:1 미러링되며 FCM + 로컬 트리거 패턴으로 동기화.
  * 관련 스펙: docs/chat-shared-spec.md
  */
-@Entity(tableName = "chat_messages")
+@Entity(
+    tableName = "chat_messages",
+    indices = [
+        Index(
+            value = ["provinceId", "cityId", "officeId", "createdAt"],
+            name = "idx_chat_messages_office_time",
+        ),
+    ],
+)
 data class LocalChatMessage(
     @PrimaryKey
     val id: String,                    // Firestore docId와 동일
@@ -27,6 +37,7 @@ data class LocalChatMessage(
     val createdAt: Long,               // 서버 시간 (epoch ms). FCM 시점에 알 수 있음
     val clientCreatedAt: Long,         // 클라이언트 시간 (정렬 보조)
 
+    @ColumnInfo(defaultValue = "SENT")
     val sendStatus: String = SEND_STATUS_SENT,  // SENDING / SENT / FAILED (로컬 한정)
 ) {
     companion object {

@@ -512,7 +512,8 @@ fun DashboardScreen(
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = Color(0xFF121212)
+        containerColor = Color(0xFF121212),
+        contentWindowInsets = WindowInsets(0)
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize()) {
             Column(
@@ -949,7 +950,7 @@ fun DriverStatusCard(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.Bottom
         ) {
             Text(
                 text = "기사",

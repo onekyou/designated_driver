@@ -27,7 +27,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.material3.BottomSheetScaffold
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -1315,11 +1321,26 @@ private fun DashboardWithChatSheet(
     onNavigateToSettings: () -> Unit,
 ) {
     val chatViewModel: ChatViewModel = viewModel()
+    val scaffoldState = rememberBottomSheetScaffoldState()
+    val sheetTargetValue = scaffoldState.bottomSheetState.targetValue
+    val isExpanded = sheetTargetValue == SheetValue.Expanded
+    val keyboardController = LocalSoftwareKeyboardController.current
+    LaunchedEffect(sheetTargetValue) {
+        if (sheetTargetValue == SheetValue.PartiallyExpanded || sheetTargetValue == SheetValue.Hidden) {
+            keyboardController?.hide()
+        }
+    }
+    val density = LocalDensity.current
+    val navInsetDp = with(density) { WindowInsets.navigationBars.getBottom(density).toDp() }
     BottomSheetScaffold(
+        scaffoldState = scaffoldState,
         sheetContent = {
-            ChatBottomSheetContent(viewModel = chatViewModel)
+            ChatBottomSheetContent(viewModel = chatViewModel, isExpanded = isExpanded)
         },
-        sheetPeekHeight = 56.dp,
+        sheetPeekHeight = 76.dp + navInsetDp,
+        sheetDragHandle = null,
+        sheetContainerColor = androidx.compose.ui.graphics.Color.Transparent,
+        sheetShadowElevation = 0.dp,
     ) { paddingValues ->
         Box(
             modifier = Modifier

@@ -34,7 +34,77 @@
 - Firebase rules: `firebase deploy --only firestore:rules --dry-run` 통과
 - Kotlin (call_manager): `./gradlew :app:compileDebugKotlin` 통과 (각 commit별)
 
-## 다음 작업 — Step 6 (driver_app) 진입
+## ⚠️ Step 5 잔여 작업 (다음 세션 첫 우선) — 2026-04-28 후반 갱신
+
+### 후속 결정 (RTDB 검토 후 Firestore 유지)
+- 사용자가 원래 RTDB 의도였으나 Firestore로 구축 발견 → 전환 검토
+- 분석 결과: V1 패턴(FCM+1회 fetch)에서 RTDB 강점(listener) 활용 안 됨, 비용 거의 동등(최적화 시), 마이그레이션 6~8h, 이중 SDK 부담 → **Firestore 유지 확정**
+- 향후 별도 트랙: since-timestamp pagination 최적화 (확장 단계 reads 90% 감소)
+
+### 적용된 모든 fix (working tree, 미커밋)
+
+#### Functional fixes (검증 통과/안전)
+1. ✅ **Room 스키마 fix**: `LocalChatMessage`에 `@ColumnInfo(defaultValue="SENT")` + `@Entity(indices=[idx_chat_messages_office_time])` — Migration_5_6 hash 일치 (crash 해결)
+2. ✅ **AndroidManifest**: MainActivity에 `windowSoftInputMode="adjustResize"` 추가
+3. ✅ **ChatMessageDao 정렬**: `ORDER BY createdAt ASC, clientCreatedAt ASC` → `DESC, DESC` (LazyColumn reverseLayout=true와 정합, 카톡 스타일)
+4. ✅ **functions/scripts/backfill-chat-members.js**: 신규 (1004 사무실 chatRoom/main/members 매니저+기사 2명 백필 1회 실행)
+
+#### Chat sheet UI (Jetchat 패턴 + 책갈피 디자인)
+5. ✅ **ChatScreen.kt**:
+   - imports: `background`, `imePadding`, `navigationBarsPadding`, `RoundedCornerShape`, `TextField`, `TextFieldDefaults`
+   - LazyColumn `verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.Bottom)` (두 군데)
+   - `ChatBottomSheetContent(viewModel, isExpanded: Boolean = false)`: 외곽 Column에 `fillMaxHeight(0.95f) + background(surfaceContainer) + navigationBarsPadding()`. peek bar는 `if (!isExpanded)` 조건부 표시
+   - `ChatPeekPreviewBar`: 책갈피(width 110dp / height 20dp / `RoundedCornerShape(topStart=10dp, topEnd=10dp)` / `surfaceContainerHighest` 색 / amber primary 텍스트 "💬 채팅" / shadowElevation 6dp) + peek 카드(fillMaxWidth / `surfaceContainerHigh` / topStart/topEnd 12dp 둥근 / shadowElevation 2dp / Box height 56dp + horizontal 16dp padding + 메시지 미리보기)
+   - `ChatInputBar`: TextField filled (indicator 모두 `Color.Transparent`, maxLines 3, placeholder "메시지 입력") + `imePadding()` (navigationBarsPadding은 외곽 Column에서 처리)
+6. ✅ **MainActivity.kt** `DashboardWithChatSheet`:
+   - `rememberBottomSheetScaffoldState()` + `LaunchedEffect(sheetTargetValue)` 키보드 close 트리거 (`PartiallyExpanded` 또는 `Hidden` 시 `keyboardController.hide()`)
+   - `WindowInsets.navigationBars.getBottom(density).toDp()` 동적 측정
+   - `BottomSheetScaffold(scaffoldState, sheetPeekHeight = 76.dp + navInsetDp, sheetDragHandle = null, sheetContainerColor = Transparent, sheetShadowElevation = 0.dp)`
+   - `ChatBottomSheetContent(chatViewModel, isExpanded = sheetTargetValue == SheetValue.Expanded)`
+
+#### Dashboard layout (외곽 inset 중복 제거)
+7. ✅ **DashboardScreen.kt** `DriverStatusCard` 안 Row: `verticalAlignment = Alignment.CenterVertically` → `Alignment.Bottom` (기사 1004 줄을 카드 안 아래쪽 정렬, chat 인접)
+8. ✅ **DashboardScreen.kt** Scaffold: `contentWindowInsets = WindowInsets(0)` 추가 — Scaffold가 자체 nav inset 처리 안 하게 (BottomSheetScaffold가 sheetPeekHeight=76+nav로 이미 처리, 중복 제거). **이전 "기사카드와 chat 사이 큰 검은 빈 영역 144px"의 진짜 원인. 사용자가 직접 지적 ("세 카드를 감싸고 있는 큰 카드의 여백")으로 확정**
+
+### 잔여 (다음 세션 첫 작업)
+
+#### 1. 검증 (S21+) — contentWindowInsets fix 효과 확인 필요
+빌드 + 설치 완료. 디바이스 검증 미완료. 시각적 시나리오:
+- 호출목록/공유콜/기사카드/chat 책갈피 모두 정상 표시 + 비율 그대로
+- 기사카드 아래 검은 빈 영역(이전 144px)이 사라짐 = chat 책갈피와 인접
+- TextField 탭 → 키보드 ON: 입력바 키보드 위 / 메시지 list 안 사라짐
+- sheet 내림 → 키보드 자동 close
+- 책갈피: 회색 + amber 텍스트 자연 디자인
+
+#### 2. Firestore PERMISSION_DENIED on `loadInitialMessages`
+- chatRoom 백필 완료 (`functions/scripts/backfill-chat-members.js` 1회 실행)
+- `loadInitialMessages`에서 PERMISSION_DENIED → firestore.rules production 미배포로 추정
+- **차단**: 사용자가 `firebase deploy --only firestore:rules` 거부 (이전 세션). **다음 세션에서 거부 사유 확인 → 배포 가능 여부 결정**
+
+#### 3. 검증 통과 시 단일 commit
+```
+fix(chat): IME UX + 책갈피 카드 디자인 + 키보드 close + Scaffold inset 중복 제거 (Jetchat 패턴)
+
+- ChatBottomSheetContent: 외곽 Column nav padding + isExpanded 조건부 peek
+- ChatPeekPreviewBar: 책갈피(회색+amber 텍스트) + 카드 통합 디자인
+- ChatInputBar: TextField(filled) + imePadding chain
+- MainActivity DashboardWithChatSheet: scaffoldState + 키보드 close + sheet config (transparent/76dp+nav peek/null drag handle)
+- DashboardScreen DriverStatusCard 안 Row: alignment Bottom
+- DashboardScreen Scaffold: contentWindowInsets = WindowInsets(0) — nav 중복 제거
+- LocalChatMessage Room 스키마 fix
+- ChatMessageDao 정렬 ASC→DESC
+- AndroidManifest adjustResize
+- functions/scripts/backfill-chat-members.js (신규 운영 도구)
+```
+
+### 이번 세션 학습 (다음 세션 클코 주의)
+
+1. **git checkout 절대 금지** — uncommitted 변경 손실 위험 (이번 세션에 ChatScreen.kt + MainActivity.kt 변경 손실, 메모리 기반 재작성 필요했음)
+2. **GUI 디버깅 추측 fix 반복 금지** — 측정/공식 reference (Jetchat 등) 후 진행 (`memory/feedback/feedback_no_guess_gui_fix.md`)
+3. **"외곽 padding/wrapper" 의심** — 사용자가 "여백"이라고 할 때 카드 안 빈 공간만 보지 말고 외곽 Scaffold contentWindowInsets / paddingValues 중복 등도 확인
+4. **plan workflow 따르기** — 코드 수정 전 plan 모드 + read-only 진단 + plan agent 검증 후 실행
+
+## 다음 작업 — Step 6 (driver_app) 진입 (Step 5 잔여 후)
 
 call_manager Step 5 완료. 다음은 driver_app에 동일 구조 이식:
 - ChatRepository (driver_app 데이터 레이어)

@@ -1,5 +1,7 @@
 package com.designated.callmanager.ui.chat
 
+import android.util.Log
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,11 +12,16 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.Button
@@ -23,9 +30,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -36,6 +44,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -82,7 +93,7 @@ fun ChatScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             reverseLayout = true,
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.Bottom),
         ) {
             itemsIndexed(items = messages, key = { _, msg -> msg.id }) { index, msg ->
                 // reverseLayout=true: index+1 = 시간상 이전, index-1 = 시간상 이후
@@ -235,16 +246,32 @@ private fun ChatInputBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .onSizeChanged { size ->
+                Log.d("ChatInputBar", "Row size: ${size.width}x${size.height} (text length=${value.length}, lines=${value.count { it == '\n' } + 1})")
+            }
+            .onGloballyPositioned { coords ->
+                val pos = coords.positionInRoot()
+                Log.d("ChatLayout", "ChatInputBar pos=(${pos.x.toInt()}, ${pos.y.toInt()}) size=${coords.size.width}x${coords.size.height} text=\"${value.take(20)}\"")
+            },
+        verticalAlignment = Alignment.Bottom,
     ) {
-        OutlinedTextField(
+        TextField(
             value = value,
             onValueChange = onValueChange,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .onSizeChanged { size ->
+                    Log.d("ChatInputBar", "TextField size: ${size.width}x${size.height} (text length=${value.length}, lines=${value.count { it == '\n' } + 1})")
+                },
             placeholder = { Text("메시지 입력") },
             singleLine = false,
-            maxLines = 4,
+            maxLines = 3,
+            colors = TextFieldDefaults.colors(
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                disabledIndicatorColor = Color.Transparent,
+            ),
         )
         Spacer(Modifier.width(8.dp))
         Button(
@@ -269,64 +296,92 @@ private fun ChatInputBar(
 @Composable
 fun ChatBottomSheetContent(
     viewModel: ChatViewModel = viewModel(),
+    isExpanded: Boolean = false,
 ) {
     val messages by viewModel.messages.collectAsState()
     val latestMessage by viewModel.latestMessage.collectAsState()
     val currentUserId = viewModel.currentUserId
     var inputText by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        ChatPeekPreviewBar(latestMessage = latestMessage, currentUserId = currentUserId)
-
-        HorizontalDivider()
-
-        LazyColumn(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            reverseLayout = true,
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            itemsIndexed(items = messages, key = { _, msg -> msg.id }) { index, msg ->
-                val prevMsg = messages.getOrNull(index + 1)
-                val nextMsg = messages.getOrNull(index - 1)
-                val showName = prevMsg == null ||
-                    prevMsg.senderId != msg.senderId ||
-                    (msg.createdAt - prevMsg.createdAt) > GROUP_THRESHOLD_MS
-                val showTime = nextMsg == null ||
-                    nextMsg.senderId != msg.senderId ||
-                    (nextMsg.createdAt - msg.createdAt) > GROUP_THRESHOLD_MS
-
-                ChatMessageRow(
-                    message = msg,
-                    isOwn = msg.senderId == currentUserId,
-                    showName = showName,
-                    showTime = showTime,
-                    onRetry = { viewModel.retryMessage(msg) },
-                )
-            }
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) {
+            listState.animateScrollToItem(0)
         }
+    }
 
-        HorizontalDivider()
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .fillMaxHeight()
+            .navigationBarsPadding()
+            .imePadding()
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .onGloballyPositioned { coords ->
+                val pos = coords.positionInRoot()
+                Log.d("ChatLayout", "OuterColumn pos=(${pos.x.toInt()}, ${pos.y.toInt()}) size=${coords.size.width}x${coords.size.height} isExpanded=$isExpanded")
+            },
+    ) {
+        if (!isExpanded) {
+            // Peek 상태 — ChatPeekPreviewBar만 visible (sheet 76dp+nav 영역 안에서만 보임)
+            ChatPeekPreviewBar(latestMessage = latestMessage, currentUserId = currentUserId)
+            Spacer(modifier = Modifier.weight(1f))
+        } else {
+            // Expanded 상태 — 메시지 list + 입력바
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .onGloballyPositioned { coords ->
+                        val pos = coords.positionInRoot()
+                        Log.d("ChatLayout", "LazyColumn pos=(${pos.x.toInt()}, ${pos.y.toInt()}) size=${coords.size.width}x${coords.size.height} msgCount=${messages.size}")
+                    },
+                reverseLayout = true,
+                verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.Bottom),
+            ) {
+                itemsIndexed(items = messages, key = { _, msg -> msg.id }) { index, msg ->
+                    val prevMsg = messages.getOrNull(index + 1)
+                    val nextMsg = messages.getOrNull(index - 1)
+                    val showName = prevMsg == null ||
+                        prevMsg.senderId != msg.senderId ||
+                        (msg.createdAt - prevMsg.createdAt) > GROUP_THRESHOLD_MS
+                    val showTime = nextMsg == null ||
+                        nextMsg.senderId != msg.senderId ||
+                        (nextMsg.createdAt - msg.createdAt) > GROUP_THRESHOLD_MS
 
-        ChatInputBar(
-            value = inputText,
-            onValueChange = { inputText = it },
-            onSend = {
-                val trimmed = inputText.trim()
-                if (trimmed.isNotEmpty()) {
-                    viewModel.sendMessage(trimmed)
-                    inputText = ""
+                    ChatMessageRow(
+                        message = msg,
+                        isOwn = msg.senderId == currentUserId,
+                        showName = showName,
+                        showTime = showTime,
+                        onRetry = { viewModel.retryMessage(msg) },
+                    )
                 }
             }
-        )
+
+            HorizontalDivider()
+
+            ChatInputBar(
+                value = inputText,
+                onValueChange = { inputText = it },
+                onSend = {
+                    val trimmed = inputText.trim()
+                    if (trimmed.isNotEmpty()) {
+                        viewModel.sendMessage(trimmed)
+                        inputText = ""
+                    }
+                }
+            )
+        }
     }
 }
 
 /**
- * Sheet peek 상태(56dp)에서 보이는 미리보기 카드.
- * "💬 [발신자]: [메시지 1줄]" 형식 (스펙 §11)
+ * Sheet peek 상태에서 보이는 미리보기 카드 (책갈피 통합 디자인).
+ *  - 위쪽 중앙 책갈피 (회색 카드 + amber 텍스트)
+ *  - 그 아래 둥근 카드(Surface) — 메시지 미리보기
  */
 @Composable
 private fun ChatPeekPreviewBar(
@@ -338,18 +393,49 @@ private fun ChatPeekPreviewBar(
         latestMessage.senderId == currentUserId -> "💬 나: ${latestMessage.text}"
         else -> "💬 ${latestMessage.senderName}: ${latestMessage.text}"
     }
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(56.dp)
-            .padding(horizontal = 16.dp),
-        contentAlignment = Alignment.CenterStart,
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(
-            text = previewText,
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1,
-        )
+        Surface(
+            modifier = Modifier
+                .width(110.dp)
+                .height(20.dp),
+            shape = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            shadowElevation = 6.dp,
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "💬 채팅",
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+        }
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shadowElevation = 2.dp,
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Text(
+                    text = previewText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                )
+            }
+        }
     }
 }
 
