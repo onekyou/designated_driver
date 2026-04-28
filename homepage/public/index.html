@@ -878,6 +878,20 @@
     .animate-d1 { transition-delay: 0.1s; }
     .animate-d2 { transition-delay: 0.2s; }
     .animate-d3 { transition-delay: 0.3s; }
+
+    /* ── 앱 다운로드 (임시, 테스트 사무실용) ───── */
+    .app-download { padding: 60px 20px; background: var(--bg-warm); }
+    .info-box { background: #fff; color: var(--text-dark); padding: 50px; border-radius: 25px; max-width: 680px; margin: 0 auto; box-shadow: 0 8px 32px rgba(255,171,0,0.15); border: 1px solid rgba(255,171,0,0.2); }
+    .info-grid { display: grid; grid-template-columns: 180px 1fr; gap: 18px; margin-top: 30px; }
+    .info-label { color: var(--primary-dark); font-weight: bold; font-size: 0.95em; align-self: center; }
+    .info-value { font-size: 1.05em; }
+    .info-value a { color: var(--primary-dark); text-decoration: none; font-weight: 600; padding: 8px 18px; background: var(--bg-light); border-radius: 8px; display: inline-block; transition: background 0.2s; }
+    .info-value a:hover { background: var(--primary); color: #fff; }
+    @media (max-width: 600px) {
+      .info-box { padding: 30px 20px; }
+      .info-grid { grid-template-columns: 1fr; gap: 8px; }
+      .info-label { margin-top: 12px; }
+    }
   </style>
 </head>
 <body>
@@ -1114,6 +1128,21 @@
         <h2 class="hurry-title animate">PC도, 수수료도 없이 만드는 당신만의 브랜드</h2>
         <h2 class="hurry-title animate" style="font-weight:400;">콜마당으로 지금 무장하세요</h2>
         <a href="signup.html" class="btn btn-primary animate" style="margin-top:32px;display:inline-block;">지금 무료 신청하기</a>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ════════════ 앱 다운로드 (임시, 테스트 사무실용) ════════════ -->
+  <section class="app-download">
+    <div class="info-box">
+      <h2 style="color: var(--primary-dark); margin-top:0; text-align:center; font-family:'KakaoBigSans',sans-serif;">앱 다운로드</h2>
+      <div class="info-grid">
+        <div class="info-label">콜마당 (Guest)</div><div class="info-value"><a href="https://calldetector-5d61e.web.app/apk_downloads/customer_app-debug.apk" download>다운로드</a></div>
+        <div class="info-label">Call Detector</div><div class="info-value"><a href="https://calldetector-5d61e.web.app/apk_downloads/call_detector-debug.apk" download>다운로드</a></div>
+        <div class="info-label">Call Manager</div><div class="info-value"><a href="https://calldetector-5d61e.web.app/apk_downloads/call_manager-debug.apk" download>다운로드</a></div>
+        <div class="info-label">Driver App</div><div class="info-value"><a href="https://calldetector-5d61e.web.app/apk_downloads/driver_app-debug.apk" download>다운로드</a></div>
+        <div class="info-label">Pickup Driver App</div><div class="info-value"><a href="https://calldetector-5d61e.web.app/apk_downloads/pickup_driver_app-debug.apk" download>다운로드</a></div>
       </div>
     </div>
   </section>

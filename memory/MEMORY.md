@@ -35,6 +35,8 @@
 | 사용자 프로필 | `memory/user_profile/README.md` | 도메인 공통 |
 
 ## 최근 달성 (5개)
+- ✅ 2026-04-28 후반-2 **driver_app + call_manager chat 운영 가능화** (11 commit push 완료, `bda7f568`~`42552143`+ `a705863d`) — driver_app BOM 업그레이드(Compose 2024.04.01/Kotlin 1.9.22/Firebase BOM 33) + Room ChatAppDatabase v1 + ChatRepository(Hilt) + ChatViewModel + ChatScreen + HomeScreenWithChatSheet wrapper + FCM NEW_CHAT_MESSAGE 분기 + chat_messages_ptt 채널 + logout fcmToken 삭제 + HomeScreen Scaffold `contentWindowInsets=WindowInsets(0)` (BottomSheet peek 영역 가림 해결). 추가: call_manager + driver_app `handleChatMessage` 포그라운드 시 `playChatSound()` 호출(시스템 알림 skip 미터치, sound만 직접 재생 — 다른 알림 영향 0). pickup_driver_app은 사용자 별도 commit `a705863d`로 ChatCard 50:50 통합 + IME padding + FCM 토큰. **3앱 동시 운영 가능**. 검증: S22 driver chat sheet 표시 + S21+/S22 포그라운드 chat sound 정상.
+- ✅ 2026-04-28 후반 픽업앱 사무실 단톡방 V1 통합 (commit `a705863d`) — Dashboard 50:50 분할(콜 위 / ChatCard 아래) + IME padding + FCM 토큰 등록(LoginViewModel + onNewToken). **BottomSheet 패턴 거부 → 카드 패턴 채택**으로 call_manager 미해결 4종 회피. 동반 운영작업: (a) `backfill-chat-members.js gyeonggi yangpyeong RUbeBEvGGYP5wMhJHhMF --execute` 1회 실행 (PICKUP_DRIVER 1명 등록), (b) chat 관련 6개 CF 배포 (`onChatMessageCreated` + `scheduledChatMessageCleanup` + `backfillChatMembers` + `onChatSync*` 3종) — 모두 첫 배포. **검증 결과**: 픽업→콜매니저 송수신 ✓, 콜매니저→픽업 송수신은 픽업 로그아웃→재로그인 후 fcmToken 등록되어야 작동 (사용자가 재로그인해야 함). plan: `C:\Users\kala1\.claude\plans\harmonic-percolating-lamport.md`
 - ✅ 2026-04-28 후반 사무실 단톡방 V1 — chat 알림음 ptt 효과음 적용 (`CHAT_MESSAGE_CHANNEL_ID = "chat_messages_ptt"` 신규 채널 + `R.raw.ptt_start` setSound). call_manager 단독. **다음 세션 Step 6 = driver_app + pickup_driver_app 이식** (handoff 문서 §"Step 6 이식 가이드" 정독 필수)
 - ✅ 2026-04-28 후반 사무실 단톡방 V1 Step 5 — `b190a2bc` commit 후 4가지 추가 증상 (peek 영역 침범 / multi-line auto-grow / 전송 시 새 메시지 안 보임 / swipe down sheet 안 닫힘) → 7번 fix 시도 모두 실패 → **이전 commit `b190a2bc` 상태로 복원** (사용자 명시: "이전 커밋으로 되돌리는 게 불필요한 수정 제거 가능"). 측정 확인: layout 정상 stack(LazyColumn 끝<ChatInputBar 시작), sheet drag 0회 위임(NestedScrollConnection 잘못 사용 의심). 미해결 4종 + 다음 세션 정밀 진단 권장: M3 BottomSheetScaffold nested scroll 정합 패턴 reference 더 fetch + 측정 강화 후 단일 fix 검증 사이클. 상세 인계: `memory/designated_drive/chat_v1_handoff_2026-04-28.md` "2026-04-28 후반 세션 결과" 섹션.
 - ✅ 2026-04-28 commit `b190a2bc` (manager-direct-drive) — 사무실 단톡방 V1 Step 5 chat sheet 재작성 + 8 fix (Room 스키마 / adjustResize / Dao DESC / backfill 스크립트 / ChatScreen Jetchat 패턴 / MainActivity DashboardWithChatSheet / DriverStatusCard alignment Bottom / DashboardScreen Scaffold contentWindowInsets=WindowInsets(0))
@@ -55,7 +57,7 @@
 - iOS App Store 무경험, Android 숙련 (`memory/user_profile/user_ios_experience.md`)
 - Apple Team ID `VCJD377MAU` / Bundle `com.designated.driverapp.app` (`memory/user_profile/apple_ios_ids.md`)
 
-## 주요 피드백 (사고 모드, 10개)
+## 주요 피드백 (사고 모드, 11개)
 | 피드백 | 핵심 |
 |--------|------|
 | user_intent_first | 사용자 명시 의도를 추측 우회로 대체 금지 |
@@ -68,6 +70,7 @@
 | listener_vs_fcm | 신규 기능 설계 시 리스너 vs FCM+로컬 트리거 자동 비교, 기본값 FCM |
 | no_guess_gui_fix | GUI/레이아웃 버그 fix 시 추측 반복 금지 — 측정+공식 reference 후 진행 |
 | user_command_overrides_system_rule | 사용자 stop/멈춤 신호는 system rule(plan mode 도구 강제 등)보다 절대 우선 |
+| app_naming | "기사앱"=driver_app(대리), "픽업앱"=pickup_driver_app. 발화 모호 시 AskUserQuestion (`memory/feedback/feedback_app_naming.md`) |
 
 ## 자주 쓰는 단축 정보
 
@@ -89,6 +92,11 @@
 - `CANCELLED_BY_DRIVER` = 기사 취소
 - `CANCELLED_BY_CUSTOMER` = 고객 취소
 - `HOLD` = 재배차 대기 (CF 코드 잔류, 미생성)
+
+### Chat member 등록 (2026-04-29 확인)
+- **자동 등록 완비**: `registerOwner` CF (매니저) + `onChatSyncDesignatedDriver` / `onChatSyncPickupDriver` 트리거 (기사 승인) — chat CF 6개 배포(2026-04-28 후반) 이후 신규 가입자는 100% 자동
+- **수동 backfill 1회 필요한 케이스**: 트리거 deploy(2026-04-28) 이전부터 운영 중이던 기존 사무실 (마이그레이션). 명령: `node functions/scripts/backfill-chat-members.js <provinceId> <cityId> <officeId> --execute` (PATCH set-merge, 멱등)
+- 헬퍼 단일 진입점: `functions/src/handlers/chat.ts:34` `addChatMember()`
 
 ### 팀 운영
 - "팀 해체해" 명시까지 유지
