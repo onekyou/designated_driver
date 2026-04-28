@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
@@ -315,7 +316,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             }
         )
 
-        val notification = NotificationCompat.Builder(this, "chat_messages_ptt")
+        val notification = NotificationCompat.Builder(this, DriverApplication.CHANNEL_CHAT_MESSAGES)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(text)
@@ -334,18 +335,17 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
     /**
      * 포그라운드 시 chat 메시지 도착 효과음 재생.
-     * 시스템 알림은 포그라운드 skip이라 channel setSound가 트리거 X — 직접 재생.
-     * chat 분기 안에서만 호출 (다른 알림 영향 0).
+     * 시스템 default 알림음 사용 — 사용자가 시스템 알림 채널 설정에서 사운드/음량 직접 컨트롤.
      */
     private fun playChatSound() {
         try {
-            val uri = android.net.Uri.parse(
-                "android.resource://$packageName/${R.raw.ptt_start}"
-            )
-            val ringtone = RingtoneManager.getRingtone(this, uri)
-            ringtone?.play()
+            val defaultUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            MediaPlayer.create(this, defaultUri)?.apply {
+                setOnCompletionListener { it.release() }
+                start()
+            }
         } catch (e: Exception) {
-            Log.w(TAG, "[playChatSound] ptt_start 재생 실패", e)
+            Log.w(TAG, "[playChatSound] default notification 재생 실패", e)
         }
     }
 

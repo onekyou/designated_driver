@@ -4,7 +4,7 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.media.AudioAttributes
-import android.net.Uri
+import android.media.RingtoneManager
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -21,7 +21,7 @@ class DriverApplication : Application() {
     private val TAG = "DriverApplication"
 
     companion object {
-        const val CHANNEL_CHAT_MESSAGES = "chat_messages_ptt"
+        const val CHANNEL_CHAT_MESSAGES = "chat_messages_v2"
 
         /**
          * 앱이 포그라운드 상태인지 여부
@@ -79,7 +79,7 @@ class DriverApplication : Application() {
             lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
             setBypassDnd(false)
             setSound(
-                Uri.parse("android.resource://$packageName/${R.raw.ptt_start}"),
+                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
                 AudioAttributes.Builder()
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .setUsage(AudioAttributes.USAGE_NOTIFICATION)
