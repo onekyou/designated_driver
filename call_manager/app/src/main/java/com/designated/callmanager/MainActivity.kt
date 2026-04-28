@@ -1325,9 +1325,15 @@ private fun DashboardWithChatSheet(
     val sheetTargetValue = scaffoldState.bottomSheetState.targetValue
     val isExpanded = sheetTargetValue == SheetValue.Expanded
     val keyboardController = LocalSoftwareKeyboardController.current
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
     LaunchedEffect(sheetTargetValue) {
         if (sheetTargetValue == SheetValue.PartiallyExpanded || sheetTargetValue == SheetValue.Hidden) {
             keyboardController?.hide()
+        }
+    }
+    androidx.activity.compose.BackHandler(enabled = isExpanded) {
+        coroutineScope.launch {
+            scaffoldState.bottomSheetState.partialExpand()
         }
     }
     val density = LocalDensity.current
