@@ -11,6 +11,7 @@ import androidx.navigation.navArgument
 import com.designated.driverapp.ui.login.LoginScreen
 import com.designated.driverapp.ui.login.ForgotPasswordScreen
 import com.designated.driverapp.ui.home.HomeScreen
+import com.designated.driverapp.ui.chat.HomeScreenWithChatSheet
 import com.designated.driverapp.ui.login.SignUpScreen
 import com.designated.driverapp.viewmodel.DriverViewModel
 import com.designated.driverapp.ui.home.HistorySettlementScreen
@@ -83,7 +84,7 @@ fun AppNavigation(
             )
         }
         composable(AppDestinations.HOME_ROUTE) {
-            HomeScreen(navController, driverViewModel)
+            HomeScreenWithChatSheet(navController, driverViewModel)
         }
         composable(AppDestinations.FORGOT_PASSWORD_ROUTE) {
             ForgotPasswordScreen(
