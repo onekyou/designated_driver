@@ -1,5 +1,6 @@
 package com.designated.pickupdriver.ui.dashboard
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,7 +21,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel(),
@@ -34,6 +35,7 @@ fun DashboardScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets.systemBars.union(WindowInsets.ime),
         topBar = {
             TopAppBar(
                 title = { Text("진행 중 ${calls.size}건") },
@@ -48,15 +50,20 @@ fun DashboardScreen(
             )
         }
     ) { paddingValues ->
+        val isImeVisible = WindowInsets.isImeVisible
+        val callWeight by animateFloatAsState(
+            targetValue = if (isImeVisible) 0.001f else 1f,
+            label = "callWeight",
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-                .imePadding(),
+                .padding(paddingValues),
         ) {
             Box(
                 modifier = Modifier
-                    .weight(1f)
+                    .weight(callWeight)
                     .fillMaxWidth(),
                 contentAlignment = if (calls.isEmpty()) Alignment.Center else Alignment.TopStart,
             ) {
@@ -81,7 +88,7 @@ fun DashboardScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(8.dp),
+                    .padding(start = 8.dp, end = 8.dp, top = 8.dp),
             )
         }
     }

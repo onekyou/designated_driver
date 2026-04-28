@@ -239,7 +239,7 @@ private fun ChatInputBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .padding(horizontal = 8.dp)
             .onSizeChanged { size ->
                 Log.d("ChatInputBar", "Row size: ${size.width}x${size.height} (text length=${value.length}, lines=${value.count { it == '\n' } + 1})")
             }
