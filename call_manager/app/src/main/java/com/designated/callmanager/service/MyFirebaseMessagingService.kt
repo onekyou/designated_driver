@@ -672,7 +672,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
         if (isAppInForeground()) {
-            Log.d(TAG, "[handleChatMessage] 포그라운드 - 알림 스킵 (UI가 처리)")
+            Log.d(TAG, "[handleChatMessage] 포그라운드 - 알림 스킵 (UI가 처리). sound만 재생")
+            playChatSound()
             return
         }
 
@@ -714,6 +715,23 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(messageId.hashCode(), notification)
         Log.d(TAG, "[handleChatMessage] 알림 표시 완료")
+    }
+
+    /**
+     * 포그라운드 시 chat 메시지 도착 효과음 재생.
+     * 시스템 알림은 포그라운드 skip이라 channel setSound가 트리거 X — 직접 재생.
+     * chat 분기 안에서만 호출 (다른 알림 영향 0).
+     */
+    private fun playChatSound() {
+        try {
+            val uri = android.net.Uri.parse(
+                "android.resource://$packageName/${R.raw.ptt_start}"
+            )
+            val ringtone = android.media.RingtoneManager.getRingtone(this, uri)
+            ringtone?.play()
+        } catch (e: Exception) {
+            Log.w(TAG, "[playChatSound] ptt_start 재생 실패", e)
+        }
     }
 
     private fun handleNewCall(remoteMessage: RemoteMessage, callId: String) {
