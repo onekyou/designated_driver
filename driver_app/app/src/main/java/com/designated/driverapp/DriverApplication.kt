@@ -1,7 +1,13 @@
 package com.designated.driverapp
 
 import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.media.AudioAttributes
+import android.net.Uri
+import android.os.Build
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -15,6 +21,8 @@ class DriverApplication : Application() {
     private val TAG = "DriverApplication"
 
     companion object {
+        const val CHANNEL_CHAT_MESSAGES = "chat_messages_ptt"
+
         /**
          * 앱이 포그라운드 상태인지 여부
          * ProcessLifecycleOwner에 의해 정확하게 관리됨
@@ -30,6 +38,9 @@ class DriverApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+
+        // 사무실 단톡방 알림 채널 (call_manager와 동일 ID — 패키지 단위 분리)
+        registerChatNotificationChannel()
 
         // 앱 라이프사이클 관찰자 등록 (포그라운드/백그라운드 감지)
         ProcessLifecycleOwner.get().lifecycle.addObserver(AppLifecycleObserver())
@@ -49,6 +60,34 @@ class DriverApplication : Application() {
                 PresenceManager.onLogout()
             }
         }
+    }
+
+    private fun registerChatNotificationChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val nm = getSystemService(NotificationManager::class.java) ?: return
+        if (nm.getNotificationChannel(CHANNEL_CHAT_MESSAGES) != null) return
+
+        val channel = NotificationChannel(
+            CHANNEL_CHAT_MESSAGES,
+            "단톡방 메시지",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "사무실 단톡방 메시지 알림"
+            enableVibration(true)
+            vibrationPattern = longArrayOf(0, 250)
+            setShowBadge(true)
+            lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+            setBypassDnd(false)
+            setSound(
+                Uri.parse("android.resource://$packageName/${R.raw.ptt_start}"),
+                AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .build()
+            )
+        }
+        nm.createNotificationChannel(channel)
+        Log.d(TAG, "[$CHANNEL_CHAT_MESSAGES] 알림 채널 등록 완료")
     }
 
     /**
