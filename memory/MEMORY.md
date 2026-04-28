@@ -31,17 +31,17 @@
 | 배달 (T2) | `memory/delivery/README.md` | placeholder |
 | 쿠폰 (T2) | `memory/coupon/README.md` | placeholder |
 | 최종 손님앱 (T최종) | `memory/customer_super_app/README.md` | placeholder |
-| 사고 모드 (피드백 8개) | `memory/feedback/README.md` | 도메인 공통 |
+| 사고 모드 (피드백 9개) | `memory/feedback/README.md` | 도메인 공통 |
 | 사용자 프로필 | `memory/user_profile/README.md` | 도메인 공통 |
 
 ## 최근 달성 (5개)
-- ✅ 2026-04-28 사무실 단톡방 채팅 V1 Step 5 UI 완료 (call_manager) — 5 commit 추가 (`ad6f11a7`/`3651f97d`/`215d937d`/`d01e5b63`/`6ef6770b`). FCM 분기 + chat_messages 채널, ChatViewModel/ChatScreen, 5분 그룹화+sendStatus+시간, BottomSheetScaffold(peek 56dp+Expanded), 로그아웃 토큰 삭제. V1.5 deferred: 50% 중간 anchor + 부풀음 진동. **다음 트리거: 디바이스 검증 (S21+ 단독, backfillChatMembers 호출 후 시나리오) → Step 6 driver_app 진입 (handoff §"다음 작업 — Step 6" 참조). driver_app Compose BOM 2023.10.01 호환성 확인 필수**
+- ✅ 2026-04-28 픽업앱 대시보드 fix — WAITING 30분 클라이언트 컷 + ADDED/MODIFIED status 변경 시 시스템 알림 (앱 켜진 상태 한정). 3파일 변경 (DashboardViewModel/MainActivity/PickupDriverApplication). 인프라 이미 존재 (POST_NOTIFICATIONS 매니페스트, HiltAndroidApp). 빌드 성공 + Z Flip4(R3CT80K78NP) + S21+(R3CR312MB1L) 설치 완료. **미커밋, 검증 대기**. 활성 4종(ASSIGNED/ACCEPTED/IN_PROGRESS/AWAITING_SETTLEMENT) 시간 제약 X = 사용자 명시 의도. 사무실 전체 콜 표시 = 의도된 설계 (Phase 2 §B3 "내 담당" 별도). 한계: listener 구독 중 timestamp 고정 → 화면 켠 채 30분 자동 제거 X. 앱 백그라운드 알림 X (Phase 2 FCM 영역). 상세: `memory/designated_drive/pickup_driver_app/dashboard_waiting_cutoff_2026-04-28.md`. Plan: `C:\Users\kala1\.claude\plans\velvety-kindling-bumblebee.md`. **검증 시나리오 5종(A~E) 통과 시 commit `feat(pickup): WAITING 30m cutoff + status change notifications`**
+- ✅ 2026-04-28 사무실 단톡방 V1 Step 5 — chat sheet UI 재작성 + 외곽 inset 중복 fix 완료 (미커밋, 검증 대기). **fix 8종**: (1) Room 스키마 (LocalChatMessage), (2) AndroidManifest adjustResize, (3) ChatMessageDao ASC→DESC, (4) backfill-chat-members.js 신규+1회 실행, (5) ChatScreen.kt 재작성 (Jetchat 패턴 + 책갈피+카드 디자인), (6) MainActivity DashboardWithChatSheet (scaffoldState + 키보드 close + sheet config), (7) DashboardScreen DriverStatusCard 안 Row alignment Bottom, (8) **DashboardScreen Scaffold contentWindowInsets=WindowInsets(0)** — 사용자가 직접 지적한 "세 카드를 감싸는 큰 카드 여백" 진짜 원인 (BottomSheetScaffold sheet + Scaffold systemBars의 nav inset 144px 중복). **결정**: RTDB 전환 X (Firestore 유지). **미해결**: 검증 미완료 + Firestore rules deploy 거부 사유 (PERMISSION_DENIED on loadInitialMessages). **이번 세션 학습**: git checkout 금지(unstaged 손실), GUI 디버깅 추측 금지, 외곽 wrapper inset 중복 의심 (`memory/feedback/feedback_no_guess_gui_fix.md`). **다음 세션 첫 작업: plan 파일 `C:\Users\kala1\.claude\plans\parsed-stirring-avalanche.md` 정독 → S21+ 검증 → 통과 시 단일 commit → PERMISSION_DENIED 처리 → Step 6 driver_app**
 - ✅ 2026-04-27 식당업소앱 변환 PLAN 1쪽 + R1~R5 결정 확정 (`memory/restaurant/owner_app_pivot_plan_2026-04-27.md`). **다음 트리거: 첫 식당 미팅 약속 → 백업 + Flutter MVP 진입**
 - ✅ 2026-04-27 클코 에이전시화 결정 + 본 에이전시 헌장 v1.0 작성. Cowork→보조 도구 재정의 (`memory/operating_model/clcode_agency_charter.md`)
 - ✅ 2026-04-27 손님앱(Kotlin+Flutter) → 식당업소앱 변환 결정 (`memory/restaurant/owner_app_pivot_2026-04-27.md`)
 - ✅ 2026-04-27 마스터 정리(v1.1 R1~R8) + 메모리 OS 레이어 재구조화
 - ✅ 2026-04-26 픽업앱 MVP + 배차 STT 메모 (commits `f9d0f0d0`/`58428830`)
-- ✅ 2026-04-23 정산 carryOver 중복 합산 fix (commit `607c6bb7`)
 
 ## 보류 트랙 (대리 도메인 안, 양평 자기추진 입증 후 복귀)
 - 손님앱 코드(Kotlin+Flutter) → 식당업소앱 변환됨 (2026-04-27): 백업본 기점으로 부활. `memory/designated_drive/customer_app/customer_app_to_owner_app_2026-04-27.md`
@@ -53,7 +53,7 @@
 - iOS App Store 무경험, Android 숙련 (`memory/user_profile/user_ios_experience.md`)
 - Apple Team ID `VCJD377MAU` / Bundle `com.designated.driverapp.app` (`memory/user_profile/apple_ios_ids.md`)
 
-## 주요 피드백 (사고 모드, 8개)
+## 주요 피드백 (사고 모드, 9개)
 | 피드백 | 핵심 |
 |--------|------|
 | user_intent_first | 사용자 명시 의도를 추측 우회로 대체 금지 |
@@ -64,6 +64,7 @@
 | purpose_based_adaptation | 다른 앱 패턴은 목적 기반 취사선택 |
 | simplest_fix | 최소 수정 우선 |
 | listener_vs_fcm | 신규 기능 설계 시 리스너 vs FCM+로컬 트리거 자동 비교, 기본값 FCM |
+| no_guess_gui_fix | GUI/레이아웃 버그 fix 시 추측 반복 금지 — 측정+공식 reference 후 진행 |
 
 ## 자주 쓰는 단축 정보
 
