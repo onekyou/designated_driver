@@ -92,6 +92,10 @@ interface ChatMessageDoc {
   senderName?: string;
   senderRole?: string;
   text?: string;
+  imageUrl?: string;
+  imagePath?: string;
+  imageWidth?: number;
+  imageHeight?: number;
   createdAt?: Timestamp;
   clientCreatedAt?: number;
   status?: string;
@@ -116,15 +120,19 @@ export const onChatMessageCreated = onDocumentCreated(
     }
 
     const msg = event.data.data() as ChatMessageDoc;
-    if (!msg.senderId || !msg.text) {
-      logger.warn(`[onChatMessageCreated:${messageId}] senderId 또는 text 누락`);
+    if (!msg.senderId || (!msg.text && !msg.imageUrl)) {
+      logger.warn(`[onChatMessageCreated:${messageId}] senderId 누락 또는 text/imageUrl 둘 다 누락`);
       return;
     }
 
     const senderId = msg.senderId;
     const senderName = msg.senderName ?? "알 수 없음";
     const senderRole = msg.senderRole ?? "MANAGER";
-    const text = msg.text;
+    const text = msg.text ?? "";
+    const imageUrl = msg.imageUrl ?? "";
+    const imagePath = msg.imagePath ?? "";
+    const imageWidth = msg.imageWidth;
+    const imageHeight = msg.imageHeight;
     const createdAtMs = msg.createdAt?.toMillis?.() ?? Date.now();
     const clientCreatedAt = msg.clientCreatedAt ?? createdAtMs;
 
@@ -175,9 +183,11 @@ export const onChatMessageCreated = onDocumentCreated(
         return;
       }
 
-      // 알림 미리보기: 본문 100자 cap
+      // 알림 미리보기: 이미지면 [사진], 텍스트는 본문 100자 cap
       const titleText = senderName;
-      const bodyText = text.length > 100 ? text.substring(0, 100) + "…" : text;
+      const bodyText = imageUrl
+        ? "[사진]"
+        : (text.length > 100 ? text.substring(0, 100) + "…" : text);
 
       const multicast = buildMulticastFcmPayload(
         {
@@ -188,6 +198,10 @@ export const onChatMessageCreated = onDocumentCreated(
             senderName,
             senderRole,
             text,
+            imageUrl,
+            imagePath,
+            imageWidth: imageWidth?.toString() ?? "",
+            imageHeight: imageHeight?.toString() ?? "",
             createdAt: String(createdAtMs),
             clientCreatedAt: String(clientCreatedAt),
             provinceId,
@@ -359,13 +373,15 @@ export const onChatSyncAdminRemoval = onDocumentWritten(
 );
 
 // ============================================================
-//  스케줄: 90일 PII cleanup
+//  스케줄: 7일 PII cleanup (Local-first 철학 — Room이 단일 진실, Firestore는 신규 사용자/FCM 누락 복구용)
 // ============================================================
 
 /**
- * 채팅 메시지 90일 자동 삭제 — 매일 04:00 KST 실행.
+ * 채팅 메시지 7일 자동 삭제 — 매일 04:00 KST 실행.
  *  collectionGroup("messages") + path 필터로 chatRoom 메시지만 삭제.
  *  500건 batch로 일괄 처리.
+ *  imagePath 있는 메시지는 Firestore delete 후 Storage 파일도 함께 삭제 (best-effort).
+ *  실패해도 UI 영향 X — orphan storage만 남음 (Phase 2에서 weekly orphan-scan 검토).
  */
 export const scheduledChatMessageCleanup = onSchedule(
   {
@@ -374,11 +390,13 @@ export const scheduledChatMessageCleanup = onSchedule(
     region: REGION,
   },
   async () => {
-    const cutoffMs = Date.now() - 90 * 24 * 60 * 60 * 1000;
+    const cutoffMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const cutoff = Timestamp.fromMillis(cutoffMs);
     logger.info(`[scheduledChatMessageCleanup] 시작. cutoff=${new Date(cutoffMs).toISOString()}`);
 
     let totalDeleted = 0;
+    let totalStorageDeleted = 0;
+    let totalStorageFailed = 0;
     const BATCH_SIZE = 500;
 
     try {
@@ -402,19 +420,43 @@ export const scheduledChatMessageCleanup = onSchedule(
         const chatMessages = snapshot.docs.filter(d => d.ref.path.includes("/chatRoom/main/messages/"));
 
         if (chatMessages.length > 0) {
+          // 1. imagePath 추출 (Storage delete 위해)
+          const imagePaths: string[] = chatMessages
+            .map(d => (d.data() as ChatMessageDoc).imagePath)
+            .filter((p): p is string => typeof p === "string" && p.length > 0);
+
+          // 2. Firestore delete 먼저 (이게 진짜 cleanup, Storage 실패해도 UI 영향 X)
           const batch = admin.firestore().batch();
           chatMessages.forEach(d => batch.delete(d.ref));
           await batch.commit();
           totalDeleted += chatMessages.length;
+
+          // 3. Storage delete (best-effort, 실패는 logging만)
+          if (imagePaths.length > 0) {
+            const bucket = admin.storage().bucket();
+            const results = await Promise.allSettled(
+              imagePaths.map(path => bucket.file(path).delete()),
+            );
+            results.forEach((r, idx) => {
+              if (r.status === "fulfilled") {
+                totalStorageDeleted++;
+              } else {
+                totalStorageFailed++;
+                logger.warn(`[scheduledChatMessageCleanup] storage delete 실패: ${imagePaths[idx]}`, r.reason);
+              }
+            });
+          }
         }
 
         cursor = snapshot.docs[snapshot.docs.length - 1];
         if (snapshot.size < BATCH_SIZE) break;
       }
 
-      logger.info(`[scheduledChatMessageCleanup] 완료. 삭제 ${totalDeleted}건`);
+      logger.info(
+        `[scheduledChatMessageCleanup] 완료. firestore=${totalDeleted}건, storage=${totalStorageDeleted}건 (실패 ${totalStorageFailed})`,
+      );
     } catch (e) {
-      logger.error(`[scheduledChatMessageCleanup] 실패. 삭제 진행 ${totalDeleted}건`, e);
+      logger.error(`[scheduledChatMessageCleanup] 실패. firestore 진행 ${totalDeleted}건`, e);
     }
   },
 );
