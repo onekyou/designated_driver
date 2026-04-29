@@ -359,12 +359,20 @@ service cloud.firestore {
 
         match /messages/{messageId} {
           allow read: if isChatMember();
-          // 본인 senderId 메시지만 생성. 텍스트 1~2000자.
+          // 본인 senderId 메시지만 생성. text(1~2000자) 또는 image(URL+path) 둘 중 하나 필수.
           allow create: if isChatMember()
                         && request.resource.data.senderId == request.auth.uid
-                        && request.resource.data.text is string
-                        && request.resource.data.text.size() >= 1
-                        && request.resource.data.text.size() <= 2000;
+                        && (
+                             (request.resource.data.text is string
+                               && request.resource.data.text.size() >= 1
+                               && request.resource.data.text.size() <= 2000)
+                             || (request.resource.data.imageUrl is string
+                                 && request.resource.data.imageUrl.size() >= 1
+                                 && request.resource.data.imageUrl.size() <= 1000
+                                 && request.resource.data.imagePath is string
+                                 && request.resource.data.imagePath.size() >= 1
+                                 && request.resource.data.imagePath.size() <= 500)
+                           );
           // V1: 메시지 수정/삭제 금지 (V2 검토)
           allow update, delete: if false;
         }

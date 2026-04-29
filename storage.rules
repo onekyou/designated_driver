@@ -30,5 +30,20 @@ service firebase.storage {
         && request.resource.size < 200 * 1024 * 1024
         && fileName.matches('.*\\.apk');
     }
+
+    // --- Chat 이미지 (사무실 단톡방) ---
+    //  • 멤버 화이트리스트 — chatRoom/main/members/{authUid} 존재 검증 (cross-service)
+    //  • 업로드: 멤버 + 2MB 이내 + image/* contentType
+    //  • update/delete 금지 (Cloud Functions cleanup만 처리)
+    //  • 압축 후 ~50~100KB 예상, 2MB는 여유 한도
+    match /provinces/{provinceId}/cities/{cityId}/offices/{officeId}/chat_images/{fileName} {
+      allow read: if isAuthenticated()
+        && firestore.exists(/databases/(default)/documents/provinces/$(provinceId)/cities/$(cityId)/offices/$(officeId)/chatRoom/main/members/$(request.auth.uid));
+      allow create: if isAuthenticated()
+        && firestore.exists(/databases/(default)/documents/provinces/$(provinceId)/cities/$(cityId)/offices/$(officeId)/chatRoom/main/members/$(request.auth.uid))
+        && request.resource.size < 2 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow update, delete: if false;
+    }
   }
 }
