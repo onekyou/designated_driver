@@ -57,6 +57,10 @@ fun WaitingScreen(
                         "현재 ${driverStatus.getDisplayName()} 상태입니다.",
                         style = MaterialTheme.typography.headlineSmall
                     )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(onClick = onCheckPendingDispatch) {
+                        Text("배차 확인")
+                    }
                 }
             }
         }

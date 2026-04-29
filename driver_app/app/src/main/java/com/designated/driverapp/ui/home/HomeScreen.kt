@@ -60,6 +60,8 @@ private const val TAG = "HomeScreen"
 fun HomeScreen(
     navController: NavController,
     viewModel: DriverViewModel,
+    isSheetExpanded: Boolean = false,
+    onCloseSheet: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -257,6 +259,10 @@ fun HomeScreen(
         ) {
             // 뒤로가기 버튼 처리
             when {
+                // chat sheet expanded: sheet 닫기 우선 (운행 중에도 chat 열고 닫을 수 있어야 함)
+                isSheetExpanded -> {
+                    BackHandler(enabled = true) { onCloseSheet() }
+                }
                 // 정산 대기 중: 뒤로가기 차단 (정산 완료 필수)
                 uiState.callForSettlement != null -> {
                     BackHandler(enabled = true) {

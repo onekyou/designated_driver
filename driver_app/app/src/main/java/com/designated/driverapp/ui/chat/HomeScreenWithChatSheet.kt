@@ -11,6 +11,7 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
@@ -20,6 +21,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import com.designated.driverapp.ui.home.HomeScreen
 import com.designated.driverapp.viewmodel.DriverViewModel
+import kotlinx.coroutines.launch
 
 /**
  * HomeScreen 위에 사무실 단톡방 BottomSheet를 동거시키는 래퍼.
@@ -38,6 +40,10 @@ fun HomeScreenWithChatSheet(
     val sheetTargetValue = scaffoldState.bottomSheetState.targetValue
     val isExpanded = sheetTargetValue == SheetValue.Expanded
     val keyboardController = LocalSoftwareKeyboardController.current
+    val coroutineScope = rememberCoroutineScope()
+    val closeSheet: () -> Unit = {
+        coroutineScope.launch { scaffoldState.bottomSheetState.partialExpand() }
+    }
     LaunchedEffect(sheetTargetValue) {
         if (sheetTargetValue == SheetValue.PartiallyExpanded || sheetTargetValue == SheetValue.Hidden) {
             keyboardController?.hide()
@@ -60,7 +66,12 @@ fun HomeScreenWithChatSheet(
                 .padding(paddingValues)
                 .fillMaxSize()
         ) {
-            HomeScreen(navController, driverViewModel)
+            HomeScreen(
+                navController = navController,
+                viewModel = driverViewModel,
+                isSheetExpanded = isExpanded,
+                onCloseSheet = closeSheet,
+            )
         }
     }
 }
