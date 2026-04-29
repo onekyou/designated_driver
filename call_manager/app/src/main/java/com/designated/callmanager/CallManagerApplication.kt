@@ -78,10 +78,10 @@ class CallManagerApplication : Application() {
     }
 
     /**
-     * ChatRepository 인스턴스 (사무실 단톡방 V1)
+     * ChatRepository 인스턴스 (사무실 단톡방 V1 + 이미지 V1.1)
      */
     val chatRepository: ChatRepository by lazy {
-        ChatRepository(database, firestore, applicationScope)
+        ChatRepository(applicationContext, database, firestore, applicationScope)
     }
 
     override fun onCreate() {

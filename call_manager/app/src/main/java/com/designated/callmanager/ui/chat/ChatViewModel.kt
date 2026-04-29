@@ -2,6 +2,7 @@ package com.designated.callmanager.ui.chat
 
 import android.app.Application
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -70,8 +71,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (isReady) {
             viewModelScope.launch {
                 fetchSenderName()
+                // Local-first: Room이 비어있을 때만 1회 fetch (앱 시작마다 50 read 방지)
                 runCatching {
-                    chatRepository.loadInitialMessages(provinceId, cityId, officeId)
+                    if (chatRepository.isEmptyInOffice(provinceId, cityId, officeId)) {
+                        chatRepository.loadInitialMessages(provinceId, cityId, officeId)
+                    }
                 }.onFailure { e ->
                     Log.e(TAG, "[init] loadInitialMessages 실패", e)
                 }
@@ -109,6 +113,23 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun retryMessage(message: LocalChatMessage) {
         chatRepository.retryMessage(message)
+    }
+
+    /**
+     * 이미지 메시지 전송 — 갤러리 picker 결과 Uri를 그대로 Repository에 위임.
+     * Repository가 EXIF + 압축 + Storage 업로드 + Firestore set + markImageSent 처리.
+     */
+    fun sendImageMessage(uri: Uri) {
+        if (!isReady) {
+            Log.w(TAG, "[sendImageMessage] 필수 정보 부족 - 전송 스킵")
+            return
+        }
+        val name = _senderName.value
+        if (name.isNullOrBlank()) {
+            Log.w(TAG, "[sendImageMessage] senderName 미로드 - 전송 스킵")
+            return
+        }
+        chatRepository.sendImageMessage(provinceId, cityId, officeId, senderId, name, senderRole, uri)
     }
 
     companion object {

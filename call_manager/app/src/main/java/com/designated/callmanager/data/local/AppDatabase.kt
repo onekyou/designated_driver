@@ -19,7 +19,7 @@ import android.content.Context
         LocalDriverInfo::class,
         LocalChatMessage::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -46,7 +46,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     DATABASE_NAME
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .fallbackToDestructiveMigration() // 개발 단계에서는 데이터 손실 허용
                 .build()
                 INSTANCE = instance
@@ -150,6 +150,19 @@ abstract class AppDatabase : RoomDatabase() {
                     ON chat_messages (provinceId, cityId, officeId, createdAt)
                     """.trimIndent()
                 )
+            }
+        }
+
+        /**
+         * v6 → v7 마이그레이션: chat_messages에 이미지 메시지 4 컬럼 추가
+         * SQLite는 1 ALTER 당 1 컬럼만 지원 → execSQL 4번 분리
+         */
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE chat_messages ADD COLUMN imageUrl TEXT")
+                database.execSQL("ALTER TABLE chat_messages ADD COLUMN imagePath TEXT")
+                database.execSQL("ALTER TABLE chat_messages ADD COLUMN imageWidth INTEGER")
+                database.execSQL("ALTER TABLE chat_messages ADD COLUMN imageHeight INTEGER")
             }
         }
 

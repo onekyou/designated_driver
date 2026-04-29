@@ -33,16 +33,23 @@ data class LocalChatMessage(
     val senderName: String,            // 발신자 표시 이름 (비정규화)
     val senderRole: String,            // MANAGER / DESIGNATED_DRIVER / PICKUP_DRIVER
 
-    val text: String,                  // 메시지 본문 (1~2000자)
+    val text: String,                  // 메시지 본문 (1~2000자, image-only 시 빈 문자열 "")
     val createdAt: Long,               // 서버 시간 (epoch ms). FCM 시점에 알 수 있음
     val clientCreatedAt: Long,         // 클라이언트 시간 (정렬 보조)
 
     @ColumnInfo(defaultValue = "SENT")
     val sendStatus: String = SEND_STATUS_SENT,  // SENDING / SENT / FAILED (로컬 한정)
+
+    // 이미지 메시지 (V1.1) — text-only 메시지는 모두 null
+    val imageUrl: String? = null,      // Storage downloadUrl ("uploading://" sentinel은 업로드 중)
+    val imagePath: String? = null,     // Storage path (cleanup 안전성, URL 파싱 회피)
+    val imageWidth: Int? = null,       // 압축 후 width (px)
+    val imageHeight: Int? = null,      // 압축 후 height (px)
 ) {
     companion object {
         const val SEND_STATUS_SENDING = "SENDING"
         const val SEND_STATUS_SENT = "SENT"
         const val SEND_STATUS_FAILED = "FAILED"
+        const val UPLOADING_SENTINEL = "uploading://"
     }
 }

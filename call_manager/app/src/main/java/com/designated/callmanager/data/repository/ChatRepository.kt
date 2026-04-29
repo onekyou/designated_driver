@@ -1,17 +1,28 @@
 package com.designated.callmanager.data.repository
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.net.Uri
 import android.util.Log
+import androidx.exifinterface.media.ExifInterface
 import com.designated.callmanager.data.local.AppDatabase
 import com.designated.callmanager.data.local.LocalChatMessage
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import java.io.ByteArrayOutputStream
+import kotlin.math.max
 
 /**
  * 채팅 Repository (사무실 단톡방 V1)
@@ -26,11 +37,13 @@ import kotlinx.coroutines.tasks.await
  * 관련 스펙: docs/chat-shared-spec.md
  */
 class ChatRepository(
+    private val context: Context,
     private val database: AppDatabase,
     private val firestore: FirebaseFirestore,
     private val scope: CoroutineScope,
 ) {
     private val chatDao = database.chatMessageDao()
+    private val storage by lazy { FirebaseStorage.getInstance() }
 
     companion object {
         private const val TAG = "ChatRepository"
@@ -39,7 +52,20 @@ class ChatRepository(
         const val ROLE_MANAGER = "MANAGER"
         const val ROLE_DESIGNATED_DRIVER = "DESIGNATED_DRIVER"
         const val ROLE_PICKUP_DRIVER = "PICKUP_DRIVER"
+
+        // 이미지 압축 사양 — 긴 변 max 640px, JPEG 60% (~50~100KB)
+        private const val IMAGE_MAX_DIM = 640
+        private const val IMAGE_JPEG_QUALITY = 60
+        private const val IMAGE_UPLOAD_TIMEOUT_MS = 30_000L
     }
+
+    /** 이미지 업로드 결과 — Firestore에 저장할 메타데이터. */
+    data class UploadResult(
+        val url: String,
+        val path: String,
+        val width: Int,
+        val height: Int,
+    )
 
     // ===== Flow 노출 =====
 
@@ -127,8 +153,13 @@ class ChatRepository(
 
     /**
      * 실패 메시지 재시도. ViewModel은 LocalChatMessage 객체를 직접 전달.
+     * Phase 1: 이미지 메시지 retry 미지원 — 사용자가 갤러리 다시 선택해서 새 메시지 생성.
      */
     fun retryMessage(message: LocalChatMessage) {
+        if (!message.imageUrl.isNullOrEmpty()) {
+            Log.w(TAG, "[retryMessage] 이미지 메시지 retry 미지원 (Phase 1) — 갤러리 재선택 권장: ${message.id}")
+            return
+        }
         scope.launch {
             chatDao.updateSendStatus(message.id, LocalChatMessage.SEND_STATUS_SENDING)
             try {
@@ -175,12 +206,22 @@ class ChatRepository(
                 val senderId = payload["senderId"] ?: return@launch
                 val senderName = payload["senderName"] ?: "알 수 없음"
                 val senderRole = payload["senderRole"] ?: ROLE_MANAGER
-                val text = payload["text"] ?: return@launch
+                val text = payload["text"] ?: ""
+                val imageUrl = payload["imageUrl"]?.takeIf { it.isNotEmpty() }
+                val imagePath = payload["imagePath"]?.takeIf { it.isNotEmpty() }
+                val imageWidth = payload["imageWidth"]?.toIntOrNull()
+                val imageHeight = payload["imageHeight"]?.toIntOrNull()
                 val createdAt = payload["createdAt"]?.toLongOrNull() ?: System.currentTimeMillis()
                 val clientCreatedAt = payload["clientCreatedAt"]?.toLongOrNull() ?: createdAt
                 val provinceId = payload["provinceId"] ?: return@launch
                 val cityId = payload["cityId"] ?: return@launch
                 val officeId = payload["officeId"] ?: return@launch
+
+                // text 또는 imageUrl 둘 중 하나는 있어야 함
+                if (text.isBlank() && imageUrl.isNullOrEmpty()) {
+                    Log.w(TAG, "[onRemoteMessageReceived] text/imageUrl 둘 다 없음 — skip ($messageId)")
+                    return@launch
+                }
 
                 // 본인 메시지면 skip (이미 로컬에 SENDING/SENT로 있음)
                 val currentUid = FirebaseAuth.getInstance().currentUser?.uid
@@ -202,9 +243,14 @@ class ChatRepository(
                         createdAt = createdAt,
                         clientCreatedAt = clientCreatedAt,
                         sendStatus = LocalChatMessage.SEND_STATUS_SENT,
+                        imageUrl = imageUrl,
+                        imagePath = imagePath,
+                        imageWidth = imageWidth,
+                        imageHeight = imageHeight,
                     )
                 )
-                Log.d(TAG, "[onRemoteMessageReceived] INSERT: $messageId")
+                Log.d(TAG, "[onRemoteMessageReceived] INSERT: $messageId" +
+                    if (imageUrl != null) " (image)" else "")
             } catch (e: Exception) {
                 Log.e(TAG, "[onRemoteMessageReceived] 처리 실패", e)
             }
@@ -236,10 +282,17 @@ class ChatRepository(
                 val senderId = doc.getString("senderId") ?: return@mapNotNull null
                 val senderName = doc.getString("senderName") ?: "알 수 없음"
                 val senderRole = doc.getString("senderRole") ?: ROLE_MANAGER
-                val text = doc.getString("text") ?: return@mapNotNull null
+                val text = doc.getString("text") ?: ""
+                val imageUrl = doc.getString("imageUrl")?.takeIf { it.isNotEmpty() }
+                val imagePath = doc.getString("imagePath")?.takeIf { it.isNotEmpty() }
+                val imageWidth = doc.getLong("imageWidth")?.toInt()
+                val imageHeight = doc.getLong("imageHeight")?.toInt()
                 val createdAt = (doc.get("createdAt") as? Timestamp)?.toDate()?.time
                     ?: doc.getLong("clientCreatedAt") ?: return@mapNotNull null
                 val clientCreatedAt = doc.getLong("clientCreatedAt") ?: createdAt
+
+                // text 또는 imageUrl 둘 중 하나는 있어야 함
+                if (text.isBlank() && imageUrl.isNullOrEmpty()) return@mapNotNull null
 
                 LocalChatMessage(
                     id = doc.id,
@@ -253,6 +306,10 @@ class ChatRepository(
                     createdAt = createdAt,
                     clientCreatedAt = clientCreatedAt,
                     sendStatus = LocalChatMessage.SEND_STATUS_SENT,
+                    imageUrl = imageUrl,
+                    imagePath = imagePath,
+                    imageWidth = imageWidth,
+                    imageHeight = imageHeight,
                 )
             }
 
@@ -262,6 +319,222 @@ class ChatRepository(
             }
         } catch (e: Exception) {
             Log.e(TAG, "[loadInitialMessages] 실패", e)
+        }
+    }
+
+    // ===== Local-first 가드 =====
+
+    /**
+     * Room이 비어있는지 확인 — ChatViewModel.init에서 Room empty 시만 loadInitialMessages 호출 (비용 절감).
+     * 첫 설치/destructive migration 후에만 true → Firestore fetch 1회.
+     */
+    suspend fun isEmptyInOffice(provinceId: String, cityId: String, officeId: String): Boolean {
+        return chatDao.countInOffice(provinceId, cityId, officeId) == 0
+    }
+
+    // ===== 이미지 업로드 (V1.1) =====
+
+    /**
+     * 갤러리 Uri → 압축 → Firebase Storage 업로드 → downloadUrl/path/dimensions 반환.
+     *
+     * 처리 흐름:
+     * 1. EXIF orientation 읽기 (회전된 사진 방지 — 빠뜨리면 옆으로 누워 저장됨)
+     * 2. inSampleSize 2단계 디코드 (boundsOnly → actual, 50MB+ 사진 OOM 방지)
+     * 3. EXIF 회전 적용 (Matrix.postRotate)
+     * 4. 긴 변 max 640px 비율 유지 리사이즈 (정사각 강제 X)
+     * 5. JPEG 60% 압축 (~50~100KB)
+     * 6. Storage path: provinces/$p/cities/$c/offices/$o/chat_images/$messageId.jpg
+     * 7. putBytes + downloadUrl, 30초 타임아웃
+     *
+     * @throws IllegalStateException 이미지 디코드 실패 시
+     * @throws kotlinx.coroutines.TimeoutCancellationException 30초 초과 시 (caller가 cleanup)
+     */
+    suspend fun uploadChatImage(
+        provinceId: String,
+        cityId: String,
+        officeId: String,
+        messageId: String,
+        uri: Uri,
+    ): UploadResult = withContext(Dispatchers.IO) {
+        val resolver = context.contentResolver
+
+        // 1. EXIF orientation 읽기 (압축 전)
+        val orientation = resolver.openInputStream(uri)?.use { input ->
+            ExifInterface(input).getAttributeInt(
+                ExifInterface.TAG_ORIENTATION,
+                ExifInterface.ORIENTATION_NORMAL,
+            )
+        } ?: ExifInterface.ORIENTATION_NORMAL
+
+        // 2. boundsOnly 디코드로 원본 크기 확인 (메모리 안전)
+        val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, boundsOpts) }
+        val origW = boundsOpts.outWidth
+        val origH = boundsOpts.outHeight
+        if (origW <= 0 || origH <= 0) {
+            throw IllegalStateException("이미지 디코드 실패: $uri")
+        }
+
+        // 3. inSampleSize 계산 (큰 이미지를 메모리에 안전하게 로드)
+        val sampleSize = calculateInSampleSize(origW, origH, IMAGE_MAX_DIM * 2)
+        val actualOpts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        val decoded = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, actualOpts) }
+            ?: throw IllegalStateException("이미지 디코드 실패: $uri")
+
+        // 4. EXIF orientation 적용 (Matrix 회전)
+        val rotated = rotateBitmap(decoded, orientation)
+        if (rotated !== decoded) decoded.recycle()
+
+        // 5. 긴 변 max 640 비율 유지 리사이즈
+        val rotW = rotated.width
+        val rotH = rotated.height
+        val scale = if (max(rotW, rotH) > IMAGE_MAX_DIM) IMAGE_MAX_DIM.toFloat() / max(rotW, rotH) else 1f
+        val targetW = (rotW * scale).toInt()
+        val targetH = (rotH * scale).toInt()
+        val resized = if (scale < 1f) {
+            Bitmap.createScaledBitmap(rotated, targetW, targetH, true).also {
+                if (it !== rotated) rotated.recycle()
+            }
+        } else {
+            rotated
+        }
+
+        // 6. JPEG 60% 압축
+        val baos = ByteArrayOutputStream()
+        resized.compress(Bitmap.CompressFormat.JPEG, IMAGE_JPEG_QUALITY, baos)
+        val bytes = baos.toByteArray()
+        val finalW = resized.width
+        val finalH = resized.height
+        if (resized !== rotated) resized.recycle()
+
+        // 7. Storage 업로드 (30초 타임아웃)
+        val path = "provinces/$provinceId/cities/$cityId/offices/$officeId/chat_images/$messageId.jpg"
+        val ref = storage.reference.child(path)
+        val downloadUrl = withTimeoutOrNull(IMAGE_UPLOAD_TIMEOUT_MS) {
+            ref.putBytes(bytes).await()
+            ref.downloadUrl.await().toString()
+        } ?: throw IllegalStateException("이미지 업로드 30초 초과: $messageId")
+
+        UploadResult(
+            url = downloadUrl,
+            path = path,
+            width = finalW,
+            height = finalH,
+        )
+    }
+
+    private fun calculateInSampleSize(w: Int, h: Int, reqMaxDim: Int): Int {
+        var inSampleSize = 1
+        var halfW = w / 2
+        var halfH = h / 2
+        while (halfW / inSampleSize >= reqMaxDim || halfH / inSampleSize >= reqMaxDim) {
+            inSampleSize *= 2
+        }
+        return inSampleSize
+    }
+
+    private fun rotateBitmap(src: Bitmap, orientation: Int): Bitmap {
+        val matrix = Matrix()
+        when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
+            else -> return src
+        }
+        return Bitmap.createBitmap(src, 0, 0, src.width, src.height, matrix, true)
+    }
+
+    /**
+     * 이미지 메시지 전송. text는 빈 문자열.
+     *
+     * 흐름:
+     * 1. messageId 사전 발급
+     * 2. 로컬 INSERT (SENDING + imageUrl="uploading://" sentinel) — UI 즉시 placeholder 표시
+     * 3. uploadChatImage (EXIF + 압축 + Storage 업로드, 30초 타임아웃)
+     * 4. Firestore set (text 필드 omit, imageUrl/imagePath/dimensions 포함)
+     * 5. markImageSent (로컬 update — 실제 URL/path/dimensions/서버 시간)
+     *
+     * 실패 시: Storage cleanup (best-effort) + FAILED 마킹.
+     * Phase 1: retry 없음 — 사용자가 갤러리 재선택해서 새 메시지 생성.
+     */
+    fun sendImageMessage(
+        provinceId: String,
+        cityId: String,
+        officeId: String,
+        senderId: String,
+        senderName: String,
+        senderRole: String,
+        uri: Uri,
+    ) {
+        scope.launch {
+            val messageRef = firestore
+                .collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
+                .collection("offices").document(officeId)
+                .collection("chatRoom").document("main")
+                .collection("messages").document()
+            val messageId = messageRef.id
+            val nowMs = System.currentTimeMillis()
+
+            // 1) Optimistic INSERT — uploading sentinel UI 즉시 표시
+            val placeholder = LocalChatMessage(
+                id = messageId,
+                provinceId = provinceId,
+                cityId = cityId,
+                officeId = officeId,
+                senderId = senderId,
+                senderName = senderName,
+                senderRole = senderRole,
+                text = "",
+                createdAt = nowMs,
+                clientCreatedAt = nowMs,
+                sendStatus = LocalChatMessage.SEND_STATUS_SENDING,
+                imageUrl = LocalChatMessage.UPLOADING_SENTINEL,
+            )
+            chatDao.insert(placeholder)
+
+            // 2) 업로드 + Firestore set
+            try {
+                val uploaded = uploadChatImage(provinceId, cityId, officeId, messageId, uri)
+
+                val firestoreData = mapOf(
+                    "id" to messageId,
+                    "senderId" to senderId,
+                    "senderName" to senderName,
+                    "senderRole" to senderRole,
+                    "imageUrl" to uploaded.url,
+                    "imagePath" to uploaded.path,
+                    "imageWidth" to uploaded.width,
+                    "imageHeight" to uploaded.height,
+                    "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                    "clientCreatedAt" to nowMs,
+                    "status" to "SENT",
+                    // text 필드 omit — image-only 메시지
+                )
+                messageRef.set(firestoreData).await()
+
+                val serverDoc = messageRef.get().await()
+                val serverCreatedAt = serverDoc.getTimestamp("createdAt")?.toDate()?.time ?: nowMs
+                chatDao.markImageSent(
+                    id = messageId,
+                    imageUrl = uploaded.url,
+                    imagePath = uploaded.path,
+                    imageWidth = uploaded.width,
+                    imageHeight = uploaded.height,
+                    createdAt = serverCreatedAt,
+                )
+                Log.d(TAG, "[sendImageMessage] 발송 성공: $messageId (${uploaded.width}x${uploaded.height})")
+            } catch (e: Exception) {
+                Log.e(TAG, "[sendImageMessage] 발송 실패: $messageId", e)
+                // Storage cleanup (best-effort)
+                try {
+                    val path = "provinces/$provinceId/cities/$cityId/offices/$officeId/chat_images/$messageId.jpg"
+                    storage.reference.child(path).delete().await()
+                } catch (_: Exception) { /* 업로드 자체 실패 시 파일 없음 */ }
+                chatDao.updateSendStatus(messageId, LocalChatMessage.SEND_STATUS_FAILED)
+            }
         }
     }
 
