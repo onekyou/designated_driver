@@ -91,6 +91,11 @@ dependencies {
     implementation libs.firebase.firestore.ktx
     // FCM dependency 유지 — Phase 2 FCM 수신 진입 시 즉시 사용 가능 (MVP에선 서비스 파일 없음)
     implementation libs.firebase.messaging.ktx
+    implementation 'com.google.firebase:firebase-storage-ktx' // chat 이미지 업로드
+
+    // Image (chat V1 이미지 메시지)
+    implementation 'io.coil-kt:coil-compose:2.6.0'
+    implementation 'androidx.exifinterface:exifinterface:1.3.7'
 
     // Room (사무실 단톡방 V1)
     implementation libs.room.runtime

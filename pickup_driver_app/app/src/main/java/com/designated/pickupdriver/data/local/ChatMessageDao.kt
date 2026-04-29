@@ -65,6 +65,39 @@ interface ChatMessageDao {
     @Query("UPDATE chat_messages SET createdAt = :createdAt, sendStatus = :status WHERE id = :id")
     suspend fun markSent(id: String, createdAt: Long, status: String = LocalChatMessage.SEND_STATUS_SENT)
 
+    /**
+     * 이미지 메시지 업로드 완료 시 imageUrl/imagePath/dimensions + 서버 시간 갱신
+     */
+    @Query(
+        """
+        UPDATE chat_messages
+        SET imageUrl = :imageUrl, imagePath = :imagePath,
+            imageWidth = :imageWidth, imageHeight = :imageHeight,
+            createdAt = :createdAt, sendStatus = :status
+        WHERE id = :id
+        """
+    )
+    suspend fun markImageSent(
+        id: String,
+        imageUrl: String,
+        imagePath: String,
+        imageWidth: Int,
+        imageHeight: Int,
+        createdAt: Long,
+        status: String = LocalChatMessage.SEND_STATUS_SENT,
+    )
+
+    /**
+     * Local-first 강화: Room empty 여부 가드 (destructive migration 후 자동 복구)
+     */
+    @Query(
+        """
+        SELECT COUNT(*) FROM chat_messages
+        WHERE provinceId = :provinceId AND cityId = :cityId AND officeId = :officeId
+        """
+    )
+    suspend fun countInOffice(provinceId: String, cityId: String, officeId: String): Int
+
     @Query("DELETE FROM chat_messages WHERE id = :id")
     suspend fun delete(id: String)
 

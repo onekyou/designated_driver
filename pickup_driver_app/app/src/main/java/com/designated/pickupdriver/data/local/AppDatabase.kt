@@ -10,10 +10,11 @@ import androidx.room.RoomDatabase
  *
  * - v1: chat_messages 테이블 (사무실 단톡방 V1)
  * - v2: calls 테이블 추가 (Dashboard FCM+Room 전환)
+ * - v3: chat_messages에 imageUrl/imagePath/imageWidth/imageHeight 추가 (이미지 메시지 V1.1, destructive)
  */
 @Database(
     entities = [LocalChatMessage::class, LocalCall::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
