@@ -836,29 +836,62 @@ export const sendNewCallNotification = onDocumentCreated(
         .where("associatedOfficeId", "==", officeId)
         .get();
 
-      const tokens: string[] = [];
+      const adminTokens: string[] = [];
       adminsSnapshot.forEach((doc) => {
         const adminData = doc.data();
         if (adminData.fcmToken) {
-          tokens.push(adminData.fcmToken);
+          adminTokens.push(adminData.fcmToken);
         }
       });
 
+      // 같은 사무실의 픽업기사 FCM 토큰 조회
+      const pickupSnapshot = await admin.firestore()
+        .collection("provinces").doc(provinceId)
+        .collection("cities").doc(cityId)
+        .collection("offices").doc(officeId)
+        .collection("pickup_drivers")
+        .get();
+
+      const pickupTokens: string[] = [];
+      pickupSnapshot.forEach((doc) => {
+        const pickupData = doc.data();
+        if (pickupData.fcmToken) {
+          pickupTokens.push(pickupData.fcmToken);
+        }
+      });
+
+      const tokens: string[] = [...adminTokens, ...pickupTokens];
+
       if (tokens.length === 0) {
-        logger.warn(`[new-call:${callId}] FCM 토큰을 가진 관리자가 없습니다.`);
+        logger.warn(`[new-call:${callId}] FCM 토큰을 가진 관리자/픽업기사가 없습니다.`);
         return;
       }
 
-      logger.info(`[new-call:${callId}] ${tokens.length}명의 관리자에게 알림 전송`);
+      logger.info(`[new-call:${callId}] tokens: admin=${adminTokens.length}, pickup=${pickupTokens.length}`);
+
+      // timestamp 필드 추출 (Firestore Timestamp → ms long → String)
+      const tsMs: number = (callData.timestamp && typeof callData.timestamp.toMillis === "function")
+        ? callData.timestamp.toMillis()
+        : (callData.createdAt && typeof callData.createdAt.toMillis === "function")
+          ? callData.createdAt.toMillis()
+          : Date.now();
 
       // FCM 메시지 구성
       const message = buildMulticastFcmPayload({
         data: {
           type: "NEW_CALL",
           callId: callId,
+          status: callData.status || "WAITING",
           customerName: callData.customerName || callData.phoneNumber || "신규 고객",
           customerPhone: callData.phoneNumber || "",
+          customerAddress: callData.customerAddress || "",
           pickupLocation: callData.customerAddress || callData.departure || "위치 미확인",
+          departure: callData.departure_set || callData.departure || "",
+          destination: callData.destination_set || callData.destination || "",
+          waypoints: callData.waypoints_set || "",
+          fare: String(callData.fare_set ?? callData.fare ?? ""),
+          assignedDriverName: callData.assignedDriverName || "",
+          timestamp: String(tsMs),
           provinceId: provinceId,
           cityId: cityId,
           officeId: officeId,
@@ -873,7 +906,7 @@ export const sendNewCallNotification = onDocumentCreated(
       const response = await admin.messaging().sendEachForMulticast(message);
       logger.info(`[new-call:${callId}] FCM 알림 전송 완료. 성공: ${response.successCount}, 실패: ${response.failureCount}`);
 
-      // 실패한 토큰 정리
+      // 실패한 토큰 정리 (admin + pickup 둘 다)
       const batch = admin.firestore().batch();
       let invalidTokensFound = 0;
 
@@ -891,6 +924,13 @@ export const sendNewCallNotification = onDocumentCreated(
             adminsSnapshot.docs.forEach((doc) => {
               const adminData = doc.data();
               if (adminData.fcmToken === invalidToken) {
+                batch.update(doc.ref, {fcmToken: FieldValue.delete()});
+                invalidTokensFound++;
+              }
+            });
+            pickupSnapshot.docs.forEach((doc) => {
+              const pickupData = doc.data();
+              if (pickupData.fcmToken === invalidToken) {
                 batch.update(doc.ref, {fcmToken: FieldValue.delete()});
                 invalidTokensFound++;
               }
@@ -1891,7 +1931,7 @@ export const onCallStatusChanged = onDocumentUpdated(
     }
 
     logger.info(`[onCallStatusChanged:${callId}] Status changed: ${beforeData.status} → ${afterData.status}`);
-    // ✅ 콜매니저에 상태 변경 알림 전송
+    // ✅ 콜매니저 + 픽업기사에 상태 변경 알림 전송
     try {
       const managerTokensSnapshot = await admin.firestore()
         .collection("provinces").doc(provinceId)
@@ -1900,43 +1940,100 @@ export const onCallStatusChanged = onDocumentUpdated(
         .collection("managerTokens")
         .get();
 
-      if (!managerTokensSnapshot.empty) {
-        const managerTokens: string[] = [];
-        managerTokensSnapshot.forEach((doc) => {
-          const token = doc.data().fcmToken;
-          if (token) managerTokens.push(token);
+      const pickupSnapshot = await admin.firestore()
+        .collection("provinces").doc(provinceId)
+        .collection("cities").doc(cityId)
+        .collection("offices").doc(officeId)
+        .collection("pickup_drivers")
+        .get();
+
+      const managerTokens: string[] = [];
+      managerTokensSnapshot.forEach((doc) => {
+        const token = doc.data().fcmToken;
+        if (token) managerTokens.push(token);
+      });
+      const pickupTokens: string[] = [];
+      pickupSnapshot.forEach((doc) => {
+        const token = doc.data().fcmToken;
+        if (token) pickupTokens.push(token);
+      });
+
+      const tokens: string[] = [...managerTokens, ...pickupTokens];
+
+      if (tokens.length > 0) {
+        // timestamp 필드 추출 (Firestore Timestamp → ms long → String)
+        const tsMs: number = (afterData.timestamp && typeof afterData.timestamp.toMillis === "function")
+          ? afterData.timestamp.toMillis()
+          : (afterData.createdAt && typeof afterData.createdAt.toMillis === "function")
+            ? afterData.createdAt.toMillis()
+            : Date.now();
+
+        const payload = buildMulticastFcmPayload({
+          data: {
+            type: "CALL_STATUS_UPDATE",
+            callId: callId,
+            status: afterData.status,
+            customerName: afterData.customerName || "고객",
+            customerPhone: afterData.phoneNumber || "",
+            customerAddress: afterData.customerAddress || "",
+            assignedDriverName: afterData.assignedDriverName || "",
+            assignedDriverPhone: afterData.assignedDriverPhone || "",
+            departure: afterData.departure_set || afterData.departure || "",
+            destination: afterData.destination_set || afterData.destination || "",
+            waypoints: afterData.waypoints_set || "",
+            fare: (afterData.fare_set ?? afterData.fare ?? 0).toString(),
+            timestamp: String(tsMs),
+            provinceId: provinceId,
+            cityId: cityId,
+            officeId: officeId
+          },
+          title: "콜 상태 변경",
+          body: `${afterData.customerName || "고객"} - ${afterData.status}`,
+          level: "active",
+          ttlSeconds: 60,
+        }, tokens);
+
+        logger.info(`[onCallStatusChanged:${callId}] tokens: manager=${managerTokens.length}, pickup=${pickupTokens.length}`);
+
+        const response = await admin.messaging().sendEachForMulticast(payload);
+        logger.info(`[onCallStatusChanged:${callId}] FCM 전송 - ${afterData.status} - 성공: ${response.successCount}, 실패: ${response.failureCount}`);
+
+        // 무효 토큰 정리 (manager + pickup 둘 다)
+        const batch = admin.firestore().batch();
+        let invalidTokensFound = 0;
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            const error = resp.error;
+            if (error?.code === "messaging/registration-token-not-registered" ||
+                error?.code === "messaging/invalid-registration-token" ||
+                error?.message?.includes("Requested entity was not found")) {
+              const invalidToken = tokens[idx];
+              managerTokensSnapshot.docs.forEach((doc) => {
+                if (doc.data().fcmToken === invalidToken) {
+                  batch.update(doc.ref, {fcmToken: FieldValue.delete()});
+                  invalidTokensFound++;
+                }
+              });
+              pickupSnapshot.docs.forEach((doc) => {
+                if (doc.data().fcmToken === invalidToken) {
+                  batch.update(doc.ref, {fcmToken: FieldValue.delete()});
+                  invalidTokensFound++;
+                }
+              });
+            }
+          }
         });
-
-        if (managerTokens.length > 0) {
-          const managerPayload = buildMulticastFcmPayload({
-            data: {
-              type: "CALL_STATUS_UPDATE",
-              callId: callId,
-              status: afterData.status,
-              customerName: afterData.customerName || "고객",
-              customerPhone: afterData.phoneNumber || "",
-              assignedDriverName: afterData.assignedDriverName || "",
-              assignedDriverPhone: afterData.assignedDriverPhone || "",
-              departure: afterData.departure_set || afterData.departure || "",
-              destination: afterData.destination_set || afterData.destination || "",
-              waypoints: afterData.waypoints_set || "",
-              fare: (afterData.fare_set ?? afterData.fare ?? 0).toString(),
-              provinceId: provinceId,
-              cityId: cityId,
-              officeId: officeId
-            },
-            title: "콜 상태 변경",
-            body: `${afterData.customerName || "고객"} - ${afterData.status}`,
-            level: "active",
-            ttlSeconds: 60,
-          }, managerTokens);
-
-          const response = await admin.messaging().sendEachForMulticast(managerPayload);
-          logger.info(`[onCallStatusChanged:${callId}] 콜매니저 FCM 전송 - ${afterData.status} - 성공: ${response.successCount}`);
+        if (invalidTokensFound > 0) {
+          try {
+            await batch.commit();
+            logger.info(`[onCallStatusChanged:${callId}] ${invalidTokensFound}개 무효 토큰 정리 완료`);
+          } catch (batchError) {
+            logger.error(`[onCallStatusChanged:${callId}] 무효 토큰 정리 오류:`, batchError);
+          }
         }
       }
     } catch (managerError) {
-      logger.error(`[onCallStatusChanged:${callId}] 콜매니저 FCM 오류:`, managerError);
+      logger.error(`[onCallStatusChanged:${callId}] FCM 전송 오류:`, managerError);
     }
 
     // CUST-03: 앱 회원 고객에게 상태 변경 FCM 전송 (ACCEPTED, IN_PROGRESS)

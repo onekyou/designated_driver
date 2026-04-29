@@ -44,8 +44,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.rejectOfficeApplication = exports.registerOwner = exports.redeemDownloadToken = exports.approveOfficeApplication = exports.submitOfficeApplication = exports.onDriverSettlementSubmitted = exports.notifyDriverSettlementResult = exports.sendDriverNotification = exports.finalizeSettlementAndNotifyDrivers = exports.notifyDriverCancellation = exports.notifyDriverAssignment = exports.manualCheckSettlementDiscrepancy = exports.autoFinalizeSettlements = exports.onCallCompletedUpdateSettlement = exports.onDriverStatusChange = exports.getOfficeReport = exports.searchArchivedCalls = exports.getArchivedStats = exports.archiveOldCalls = exports.scheduledDataCleanup = exports.checkAssignedTimeout = exports.onCallDetectorCrash = exports.onCustomerCountChange = exports.onDriverCountChange = exports.onNewCustomerRegistered = exports.onCallCancelledByDriver = exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.notifyCustomerOnComplete = exports.notifyCustomerOnPhoneCall = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.notifyCustomerOnOfficeClosed = exports.onSharedCallCreated = exports.sendNewCallNotification = exports.oncallassigned = exports.handleFailedNotifications = exports.retryPendingNotifications = exports.acknowledgeNotification = exports.recoverCustomerAccount = exports.checkPhoneNumberDuplicate = exports.aggregateMonthlyStats = void 0;
-exports.homepageGate = exports.getApkDownloadUrl = void 0;
+exports.notifyDriverSettlementResult = exports.sendDriverNotification = exports.finalizeSettlementAndNotifyDrivers = exports.notifyDriverCancellation = exports.notifyDriverAssignment = exports.manualCheckSettlementDiscrepancy = exports.autoFinalizeSettlements = exports.onCallCompletedUpdateSettlement = exports.onDriverStatusChange = exports.getOfficeReport = exports.searchArchivedCalls = exports.getArchivedStats = exports.archiveOldCalls = exports.scheduledDataCleanup = exports.checkAssignedTimeout = exports.onCallDetectorCrash = exports.onCustomerCountChange = exports.onDriverCountChange = exports.onNewCustomerRegistered = exports.onCallCancelledByDriver = exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.notifyCustomerOnComplete = exports.notifyCustomerOnPhoneCall = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.notifyCustomerOnOfficeClosed = exports.onSharedCallCreated = exports.sendNewCallNotification = exports.oncallassigned = exports.handleFailedNotifications = exports.retryPendingNotifications = exports.acknowledgeNotification = exports.recoverCustomerAccount = exports.checkPhoneNumberDuplicate = exports.onChatSyncAdminRemoval = exports.onChatSyncPickupDriver = exports.onChatSyncDesignatedDriver = exports.backfillChatMembers = exports.scheduledChatMessageCleanup = exports.onChatMessageCreated = exports.aggregateMonthlyStats = void 0;
+exports.homepageGate = exports.getApkDownloadUrl = exports.rejectOfficeApplication = exports.registerOwner = exports.redeemDownloadToken = exports.approveOfficeApplication = exports.submitOfficeApplication = exports.onDriverSettlementSubmitted = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -58,6 +58,14 @@ const fcmPayload_1 = require("./utils/fcmPayload");
 const acceptanceEvents_1 = require("./analytics/acceptanceEvents");
 var aggregateMonthly_1 = require("./analytics/aggregateMonthly");
 Object.defineProperty(exports, "aggregateMonthlyStats", { enumerable: true, get: function () { return aggregateMonthly_1.aggregateMonthlyStats; } });
+var chat_1 = require("./handlers/chat");
+Object.defineProperty(exports, "onChatMessageCreated", { enumerable: true, get: function () { return chat_1.onChatMessageCreated; } });
+Object.defineProperty(exports, "scheduledChatMessageCleanup", { enumerable: true, get: function () { return chat_1.scheduledChatMessageCleanup; } });
+Object.defineProperty(exports, "backfillChatMembers", { enumerable: true, get: function () { return chat_1.backfillChatMembers; } });
+Object.defineProperty(exports, "onChatSyncDesignatedDriver", { enumerable: true, get: function () { return chat_1.onChatSyncDesignatedDriver; } });
+Object.defineProperty(exports, "onChatSyncPickupDriver", { enumerable: true, get: function () { return chat_1.onChatSyncPickupDriver; } });
+Object.defineProperty(exports, "onChatSyncAdminRemoval", { enumerable: true, get: function () { return chat_1.onChatSyncAdminRemoval; } });
+const chat_2 = require("./handlers/chat");
 const express_1 = __importDefault(require("express"));
 const express_basic_auth_1 = __importDefault(require("express-basic-auth"));
 const nodePath = __importStar(require("node:path"));
@@ -576,6 +584,7 @@ exports.sendNewCallNotification = (0, firestore_1.onDocumentCreated)({
     region: "asia-northeast3",
     document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/calls/{callId}"
 }, async (event) => {
+    var _a, _b;
     const { provinceId, cityId, officeId, callId } = event.params;
     if (!event.data) {
         logger.warn(`[new-call:${callId}] 이벤트 데이터가 없습니다.`);
@@ -639,26 +648,55 @@ exports.sendNewCallNotification = (0, firestore_1.onDocumentCreated)({
             .where("associatedCityId", "==", cityId)
             .where("associatedOfficeId", "==", officeId)
             .get();
-        const tokens = [];
+        const adminTokens = [];
         adminsSnapshot.forEach((doc) => {
             const adminData = doc.data();
             if (adminData.fcmToken) {
-                tokens.push(adminData.fcmToken);
+                adminTokens.push(adminData.fcmToken);
             }
         });
+        // 같은 사무실의 픽업기사 FCM 토큰 조회
+        const pickupSnapshot = await admin.firestore()
+            .collection("provinces").doc(provinceId)
+            .collection("cities").doc(cityId)
+            .collection("offices").doc(officeId)
+            .collection("pickup_drivers")
+            .get();
+        const pickupTokens = [];
+        pickupSnapshot.forEach((doc) => {
+            const pickupData = doc.data();
+            if (pickupData.fcmToken) {
+                pickupTokens.push(pickupData.fcmToken);
+            }
+        });
+        const tokens = [...adminTokens, ...pickupTokens];
         if (tokens.length === 0) {
-            logger.warn(`[new-call:${callId}] FCM 토큰을 가진 관리자가 없습니다.`);
+            logger.warn(`[new-call:${callId}] FCM 토큰을 가진 관리자/픽업기사가 없습니다.`);
             return;
         }
-        logger.info(`[new-call:${callId}] ${tokens.length}명의 관리자에게 알림 전송`);
+        logger.info(`[new-call:${callId}] tokens: admin=${adminTokens.length}, pickup=${pickupTokens.length}`);
+        // timestamp 필드 추출 (Firestore Timestamp → ms long → String)
+        const tsMs = (callData.timestamp && typeof callData.timestamp.toMillis === "function")
+            ? callData.timestamp.toMillis()
+            : (callData.createdAt && typeof callData.createdAt.toMillis === "function")
+                ? callData.createdAt.toMillis()
+                : Date.now();
         // FCM 메시지 구성
         const message = (0, fcmPayload_1.buildMulticastFcmPayload)({
             data: {
                 type: "NEW_CALL",
                 callId: callId,
+                status: callData.status || "WAITING",
                 customerName: callData.customerName || callData.phoneNumber || "신규 고객",
                 customerPhone: callData.phoneNumber || "",
+                customerAddress: callData.customerAddress || "",
                 pickupLocation: callData.customerAddress || callData.departure || "위치 미확인",
+                departure: callData.departure_set || callData.departure || "",
+                destination: callData.destination_set || callData.destination || "",
+                waypoints: callData.waypoints_set || "",
+                fare: String((_b = (_a = callData.fare_set) !== null && _a !== void 0 ? _a : callData.fare) !== null && _b !== void 0 ? _b : ""),
+                assignedDriverName: callData.assignedDriverName || "",
+                timestamp: String(tsMs),
                 provinceId: provinceId,
                 cityId: cityId,
                 officeId: officeId,
@@ -671,7 +709,7 @@ exports.sendNewCallNotification = (0, firestore_1.onDocumentCreated)({
         }, tokens);
         const response = await admin.messaging().sendEachForMulticast(message);
         logger.info(`[new-call:${callId}] FCM 알림 전송 완료. 성공: ${response.successCount}, 실패: ${response.failureCount}`);
-        // 실패한 토큰 정리
+        // 실패한 토큰 정리 (admin + pickup 둘 다)
         const batch = admin.firestore().batch();
         let invalidTokensFound = 0;
         response.responses.forEach((resp, idx) => {
@@ -687,6 +725,13 @@ exports.sendNewCallNotification = (0, firestore_1.onDocumentCreated)({
                     adminsSnapshot.docs.forEach((doc) => {
                         const adminData = doc.data();
                         if (adminData.fcmToken === invalidToken) {
+                            batch.update(doc.ref, { fcmToken: firestore_2.FieldValue.delete() });
+                            invalidTokensFound++;
+                        }
+                    });
+                    pickupSnapshot.docs.forEach((doc) => {
+                        const pickupData = doc.data();
+                        if (pickupData.fcmToken === invalidToken) {
                             batch.update(doc.ref, { fcmToken: firestore_2.FieldValue.delete() });
                             invalidTokensFound++;
                         }
@@ -1535,7 +1580,7 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
         return;
     }
     logger.info(`[onCallStatusChanged:${callId}] Status changed: ${beforeData.status} → ${afterData.status}`);
-    // ✅ 콜매니저에 상태 변경 알림 전송
+    // ✅ 콜매니저 + 픽업기사에 상태 변경 알림 전송
     try {
         const managerTokensSnapshot = await admin.firestore()
             .collection("provinces").doc(provinceId)
@@ -1543,43 +1588,98 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
             .collection("offices").doc(officeId)
             .collection("managerTokens")
             .get();
-        if (!managerTokensSnapshot.empty) {
-            const managerTokens = [];
-            managerTokensSnapshot.forEach((doc) => {
-                const token = doc.data().fcmToken;
-                if (token)
-                    managerTokens.push(token);
+        const pickupSnapshot = await admin.firestore()
+            .collection("provinces").doc(provinceId)
+            .collection("cities").doc(cityId)
+            .collection("offices").doc(officeId)
+            .collection("pickup_drivers")
+            .get();
+        const managerTokens = [];
+        managerTokensSnapshot.forEach((doc) => {
+            const token = doc.data().fcmToken;
+            if (token)
+                managerTokens.push(token);
+        });
+        const pickupTokens = [];
+        pickupSnapshot.forEach((doc) => {
+            const token = doc.data().fcmToken;
+            if (token)
+                pickupTokens.push(token);
+        });
+        const tokens = [...managerTokens, ...pickupTokens];
+        if (tokens.length > 0) {
+            // timestamp 필드 추출 (Firestore Timestamp → ms long → String)
+            const tsMs = (afterData.timestamp && typeof afterData.timestamp.toMillis === "function")
+                ? afterData.timestamp.toMillis()
+                : (afterData.createdAt && typeof afterData.createdAt.toMillis === "function")
+                    ? afterData.createdAt.toMillis()
+                    : Date.now();
+            const payload = (0, fcmPayload_1.buildMulticastFcmPayload)({
+                data: {
+                    type: "CALL_STATUS_UPDATE",
+                    callId: callId,
+                    status: afterData.status,
+                    customerName: afterData.customerName || "고객",
+                    customerPhone: afterData.phoneNumber || "",
+                    customerAddress: afterData.customerAddress || "",
+                    assignedDriverName: afterData.assignedDriverName || "",
+                    assignedDriverPhone: afterData.assignedDriverPhone || "",
+                    departure: afterData.departure_set || afterData.departure || "",
+                    destination: afterData.destination_set || afterData.destination || "",
+                    waypoints: afterData.waypoints_set || "",
+                    fare: ((_d = (_c = afterData.fare_set) !== null && _c !== void 0 ? _c : afterData.fare) !== null && _d !== void 0 ? _d : 0).toString(),
+                    timestamp: String(tsMs),
+                    provinceId: provinceId,
+                    cityId: cityId,
+                    officeId: officeId
+                },
+                title: "콜 상태 변경",
+                body: `${afterData.customerName || "고객"} - ${afterData.status}`,
+                level: "active",
+                ttlSeconds: 60,
+            }, tokens);
+            logger.info(`[onCallStatusChanged:${callId}] tokens: manager=${managerTokens.length}, pickup=${pickupTokens.length}`);
+            const response = await admin.messaging().sendEachForMulticast(payload);
+            logger.info(`[onCallStatusChanged:${callId}] FCM 전송 - ${afterData.status} - 성공: ${response.successCount}, 실패: ${response.failureCount}`);
+            // 무효 토큰 정리 (manager + pickup 둘 다)
+            const batch = admin.firestore().batch();
+            let invalidTokensFound = 0;
+            response.responses.forEach((resp, idx) => {
+                var _a;
+                if (!resp.success) {
+                    const error = resp.error;
+                    if ((error === null || error === void 0 ? void 0 : error.code) === "messaging/registration-token-not-registered" ||
+                        (error === null || error === void 0 ? void 0 : error.code) === "messaging/invalid-registration-token" ||
+                        ((_a = error === null || error === void 0 ? void 0 : error.message) === null || _a === void 0 ? void 0 : _a.includes("Requested entity was not found"))) {
+                        const invalidToken = tokens[idx];
+                        managerTokensSnapshot.docs.forEach((doc) => {
+                            if (doc.data().fcmToken === invalidToken) {
+                                batch.update(doc.ref, { fcmToken: firestore_2.FieldValue.delete() });
+                                invalidTokensFound++;
+                            }
+                        });
+                        pickupSnapshot.docs.forEach((doc) => {
+                            if (doc.data().fcmToken === invalidToken) {
+                                batch.update(doc.ref, { fcmToken: firestore_2.FieldValue.delete() });
+                                invalidTokensFound++;
+                            }
+                        });
+                    }
+                }
             });
-            if (managerTokens.length > 0) {
-                const managerPayload = (0, fcmPayload_1.buildMulticastFcmPayload)({
-                    data: {
-                        type: "CALL_STATUS_UPDATE",
-                        callId: callId,
-                        status: afterData.status,
-                        customerName: afterData.customerName || "고객",
-                        customerPhone: afterData.phoneNumber || "",
-                        assignedDriverName: afterData.assignedDriverName || "",
-                        assignedDriverPhone: afterData.assignedDriverPhone || "",
-                        departure: afterData.departure_set || afterData.departure || "",
-                        destination: afterData.destination_set || afterData.destination || "",
-                        waypoints: afterData.waypoints_set || "",
-                        fare: ((_d = (_c = afterData.fare_set) !== null && _c !== void 0 ? _c : afterData.fare) !== null && _d !== void 0 ? _d : 0).toString(),
-                        provinceId: provinceId,
-                        cityId: cityId,
-                        officeId: officeId
-                    },
-                    title: "콜 상태 변경",
-                    body: `${afterData.customerName || "고객"} - ${afterData.status}`,
-                    level: "active",
-                    ttlSeconds: 60,
-                }, managerTokens);
-                const response = await admin.messaging().sendEachForMulticast(managerPayload);
-                logger.info(`[onCallStatusChanged:${callId}] 콜매니저 FCM 전송 - ${afterData.status} - 성공: ${response.successCount}`);
+            if (invalidTokensFound > 0) {
+                try {
+                    await batch.commit();
+                    logger.info(`[onCallStatusChanged:${callId}] ${invalidTokensFound}개 무효 토큰 정리 완료`);
+                }
+                catch (batchError) {
+                    logger.error(`[onCallStatusChanged:${callId}] 무효 토큰 정리 오류:`, batchError);
+                }
             }
         }
     }
     catch (managerError) {
-        logger.error(`[onCallStatusChanged:${callId}] 콜매니저 FCM 오류:`, managerError);
+        logger.error(`[onCallStatusChanged:${callId}] FCM 전송 오류:`, managerError);
     }
     // CUST-03: 앱 회원 고객에게 상태 변경 FCM 전송 (ACCEPTED, IN_PROGRESS)
     const customerNotifyStatuses = ["ACCEPTED", "IN_PROGRESS"];
@@ -4870,6 +4970,13 @@ exports.registerOwner = (0, https_1.onCall)({ region: "asia-northeast3" }, async
         throw new Error(txError.message || "가입 처리 중 오류가 발생했습니다.");
     }
     logger.info(`[registerOwner] 가입 완료 - uid: ${uid}, officeId: ${invite.officeId}`);
+    // 채팅방 멤버 자동 등록 (실패해도 가입 자체는 성공 처리 — best-effort)
+    try {
+        await (0, chat_2.addChatMember)(invite.provinceId, invite.cityId, invite.officeId, uid, "MANAGER");
+    }
+    catch (chatErr) {
+        logger.error(`[registerOwner] chat member 등록 실패 (무시, backfill로 보강 가능)`, chatErr);
+    }
     return {
         success: true,
         uid,
