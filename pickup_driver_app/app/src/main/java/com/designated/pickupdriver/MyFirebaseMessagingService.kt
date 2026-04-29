@@ -8,6 +8,7 @@ import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.designated.pickupdriver.data.Constants
+import com.designated.pickupdriver.data.repository.CallRepository
 import com.designated.pickupdriver.data.repository.ChatRepository
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -19,13 +20,17 @@ import javax.inject.Inject
 /**
  * pickup_driver_app FCM 서비스
  *
- * Phase 1: 사무실 단톡방 (NEW_CHAT_MESSAGE)만 처리.
- * 다른 FCM 타입(call_assigned 등)은 추후 진입 시 추가.
+ * 처리 타입:
+ *  - NEW_CHAT_MESSAGE: 사무실 단톡방
+ *  - NEW_CALL: 신규 콜 → Room INSERT + 시스템 알림
+ *  - CALL_STATUS_UPDATE: 콜 상태 변경 → Room UPDATE + 시스템 알림
+ *  - 그 외(call_assigned 등): 무시 (else 분기)
  */
 @AndroidEntryPoint
 class MyFirebaseMessagingService : FirebaseMessagingService() {
 
     @Inject lateinit var chatRepository: ChatRepository
+    @Inject lateinit var callRepository: CallRepository
     @Inject lateinit var auth: FirebaseAuth
     @Inject lateinit var firestore: FirebaseFirestore
 
@@ -70,8 +75,129 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         Log.d(TAG, "수신: type=$messageType")
 
         when (messageType) {
-            "NEW_CHAT_MESSAGE" -> handleChatMessage(remoteMessage)
+            Constants.MSG_TYPE_NEW_CHAT_MESSAGE -> handleChatMessage(remoteMessage)
+            Constants.MSG_TYPE_NEW_CALL -> handleNewCall(remoteMessage)
+            Constants.MSG_TYPE_CALL_STATUS_UPDATE -> handleCallStatusUpdate(remoteMessage)
             else -> Log.d(TAG, "처리 안 함: $messageType")
+        }
+    }
+
+    /**
+     * 신규 콜 (NEW_CALL) 처리
+     *  1) WAITING 30분 컷오프: stuck 콜은 Room/알림 둘 다 skip (대시보드 일관성)
+     *  2) Room upsert (CallRepository)
+     *  3) 시스템 알림 (PickupDriverApplication.CHANNEL_CALL_CHANGES)
+     *
+     * fromCallDetector / fromCallManager 플래그 무시 — 픽업앱은 콜을 만든 게 아니라 모든 NEW_CALL 알림 발사.
+     */
+    private fun handleNewCall(remoteMessage: RemoteMessage) {
+        val data = remoteMessage.data
+        val callId = data["callId"] ?: run {
+            Log.w(TAG, "[handleNewCall] callId 없음")
+            return
+        }
+        val status = data["status"] ?: Constants.STATUS_WAITING
+        val timestamp = data["timestamp"]?.toLongOrNull() ?: System.currentTimeMillis()
+
+        // WAITING 30분 컷오프 (FCM 측)
+        val age = System.currentTimeMillis() - timestamp
+        if (status == Constants.STATUS_WAITING && age > Constants.WAITING_CUTOFF_MS) {
+            Log.d(TAG, "[handleNewCall] WAITING 30분+ 경과 → skip: $callId (age=${age}ms)")
+            return
+        }
+
+        Log.d(TAG, "[handleNewCall] callId=$callId status=$status")
+
+        // 1) Room upsert
+        callRepository.insertCallFromFCM(data)
+
+        // 2) 시스템 알림
+        val title = "🔔 새 콜 접수"
+        val body = buildCallBody(data)
+        notifyCallChange(callId, title, body)
+    }
+
+    /**
+     * 콜 상태 변경 (CALL_STATUS_UPDATE) 처리
+     */
+    private fun handleCallStatusUpdate(remoteMessage: RemoteMessage) {
+        val data = remoteMessage.data
+        val callId = data["callId"] ?: run {
+            Log.w(TAG, "[handleCallStatusUpdate] callId 없음")
+            return
+        }
+        val status = data["status"] ?: run {
+            Log.w(TAG, "[handleCallStatusUpdate] status 없음")
+            return
+        }
+
+        Log.d(TAG, "[handleCallStatusUpdate] callId=$callId status=$status")
+
+        // 1) Room UPDATE
+        callRepository.updateCallStatusFromFCM(data)
+
+        // 2) 시스템 알림 (status 라벨)
+        val title = statusLabel(status)
+        val body = buildCallBody(data)
+        notifyCallChange(callId, title, body)
+    }
+
+    private fun statusLabel(status: String): String = when (status) {
+        Constants.STATUS_WAITING -> "대기"
+        Constants.STATUS_ASSIGNED -> "배차됨"
+        Constants.STATUS_ACCEPTED -> "수락"
+        Constants.STATUS_IN_PROGRESS -> "운행중"
+        Constants.STATUS_AWAITING_SETTLEMENT -> "정산대기"
+        else -> status
+    }
+
+    private fun buildCallBody(data: Map<String, String>): String {
+        val departure = data["departure"]?.takeIf { it.isNotBlank() }
+        val destination = data["destination"]?.takeIf { it.isNotBlank() }
+        val customerAddress = data["customerAddress"]?.takeIf { it.isNotBlank() }
+            ?: data["pickupLocation"]?.takeIf { it.isNotBlank() }
+        return when {
+            departure != null && destination != null -> "$departure → $destination"
+            departure != null -> departure
+            destination != null -> "→ $destination"
+            customerAddress != null -> customerAddress
+            else -> "출발지 정보 없음"
+        }
+    }
+
+    private fun notifyCallChange(callId: String, title: String, body: String) {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            callId.hashCode(),
+            intent,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+        )
+
+        val notification = NotificationCompat.Builder(
+            this, PickupDriverApplication.CHANNEL_CALL_CHANGES
+        )
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .build()
+
+        try {
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.notify(callId.hashCode(), notification)
+            Log.d(TAG, "[notifyCallChange] $callId / $title")
+        } catch (e: SecurityException) {
+            Log.w(TAG, "POST_NOTIFICATIONS 권한 없음 — 알림 skip", e)
         }
     }
 

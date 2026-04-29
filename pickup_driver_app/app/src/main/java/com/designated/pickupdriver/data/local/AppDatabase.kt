@@ -7,16 +7,20 @@ import androidx.room.RoomDatabase
 
 /**
  * pickup_driver_app 로컬 Room 데이터베이스
- * 사무실 단톡방 V1: chat_messages 테이블 (Firestore 미러링)
+ *
+ * - v1: chat_messages 테이블 (사무실 단톡방 V1)
+ * - v2: calls 테이블 추가 (Dashboard FCM+Room 전환)
  */
 @Database(
-    entities = [LocalChatMessage::class],
-    version = 1,
+    entities = [LocalChatMessage::class, LocalCall::class],
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun chatMessageDao(): ChatMessageDao
+
+    abstract fun callDao(): CallDao
 
     companion object {
         private const val DATABASE_NAME = "pickup_driver_db"
