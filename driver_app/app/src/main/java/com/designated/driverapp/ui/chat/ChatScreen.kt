@@ -1,6 +1,9 @@
 package com.designated.driverapp.ui.chat
 
 import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -8,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,8 +28,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -43,14 +50,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.ColorPainter
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
 import com.designated.driverapp.data.local.LocalChatMessage
 import com.designated.driverapp.data.repository.ChatRepository
 import java.text.SimpleDateFormat
@@ -70,6 +82,11 @@ fun ChatScreen(
     val messages by viewModel.messages.collectAsState()
     val currentUserId = viewModel.currentUserId
     var inputText by remember { mutableStateOf("") }
+    var fullScreenUrl by remember { mutableStateOf<String?>(null) }
+
+    val imagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri -> uri?.let { viewModel.sendImageMessage(it) } }
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
@@ -106,6 +123,7 @@ fun ChatScreen(
                     showName = showName,
                     showTime = showTime,
                     onRetry = { viewModel.retryMessage(msg) },
+                    onImageClick = { url -> fullScreenUrl = url },
                 )
             }
         }
@@ -121,9 +139,16 @@ fun ChatScreen(
                     viewModel.sendMessage(trimmed)
                     inputText = ""
                 }
-            }
+            },
+            onPickImage = {
+                imagePicker.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                )
+            },
         )
     }
+
+    FullScreenImageViewer(url = fullScreenUrl, onDismiss = { fullScreenUrl = null })
 }
 
 @Composable
@@ -133,10 +158,12 @@ private fun ChatMessageRow(
     showName: Boolean,
     showTime: Boolean,
     onRetry: () -> Unit,
+    onImageClick: (String) -> Unit = {},
 ) {
     val alignment = if (isOwn) Alignment.End else Alignment.Start
     val bubbleColor = if (isOwn) Color(0xFFFFF59D) else Color(0xFFEEEEEE)
     val timeText = formatTime(message.createdAt)
+    val isImage = !message.imageUrl.isNullOrEmpty()
 
     Column(
         modifier = Modifier
@@ -173,9 +200,29 @@ private fun ChatMessageRow(
                     sendStatus = message.sendStatus,
                     onRetry = onRetry,
                 )
-                MessageBubble(text = message.text, color = bubbleColor)
+                if (isImage) {
+                    ImageBubble(
+                        imageUrl = message.imageUrl!!,
+                        width = message.imageWidth ?: 640,
+                        height = message.imageHeight ?: 640,
+                        sendStatus = message.sendStatus,
+                        onClick = onImageClick,
+                    )
+                } else {
+                    MessageBubble(text = message.text, color = bubbleColor)
+                }
             } else {
-                MessageBubble(text = message.text, color = bubbleColor)
+                if (isImage) {
+                    ImageBubble(
+                        imageUrl = message.imageUrl!!,
+                        width = message.imageWidth ?: 640,
+                        height = message.imageHeight ?: 640,
+                        sendStatus = message.sendStatus,
+                        onClick = onImageClick,
+                    )
+                } else {
+                    MessageBubble(text = message.text, color = bubbleColor)
+                }
                 if (showTime) {
                     Text(
                         text = timeText,
@@ -202,6 +249,83 @@ private fun MessageBubble(text: String, color: Color) {
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             color = Color.Black,
         )
+    }
+}
+
+/**
+ * 이미지 메시지 버블.
+ * - "uploading://" sentinel + SENDING: 회색 박스 + spinner
+ * - "uploading://" sentinel + FAILED: 회색 박스 + ❌ + "전송 실패"
+ * - 정상 URL: AsyncImage + aspectRatio + 클릭 시 풀스크린
+ */
+@Composable
+private fun ImageBubble(
+    imageUrl: String,
+    width: Int,
+    height: Int,
+    sendStatus: String,
+    onClick: (String) -> Unit,
+) {
+    if (imageUrl == LocalChatMessage.UPLOADING_SENTINEL) {
+        Box(
+            modifier = Modifier
+                .size(160.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.Gray.copy(alpha = 0.3f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (sendStatus == LocalChatMessage.SEND_STATUS_FAILED) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(text = "❌", fontSize = 32.sp)
+                    Text(
+                        text = "전송 실패",
+                        color = Color.Red,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+            } else {
+                CircularProgressIndicator()
+            }
+        }
+    } else {
+        val ratio = if (height > 0) width.toFloat() / height else 1f
+        AsyncImage(
+            model = imageUrl,
+            contentDescription = "사진",
+            modifier = Modifier
+                .widthIn(max = 240.dp)
+                .aspectRatio(ratio)
+                .clip(RoundedCornerShape(12.dp))
+                .clickable { onClick(imageUrl) },
+            contentScale = ContentScale.Crop,
+            placeholder = ColorPainter(Color.Gray.copy(alpha = 0.2f)),
+            error = ColorPainter(Color.Red.copy(alpha = 0.2f)),
+        )
+    }
+}
+
+/**
+ * 풀스크린 이미지 뷰어.
+ */
+@Composable
+private fun FullScreenImageViewer(url: String?, onDismiss: () -> Unit) {
+    if (url.isNullOrEmpty()) return
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .clickable { onDismiss() },
+            contentAlignment = Alignment.Center,
+        ) {
+            AsyncImage(
+                model = url,
+                contentDescription = "사진 풀스크린",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit,
+            )
+        }
     }
 }
 
@@ -233,6 +357,7 @@ private fun ChatInputBar(
     value: String,
     onValueChange: (String) -> Unit,
     onSend: () -> Unit,
+    onPickImage: () -> Unit = {},
 ) {
     Row(
         modifier = Modifier
@@ -247,6 +372,13 @@ private fun ChatInputBar(
             },
         verticalAlignment = Alignment.Bottom,
     ) {
+        IconButton(onClick = onPickImage) {
+            Icon(
+                imageVector = Icons.Default.AddPhotoAlternate,
+                contentDescription = "이미지 첨부",
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
         TextField(
             value = value,
             onValueChange = onValueChange,
@@ -287,7 +419,12 @@ fun ChatBottomSheetContent(
     val latestMessage by viewModel.latestMessage.collectAsState()
     val currentUserId = viewModel.currentUserId
     var inputText by remember { mutableStateOf("") }
+    var fullScreenUrl by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
+
+    val imagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri -> uri?.let { viewModel.sendImageMessage(it) } }
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
@@ -340,6 +477,7 @@ fun ChatBottomSheetContent(
                         showName = showName,
                         showTime = showTime,
                         onRetry = { viewModel.retryMessage(msg) },
+                        onImageClick = { url -> fullScreenUrl = url },
                     )
                 }
             }
@@ -355,10 +493,17 @@ fun ChatBottomSheetContent(
                         viewModel.sendMessage(trimmed)
                         inputText = ""
                     }
-                }
+                },
+                onPickImage = {
+                    imagePicker.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    )
+                },
             )
         }
     }
+
+    FullScreenImageViewer(url = fullScreenUrl, onDismiss = { fullScreenUrl = null })
 }
 
 @Composable
@@ -368,6 +513,10 @@ private fun ChatPeekPreviewBar(
 ) {
     val previewText = when {
         latestMessage == null -> "💬 사무실 단톡방 (메시지 없음)"
+        !latestMessage.imageUrl.isNullOrEmpty() -> {
+            val who = if (latestMessage.senderId == currentUserId) "나" else latestMessage.senderName
+            "💬 $who: [사진]"
+        }
         latestMessage.senderId == currentUserId -> "💬 나: ${latestMessage.text}"
         else -> "💬 ${latestMessage.senderName}: ${latestMessage.text}"
     }

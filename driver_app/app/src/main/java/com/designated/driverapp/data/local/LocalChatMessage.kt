@@ -31,16 +31,23 @@ data class LocalChatMessage(
     val senderName: String,
     val senderRole: String,
 
-    val text: String,
+    val text: String,                  // image-only 시 빈 문자열 ""
     val createdAt: Long,
     val clientCreatedAt: Long,
 
     @ColumnInfo(defaultValue = "SENT")
     val sendStatus: String = SEND_STATUS_SENT,
+
+    // 이미지 메시지 (V1.1)
+    val imageUrl: String? = null,      // Storage downloadUrl ("uploading://" sentinel은 업로드 중)
+    val imagePath: String? = null,     // Storage path (cleanup 안전성)
+    val imageWidth: Int? = null,
+    val imageHeight: Int? = null,
 ) {
     companion object {
         const val SEND_STATUS_SENDING = "SENDING"
         const val SEND_STATUS_SENT = "SENT"
         const val SEND_STATUS_FAILED = "FAILED"
+        const val UPLOADING_SENTINEL = "uploading://"
     }
 }

@@ -122,7 +122,12 @@ dependencies {
     implementation libs.firebase.messaging.ktx
     implementation 'com.google.firebase:firebase-database-ktx' // Realtime Database (Presence)
     implementation 'com.google.firebase:firebase-functions-ktx' // Cloud Functions (ACK)
+    implementation 'com.google.firebase:firebase-storage-ktx' // chat 이미지 업로드
     implementation libs.firebase.crashlytics.ktx // Crashlytics
+
+    // Image (chat V1 이미지 메시지)
+    implementation 'io.coil-kt:coil-compose:2.6.0' // Compose 1.6.x 호환
+    implementation 'androidx.exifinterface:exifinterface:1.3.7' // EXIF orientation
 
     // QR Code Generation (ZXing)
     implementation 'com.google.zxing:core:3.5.2'

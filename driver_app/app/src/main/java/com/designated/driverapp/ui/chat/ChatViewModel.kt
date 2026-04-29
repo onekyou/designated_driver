@@ -1,6 +1,7 @@
 package com.designated.driverapp.ui.chat
 
 import android.content.SharedPreferences
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -79,6 +80,14 @@ class ChatViewModel @Inject constructor(
                 if (_senderName.value.isNullOrBlank()) {
                     fetchSenderName()
                 }
+                // Local-first: Room이 비어있을 때만 50건 fetch (destructive migration 후 자동 복구)
+                runCatching {
+                    if (chatRepository.isEmptyInOffice(provinceId, cityId, officeId)) {
+                        chatRepository.loadInitialMessages(provinceId, cityId, officeId)
+                    }
+                }.onFailure { e ->
+                    Log.e(TAG, "[init] loadInitialMessages 실패", e)
+                }
             }
         } else {
             Log.w(TAG, "[init] 필수 정보 부족 - provinceId=$provinceId, cityId=$cityId, officeId=$officeId, senderId=$senderId")
@@ -117,6 +126,22 @@ class ChatViewModel @Inject constructor(
 
     fun retryMessage(message: LocalChatMessage) {
         chatRepository.retryMessage(message)
+    }
+
+    /**
+     * 이미지 메시지 전송 — Repository에 위임 (EXIF + 압축 + Storage + Firestore set + markImageSent).
+     */
+    fun sendImageMessage(uri: Uri) {
+        if (!isReady) {
+            Log.w(TAG, "[sendImageMessage] 필수 정보 부족 - 전송 스킵")
+            return
+        }
+        val name = _senderName.value
+        if (name.isNullOrBlank()) {
+            Log.w(TAG, "[sendImageMessage] senderName 미로드 - 전송 스킵")
+            return
+        }
+        chatRepository.sendImageMessage(provinceId, cityId, officeId, senderId, name, senderRole, uri)
     }
 
     companion object {
