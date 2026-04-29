@@ -223,6 +223,42 @@ fun TripPreparationScreen(
                 )
             }
         },
+        bottomBar = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(DarkBackground)
+                    .imePadding()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { showCancelDialog = true },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                ) {
+                    Text("취소", fontWeight = FontWeight.Bold)
+                }
+
+                Button(
+                    onClick = {
+                        val fareInt = fare.toIntOrNull() ?: 0
+                        onStartDriving(departure, destination, waypoints, fareInt)
+                    },
+                    modifier = Modifier
+                        .weight(2f)
+                        .height(50.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = DeepYellow)
+                ) {
+                    Text("운행 시작", fontWeight = FontWeight.Bold)
+                }
+            }
+        },
         containerColor = DarkBackground
     ) { paddingValues ->
 
@@ -609,38 +645,6 @@ fun TripPreparationScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedButton(
-                    onClick = { showCancelDialog = true },
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(50.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    ),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
-                ) {
-                    Text("취소", fontWeight = FontWeight.Bold)
-                }
-
-                Button(
-                    onClick = {
-                        val fareInt = fare.toIntOrNull() ?: 0
-                        onStartDriving(departure, destination, waypoints, fareInt)
-                    },
-                    modifier = Modifier
-                        .weight(2f)
-                        .height(50.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = DeepYellow)
-                ) {
-                    Text("운행 시작", fontWeight = FontWeight.Bold)
-                }
-            }
         }
     }
 
