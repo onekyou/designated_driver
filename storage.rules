@@ -32,15 +32,15 @@ service firebase.storage {
     }
 
     // --- Chat 이미지 (사무실 단톡방) ---
-    //  • 멤버 화이트리스트 — chatRoom/main/members/{authUid} 존재 검증 (cross-service)
-    //  • 업로드: 멤버 + 2MB 이내 + image/* contentType
-    //  • update/delete 금지 (Cloud Functions cleanup만 처리)
-    //  • 압축 후 ~50~100KB 예상, 2MB는 여유 한도
+    //  • 인증된 사용자 + 2MB + image/* (cross-service firestore.exists는 wildcard substitution 작동 X)
+    //  • 보안 분석:
+    //    - read URL: firestore.rules에서 chat 메시지를 멤버만 read → imageUrl은 사실상 멤버에게만 노출
+    //    - write: 비멤버가 storage 업로드해도 firestore.rules가 chat 메시지 create 거부 → orphan 파일만
+    //  • Phase 2: weekly orphan-scan CF로 firestore에 매핑 안 된 storage 파일 정리
+    //  • update/delete 금지 (CF scheduledChatMessageCleanup만 처리)
     match /provinces/{provinceId}/cities/{cityId}/offices/{officeId}/chat_images/{fileName} {
-      allow read: if isAuthenticated()
-        && firestore.exists(/databases/(default)/documents/provinces/$(provinceId)/cities/$(cityId)/offices/$(officeId)/chatRoom/main/members/$(request.auth.uid));
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated()
-        && firestore.exists(/databases/(default)/documents/provinces/$(provinceId)/cities/$(cityId)/offices/$(officeId)/chatRoom/main/members/$(request.auth.uid))
         && request.resource.size < 2 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
       allow update, delete: if false;
