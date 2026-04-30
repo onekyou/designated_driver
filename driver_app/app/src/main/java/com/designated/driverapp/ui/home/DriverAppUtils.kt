@@ -11,7 +11,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 import android.util.Log
+import com.designated.driverapp.MyFirebaseMessagingService
 import com.designated.driverapp.viewmodel.DriverViewModel
 import com.designated.driverapp.data.Constants
 import org.json.JSONArray
@@ -48,18 +51,22 @@ fun logoutUserAndExitApp(context: Context, scope: CoroutineScope, viewModel: Dri
             ))
                 .addOnSuccessListener {
                     Log.d("DriverAppUtils", "✅ [LOGOUT] OFFLINE 업데이트 + fcmToken 삭제 성공")
+                    MyFirebaseMessagingService.clearPendingFcmToken(context)
                     performSignOut(context, scope)
                 }
                 .addOnFailureListener { e ->
                     Log.e("DriverAppUtils", "❌ [LOGOUT] OFFLINE 업데이트 실패", e)
                     Toast.makeText(context, "상태 업데이트 실패. 로그아웃을 진행합니다.", Toast.LENGTH_SHORT).show()
+                    MyFirebaseMessagingService.clearPendingFcmToken(context)
                     performSignOut(context, scope)
                 }
         } else {
             Toast.makeText(context, "오류: 지역/사무실 정보를 찾을 수 없어 상태 업데이트 불가. 로그아웃만 진행합니다.", Toast.LENGTH_LONG).show()
+            MyFirebaseMessagingService.clearPendingFcmToken(context)
             performSignOut(context, scope)
         }
     } else {
+        MyFirebaseMessagingService.clearPendingFcmToken(context)
         performSignOut(context, scope)
     }
 }
@@ -68,7 +75,19 @@ fun performSignOut(context: Context, scope: CoroutineScope) {
     scope.launch(Dispatchers.IO) {
         try {
             withContext(Dispatchers.Main) {
-                Firebase.auth.signOut()
+                Firebase.auth.signOut()  // ② signOut (currentUser → null)
+            }
+            // ③ deleteToken (5s timeout — 네트워크 불량 시 logout freeze 방지)
+            try {
+                withTimeoutOrNull(5_000) {
+                    com.google.firebase.messaging.FirebaseMessaging.getInstance()
+                        .deleteToken().await()
+                }
+                Log.d("DriverAppUtils", "[LOGOUT] deleteToken 처리")
+            } catch (e: Exception) {
+                Log.w("DriverAppUtils", "[LOGOUT] deleteToken 실패: ${e.message}")
+            }
+            withContext(Dispatchers.Main) {
                 Toast.makeText(context, "로그아웃되었습니다.", Toast.LENGTH_SHORT).show()
                 delay(100)
                 (context as? Activity)?.finishAffinity()

@@ -1,5 +1,6 @@
 package com.designated.pickupdriver.ui.dashboard
 
+import androidx.activity.ComponentActivity
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -11,12 +12,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import com.designated.pickupdriver.data.Constants
 import com.designated.pickupdriver.ui.chat.ChatCard
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -28,6 +32,8 @@ fun DashboardScreen(
     onLogout: () -> Unit
 ) {
     val calls by viewModel.calls.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val activity = context as ComponentActivity
 
     DisposableEffect(Unit) {
         viewModel.startListening()
@@ -41,8 +47,12 @@ fun DashboardScreen(
                 title = { Text("진행 중 ${calls.size}건") },
                 actions = {
                     TextButton(onClick = {
-                        viewModel.logout()
-                        onLogout()
+                        // Activity의 lifecycleScope에서 logout suspend를 await 후 navigate.
+                        // viewModelScope를 쓰면 popUpTo(DASHBOARD, inclusive=true)로 VM cancel 발생.
+                        activity.lifecycleScope.launch {
+                            viewModel.logout()
+                            onLogout()
+                        }
                     }) {
                         Text("로그아웃")
                     }

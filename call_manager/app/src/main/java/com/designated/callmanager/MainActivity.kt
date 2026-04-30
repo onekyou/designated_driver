@@ -104,6 +104,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
+import com.google.firebase.firestore.FieldValue
 import android.net.Uri
 import android.os.PowerManager
 import android.content.BroadcastReceiver
@@ -1187,9 +1190,10 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * 로그아웃 시 managerTokens/{uid} 문서 삭제 후 signOut + finishAffinity.
-     * 이전 기기 토큰 잔류 방지 (스펙 §14 체크리스트 "로그아웃 시 fcmToken 삭제").
-     * 삭제 실패 시에도 signOut/finishAffinity는 진행 (best-effort cleanup).
+     * 로그아웃 = 업무 종료 → 모든 FCM 알림 즉시 차단.
+     * 순서: ① Firestore field delete (admins.fcmToken + managerTokens 문서) → ② signOut →
+     *       ③ deleteToken (device-level revoke) → ④ tokenRefreshListener.remove + fcm_prefs.clear → ⑤ finishAffinity.
+     * 모든 await에 5초 timeout (네트워크 불량 시 logout freeze 방지).
      */
     private fun logoutAndExit() {
         val uid = auth.currentUser?.uid
@@ -1198,29 +1202,64 @@ class MainActivity : ComponentActivity() {
         val c = cityId ?: prefs.getString("cityId", null)
         val o = officeId ?: prefs.getString("officeId", null)
 
-        val finalize = {
-            auth.signOut()
-            finishAffinity()
-        }
+        lifecycleScope.launch {
+            // ① Firestore field delete (인증 살아있을 때)
+            if (uid != null) {
+                // (1-a) admins/{uid}.fcmToken 삭제 — 콜 알림(admins 토큰 사용 경로) 차단
+                try {
+                    withTimeoutOrNull(5_000) {
+                        FirebaseFirestore.getInstance()
+                            .collection("admins").document(uid)
+                            .update("fcmToken", FieldValue.delete())
+                            .await()
+                    }
+                    Log.d("MainActivity", "[logoutAndExit] admins.fcmToken 삭제 처리")
+                } catch (e: Exception) {
+                    Log.w("MainActivity", "[logoutAndExit] admins.fcmToken 삭제 실패: ${e.message}")
+                }
 
-        if (uid != null && !p.isNullOrBlank() && !c.isNullOrBlank() && !o.isNullOrBlank()) {
-            FirebaseFirestore.getInstance()
-                .collection("provinces").document(p)
-                .collection("cities").document(c)
-                .collection("offices").document(o)
-                .collection("managerTokens").document(uid)
-                .delete()
-                .addOnSuccessListener {
-                    Log.d("MainActivity", "[logoutAndExit] managerTokens/$uid 삭제 성공")
-                    finalize()
+                // (1-b) managerTokens/{uid} 문서 삭제 — chat + 콜 알림(managerTokens 경로) 차단
+                if (!p.isNullOrBlank() && !c.isNullOrBlank() && !o.isNullOrBlank()) {
+                    try {
+                        withTimeoutOrNull(5_000) {
+                            FirebaseFirestore.getInstance()
+                                .collection("provinces").document(p)
+                                .collection("cities").document(c)
+                                .collection("offices").document(o)
+                                .collection("managerTokens").document(uid)
+                                .delete()
+                                .await()
+                        }
+                        Log.d("MainActivity", "[logoutAndExit] managerTokens/$uid 삭제 처리")
+                    } catch (e: Exception) {
+                        Log.w("MainActivity", "[logoutAndExit] managerTokens 삭제 실패: ${e.message}")
+                    }
+                } else {
+                    Log.w("MainActivity", "[logoutAndExit] 사무실 정보 부족 - managerTokens 스킵")
                 }
-                .addOnFailureListener { e ->
-                    Log.w("MainActivity", "[logoutAndExit] managerTokens 삭제 실패 (signOut 진행): ${e.message}")
-                    finalize()
+            }
+
+            // ② signOut (currentUser → null, 이후 onNewToken 가드 작동)
+            auth.signOut()
+
+            // ③ deleteToken (device push 채널 revoke)
+            try {
+                withTimeoutOrNull(5_000) {
+                    FirebaseMessaging.getInstance().deleteToken().await()
                 }
-        } else {
-            Log.w("MainActivity", "[logoutAndExit] 토큰 식별 정보 부족 (uid=$uid, p=$p, c=$c, o=$o) - 토큰 삭제 스킵")
-            finalize()
+                Log.d("MainActivity", "[logoutAndExit] deleteToken 처리")
+            } catch (e: Exception) {
+                Log.w("MainActivity", "[logoutAndExit] deleteToken 실패: ${e.message}")
+            }
+
+            // ④ 부수적 cleanup
+            tokenRefreshListener?.remove()
+            tokenRefreshListener = null
+            getSharedPreferences("fcm_prefs", Context.MODE_PRIVATE)
+                .edit().remove("fcm_token").apply()
+
+            // ⑤ finishAffinity
+            finishAffinity()
         }
     }
 
