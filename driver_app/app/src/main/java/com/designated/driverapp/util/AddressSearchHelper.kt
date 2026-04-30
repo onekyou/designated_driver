@@ -1,6 +1,7 @@
 package com.designated.driverapp.util
 
 import android.util.Log
+import com.designated.driverapp.BuildConfig
 import com.designated.driverapp.data.AddressSearchResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -14,8 +15,7 @@ import java.net.URLEncoder
 class AddressSearchHelper {
     companion object {
         private const val TAG = "AddressSearchHelper"
-        // Kakao API Key - 콜매니저와 동일한 키 사용
-        private const val KAKAO_API_KEY = "a8049d5693a0c5505e80a88ebd852b9e"
+        private val KAKAO_API_KEY = BuildConfig.KAKAO_API_KEY
         private const val KAKAO_SEARCH_URL = "https://dapi.kakao.com/v2/local/search/keyword.json"
         private const val KAKAO_ADDRESS_URL = "https://dapi.kakao.com/v2/local/search/address.json"
     }

@@ -20,6 +20,14 @@ android {
         keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
     }
 
+    // local.properties 로드 (Kakao API 키 등)
+    def localPropertiesFile = rootProject.file("local.properties")
+    def localProperties = new Properties()
+    if (localPropertiesFile.exists()) {
+        localProperties.load(new FileInputStream(localPropertiesFile))
+    }
+    def kakaoApiKey = localProperties.getProperty("KAKAO_API_KEY", "")
+
     signingConfigs {
         release {
             if (keystorePropertiesFile.exists()) {
@@ -42,6 +50,8 @@ android {
         vectorDrawables {
             useSupportLibrary true
         }
+
+        buildConfigField "String", "KAKAO_API_KEY", "\"${kakaoApiKey}\""
     }
 
     buildTypes {
@@ -63,6 +73,7 @@ android {
     }
     buildFeatures {
         compose true
+        buildConfig true
     }
     composeOptions {
         kotlinCompilerExtensionVersion '1.5.8' // Compatible with Kotlin 1.9.22
