@@ -275,18 +275,4 @@ class LoginViewModel @Inject constructor(
     fun resetLoginState() {
         _loginState.value = LoginState.Idle
     }
-
-    /**
-     * 로그아웃 - 세션 삭제
-     */
-    fun logout() {
-        auth.signOut()
-        sessionManager.clearSession()
-        // 자동로그인 자격증명은 유지 (재실행 시 자동로그인 위해)
-        // pending FCM 토큰 제거 (다른 계정 로그인 시 혼선 방지)
-        sharedPreferences.edit()
-            .remove(Constants.PREF_KEY_PENDING_FCM_TOKEN)
-            .apply()
-        _loginState.value = LoginState.Idle
-    }
 }

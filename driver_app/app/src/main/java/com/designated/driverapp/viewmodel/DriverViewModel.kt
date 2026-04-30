@@ -791,17 +791,6 @@ class DriverViewModel @Inject constructor(
                 val (provinceId, cityId, officeId) = getDriverLocationInfo()
                 val driverId = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
 
-                // ✅ 추가: 콜 정보 조회하여 앱 회원 여부 확인
-                val callDoc = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
-                    .collection(Constants.COLLECTION_CITIES).document(cityId)
-                    .collection(Constants.COLLECTION_OFFICES).document(officeId)
-                    .collection(Constants.COLLECTION_CALLS).document(callId)
-                    .get()
-                    .await()
-
-                val isAppCustomer = callDoc.getBoolean("isAppCustomer") ?: false
-                val phoneNumber = callDoc.getString("phoneNumber")
-
                 // 포인트 적립은 Cloud Functions에서 일원화 처리 (BUG-D12 수정)
                 // Driver App에서는 적립하지 않음 - CF의 notifyCustomerOnComplete에서 처리
 
@@ -914,38 +903,6 @@ class DriverViewModel @Inject constructor(
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = "정산 처리 중 오류: ${e.message}", isLoading = false) }
             }
-        }
-    }
-
-    private fun saveTripToHistory(fare: Int, tripSummary: String, paymentMethod: String, cashAmount: Int?, callInfo: CallInfo?) {
-        try {
-            val prefs = appContext.getSharedPreferences("trip_history", Context.MODE_PRIVATE)
-            val historyJson = prefs.getString("history_list", "[]")
-            val historyList = org.json.JSONArray(historyJson)
-
-            val tripNumber = historyList.length() + 1
-
-            val customerName = callInfo?.customerName ?: "고객"
-            val departure = callInfo?.departure_set?.takeIf { it.isNotBlank() } ?: "출발지"
-            val destination = callInfo?.destination_set?.takeIf { it.isNotBlank() } ?: "도착지"
-
-            val paymentString = when (paymentMethod) {
-                "현금" -> "현금"
-                "외상" -> "외상"
-                "이체" -> "이체"
-                "현금+포인트" -> if (cashAmount != null) "현금+포인트(${String.format("%,d", cashAmount)}원 현금)" else "현금+포인트"
-                "포인트" -> "포인트"
-                else -> paymentMethod
-            }
-
-            // 운행내역 문자열 생성 (예: "1. 홍길동, 용문면→양평읍, 15,000원, 현금")
-            val tripHistoryEntry = "$tripNumber. $customerName, $departure→$destination, ${String.format("%,d", fare)}원, $paymentString|timestamp=${System.currentTimeMillis()}"
-
-            historyList.put(tripHistoryEntry)
-
-            prefs.edit().putString("history_list", historyList.toString()).apply()
-
-        } catch (e: Exception) {
         }
     }
 
@@ -1387,10 +1344,12 @@ class DriverViewModel @Inject constructor(
             }
 
             if (snapshot != null && snapshot.exists()) {
+                @Suppress("UNCHECKED_CAST")
                 val carryOverMap = snapshot.get("carryOver") as? Map<String, Any?>
                 val carryOver = DriverCarryOver.fromMap(carryOverMap)
 
                 // dailySettlement 확인 - PENDING_CONFIRM 상태면 calculatedCarryOver 사용
+                @Suppress("UNCHECKED_CAST")
                 val dailySettlementMap = snapshot.get("dailySettlement") as? Map<String, Any?>
                 val dailySettlement = DriverDailySettlement.fromMap(dailySettlementMap)
 
