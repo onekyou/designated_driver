@@ -123,3 +123,10 @@
 -dontwarn javax.annotation.**
 -dontwarn javax.inject.**
 -dontwarn sun.misc.Unsafe
+
+# Release 빌드에서 디버그 로그 제거 (PII 노출 방지). Log.w/e는 유지 (Crashlytics 진단)
+-assumenosideeffects class android.util.Log {
+    public static *** v(...);
+    public static *** d(...);
+    public static *** i(...);
+}
