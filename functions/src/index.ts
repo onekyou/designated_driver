@@ -1311,7 +1311,8 @@ export const onSharedCallClaimed = onDocumentUpdated(
       logger.info(`[shared:${callId}] assignedDriverId=${afterData.claimedDriverId}`);
 
       // PR 1 — 결정 #11: claim 시점 wallet 잔액 ≥ 5,000 검증 (잔액 부족 사무실은 revert + 매니저 충전 안내)
-      if (afterData.claimedOfficeId) {
+      // 식당앱 콜(sourceRestaurantId 존재)에만 적용. 기존 사무실간 zero-sum 콜은 면제 (마이그레이션 윈도우 안전 + 의미 정합)
+      if (afterData.sourceRestaurantId && afterData.claimedOfficeId) {
         const { allowed, balance } = await checkOfficeWalletForClaim(
           afterData.targetProvinceId,
           afterData.targetCityId,
