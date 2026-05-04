@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/providers.dart';
 import 'core/routing/app_router.dart';
+import 'features/restaurant/presentation/services/notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,18 +17,32 @@ Future<void> main() async {
     overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
     ],
-    child: const CustomerApp(),
+    child: const RestaurantApp(),
   ));
 }
 
-class CustomerApp extends ConsumerWidget {
-  const CustomerApp({super.key});
+class RestaurantApp extends ConsumerStatefulWidget {
+  const RestaurantApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<RestaurantApp> createState() => _RestaurantAppState();
+}
+
+class _RestaurantAppState extends ConsumerState<RestaurantApp> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      RestaurantNotificationService.instance
+          .attach(ref.read(navigatorKeyProvider));
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final router = ref.watch(goRouterProvider);
     return MaterialApp.router(
-      title: '콜마당 고객',
+      title: '콜마당 식당',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepOrange),
         useMaterial3: true,

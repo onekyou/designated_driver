@@ -1,96 +1,64 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'main_shell.dart';
-import 'placeholder_screen.dart';
+import '../../features/restaurant/presentation/notifiers/restaurant_ids_notifier.dart';
+import '../../features/restaurant/presentation/screens/app_call_screen.dart';
+import '../../features/restaurant/presentation/screens/home_screen.dart';
+import '../../features/restaurant/presentation/screens/points_screen.dart';
+import '../../features/restaurant/presentation/screens/signup_screen.dart';
+import '../../features/restaurant/presentation/screens/simple_call_screen.dart';
+import '../../features/restaurant/presentation/screens/taxi_call_screen.dart';
 
-/// GoRouter 골격 (SCREENS.md §2.1 1:1 이관)
-/// Chunk 3: 라우트만 선언 + PlaceholderScreen. 실제 화면은 Chunk 4+.
+/// 식당앱 root navigator key — RestaurantNotificationService.attach() 가 사용.
+final navigatorKeyProvider = Provider<GlobalKey<NavigatorState>>(
+  (_) => GlobalKey<NavigatorState>(),
+);
+
+/// 식당앱 라우팅.
+/// 진입 흐름: 가입 전(ids null) → /signup, 이후 → /
+/// home의 4메뉴 → /call/simple, /call/app, /call/taxi, /points
 final goRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
-    initialLocation: '/splash',
+    navigatorKey: ref.watch(navigatorKeyProvider),
+    initialLocation: '/',
+    redirect: (context, state) {
+      final ids = ref.read(restaurantIdsProvider);
+      final loc = state.matchedLocation;
+      if (ids == null && loc != '/signup') return '/signup';
+      if (ids != null && loc == '/signup') return '/';
+      return null;
+    },
     routes: [
       GoRoute(
-        path: '/splash',
-        name: 'splash',
-        builder: (_, _) => const PlaceholderScreen(title: 'Splash'),
+        path: '/signup',
+        name: 'signup',
+        builder: (_, __) => const SignupScreen(),
       ),
       GoRoute(
-        path: '/office-code',
-        name: 'office-code',
-        builder: (_, _) => const PlaceholderScreen(title: 'OfficeCode'),
+        path: '/',
+        name: 'home',
+        builder: (_, __) => const HomeScreen(),
       ),
       GoRoute(
-        path: '/auth/terms',
-        name: 'terms',
-        builder: (_, _) => const PlaceholderScreen(title: 'Terms'),
-        routes: [
-          GoRoute(
-            path: 'view',
-            name: 'terms-view',
-            builder: (_, state) => PlaceholderScreen(
-              title:
-                  'DocumentViewer(${state.uri.queryParameters['type'] ?? 'terms'})',
-            ),
-          ),
-        ],
+        path: '/call/simple',
+        name: 'call-simple',
+        builder: (_, __) => const SimpleCallScreen(),
       ),
       GoRoute(
-        path: '/auth/privacy',
-        name: 'privacy-view',
-        builder: (_, _) =>
-            const PlaceholderScreen(title: 'DocumentViewer(privacy)'),
+        path: '/call/app',
+        name: 'call-app',
+        builder: (_, __) => const AppCallScreen(),
       ),
       GoRoute(
-        path: '/auth/phone',
-        name: 'phone-auth',
-        builder: (_, _) => const PlaceholderScreen(title: 'PhoneAuth'),
+        path: '/call/taxi',
+        name: 'call-taxi',
+        builder: (_, __) => const TaxiCallScreen(),
       ),
       GoRoute(
-        path: '/profile/setup',
-        name: 'profile-setup',
-        builder: (_, _) => const PlaceholderScreen(title: 'ProfileSetup'),
-      ),
-      ShellRoute(
-        builder: (_, _, child) => MainShell(child: child),
-        routes: [
-          GoRoute(
-            path: '/',
-            name: 'home',
-            pageBuilder: (_, _) => const NoTransitionPage(
-              child: PlaceholderScreen(title: 'Home'),
-            ),
-          ),
-          GoRoute(
-            path: '/history',
-            name: 'history',
-            pageBuilder: (_, _) => const NoTransitionPage(
-              child: PlaceholderScreen(title: 'History'),
-            ),
-          ),
-          GoRoute(
-            path: '/points',
-            name: 'points',
-            pageBuilder: (_, _) => const NoTransitionPage(
-              child: PlaceholderScreen(title: 'Points'),
-            ),
-            routes: [
-              GoRoute(
-                path: 'history',
-                name: 'point-history',
-                builder: (_, _) =>
-                    const PlaceholderScreen(title: 'PointHistory'),
-              ),
-            ],
-          ),
-          GoRoute(
-            path: '/profile',
-            name: 'profile',
-            pageBuilder: (_, _) => const NoTransitionPage(
-              child: PlaceholderScreen(title: 'Profile'),
-            ),
-          ),
-        ],
+        path: '/points',
+        name: 'points',
+        builder: (_, __) => const PointsScreen(),
       ),
     ],
   );
