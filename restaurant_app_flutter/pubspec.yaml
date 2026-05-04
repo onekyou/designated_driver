@@ -1,0 +1,83 @@
+name: restaurant_app_flutter
+description: "콜마당 식당앱 (Flutter)"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Firebase
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.1
+  cloud_firestore: ^5.4.4
+  firebase_messaging: ^15.1.3
+  cloud_functions: ^5.3.3
+  firebase_analytics: ^11.3.0
+  firebase_crashlytics: ^4.1.0
+  firebase_remote_config: ^5.1.0
+
+  # State Management (Riverpod)
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+
+  # Value Objects
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+
+  # Routing
+  go_router: ^14.2.7
+
+  # Local Storage
+  shared_preferences: ^2.3.2
+  flutter_secure_storage: ^9.2.2
+
+  # Network
+  connectivity_plus: ^6.0.5
+  http: ^1.6.0
+
+  # External app launcher (택시호출 다이얼러)
+  url_launcher: ^6.3.1
+
+  # Location
+  geolocator: ^10.1.0
+  geocoding: ^2.1.1
+
+  # QR Code Scanner (사무실 코드 스캔)
+  mobile_scanner: ^5.2.0
+
+  # In-app Update (Android Play Store Staged Rollout, 의제 10)
+  in_app_update: ^4.2.3
+
+  # Utilities
+  intl: ^0.19.0
+  permission_handler: ^11.3.1
+
+  # Local Notifications (FCM용)
+  flutter_local_notifications: ^21.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # Lints
+  flutter_lints: ^6.0.0
+
+  # Code Generation
+  build_runner: ^2.4.12
+  freezed: ^2.5.7
+  json_serializable: ^6.8.0
+  riverpod_generator: ^2.4.3
+
+  # Test mocks (Chunk 3~: AuthNotifier smoke + Chunk 4 본격 테스트 디딤돌)
+  firebase_auth_mocks: ^0.14.0
+  fake_cloud_firestore: ^3.0.3
+  mocktail: ^1.0.4
+  mock_exceptions: ^0.8.2
+
+flutter:
+  uses-material-design: true
