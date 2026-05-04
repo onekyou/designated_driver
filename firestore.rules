@@ -383,6 +383,36 @@ service cloud.firestore {
           allow write: if request.auth == null;
         }
       }
+
+      // =============================
+      //  Restaurants (식당, P0 식당앱)
+      //  • 식당 doc은 callable CF가 admin SDK로 생성/관리 (redeemRestaurantInviteCode)
+      //  • 식당 본인(익명 인증, ownerUid 매칭)은 자기 doc 읽기 + FCM 토큰 갱신
+      //  • 사무실 매니저는 자기 사무실 식당 read
+      //  관련 plan: abundant-floating-island.md §3.5
+      // =============================
+      match /restaurants/{restaurantId} {
+        // 식당 본인 또는 사무실 매니저 read
+        allow read: if isOfficeAdmin(provinceId, cityId, officeId)
+                    || (isAuthenticated() && resource.data.ownerUid == request.auth.uid);
+        // 식당 본인은 FCM 토큰 등 본인 필드만 update (ownerUid 변경 불가)
+        allow update: if (isAuthenticated() && resource.data.ownerUid == request.auth.uid
+                          && request.resource.data.ownerUid == resource.data.ownerUid)
+                      || isOfficeAdmin(provinceId, cityId, officeId)
+                      || request.auth == null;
+        // create/delete는 CF만 (admin SDK)
+        allow create, delete: if request.auth == null;
+      }
+
+      // =============================
+      //  Restaurant Invite Codes (식당 가입 코드)
+      //  • P0: 사용자(admin)만 generateRestaurantInviteCode 호출 → CF가 admin SDK로 생성
+      //  • redeemRestaurantInviteCode (callable, 식당앱) → CF가 검증 + used = true
+      //  • 클라이언트 직접 read/write 불가
+      // =============================
+      match /restaurantInviteCodes/{code} {
+        allow read, write: if request.auth == null;
+      }
     }
 
     // 공유 콜 규칙 – 관리자만 접근 가능, 기사는 내부콜만 처리

@@ -13,7 +13,7 @@ import {onSchedule} from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
-import { processSharedCallPoints, processCustomerPointsOnComplete, refundCustomerPointsOnCancel } from "./handlers/points";
+import { processSharedCallPoints, processCustomerPointsOnComplete, refundCustomerPointsOnCancel, processRestaurantCallPayout, checkOfficeWalletForClaim } from "./handlers/points";
 import { addCallToSettlementSession, autoFinalizeSettlementSessions, checkSettlementDiscrepancies, notifyDriversSettlementFinalized, notifyDriverSettlementResultHandler, getTodayWorkDate } from "./handlers/settlement";
 import { buildFcmPayload, buildMulticastFcmPayload } from "./utils/fcmPayload";
 import { recordAcceptanceEvent } from "./analytics/acceptanceEvents";
@@ -26,6 +26,18 @@ export {
   onChatSyncPickupDriver,
   onChatSyncAdminRemoval,
 } from "./handlers/chat";
+export {
+  generateRestaurantInviteCode,
+  redeemRestaurantInviteCode,
+  createSharedCallFromRestaurant,
+  notifyRestaurantOnNoResponse,
+} from "./handlers/restaurant";
+export {
+  submitWithdrawalRequest,
+  processDeposit,
+  processWithdrawal,
+} from "./handlers/wallet";
+export { migrateExistingOfficesWallet } from "./scripts/migrateExistingOfficesWallet";
 import { addChatMember } from "./handlers/chat";
 import express from "express";
 import basicAuth from "express-basic-auth";
@@ -746,6 +758,13 @@ interface SharedCallData {
   originalCallId?: string; // 원본 콜 ID
   cancelReason?: string; // 취소 사유
   cancelledAt?: FirebaseFirestore.FieldValue | string; // 취소 시각
+  // PR 1 — 식당앱 발생 콜 식별 (plan §3.2)
+  sourceRestaurantId?: string;        // 식당앱이 만든 콜인지 식별. 있으면 PLATFORM 분기
+  paymentMethod?: "CASH" | "RESTAURANT_POINT"; // 식당앱 결제 방식 (PR 4 활용)
+  callType?: string;                  // "RESTAURANT" 또는 "AFTER_HOURS" 등
+  fromRestaurantApp?: boolean;
+  contactName?: string;
+  contactAddress?: string;
 }
 
 // =============================
@@ -1291,6 +1310,56 @@ export const onSharedCallClaimed = onDocumentUpdated(
 
       logger.info(`[shared:${callId}] assignedDriverId=${afterData.claimedDriverId}`);
 
+      // PR 1 — 결정 #11: claim 시점 wallet 잔액 ≥ 5,000 검증 (잔액 부족 사무실은 revert + 매니저 충전 안내)
+      if (afterData.claimedOfficeId) {
+        const { allowed, balance } = await checkOfficeWalletForClaim(
+          afterData.targetProvinceId,
+          afterData.targetCityId,
+          afterData.claimedOfficeId
+        );
+        if (!allowed) {
+          logger.warn(`[shared:${callId}] 잔액 부족으로 claim revert - office: ${afterData.claimedOfficeId}, balance: ${balance}`);
+          try {
+            await admin.firestore().collection("shared_calls").doc(callId).update({
+              status: "OPEN",
+              claimedOfficeId: null,
+              claimedDriverId: null,
+              claimRejectedReason: "INSUFFICIENT_BALANCE",
+              claimRejectedAt: FieldValue.serverTimestamp(),
+            });
+            const adminQuery = await admin.firestore()
+              .collection("admins")
+              .where("associatedProvinceId", "==", afterData.targetProvinceId)
+              .where("associatedCityId", "==", afterData.targetCityId)
+              .where("associatedOfficeId", "==", afterData.claimedOfficeId)
+              .get();
+            const tokens: string[] = [];
+            adminQuery.docs.forEach((doc) => {
+              const fcm = doc.data().fcmToken;
+              if (fcm) tokens.push(fcm);
+            });
+            if (tokens.length > 0) {
+              await admin.messaging().sendEachForMulticast({
+                tokens,
+                notification: {
+                  title: "포인트 충전이 필요합니다",
+                  body: `현재 잔액 ${balance}P. 콜을 잡으려면 5,000P 이상 필요합니다.`,
+                },
+                data: {
+                  type: "WALLET_INSUFFICIENT",
+                  callId,
+                  balance: String(balance),
+                  required: "5000",
+                },
+              });
+            }
+          } catch (revertErr) {
+            logger.error(`[shared:${callId}] revert 실패`, revertErr);
+          }
+          return;
+        }
+      }
+
       // 트랜잭션 외부에서 변수 선언
       let assignedDriverId: string | null = null;
       let assignedDriverName: string | null = null;
@@ -1466,11 +1535,48 @@ export const onSharedCallClaimed = onDocumentUpdated(
           logger.error(`[shared:${callId}] FCM 전송 오류`, fcmErr);
         }
 
+        // PR 1 plan §3.3 — 식당앱 발생 콜이면 식당 fcmToken으로 잡힘 알림 (사무실명·전화번호 + 통화 버튼)
+        if (afterData.sourceRestaurantId && afterData.claimedOfficeId) {
+          try {
+            const restRef = admin.firestore()
+              .collection("provinces").doc(afterData.sourceProvinceId)
+              .collection("cities").doc(afterData.sourceCityId)
+              .collection("offices").doc(afterData.sourceOfficeId)
+              .collection("restaurants").doc(afterData.sourceRestaurantId);
+            const officeRef = admin.firestore()
+              .collection("provinces").doc(afterData.targetProvinceId)
+              .collection("cities").doc(afterData.targetCityId)
+              .collection("offices").doc(afterData.claimedOfficeId);
+            const [restSnap, officeSnap] = await Promise.all([restRef.get(), officeRef.get()]);
+            const restFcmToken = restSnap.data()?.fcmToken;
+            const officeName = officeSnap.data()?.name || "사무실";
+            const officePhone = officeSnap.data()?.phone || "";
+            if (restFcmToken) {
+              await admin.messaging().send({
+                token: restFcmToken,
+                notification: {
+                  title: "콜이 잡혔습니다",
+                  body: `${officeName}에서 운행을 시작합니다.`,
+                },
+                data: {
+                  type: "RESTAURANT_CALL_CLAIMED",
+                  sharedCallId: callId,
+                  officeName,
+                  officePhone,
+                },
+              });
+              logger.info(`[shared:${callId}] 식당 알림 발송 - restaurantId: ${afterData.sourceRestaurantId}, officeName: ${officeName}`);
+            }
+          } catch (restErr) {
+            logger.error(`[shared:${callId}] 식당 알림 실패`, restErr);
+          }
+        }
+
       } catch (err) {
         logger.error(`[shared:${callId}] 트랜잭션 오류`, err);
       }
     }
-    
+
     // CLAIMED -> OPEN 인지 확인 (기사가 취소한 경우)
     else if (beforeData.status === "CLAIMED" && afterData.status === "OPEN") {
       logger.info(`[shared:${callId}] 공유 콜이 취소되어 OPEN으로 되돌려졌습니다.`);
@@ -2389,15 +2495,28 @@ export const onSharedCallCompleted = onDocumentUpdated(
           destCallId: callId
         });
 
-        // 2. 포인트 처리 (별도 함수 호출)
-        await processSharedCallPoints(
-          sharedCallData,
-          provinceId,
-          cityId,
-          officeId,
-          fare,
-          sourceSharedCallId
-        );
+        // 2. 포인트 처리 — 식당앱 콜이면 분기 (PR 1, plan §3.3)
+        // sourceRestaurantId 존재 시 = 식당앱 발생 콜 → processRestaurantCallPayout
+        // 없으면 기존 사무실↔사무실 zero-sum 분배 (processSharedCallPoints)
+        if (sharedCallData.sourceRestaurantId) {
+          await processRestaurantCallPayout(
+            sharedCallData,
+            provinceId,
+            cityId,
+            officeId,
+            fare,
+            sourceSharedCallId
+          );
+        } else {
+          await processSharedCallPoints(
+            sharedCallData,
+            provinceId,
+            cityId,
+            officeId,
+            fare,
+            sourceSharedCallId
+          );
+        }
 
         logger.info(`[call-completed:${callId}] 공유콜 완료 처리 및 포인트 분배 완료. SharedCallId: ${sourceSharedCallId}`);
 
@@ -5955,7 +6074,7 @@ export const registerOwner = onCall(
     // 3) Firestore 트랜잭션 — 실패 시 Auth 계정 롤백
     try {
       await db.runTransaction(async (tx) => {
-        // 토큰 재확인 (경합 방지)
+        // ===== READ 단계 =====
         const freshInvite = await tx.get(inviteRef);
         if (!freshInvite.exists) {
           throw new Error("초대 토큰이 사라졌습니다.");
@@ -5965,6 +6084,18 @@ export const registerOwner = onCall(
           throw new Error("이미 사용된 초대 토큰입니다.");
         }
 
+        // wallet 초기화 read (P0 plan §3.3, 결정 #19) — 가입 보너스 30,000 멱등성 체크
+        const pointsRef = officeRef.collection("points").doc("points");
+        const walletTxRef = officeRef.collection("point_transactions").doc(`signup_bonus_${invite.officeId}`);
+        const existingWalletTx = await tx.get(walletTxRef);
+        let walletBeforeBalance = 0;
+        const needWalletInit = !existingWalletTx.exists;
+        if (needWalletInit) {
+          const pointsSnap = await tx.get(pointsRef);
+          walletBeforeBalance = pointsSnap.data()?.balance || 0;
+        }
+
+        // ===== WRITE 단계 =====
         tx.set(adminsRef, {
           email: normalizedEmail,
           name: invite.ownerName,
@@ -5991,6 +6122,24 @@ export const registerOwner = onCall(
           usedBy: uid,
           usesRemaining: 0,
         });
+
+        // wallet 가입 보너스 (멱등)
+        if (needWalletInit) {
+          const after = walletBeforeBalance + 30000;
+          tx.set(pointsRef, {
+            balance: after,
+            updatedAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
+          tx.set(walletTxRef, {
+            type: "SIGNUP_BONUS",
+            amount: 30000,
+            balanceAfter: after,
+            description: "사무실 가입 보너스",
+            status: "COMPLETED",
+            timestamp: FieldValue.serverTimestamp(),
+            createdBy: "system",
+          });
+        }
       });
     } catch (txError: any) {
       // 롤백: Auth 계정 삭제

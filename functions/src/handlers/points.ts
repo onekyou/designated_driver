@@ -483,3 +483,154 @@ export async function getCustomerPointBalance(
     totalCalls: data?.totalCalls || 0,
   };
 }
+
+// ============================================================
+// 식당앱 콜 정산 (P0 — 식당 ↔ 사무실)
+// ============================================================
+// 사용자 결정 #4: P0는 PLATFORM 모드 (모든 사무실 동일 broadcast)
+// 사용자 결정 #5/12: 결제 방식 무관 식당 +1,000 적립
+// 사용자 결정 #10: 운행 완료 시 차감 + 마이너스 허용
+// 식당앱 콜은 source 사무실 분배 SKIP — 기존 processSharedCallPoints와 분리
+
+const RESTAURANT_CALL_BONUS = 1000;
+const OFFICE_CHARGE_RATIO = 0.1;
+
+/**
+ * 식당앱 콜 운행 완료 시 정산 처리
+ * - CASH: 사무실 wallet -fare×10% + 식당 +1,000
+ * - RESTAURANT_POINT: 식당 -fare + 사무실 wallet +fare + 식당 +1,000
+ * 멱등성 키: restaurant_call_${sourceSharedCallId}
+ */
+export async function processRestaurantCallPayout(
+  sharedCallData: any,
+  targetProvinceId: string,
+  targetCityId: string,
+  targetOfficeId: string,
+  fare: number,
+  sourceSharedCallId: string
+): Promise<void> {
+  const paymentMethod = sharedCallData.paymentMethod || "CASH";
+  const restaurantId = sharedCallData.sourceRestaurantId;
+  if (!restaurantId) {
+    logger.warn(`[restaurant_payout] sourceRestaurantId 없음 - skip. sharedCallId: ${sourceSharedCallId}`);
+    return;
+  }
+
+  logger.info(`[restaurant_payout] 시작 - method: ${paymentMethod}, fare: ${fare}, restaurantId: ${restaurantId}, sharedCallId: ${sourceSharedCallId}`);
+
+  await admin.firestore().runTransaction(async (tx) => {
+    const targetOfficeRef = admin.firestore()
+      .collection("provinces").doc(targetProvinceId)
+      .collection("cities").doc(targetCityId)
+      .collection("offices").doc(targetOfficeId);
+
+    const sourceOfficeRef = admin.firestore()
+      .collection("provinces").doc(sharedCallData.sourceProvinceId)
+      .collection("cities").doc(sharedCallData.sourceCityId)
+      .collection("offices").doc(sharedCallData.sourceOfficeId);
+
+    const restaurantRef = sourceOfficeRef.collection("restaurants").doc(restaurantId);
+
+    const officeTxRef = targetOfficeRef.collection("point_transactions").doc(`restaurant_call_${sourceSharedCallId}`);
+    const restTxRef = restaurantRef.collection("transactions").doc(`call_${sourceSharedCallId}`);
+
+    // 멱등성 체크
+    const [existingOfficeTx, existingRestTx] = await Promise.all([
+      tx.get(officeTxRef),
+      tx.get(restTxRef),
+    ]);
+    if (existingOfficeTx.exists || existingRestTx.exists) {
+      logger.warn(`[restaurant_payout] 이미 처리된 콜 - sharedCallId: ${sourceSharedCallId}`);
+      return;
+    }
+
+    const officePointsRef = targetOfficeRef.collection("points").doc("points");
+    const [officePointsSnap, restSnap] = await Promise.all([
+      tx.get(officePointsRef),
+      tx.get(restaurantRef),
+    ]);
+    const officeCurrent = officePointsSnap.data()?.balance || 0;
+    const restCurrent = restSnap.data()?.points || 0;
+
+    let officeDelta = 0;
+    let restDelta = RESTAURANT_CALL_BONUS;
+    let officeTxType = "";
+    let officeTxDesc = "";
+    let restTxType = "";
+    let restTxDesc = "";
+
+    if (paymentMethod === "RESTAURANT_POINT") {
+      // 식당이 fare 결제 → 사무실 wallet +fare, 식당 -fare + 적립 +1,000 (마이너스 허용)
+      const restPaymentAmount = -fare;
+      officeDelta = fare;
+      restDelta = restPaymentAmount + RESTAURANT_CALL_BONUS;
+      officeTxType = "RESTAURANT_PAYMENT_RECEIVED";
+      officeTxDesc = `식당 포인트 결제 입금 (${sharedCallData.contactName || "식당"}, +${fare})`;
+      restTxType = "PAYMENT_AND_EARN";
+      restTxDesc = `식당 포인트 결제 (-${fare}) + 콜 적립 (+${RESTAURANT_CALL_BONUS})`;
+    } else {
+      // CASH: 사무실 -fare×10%, 식당 +1,000
+      const charge = Math.round(fare * OFFICE_CHARGE_RATIO);
+      officeDelta = -charge;
+      restDelta = RESTAURANT_CALL_BONUS;
+      officeTxType = "RESTAURANT_CALL_CHARGE";
+      officeTxDesc = `식당앱 콜 수수료 (${sharedCallData.contactName || "식당"}, -${charge})`;
+      restTxType = "EARN_FROM_CALL";
+      restTxDesc = `콜 적립 (+${RESTAURANT_CALL_BONUS})`;
+    }
+
+    const officeNext = officeCurrent + officeDelta;
+    const restNext = restCurrent + restDelta;
+
+    tx.set(officePointsRef, {
+      balance: officeNext,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    tx.set(officeTxRef, {
+      type: officeTxType,
+      amount: officeDelta,
+      balanceAfter: officeNext,
+      description: officeTxDesc,
+      callId: sourceSharedCallId,
+      paymentMethod,
+      timestamp: FieldValue.serverTimestamp(),
+      createdBy: "system",
+    });
+
+    tx.update(restaurantRef, { points: restNext });
+
+    tx.set(restTxRef, {
+      type: restTxType,
+      amount: restDelta,
+      pointsAfter: restNext,
+      description: restTxDesc,
+      callId: sourceSharedCallId,
+      paymentMethod,
+      timestamp: FieldValue.serverTimestamp(),
+      createdBy: "system",
+    });
+
+    logger.info(`[restaurant_payout] 완료 - office: ${officeDelta} (${officeCurrent}→${officeNext}), restaurant: ${restDelta} (${restCurrent}→${restNext})`);
+  });
+}
+
+/**
+ * 사무실 wallet 잔액 검증 (claim 가능 여부)
+ * 결정 #11: 잔액 < 5,000이면 claim 거절
+ */
+export async function checkOfficeWalletForClaim(
+  provinceId: string,
+  cityId: string,
+  officeId: string,
+  threshold: number = 5000
+): Promise<{ allowed: boolean; balance: number }> {
+  const pointsRef = admin.firestore()
+    .collection("provinces").doc(provinceId)
+    .collection("cities").doc(cityId)
+    .collection("offices").doc(officeId)
+    .collection("points").doc("points");
+  const snap = await pointsRef.get();
+  const balance = snap.data()?.balance || 0;
+  return { allowed: balance >= threshold, balance };
+}
