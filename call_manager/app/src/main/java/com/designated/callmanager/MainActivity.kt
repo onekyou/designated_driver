@@ -124,7 +124,10 @@ enum class Screen {
     ExcludeNumber,
     ContactSelection,
     CustomerManagement,
-    AttributionManagement
+    AttributionManagement,
+    Wallet,
+    DepositGuide,
+    WithdrawalRequest
 }
 
 sealed class NavigationParams {
@@ -395,6 +398,12 @@ class MainActivity : ComponentActivity() {
                             Screen.SignUp, Screen.PasswordReset -> {
                                 screenState = Screen.Login
                             }
+                            Screen.Wallet -> {
+                                screenState = Screen.Dashboard
+                            }
+                            Screen.DepositGuide, Screen.WithdrawalRequest -> {
+                                screenState = Screen.Wallet
+                            }
                         }
                     }
 
@@ -454,7 +463,8 @@ class MainActivity : ComponentActivity() {
                             DashboardWithChatSheet(
                                 dashboardViewModel = dashboardViewModel,
                                 onLogout = { showLogoutConfirmDialog = true },
-                                onNavigateToSettings = { screenState = Screen.Settings }
+                                onNavigateToSettings = { screenState = Screen.Settings },
+                                onNavigateToWallet = { screenState = Screen.Wallet }
                             )
                         }
                         Screen.Settings -> {
@@ -558,6 +568,29 @@ class MainActivity : ComponentActivity() {
                                     screenState = Screen.Settings
                                 }
                             }
+                        }
+                        Screen.Wallet -> {
+                            val walletViewModel: com.designated.callmanager.ui.wallet.WalletViewModel = viewModel()
+                            com.designated.callmanager.ui.wallet.WalletScreen(
+                                viewModel = walletViewModel,
+                                onNavigateBack = { screenState = Screen.Dashboard },
+                                onNavigateToDepositGuide = { screenState = Screen.DepositGuide },
+                                onNavigateToWithdrawalRequest = { screenState = Screen.WithdrawalRequest },
+                            )
+                        }
+                        Screen.DepositGuide -> {
+                            val walletViewModel: com.designated.callmanager.ui.wallet.WalletViewModel = viewModel()
+                            com.designated.callmanager.ui.wallet.DepositGuideScreen(
+                                viewModel = walletViewModel,
+                                onNavigateBack = { screenState = Screen.Wallet },
+                            )
+                        }
+                        Screen.WithdrawalRequest -> {
+                            val walletViewModel: com.designated.callmanager.ui.wallet.WalletViewModel = viewModel()
+                            com.designated.callmanager.ui.wallet.WithdrawalRequestScreen(
+                                viewModel = walletViewModel,
+                                onNavigateBack = { screenState = Screen.Wallet },
+                            )
                         }
                     }
 
@@ -1358,6 +1391,7 @@ private fun DashboardWithChatSheet(
     dashboardViewModel: DashboardViewModel,
     onLogout: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToWallet: () -> Unit,
 ) {
     val chatViewModel: ChatViewModel = viewModel()
     val scaffoldState = rememberBottomSheetScaffoldState()
@@ -1396,6 +1430,7 @@ private fun DashboardWithChatSheet(
                 viewModel = dashboardViewModel,
                 onLogout = onLogout,
                 onNavigateToSettings = onNavigateToSettings,
+                onNavigateToWallet = onNavigateToWallet,
             )
         }
     }

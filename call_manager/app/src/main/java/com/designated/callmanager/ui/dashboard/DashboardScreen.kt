@@ -148,6 +148,7 @@ fun DashboardScreen(
     viewModel: DashboardViewModel,
     onLogout: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
+    onNavigateToWallet: () -> Unit = {},
 ) {
     val callInfoForDialog by viewModel.callInfoForDialog.collectAsStateWithLifecycle()
     val calls by viewModel.calls.collectAsStateWithLifecycle()
@@ -499,6 +500,9 @@ fun DashboardScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onNavigateToWallet) {
+                        Icon(Icons.Filled.AccountBalanceWallet, contentDescription = "사무실 지갑")
+                    }
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = "설정")
                     }

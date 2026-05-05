@@ -543,5 +543,15 @@ service cloud.firestore {
       allow read: if isAnyAdmin();
       allow write: if false;
     }
+
+    // =============================
+    //  system_config (콜마당 본부 운영 설정 — 단일계좌 안내 등)
+    //  • Firestore Console 수동 운영. 클라이언트는 read 만.
+    //  • doc 예: system_config/deposit_account → { bankName, accountNumber, accountHolder, contactPhone? }
+    // =============================
+    match /system_config/{docId} {
+      allow read: if isAnyAdmin();
+      allow write: if false;
+    }
   }
 }
