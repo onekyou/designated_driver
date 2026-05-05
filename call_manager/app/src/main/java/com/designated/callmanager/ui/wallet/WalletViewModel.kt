@@ -196,6 +196,12 @@ class WalletViewModel(application: Application) : AndroidViewModel(application) 
     fun resetWithdrawalState() {
         _withdrawalState.value = WithdrawalUiState.Idle
     }
+
+    override fun onCleared() {
+        super.onCleared()
+        runCatching { pointRepository.stopSync() }
+            .onFailure { Log.w(TAG, "pointRepository.stopSync 실패", it) }
+    }
 }
 
 data class DepositAccount(
