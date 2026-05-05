@@ -1,11 +1,14 @@
 'use client';
 
 import { useAuth } from '@/lib/hooks/useAuth';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { LogOut } from 'lucide-react';
+
+// 인증 가드 예외: 토큰 기반 공개 페이지
+const PUBLIC_OWNER_ROUTES = ['/owner/download'];
 
 export default function OwnerLayout({
   children,
@@ -14,12 +17,15 @@ export default function OwnerLayout({
 }) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const isPublic = PUBLIC_OWNER_ROUTES.some((p) => pathname?.startsWith(p));
 
   useEffect(() => {
+    if (isPublic) return;
     if (!loading && !user) {
       router.push('/owner/login');
     }
-  }, [user, loading, router]);
+  }, [user, loading, router, isPublic]);
 
   const handleLogout = async () => {
     try {
@@ -29,6 +35,11 @@ export default function OwnerLayout({
       console.error('로그아웃 에러:', error);
     }
   };
+
+  // 공개 페이지는 레이아웃 없이 렌더링 (로딩 스피너/헤더 모두 건너뜀)
+  if (isPublic) {
+    return <>{children}</>;
+  }
 
   if (loading) {
     return (

@@ -138,7 +138,7 @@ class CallManagerPermissionManager(
         AlertDialog.Builder(activity)
             .setTitle("⚠️ 권한 필요")
             .setMessage(
-                "콜 매니저는 위치 권한 없이는 작동할 수 없습니다.\n\n" +
+                "콜 매니저는 필수 권한 없이는 작동할 수 없습니다.\n\n" +
                 "앱을 사용하려면 설정에서 권한을 허용해 주세요."
             )
             .setPositiveButton("설정으로 이동") { _, _ ->

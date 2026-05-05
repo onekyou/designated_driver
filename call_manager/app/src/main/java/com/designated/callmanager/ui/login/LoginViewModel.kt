@@ -72,7 +72,33 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                     _loginState.value = LoginState.Error("로그인에 실패했습니다. 사용자 정보를 가져올 수 없습니다.")
                 }
             } catch (e: Exception) {
-                _loginState.value = LoginState.Error(e.message ?: "로그인 중 오류가 발생했습니다.")
+                val friendly = when {
+                    e is com.google.firebase.auth.FirebaseAuthInvalidCredentialsException ->
+                        "이메일 또는 비밀번호가 일치하지 않습니다."
+                    e is com.google.firebase.auth.FirebaseAuthInvalidUserException ->
+                        "등록되지 않은 계정입니다."
+                    e is com.google.firebase.FirebaseNetworkException ->
+                        "네트워크 연결을 확인해주세요."
+                    e is com.google.firebase.FirebaseTooManyRequestsException ->
+                        "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요."
+                    else -> {
+                        val msg = e.message ?: ""
+                        when {
+                            msg.contains("credential is incorrect", ignoreCase = true) ||
+                            msg.contains("malformed", ignoreCase = true) ||
+                            msg.contains("expired", ignoreCase = true) ->
+                                "이메일 또는 비밀번호가 일치하지 않습니다."
+                            msg.contains("no user record", ignoreCase = true) ||
+                            msg.contains("user-not-found", ignoreCase = true) ->
+                                "등록되지 않은 계정입니다."
+                            msg.contains("badly formatted", ignoreCase = true) ||
+                            msg.contains("invalid-email", ignoreCase = true) ->
+                                "이메일 형식이 올바르지 않습니다."
+                            else -> "로그인 중 오류가 발생했습니다. (${msg.take(60)})"
+                        }
+                    }
+                }
+                _loginState.value = LoginState.Error(friendly)
             }
         }
     }

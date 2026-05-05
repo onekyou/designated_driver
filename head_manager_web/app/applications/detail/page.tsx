@@ -62,8 +62,8 @@ function ApplicationDetailPage() {
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [result, setResult] = useState<{
     success: boolean;
-    loginEmail?: string;
-    tempPassword?: string;
+    inviteUrl?: string;
+    inviteToken?: string;
     officeId?: string;
   } | null>(null);
   const [copied, setCopied] = useState('');
@@ -136,14 +136,14 @@ function ApplicationDetailPage() {
       });
 
       const data = response.data as any;
+      // 신청서 상태(approved)를 먼저 반영해야 승인 액션 UI 와 결과 UI 가 동시에 표시되지 않음
+      await fetchApplication();
       setResult({
         success: true,
-        loginEmail: data.loginEmail,
-        tempPassword: data.tempPassword,
+        inviteUrl: data.inviteUrl,
+        inviteToken: data.inviteToken,
         officeId: data.officeId,
       });
-
-      await fetchApplication();
     } catch (error: any) {
       alert(`승인 실패: ${error.message}`);
     } finally {
@@ -324,29 +324,26 @@ function ApplicationDetailPage() {
           <div className="bg-green-50 border border-green-200 rounded-lg p-6">
             <h2 className="text-lg font-semibold text-green-800 flex items-center">
               <CheckCircle className="h-5 w-5 mr-2" />
-              승인 완료 - 사장님에게 전달할 정보
+              승인 완료 - 사장님에게 전달할 초대 링크
             </h2>
             <div className="mt-4 space-y-3">
-              <div className="flex items-center justify-between bg-white p-3 rounded-lg">
-                <div>
-                  <span className="text-sm text-gray-500">로그인 이메일</span>
-                  <p className="font-mono text-gray-900">{result.loginEmail}</p>
+              <div className="bg-white p-3 rounded-lg">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <span className="text-sm text-gray-500">초대 URL (유효기간 7일 · 1회 사용)</span>
+                    <p className="font-mono text-sm text-gray-900 break-all">{result.inviteUrl}</p>
+                  </div>
+                  <button
+                    onClick={() => handleCopy(result.inviteUrl!, 'inviteUrl')}
+                    className="flex-shrink-0 p-2 hover:bg-gray-100 rounded"
+                  >
+                    {copied === 'inviteUrl' ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4 text-gray-400" />}
+                  </button>
                 </div>
-                <button onClick={() => handleCopy(result.loginEmail!, 'email')} className="p-2 hover:bg-gray-100 rounded">
-                  {copied === 'email' ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4 text-gray-400" />}
-                </button>
-              </div>
-              <div className="flex items-center justify-between bg-white p-3 rounded-lg">
-                <div>
-                  <span className="text-sm text-gray-500">임시 비밀번호</span>
-                  <p className="font-mono text-gray-900">{result.tempPassword}</p>
-                </div>
-                <button onClick={() => handleCopy(result.tempPassword!, 'password')} className="p-2 hover:bg-gray-100 rounded">
-                  {copied === 'password' ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4 text-gray-400" />}
-                </button>
               </div>
               <p className="text-sm text-green-700 mt-2">
-                이 정보를 사장님에게 전화 또는 카톡으로 전달해주세요.
+                이 URL 을 사장님의 휴대폰으로 카톡/SMS 전송해주세요.
+                사장님은 URL 을 열어 APK 를 다운로드하고, 콜 매니저 앱에서 직접 이메일·비밀번호를 설정해 가입합니다.
               </p>
             </div>
           </div>
