@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "com.designated.customer.app"
+    namespace = "com.designated.restaurantapp.app"
     compileSdk = 36
     ndkVersion = "28.2.13676358"
 
@@ -22,7 +22,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.designated.customer.app"
+        applicationId = "com.designated.restaurantapp.app"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
