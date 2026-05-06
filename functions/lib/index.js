@@ -44,8 +44,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notifyDriverSettlementResult = exports.sendDriverNotification = exports.finalizeSettlementAndNotifyDrivers = exports.notifyDriverCancellation = exports.notifyDriverAssignment = exports.manualCheckSettlementDiscrepancy = exports.autoFinalizeSettlements = exports.onCallCompletedUpdateSettlement = exports.onDriverStatusChange = exports.getOfficeReport = exports.searchArchivedCalls = exports.getArchivedStats = exports.archiveOldCalls = exports.scheduledDataCleanup = exports.checkAssignedTimeout = exports.onCallDetectorCrash = exports.onCustomerCountChange = exports.onDriverCountChange = exports.onNewCustomerRegistered = exports.onCallCancelledByDriver = exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.notifyCustomerOnComplete = exports.notifyCustomerOnPhoneCall = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.notifyCustomerOnOfficeClosed = exports.onSharedCallCreated = exports.sendNewCallNotification = exports.oncallassigned = exports.handleFailedNotifications = exports.retryPendingNotifications = exports.acknowledgeNotification = exports.recoverCustomerAccount = exports.checkPhoneNumberDuplicate = exports.onChatSyncAdminRemoval = exports.onChatSyncPickupDriver = exports.onChatSyncDesignatedDriver = exports.backfillChatMembers = exports.scheduledChatMessageCleanup = exports.onChatMessageCreated = exports.aggregateMonthlyStats = void 0;
-exports.homepageGate = exports.getApkDownloadUrl = exports.rejectOfficeApplication = exports.registerOwner = exports.redeemDownloadToken = exports.approveOfficeApplication = exports.submitOfficeApplication = exports.onDriverSettlementSubmitted = void 0;
+exports.onDriverStatusChange = exports.getOfficeReport = exports.searchArchivedCalls = exports.getArchivedStats = exports.archiveOldCalls = exports.scheduledDataCleanup = exports.onCallDetectorCrash = exports.onCustomerCountChange = exports.onDriverCountChange = exports.onNewCustomerRegistered = exports.onCallCancelledByDriver = exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.notifyCustomerOnComplete = exports.notifyCustomerOnPhoneCall = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.notifyCustomerOnOfficeClosed = exports.onSharedCallCreated = exports.sendNewCallNotification = exports.oncallassigned = exports.handleFailedNotifications = exports.retryPendingNotifications = exports.acknowledgeNotification = exports.recoverCustomerAccount = exports.checkPhoneNumberDuplicate = exports.migrateExistingOfficesWallet = exports.processWithdrawal = exports.processDeposit = exports.submitWithdrawalRequest = exports.notifyRestaurantOnNoResponse = exports.createSharedCallFromRestaurant = exports.redeemRestaurantInviteCode = exports.generateRestaurantInviteCode = exports.onChatSyncAdminRemoval = exports.onChatSyncPickupDriver = exports.onChatSyncDesignatedDriver = exports.backfillChatMembers = exports.scheduledChatMessageCleanup = exports.onChatMessageCreated = exports.aggregateMonthlyStats = exports.checkSingleCallAssignedTimeout = void 0;
+exports.homepageGate = exports.getApkDownloadUrl = exports.rejectOfficeApplication = exports.registerOwner = exports.redeemDownloadToken = exports.approveOfficeApplication = exports.submitOfficeApplication = exports.onDriverSettlementSubmitted = exports.notifyDriverSettlementResult = exports.sendDriverNotification = exports.finalizeSettlementAndNotifyDrivers = exports.notifyDriverCancellation = exports.notifyDriverAssignment = exports.manualCheckSettlementDiscrepancy = exports.autoFinalizeSettlements = exports.onCallCompletedUpdateSettlement = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -56,6 +56,13 @@ const points_1 = require("./handlers/points");
 const settlement_1 = require("./handlers/settlement");
 const fcmPayload_1 = require("./utils/fcmPayload");
 const acceptanceEvents_1 = require("./analytics/acceptanceEvents");
+const timeout_1 = require("./handlers/timeout");
+// === timeout.ts export — 분기 1만 활성, 2/3은 휴면 (콜마당 간소화 2026-05-05) ===
+//   분기 2/3 휴면 사유: 콜·기사 데이터는 driver_app 자동 fetch + 매니저 listener 로
+//   자동 복구되어 시스템 무결성 보장됨. 매니저 알림은 양평 1곳 사람 운영으로 대체.
+//   재활성화: 아래 두 라인 주석 풀고 firebase deploy.
+var timeout_2 = require("./handlers/timeout");
+Object.defineProperty(exports, "checkSingleCallAssignedTimeout", { enumerable: true, get: function () { return timeout_2.checkSingleCallAssignedTimeout; } });
 var aggregateMonthly_1 = require("./analytics/aggregateMonthly");
 Object.defineProperty(exports, "aggregateMonthlyStats", { enumerable: true, get: function () { return aggregateMonthly_1.aggregateMonthlyStats; } });
 var chat_1 = require("./handlers/chat");
@@ -65,6 +72,17 @@ Object.defineProperty(exports, "backfillChatMembers", { enumerable: true, get: f
 Object.defineProperty(exports, "onChatSyncDesignatedDriver", { enumerable: true, get: function () { return chat_1.onChatSyncDesignatedDriver; } });
 Object.defineProperty(exports, "onChatSyncPickupDriver", { enumerable: true, get: function () { return chat_1.onChatSyncPickupDriver; } });
 Object.defineProperty(exports, "onChatSyncAdminRemoval", { enumerable: true, get: function () { return chat_1.onChatSyncAdminRemoval; } });
+var restaurant_1 = require("./handlers/restaurant");
+Object.defineProperty(exports, "generateRestaurantInviteCode", { enumerable: true, get: function () { return restaurant_1.generateRestaurantInviteCode; } });
+Object.defineProperty(exports, "redeemRestaurantInviteCode", { enumerable: true, get: function () { return restaurant_1.redeemRestaurantInviteCode; } });
+Object.defineProperty(exports, "createSharedCallFromRestaurant", { enumerable: true, get: function () { return restaurant_1.createSharedCallFromRestaurant; } });
+Object.defineProperty(exports, "notifyRestaurantOnNoResponse", { enumerable: true, get: function () { return restaurant_1.notifyRestaurantOnNoResponse; } });
+var wallet_1 = require("./handlers/wallet");
+Object.defineProperty(exports, "submitWithdrawalRequest", { enumerable: true, get: function () { return wallet_1.submitWithdrawalRequest; } });
+Object.defineProperty(exports, "processDeposit", { enumerable: true, get: function () { return wallet_1.processDeposit; } });
+Object.defineProperty(exports, "processWithdrawal", { enumerable: true, get: function () { return wallet_1.processWithdrawal; } });
+var migrateExistingOfficesWallet_1 = require("./scripts/migrateExistingOfficesWallet");
+Object.defineProperty(exports, "migrateExistingOfficesWallet", { enumerable: true, get: function () { return migrateExistingOfficesWallet_1.migrateExistingOfficesWallet; } });
 const chat_2 = require("./handlers/chat");
 const express_1 = __importDefault(require("express"));
 const express_basic_auth_1 = __importDefault(require("express-basic-auth"));
@@ -389,7 +407,7 @@ exports.oncallassigned = (0, firestore_1.onDocumentWritten)({
     region: "asia-northeast3",
     document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/calls/{callId}"
 }, async (event) => {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e, _f, _g;
     const { provinceId, cityId, officeId, callId } = event.params;
     // 1. 이벤트 데이터와 변경 후 데이터 존재 여부 확인 (가장 안전한 방법)
     if (!event.data || !event.data.after) {
@@ -450,10 +468,36 @@ exports.oncallassigned = (0, firestore_1.onDocumentWritten)({
         const driverName = (driverData === null || driverData === void 0 ? void 0 : driverData.name) || "기사";
         const driverPhone = (driverData === null || driverData === void 0 ? void 0 : driverData.phoneNumber) || "";
         const vehicleNumber = (driverData === null || driverData === void 0 ? void 0 : driverData.vehicleNumber) || "";
+        // 3-1. ASSIGNED timeout task enqueue (이벤트 기반, 폴링 대체)
+        // - selfAssigned/handledByManager 는 timeout 보호 불요 (자가배차/직접운행)
+        // - enqueue 실패는 logger.warn 만 → FCM 흐름 보호. in-flight 콜은 onDriverPresenceOffline 트리거가 안전망.
+        if (!isSelfAssigned && !afterData.handledByManager) {
+            try {
+                const officeSnap = await admin.firestore()
+                    .collection("provinces").doc(provinceId)
+                    .collection("cities").doc(cityId)
+                    .collection("offices").doc(officeId)
+                    .get();
+                const timeoutMin = Number((_c = (_b = officeSnap.data()) === null || _b === void 0 ? void 0 : _b.assignedTimeoutMinutes) !== null && _c !== void 0 ? _c : 1);
+                const assignedTsMs = (_e = (_d = afterData.assignedTimestamp) === null || _d === void 0 ? void 0 : _d.toMillis()) !== null && _e !== void 0 ? _e : Date.now();
+                await (0, timeout_1.enqueueAssignedTimeoutTask)({
+                    provinceId,
+                    cityId,
+                    officeId,
+                    callId,
+                    expectedDriverId: driverId,
+                    expectedAssignedTimestampMs: assignedTsMs,
+                }, timeoutMin * 60);
+                logger.info(`[${callId}] timeout task enqueue 완료 (delay=${timeoutMin}분)`);
+            }
+            catch (taskErr) {
+                logger.warn(`[${callId}] timeout task enqueue 실패 — onDriverPresenceOffline 트리거가 보호망`, taskErr);
+            }
+        }
         // 4. 기사에게 FCM 알림 전송
         // Note: 배차 직후 presence 즉시 체크 제거 — 도즈모드/화면꺼짐 시 오탐 발생
         // (FCM high priority가 기기를 깨우기 전에 offline으로 판단하여 불필요한 경고 전송)
-        // 실제 오프라인 보호는 checkAssignedTimeout 스케줄러(1분 간격)가 담당
+        // 실제 오프라인 보호는 Cloud Tasks deferred + onDriverPresenceOffline 트리거가 담당
         if (driverFcmToken && !isSelfAssigned) {
             const notificationId = `${callId}_${driverId}_${Date.now()}`;
             const driverPayload = (0, fcmPayload_1.buildFcmPayload)({
@@ -491,7 +535,7 @@ exports.oncallassigned = (0, firestore_1.onDocumentWritten)({
                     .collection("customerInfo")
                     .doc(customerPhone)
                     .get();
-                const customerFcmToken = (_b = customerDoc.data()) === null || _b === void 0 ? void 0 : _b.fcmToken;
+                const customerFcmToken = (_f = customerDoc.data()) === null || _f === void 0 ? void 0 : _f.fcmToken;
                 logger.info(`[${callId}] 고객 FCM 토큰: ${customerFcmToken}`);
                 if (!customerFcmToken) {
                     logger.warn(`[${callId}] 고객 FCM 토큰 없음: ${customerPhone}`);
@@ -549,7 +593,7 @@ exports.oncallassigned = (0, firestore_1.onDocumentWritten)({
                             customerPhone: afterData.phoneNumber || "",
                             departure: afterData.departure || "",
                             destination: afterData.destination || "",
-                            fare: ((_c = afterData.fare) !== null && _c !== void 0 ? _c : 0).toString(),
+                            fare: ((_g = afterData.fare) !== null && _g !== void 0 ? _g : 0).toString(),
                             provinceId: provinceId,
                             cityId: cityId,
                             officeId: officeId
@@ -957,7 +1001,7 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
     region: "asia-northeast3",
     document: "shared_calls/{callId}"
 }, async (event) => {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
     const callId = event.params.callId;
     if (!event.data) {
         logger.warn(`[shared:${callId}] 이벤트 데이터가 없습니다.`);
@@ -1043,6 +1087,54 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
         logger.info(`[shared:${callId}] 공유 콜이 CLAIMED 되었습니다. 대상사무실로 복사 시작.`);
         logger.info(`[shared:${callId}] afterData.claimedDriverId=${afterData.claimedDriverId}`);
         logger.info(`[shared:${callId}] assignedDriverId=${afterData.claimedDriverId}`);
+        // PR 1 — 결정 #11: claim 시점 wallet 잔액 ≥ 5,000 검증 (잔액 부족 사무실은 revert + 매니저 충전 안내)
+        // 식당앱 콜(sourceRestaurantId 존재)에만 적용. 기존 사무실간 zero-sum 콜은 면제 (마이그레이션 윈도우 안전 + 의미 정합)
+        if (afterData.sourceRestaurantId && afterData.claimedOfficeId) {
+            const { allowed, balance } = await (0, points_1.checkOfficeWalletForClaim)(afterData.targetProvinceId, afterData.targetCityId, afterData.claimedOfficeId);
+            if (!allowed) {
+                logger.warn(`[shared:${callId}] 잔액 부족으로 claim revert - office: ${afterData.claimedOfficeId}, balance: ${balance}`);
+                try {
+                    await admin.firestore().collection("shared_calls").doc(callId).update({
+                        status: "OPEN",
+                        claimedOfficeId: null,
+                        claimedDriverId: null,
+                        claimRejectedReason: "INSUFFICIENT_BALANCE",
+                        claimRejectedAt: firestore_2.FieldValue.serverTimestamp(),
+                    });
+                    const adminQuery = await admin.firestore()
+                        .collection("admins")
+                        .where("associatedProvinceId", "==", afterData.targetProvinceId)
+                        .where("associatedCityId", "==", afterData.targetCityId)
+                        .where("associatedOfficeId", "==", afterData.claimedOfficeId)
+                        .get();
+                    const tokens = [];
+                    adminQuery.docs.forEach((doc) => {
+                        const fcm = doc.data().fcmToken;
+                        if (fcm)
+                            tokens.push(fcm);
+                    });
+                    if (tokens.length > 0) {
+                        await admin.messaging().sendEachForMulticast({
+                            tokens,
+                            notification: {
+                                title: "포인트 충전이 필요합니다",
+                                body: `현재 잔액 ${balance}P. 콜을 잡으려면 5,000P 이상 필요합니다.`,
+                            },
+                            data: {
+                                type: "WALLET_INSUFFICIENT",
+                                callId,
+                                balance: String(balance),
+                                required: "5000",
+                            },
+                        });
+                    }
+                }
+                catch (revertErr) {
+                    logger.error(`[shared:${callId}] revert 실패`, revertErr);
+                }
+                return;
+            }
+        }
         // 트랜잭션 외부에서 변수 선언
         let assignedDriverId = null;
         let assignedDriverName = null;
@@ -1191,6 +1283,43 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
             }
             catch (fcmErr) {
                 logger.error(`[shared:${callId}] FCM 전송 오류`, fcmErr);
+            }
+            // PR 1 plan §3.3 — 식당앱 발생 콜이면 식당 fcmToken으로 잡힘 알림 (사무실명·전화번호 + 통화 버튼)
+            if (afterData.sourceRestaurantId && afterData.claimedOfficeId) {
+                try {
+                    const restRef = admin.firestore()
+                        .collection("provinces").doc(afterData.sourceProvinceId)
+                        .collection("cities").doc(afterData.sourceCityId)
+                        .collection("offices").doc(afterData.sourceOfficeId)
+                        .collection("restaurants").doc(afterData.sourceRestaurantId);
+                    const officeRef = admin.firestore()
+                        .collection("provinces").doc(afterData.targetProvinceId)
+                        .collection("cities").doc(afterData.targetCityId)
+                        .collection("offices").doc(afterData.claimedOfficeId);
+                    const [restSnap, officeSnap] = await Promise.all([restRef.get(), officeRef.get()]);
+                    const restFcmToken = (_g = restSnap.data()) === null || _g === void 0 ? void 0 : _g.fcmToken;
+                    const officeName = ((_h = officeSnap.data()) === null || _h === void 0 ? void 0 : _h.name) || "사무실";
+                    const officePhone = ((_j = officeSnap.data()) === null || _j === void 0 ? void 0 : _j.phone) || "";
+                    if (restFcmToken) {
+                        await admin.messaging().send({
+                            token: restFcmToken,
+                            notification: {
+                                title: "콜이 잡혔습니다",
+                                body: `${officeName}에서 운행을 시작합니다.`,
+                            },
+                            data: {
+                                type: "RESTAURANT_CALL_CLAIMED",
+                                sharedCallId: callId,
+                                officeName,
+                                officePhone,
+                            },
+                        });
+                        logger.info(`[shared:${callId}] 식당 알림 발송 - restaurantId: ${afterData.sourceRestaurantId}, officeName: ${officeName}`);
+                    }
+                }
+                catch (restErr) {
+                    logger.error(`[shared:${callId}] 식당 알림 실패`, restErr);
+                }
             }
         }
         catch (err) {
@@ -1991,8 +2120,15 @@ exports.onSharedCallCompleted = (0, firestore_1.onDocumentUpdated)({
                 completedAt: firestore_2.FieldValue.serverTimestamp(),
                 destCallId: callId
             });
-            // 2. 포인트 처리 (별도 함수 호출)
-            await (0, points_1.processSharedCallPoints)(sharedCallData, provinceId, cityId, officeId, fare, sourceSharedCallId);
+            // 2. 포인트 처리 — 식당앱 콜이면 분기 (PR 1, plan §3.3)
+            // sourceRestaurantId 존재 시 = 식당앱 발생 콜 → processRestaurantCallPayout
+            // 없으면 기존 사무실↔사무실 zero-sum 분배 (processSharedCallPoints)
+            if (sharedCallData.sourceRestaurantId) {
+                await (0, points_1.processRestaurantCallPayout)(sharedCallData, provinceId, cityId, officeId, fare, sourceSharedCallId);
+            }
+            else {
+                await (0, points_1.processSharedCallPoints)(sharedCallData, provinceId, cityId, officeId, fare, sourceSharedCallId);
+            }
             logger.info(`[call-completed:${callId}] 공유콜 완료 처리 및 포인트 분배 완료. SharedCallId: ${sourceSharedCallId}`);
         }
         catch (error) {
@@ -2997,296 +3133,6 @@ exports.onCallDetectorCrash = (0, firestore_1.onDocumentCreated)({
     }
     catch (error) {
         logger.error(`[${alertId}] 오류 발생:`, error);
-    }
-});
-// =============================
-// 자동 데이터 정리: 매일 오전 11시 실행
-// =============================
-// NEW-15: ASSIGNED 타임아웃 자동 복구
-// 기사가 배차 후 일정 시간 내에 수락하지 않으면 WAITING으로 되돌림
-// =============================
-/**
- * 관리자에게 presence 기반 알림 FCM 전송
- */
-async function sendPresenceAlert(officeDoc, provinceId, cityId, callId, driverName, title, message) {
-    try {
-        const managerTokensSnapshot = await officeDoc.ref
-            .collection("managerTokens")
-            .get();
-        if (managerTokensSnapshot.empty)
-            return;
-        const tokens = managerTokensSnapshot.docs
-            .map(doc => doc.data().fcmToken)
-            .filter((token) => !!token);
-        if (tokens.length === 0)
-            return;
-        await admin.messaging().sendEachForMulticast((0, fcmPayload_1.buildMulticastFcmPayload)({
-            data: {
-                type: "NOTIFICATION_FAILURE",
-                callId: callId,
-                driverName: driverName,
-                title: title,
-                message: message
-            },
-            title: title,
-            body: message,
-            level: "active",
-        }, tokens));
-        logger.info(`[PresenceAlert] ${message}`);
-    }
-    catch (error) {
-        logger.error("[PresenceAlert] 알림 전송 오류", error);
-    }
-}
-/**
- * 기사 presence 상태 조회 (Realtime DB)
- */
-async function getDriverPresenceStatus(driverId) {
-    var _a;
-    try {
-        const presencePath = `presence/drivers/${driverId}`;
-        const presenceSnapshot = await admin.database().ref(presencePath).get();
-        return ((_a = presenceSnapshot.val()) === null || _a === void 0 ? void 0 : _a.status) || "offline";
-    }
-    catch (_b) {
-        return "unknown";
-    }
-}
-exports.checkAssignedTimeout = (0, scheduler_1.onSchedule)({
-    schedule: "every 1 minutes",
-    timeZone: "Asia/Seoul",
-    region: "asia-northeast3",
-}, async () => {
-    var _a, _b, _c, _d, _e, _f;
-    const db = admin.firestore();
-    try {
-        // 모든 사무실 조회
-        const provincesSnapshot = await db.collection("provinces").get();
-        let totalRecovered = 0;
-        for (const provinceDoc of provincesSnapshot.docs) {
-            const citiesSnapshot = await provinceDoc.ref.collection("cities").get();
-            for (const cityDoc of citiesSnapshot.docs) {
-                const officesSnapshot = await cityDoc.ref.collection("offices").get();
-                for (const officeDoc of officesSnapshot.docs) {
-                    const provinceId = provinceDoc.id;
-                    const cityId = cityDoc.id;
-                    // ===== 1. ASSIGNED 콜 처리 =====
-                    const timeoutMinutes = (_a = officeDoc.data().assignedTimeoutMinutes) !== null && _a !== void 0 ? _a : 1;
-                    const timeoutMs = timeoutMinutes * 60 * 1000;
-                    const cutoff = firestore_2.Timestamp.fromMillis(Date.now() - timeoutMs);
-                    // 모든 ASSIGNED 콜 조회 (타임아웃 여부와 무관하게)
-                    const allAssignedCalls = await officeDoc.ref
-                        .collection("calls")
-                        .where("status", "==", "ASSIGNED")
-                        .get();
-                    for (const callDoc of allAssignedCalls.docs) {
-                        const callData = callDoc.data();
-                        const assignedDriverId = callData.assignedDriverId;
-                        if (!assignedDriverId)
-                            continue;
-                        // presence 조회
-                        const presenceStatus = await getDriverPresenceStatus(assignedDriverId);
-                        const isTimedOut = callData.assignedTimestamp && callData.assignedTimestamp.toMillis() < cutoff.toMillis();
-                        // #1: ASSIGNED + offline + 타임아웃 → WAITING 복귀 + 관리자 알림
-                        if (presenceStatus === "offline" && isTimedOut) {
-                            // 기사 이름 조회
-                            const driversQuery = await officeDoc.ref
-                                .collection("designated_drivers")
-                                .where("authUid", "==", assignedDriverId)
-                                .limit(1)
-                                .get();
-                            const driverName = driversQuery.empty ? "기사" : driversQuery.docs[0].data().name || "기사";
-                            // 콜을 WAITING으로 복구
-                            await callDoc.ref.update({
-                                status: "WAITING",
-                                assignedDriverId: firestore_2.FieldValue.delete(),
-                                assignedDriverName: firestore_2.FieldValue.delete(),
-                                assignedDriverPhone: firestore_2.FieldValue.delete(),
-                                assignedTimestamp: firestore_2.FieldValue.delete(),
-                                timeoutRecoveredAt: firestore_2.FieldValue.serverTimestamp(),
-                            });
-                            // 기사 상태 복구
-                            if (!driversQuery.empty) {
-                                const driverDocSnap = driversQuery.docs[0];
-                                if (driverDocSnap.data().status === "ASSIGNED") {
-                                    await driverDocSnap.ref.update({ status: "WAITING" });
-                                }
-                            }
-                            // acceptanceEvents 기록 (Phase 6 ① B) — 오프라인 즉시 복구 타임아웃
-                            try {
-                                await (0, acceptanceEvents_1.recordAcceptanceEvent)({
-                                    callId: callDoc.id,
-                                    assignedDriverId: assignedDriverId,
-                                    provinceId,
-                                    cityId,
-                                    officeId: officeDoc.id,
-                                    outcome: "timeout",
-                                    assignedAt: (_b = callData.assignedTimestamp) !== null && _b !== void 0 ? _b : firestore_2.Timestamp.now(),
-                                    rejectReason: "assigned_timeout_offline",
-                                });
-                            }
-                            catch (analyticsError) {
-                                logger.warn(`[AssignedTimeout] acceptanceEvents 기록 실패 (오프라인): ${callDoc.id}`, analyticsError);
-                            }
-                            // 관리자에 알림
-                            await sendPresenceAlert(officeDoc, provinceId, cityId, callDoc.id, driverName, "⚠️ 기사 오프라인", `${driverName} 기사 오프라인 — 자동 재배차 대기 중`);
-                            totalRecovered++;
-                            logger.info(`[AssignedTimeout] 오프라인 즉시 복구: ${callDoc.id}, 기사: ${driverName}`);
-                            continue;
-                        }
-                        // #2: ASSIGNED + online + 3분 초과 → 기존 WAITING 복귀 + 관리자 알림
-                        if (isTimedOut) {
-                            const driversQuery = await officeDoc.ref
-                                .collection("designated_drivers")
-                                .where("authUid", "==", assignedDriverId)
-                                .limit(1)
-                                .get();
-                            const driverName = driversQuery.empty ? "기사" : driversQuery.docs[0].data().name || "기사";
-                            // 콜을 WAITING으로 복구
-                            await callDoc.ref.update({
-                                status: "WAITING",
-                                assignedDriverId: firestore_2.FieldValue.delete(),
-                                assignedDriverName: firestore_2.FieldValue.delete(),
-                                assignedDriverPhone: firestore_2.FieldValue.delete(),
-                                assignedTimestamp: firestore_2.FieldValue.delete(),
-                                timeoutRecoveredAt: firestore_2.FieldValue.serverTimestamp(),
-                            });
-                            // acceptanceEvents 기록 (Phase 6 ① B) — 온라인 3분 초과 타임아웃
-                            try {
-                                await (0, acceptanceEvents_1.recordAcceptanceEvent)({
-                                    callId: callDoc.id,
-                                    assignedDriverId: assignedDriverId,
-                                    provinceId,
-                                    cityId,
-                                    officeId: officeDoc.id,
-                                    outcome: "timeout",
-                                    assignedAt: (_c = callData.assignedTimestamp) !== null && _c !== void 0 ? _c : firestore_2.Timestamp.now(),
-                                    rejectReason: "assigned_timeout_3min",
-                                });
-                            }
-                            catch (analyticsError) {
-                                logger.warn(`[AssignedTimeout] acceptanceEvents 기록 실패 (3분): ${callDoc.id}`, analyticsError);
-                            }
-                            // 기사 상태 복구 + FCM
-                            if (!driversQuery.empty) {
-                                const driverDocSnap = driversQuery.docs[0];
-                                const driverData = driverDocSnap.data();
-                                if (driverData.status === "ASSIGNED") {
-                                    await driverDocSnap.ref.update({ status: "WAITING" });
-                                }
-                                const driverFcmToken = driverData.fcmToken;
-                                if (driverFcmToken) {
-                                    try {
-                                        await admin.messaging().send((0, fcmPayload_1.buildFcmPayload)({
-                                            data: {
-                                                type: "call_cancelled",
-                                                callId: callDoc.id,
-                                                cancelReason: "응답 시간 초과로 배차가 해제되었습니다"
-                                            },
-                                            title: "콜 배차 해제",
-                                            body: "응답 시간 초과로 배차가 해제되었습니다",
-                                            level: "active",
-                                            ttlSeconds: 60,
-                                        }, driverFcmToken));
-                                    }
-                                    catch (fcmError) {
-                                        logger.warn(`[AssignedTimeout] 기사 FCM 전송 실패: ${assignedDriverId}`, fcmError);
-                                    }
-                                }
-                            }
-                            // 고객 FCM
-                            if (callData.isAppCustomer && callData.phoneNumber) {
-                                try {
-                                    const customerDoc = await officeDoc.ref
-                                        .collection("customerInfo")
-                                        .doc(callData.phoneNumber)
-                                        .get();
-                                    const customerFcmToken = (_d = customerDoc.data()) === null || _d === void 0 ? void 0 : _d.fcmToken;
-                                    if (customerFcmToken) {
-                                        await admin.messaging().send((0, fcmPayload_1.buildFcmPayload)({
-                                            data: {
-                                                type: "CALL_STATUS_UPDATE",
-                                                callId: callDoc.id,
-                                                status: "WAITING",
-                                                message: "기사 재배정 중입니다"
-                                            },
-                                            title: "콜 상태 변경",
-                                            body: "기사 재배정 중입니다",
-                                            level: "active",
-                                            ttlSeconds: 60,
-                                        }, customerFcmToken));
-                                    }
-                                }
-                                catch (custError) {
-                                    logger.warn(`[AssignedTimeout] 고객 FCM 전송 실패`, custError);
-                                }
-                            }
-                            // 관리자에 알림
-                            await sendPresenceAlert(officeDoc, provinceId, cityId, callDoc.id, driverName, "⚠️ 기사 미응답", `${driverName} 기사 미응답 — 확인 필요`);
-                            totalRecovered++;
-                            logger.info(`[AssignedTimeout] 타임아웃 복구: ${callDoc.id}, 기사: ${driverName}`);
-                        }
-                    }
-                    // ===== 2. ACCEPTED/PREPARING 콜 처리 =====
-                    const acceptedCalls = await officeDoc.ref
-                        .collection("calls")
-                        .where("status", "in", ["ACCEPTED", "PREPARING"])
-                        .get();
-                    for (const callDoc of acceptedCalls.docs) {
-                        const callData = callDoc.data();
-                        const assignedDriverId = callData.assignedDriverId;
-                        if (!assignedDriverId || callData.acceptedAlertSent)
-                            continue;
-                        const presenceStatus = await getDriverPresenceStatus(assignedDriverId);
-                        if (presenceStatus === "offline") {
-                            const driverName = callData.assignedDriverName || "기사";
-                            await sendPresenceAlert(officeDoc, provinceId, cityId, callDoc.id, driverName, "🚨 수락 후 연결 끊김", `${driverName} 기사 수락 후 연결 끊김 — 확인 필요`);
-                            await callDoc.ref.update({ acceptedAlertSent: true });
-                            logger.warn(`[PresenceCheck] ACCEPTED 오프라인: ${callDoc.id}, 기사: ${driverName}`);
-                        }
-                    }
-                    // ===== 3. IN_PROGRESS 콜 처리 =====
-                    const inProgressCalls = await officeDoc.ref
-                        .collection("calls")
-                        .where("status", "==", "IN_PROGRESS")
-                        .get();
-                    for (const callDoc of inProgressCalls.docs) {
-                        const callData = callDoc.data();
-                        const assignedDriverId = callData.assignedDriverId;
-                        if (!assignedDriverId || callData.inProgressAlertSent)
-                            continue;
-                        const presenceStatus = await getDriverPresenceStatus(assignedDriverId);
-                        if (presenceStatus === "offline") {
-                            const now = Date.now();
-                            const firstOfflineAt = ((_f = (_e = callData.firstOfflineAt) === null || _e === void 0 ? void 0 : _e.toMillis) === null || _f === void 0 ? void 0 : _f.call(_e)) || 0;
-                            if (!firstOfflineAt) {
-                                // 첫 offline 감지 — 타임스탬프 기록
-                                await callDoc.ref.update({ firstOfflineAt: firestore_2.FieldValue.serverTimestamp() });
-                            }
-                            else if (now - firstOfflineAt > 5 * 60 * 1000) {
-                                // 10분 연속 offline — 관리자 알림
-                                const driverName = callData.assignedDriverName || "기사";
-                                await sendPresenceAlert(officeDoc, provinceId, cityId, callDoc.id, driverName, "🚨 운행 중 연결 끊김", `${driverName} 기사 운행 중 5분째 연결 끊김 — 확인 필요`);
-                                await callDoc.ref.update({ inProgressAlertSent: true });
-                                logger.warn(`[PresenceCheck] IN_PROGRESS 5분 오프라인: ${callDoc.id}, 기사: ${driverName}`);
-                            }
-                        }
-                        else {
-                            // online 복귀 — firstOfflineAt 초기화
-                            if (callData.firstOfflineAt) {
-                                await callDoc.ref.update({ firstOfflineAt: firestore_2.FieldValue.delete() });
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        if (totalRecovered > 0) {
-            logger.info(`[AssignedTimeout] 총 ${totalRecovered}건 타임아웃 복구 완료`);
-        }
-    }
-    catch (error) {
-        logger.error("[AssignedTimeout] 스케줄러 오류:", error);
     }
 });
 // =============================
@@ -4922,8 +4768,8 @@ exports.registerOwner = (0, https_1.onCall)({ region: "asia-northeast3" }, async
     // 3) Firestore 트랜잭션 — 실패 시 Auth 계정 롤백
     try {
         await db.runTransaction(async (tx) => {
-            var _a;
-            // 토큰 재확인 (경합 방지)
+            var _a, _b;
+            // ===== READ 단계 =====
             const freshInvite = await tx.get(inviteRef);
             if (!freshInvite.exists) {
                 throw new Error("초대 토큰이 사라졌습니다.");
@@ -4932,6 +4778,17 @@ exports.registerOwner = (0, https_1.onCall)({ region: "asia-northeast3" }, async
             if (fi.status !== "active" || ((_a = fi.usesRemaining) !== null && _a !== void 0 ? _a : 0) <= 0) {
                 throw new Error("이미 사용된 초대 토큰입니다.");
             }
+            // wallet 초기화 read (P0 plan §3.3, 결정 #19) — 가입 보너스 30,000 멱등성 체크
+            const pointsRef = officeRef.collection("points").doc("points");
+            const walletTxRef = officeRef.collection("point_transactions").doc(`signup_bonus_${invite.officeId}`);
+            const existingWalletTx = await tx.get(walletTxRef);
+            let walletBeforeBalance = 0;
+            const needWalletInit = !existingWalletTx.exists;
+            if (needWalletInit) {
+                const pointsSnap = await tx.get(pointsRef);
+                walletBeforeBalance = ((_b = pointsSnap.data()) === null || _b === void 0 ? void 0 : _b.balance) || 0;
+            }
+            // ===== WRITE 단계 =====
             tx.set(adminsRef, {
                 email: normalizedEmail,
                 name: invite.ownerName,
@@ -4955,6 +4812,23 @@ exports.registerOwner = (0, https_1.onCall)({ region: "asia-northeast3" }, async
                 usedBy: uid,
                 usesRemaining: 0,
             });
+            // wallet 가입 보너스 (멱등)
+            if (needWalletInit) {
+                const after = walletBeforeBalance + 30000;
+                tx.set(pointsRef, {
+                    balance: after,
+                    updatedAt: firestore_2.FieldValue.serverTimestamp(),
+                }, { merge: true });
+                tx.set(walletTxRef, {
+                    type: "SIGNUP_BONUS",
+                    amount: 30000,
+                    balanceAfter: after,
+                    description: "사무실 가입 보너스",
+                    status: "COMPLETED",
+                    timestamp: firestore_2.FieldValue.serverTimestamp(),
+                    createdBy: "system",
+                });
+            }
         });
     }
     catch (txError) {

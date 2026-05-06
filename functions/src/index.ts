@@ -17,6 +17,16 @@ import { processSharedCallPoints, processCustomerPointsOnComplete, refundCustome
 import { addCallToSettlementSession, autoFinalizeSettlementSessions, checkSettlementDiscrepancies, notifyDriversSettlementFinalized, notifyDriverSettlementResultHandler, getTodayWorkDate } from "./handlers/settlement";
 import { buildFcmPayload, buildMulticastFcmPayload } from "./utils/fcmPayload";
 import { recordAcceptanceEvent } from "./analytics/acceptanceEvents";
+import { enqueueAssignedTimeoutTask } from "./handlers/timeout";
+// === timeout.ts export — 분기 1만 활성, 2/3은 휴면 (콜마당 간소화 2026-05-05) ===
+//   분기 2/3 휴면 사유: 콜·기사 데이터는 driver_app 자동 fetch + 매니저 listener 로
+//   자동 복구되어 시스템 무결성 보장됨. 매니저 알림은 양평 1곳 사람 운영으로 대체.
+//   재활성화: 아래 두 라인 주석 풀고 firebase deploy.
+export {
+  checkSingleCallAssignedTimeout,
+  // checkSingleCallInProgressOffline,  // 분기 3 휴면 (IN_PROGRESS 5분 끊김 알림)
+  // onDriverPresenceOffline,           // 분기 2 휴면 (RTDB presence offline trigger)
+} from "./handlers/timeout";
 export { aggregateMonthlyStats } from "./analytics/aggregateMonthly";
 export {
   onChatMessageCreated,
@@ -589,10 +599,36 @@ export const oncallassigned = onDocumentWritten(
             const driverPhone = driverData?.phoneNumber || "";
             const vehicleNumber = driverData?.vehicleNumber || "";
 
+            // 3-1. ASSIGNED timeout task enqueue (이벤트 기반, 폴링 대체)
+            // - selfAssigned/handledByManager 는 timeout 보호 불요 (자가배차/직접운행)
+            // - enqueue 실패는 logger.warn 만 → FCM 흐름 보호. in-flight 콜은 onDriverPresenceOffline 트리거가 안전망.
+            if (!isSelfAssigned && !(afterData as any).handledByManager) {
+                try {
+                    const officeSnap = await admin.firestore()
+                        .collection("provinces").doc(provinceId)
+                        .collection("cities").doc(cityId)
+                        .collection("offices").doc(officeId)
+                        .get();
+                    const timeoutMin = Number(officeSnap.data()?.assignedTimeoutMinutes ?? 1);
+                    const assignedTsMs = ((afterData as any).assignedTimestamp as Timestamp | undefined)?.toMillis() ?? Date.now();
+                    await enqueueAssignedTimeoutTask({
+                        provinceId,
+                        cityId,
+                        officeId,
+                        callId,
+                        expectedDriverId: driverId,
+                        expectedAssignedTimestampMs: assignedTsMs,
+                    }, timeoutMin * 60);
+                    logger.info(`[${callId}] timeout task enqueue 완료 (delay=${timeoutMin}분)`);
+                } catch (taskErr) {
+                    logger.warn(`[${callId}] timeout task enqueue 실패 — onDriverPresenceOffline 트리거가 보호망`, taskErr);
+                }
+            }
+
             // 4. 기사에게 FCM 알림 전송
             // Note: 배차 직후 presence 즉시 체크 제거 — 도즈모드/화면꺼짐 시 오탐 발생
             // (FCM high priority가 기기를 깨우기 전에 offline으로 판단하여 불필요한 경고 전송)
-            // 실제 오프라인 보호는 checkAssignedTimeout 스케줄러(1분 간격)가 담당
+            // 실제 오프라인 보호는 Cloud Tasks deferred + onDriverPresenceOffline 트리거가 담당
             if (driverFcmToken && !isSelfAssigned) {
                 const notificationId = `${callId}_${driverId}_${Date.now()}`;
                 const driverPayload = buildFcmPayload({
@@ -3750,348 +3786,6 @@ export const onCallDetectorCrash = onDocumentCreated(
 
     } catch (error) {
       logger.error(`[${alertId}] 오류 발생:`, error);
-    }
-  }
-);
-
-// =============================
-// 자동 데이터 정리: 매일 오전 11시 실행
-// =============================
-// NEW-15: ASSIGNED 타임아웃 자동 복구
-// 기사가 배차 후 일정 시간 내에 수락하지 않으면 WAITING으로 되돌림
-// =============================
-/**
- * 관리자에게 presence 기반 알림 FCM 전송
- */
-async function sendPresenceAlert(
-  officeDoc: FirebaseFirestore.QueryDocumentSnapshot,
-  provinceId: string,
-  cityId: string,
-  callId: string,
-  driverName: string,
-  title: string,
-  message: string
-): Promise<void> {
-  try {
-    const managerTokensSnapshot = await officeDoc.ref
-      .collection("managerTokens")
-      .get();
-
-    if (managerTokensSnapshot.empty) return;
-
-    const tokens = managerTokensSnapshot.docs
-      .map(doc => doc.data().fcmToken)
-      .filter((token): token is string => !!token);
-
-    if (tokens.length === 0) return;
-
-    await admin.messaging().sendEachForMulticast(buildMulticastFcmPayload({
-      data: {
-        type: "NOTIFICATION_FAILURE",
-        callId: callId,
-        driverName: driverName,
-        title: title,
-        message: message
-      },
-      title: title,
-      body: message,
-      level: "active",
-    }, tokens));
-    logger.info(`[PresenceAlert] ${message}`);
-  } catch (error) {
-    logger.error("[PresenceAlert] 알림 전송 오류", error);
-  }
-}
-
-/**
- * 기사 presence 상태 조회 (Realtime DB)
- */
-async function getDriverPresenceStatus(driverId: string): Promise<string> {
-  try {
-    const presencePath = `presence/drivers/${driverId}`;
-    const presenceSnapshot = await admin.database().ref(presencePath).get();
-    return presenceSnapshot.val()?.status || "offline";
-  } catch {
-    return "unknown";
-  }
-}
-
-export const checkAssignedTimeout = onSchedule(
-  {
-    schedule: "every 1 minutes",
-    timeZone: "Asia/Seoul",
-    region: "asia-northeast3",
-  },
-  async () => {
-    const db = admin.firestore();
-
-    try {
-      // 모든 사무실 조회
-      const provincesSnapshot = await db.collection("provinces").get();
-      let totalRecovered = 0;
-
-      for (const provinceDoc of provincesSnapshot.docs) {
-        const citiesSnapshot = await provinceDoc.ref.collection("cities").get();
-        for (const cityDoc of citiesSnapshot.docs) {
-          const officesSnapshot = await cityDoc.ref.collection("offices").get();
-          for (const officeDoc of officesSnapshot.docs) {
-            const provinceId = provinceDoc.id;
-            const cityId = cityDoc.id;
-
-            // ===== 1. ASSIGNED 콜 처리 =====
-            const timeoutMinutes = officeDoc.data().assignedTimeoutMinutes ?? 1;
-            const timeoutMs = timeoutMinutes * 60 * 1000;
-            const cutoff = Timestamp.fromMillis(Date.now() - timeoutMs);
-
-            // 모든 ASSIGNED 콜 조회 (타임아웃 여부와 무관하게)
-            const allAssignedCalls = await officeDoc.ref
-              .collection("calls")
-              .where("status", "==", "ASSIGNED")
-              .get();
-
-            for (const callDoc of allAssignedCalls.docs) {
-              const callData = callDoc.data();
-              const assignedDriverId = callData.assignedDriverId;
-              if (!assignedDriverId) continue;
-
-              // presence 조회
-              const presenceStatus = await getDriverPresenceStatus(assignedDriverId);
-              const isTimedOut = callData.assignedTimestamp && callData.assignedTimestamp.toMillis() < cutoff.toMillis();
-
-              // #1: ASSIGNED + offline + 타임아웃 → WAITING 복귀 + 관리자 알림
-              if (presenceStatus === "offline" && isTimedOut) {
-                // 기사 이름 조회
-                const driversQuery = await officeDoc.ref
-                  .collection("designated_drivers")
-                  .where("authUid", "==", assignedDriverId)
-                  .limit(1)
-                  .get();
-                const driverName = driversQuery.empty ? "기사" : driversQuery.docs[0].data().name || "기사";
-
-                // 콜을 WAITING으로 복구
-                await callDoc.ref.update({
-                  status: "WAITING",
-                  assignedDriverId: FieldValue.delete(),
-                  assignedDriverName: FieldValue.delete(),
-                  assignedDriverPhone: FieldValue.delete(),
-                  assignedTimestamp: FieldValue.delete(),
-                  timeoutRecoveredAt: FieldValue.serverTimestamp(),
-                });
-
-                // 기사 상태 복구
-                if (!driversQuery.empty) {
-                  const driverDocSnap = driversQuery.docs[0];
-                  if (driverDocSnap.data().status === "ASSIGNED") {
-                    await driverDocSnap.ref.update({ status: "WAITING" });
-                  }
-                }
-
-                // acceptanceEvents 기록 (Phase 6 ① B) — 오프라인 즉시 복구 타임아웃
-                try {
-                  await recordAcceptanceEvent({
-                    callId: callDoc.id,
-                    assignedDriverId: assignedDriverId,
-                    provinceId,
-                    cityId,
-                    officeId: officeDoc.id,
-                    outcome: "timeout",
-                    assignedAt: (callData.assignedTimestamp as Timestamp) ?? Timestamp.now(),
-                    rejectReason: "assigned_timeout_offline",
-                  });
-                } catch (analyticsError) {
-                  logger.warn(`[AssignedTimeout] acceptanceEvents 기록 실패 (오프라인): ${callDoc.id}`, analyticsError);
-                }
-
-                // 관리자에 알림
-                await sendPresenceAlert(
-                  officeDoc, provinceId, cityId, callDoc.id, driverName,
-                  "⚠️ 기사 오프라인",
-                  `${driverName} 기사 오프라인 — 자동 재배차 대기 중`
-                );
-
-                totalRecovered++;
-                logger.info(`[AssignedTimeout] 오프라인 즉시 복구: ${callDoc.id}, 기사: ${driverName}`);
-                continue;
-              }
-
-              // #2: ASSIGNED + online + 3분 초과 → 기존 WAITING 복귀 + 관리자 알림
-              if (isTimedOut) {
-                const driversQuery = await officeDoc.ref
-                  .collection("designated_drivers")
-                  .where("authUid", "==", assignedDriverId)
-                  .limit(1)
-                  .get();
-                const driverName = driversQuery.empty ? "기사" : driversQuery.docs[0].data().name || "기사";
-
-                // 콜을 WAITING으로 복구
-                await callDoc.ref.update({
-                  status: "WAITING",
-                  assignedDriverId: FieldValue.delete(),
-                  assignedDriverName: FieldValue.delete(),
-                  assignedDriverPhone: FieldValue.delete(),
-                  assignedTimestamp: FieldValue.delete(),
-                  timeoutRecoveredAt: FieldValue.serverTimestamp(),
-                });
-
-                // acceptanceEvents 기록 (Phase 6 ① B) — 온라인 3분 초과 타임아웃
-                try {
-                  await recordAcceptanceEvent({
-                    callId: callDoc.id,
-                    assignedDriverId: assignedDriverId,
-                    provinceId,
-                    cityId,
-                    officeId: officeDoc.id,
-                    outcome: "timeout",
-                    assignedAt: (callData.assignedTimestamp as Timestamp) ?? Timestamp.now(),
-                    rejectReason: "assigned_timeout_3min",
-                  });
-                } catch (analyticsError) {
-                  logger.warn(`[AssignedTimeout] acceptanceEvents 기록 실패 (3분): ${callDoc.id}`, analyticsError);
-                }
-
-                // 기사 상태 복구 + FCM
-                if (!driversQuery.empty) {
-                  const driverDocSnap = driversQuery.docs[0];
-                  const driverData = driverDocSnap.data();
-                  if (driverData.status === "ASSIGNED") {
-                    await driverDocSnap.ref.update({ status: "WAITING" });
-                  }
-
-                  const driverFcmToken = driverData.fcmToken;
-                  if (driverFcmToken) {
-                    try {
-                      await admin.messaging().send(buildFcmPayload({
-                        data: {
-                          type: "call_cancelled",
-                          callId: callDoc.id,
-                          cancelReason: "응답 시간 초과로 배차가 해제되었습니다"
-                        },
-                        title: "콜 배차 해제",
-                        body: "응답 시간 초과로 배차가 해제되었습니다",
-                        level: "active",
-                        ttlSeconds: 60,
-                      }, driverFcmToken));
-                    } catch (fcmError) {
-                      logger.warn(`[AssignedTimeout] 기사 FCM 전송 실패: ${assignedDriverId}`, fcmError);
-                    }
-                  }
-                }
-
-                // 고객 FCM
-                if (callData.isAppCustomer && callData.phoneNumber) {
-                  try {
-                    const customerDoc = await officeDoc.ref
-                      .collection("customerInfo")
-                      .doc(callData.phoneNumber)
-                      .get();
-                    const customerFcmToken = customerDoc.data()?.fcmToken;
-                    if (customerFcmToken) {
-                      await admin.messaging().send(buildFcmPayload({
-                        data: {
-                          type: "CALL_STATUS_UPDATE",
-                          callId: callDoc.id,
-                          status: "WAITING",
-                          message: "기사 재배정 중입니다"
-                        },
-                        title: "콜 상태 변경",
-                        body: "기사 재배정 중입니다",
-                        level: "active",
-                        ttlSeconds: 60,
-                      }, customerFcmToken));
-                    }
-                  } catch (custError) {
-                    logger.warn(`[AssignedTimeout] 고객 FCM 전송 실패`, custError);
-                  }
-                }
-
-                // 관리자에 알림
-                await sendPresenceAlert(
-                  officeDoc, provinceId, cityId, callDoc.id, driverName,
-                  "⚠️ 기사 미응답",
-                  `${driverName} 기사 미응답 — 확인 필요`
-                );
-
-                totalRecovered++;
-                logger.info(`[AssignedTimeout] 타임아웃 복구: ${callDoc.id}, 기사: ${driverName}`);
-              }
-            }
-
-            // ===== 2. ACCEPTED/PREPARING 콜 처리 =====
-            const acceptedCalls = await officeDoc.ref
-              .collection("calls")
-              .where("status", "in", ["ACCEPTED", "PREPARING"])
-              .get();
-
-            for (const callDoc of acceptedCalls.docs) {
-              const callData = callDoc.data();
-              const assignedDriverId = callData.assignedDriverId;
-              if (!assignedDriverId || callData.acceptedAlertSent) continue;
-
-              const presenceStatus = await getDriverPresenceStatus(assignedDriverId);
-
-              if (presenceStatus === "offline") {
-                const driverName = callData.assignedDriverName || "기사";
-
-                await sendPresenceAlert(
-                  officeDoc, provinceId, cityId, callDoc.id, driverName,
-                  "🚨 수락 후 연결 끊김",
-                  `${driverName} 기사 수락 후 연결 끊김 — 확인 필요`
-                );
-
-                await callDoc.ref.update({ acceptedAlertSent: true });
-                logger.warn(`[PresenceCheck] ACCEPTED 오프라인: ${callDoc.id}, 기사: ${driverName}`);
-              }
-            }
-
-            // ===== 3. IN_PROGRESS 콜 처리 =====
-            const inProgressCalls = await officeDoc.ref
-              .collection("calls")
-              .where("status", "==", "IN_PROGRESS")
-              .get();
-
-            for (const callDoc of inProgressCalls.docs) {
-              const callData = callDoc.data();
-              const assignedDriverId = callData.assignedDriverId;
-              if (!assignedDriverId || callData.inProgressAlertSent) continue;
-
-              const presenceStatus = await getDriverPresenceStatus(assignedDriverId);
-
-              if (presenceStatus === "offline") {
-                const now = Date.now();
-                const firstOfflineAt = callData.firstOfflineAt?.toMillis?.() || 0;
-
-                if (!firstOfflineAt) {
-                  // 첫 offline 감지 — 타임스탬프 기록
-                  await callDoc.ref.update({ firstOfflineAt: FieldValue.serverTimestamp() });
-                } else if (now - firstOfflineAt > 5 * 60 * 1000) {
-                  // 10분 연속 offline — 관리자 알림
-                  const driverName = callData.assignedDriverName || "기사";
-
-                  await sendPresenceAlert(
-                    officeDoc, provinceId, cityId, callDoc.id, driverName,
-                    "🚨 운행 중 연결 끊김",
-                    `${driverName} 기사 운행 중 5분째 연결 끊김 — 확인 필요`
-                  );
-
-                  await callDoc.ref.update({ inProgressAlertSent: true });
-                  logger.warn(`[PresenceCheck] IN_PROGRESS 5분 오프라인: ${callDoc.id}, 기사: ${driverName}`);
-                }
-              } else {
-                // online 복귀 — firstOfflineAt 초기화
-                if (callData.firstOfflineAt) {
-                  await callDoc.ref.update({ firstOfflineAt: FieldValue.delete() });
-                }
-              }
-            }
-          }
-        }
-      }
-
-      if (totalRecovered > 0) {
-        logger.info(`[AssignedTimeout] 총 ${totalRecovered}건 타임아웃 복구 완료`);
-      }
-    } catch (error) {
-      logger.error("[AssignedTimeout] 스케줄러 오류:", error);
     }
   }
 );
