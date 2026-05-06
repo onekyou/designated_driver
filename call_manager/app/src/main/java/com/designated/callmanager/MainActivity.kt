@@ -464,7 +464,8 @@ class MainActivity : ComponentActivity() {
                                 dashboardViewModel = dashboardViewModel,
                                 onLogout = { showLogoutConfirmDialog = true },
                                 onNavigateToSettings = { screenState = Screen.Settings },
-                                onNavigateToWallet = { screenState = Screen.Wallet }
+                                onNavigateToWallet = { screenState = Screen.Wallet },
+                                onNavigateToSettlement = { screenState = Screen.Settlement }
                             )
                         }
                         Screen.Settings -> {
@@ -1392,6 +1393,7 @@ private fun DashboardWithChatSheet(
     onLogout: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToWallet: () -> Unit,
+    onNavigateToSettlement: () -> Unit,
 ) {
     val chatViewModel: ChatViewModel = viewModel()
     val scaffoldState = rememberBottomSheetScaffoldState()
@@ -1431,6 +1433,7 @@ private fun DashboardWithChatSheet(
                 onLogout = onLogout,
                 onNavigateToSettings = onNavigateToSettings,
                 onNavigateToWallet = onNavigateToWallet,
+                onNavigateToSettlement = onNavigateToSettlement,
             )
         }
     }

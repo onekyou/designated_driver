@@ -1543,8 +1543,14 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                         )
                     }
 
-                    // 오늘 날짜의 dailySettlement가 있고, 마감/확인/거절 상태인 경우 리스트에 추가
-                    if (dailySettlement.date == today &&
+                    // dailySettlement가 있고 마감/확인/거절 상태일 때 리스트에 추가
+                    // 윈도우화: 오늘 데이터(전체 status) + 어제 이전 PENDING_CONFIRM (휴무·퇴사 기사 dead lock 해소)
+                    val isToday = dailySettlement.date == today
+                    val isOldPendingConfirm =
+                        dailySettlement.date.isNotBlank() &&
+                        dailySettlement.date < today &&
+                        dailySettlement.status == DailySettlementStatus.PENDING_CONFIRM
+                    if ((isToday || isOldPendingConfirm) &&
                         (dailySettlement.status == DailySettlementStatus.PENDING_CONFIRM ||
                          dailySettlement.status == DailySettlementStatus.CONFIRMED ||
                          dailySettlement.status == DailySettlementStatus.REJECTED)) {
@@ -1959,6 +1965,106 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                 _isConfirming.value = false
                 onResult(false, "확인 실패: ${e.message}")
             }
+        }
+    }
+
+    /**
+     * 미확정 정산 일괄 확정 (Cleanup Gate — dead lock 해소).
+     *
+     * dailySettlementList 의 PENDING_CONFIRM 항목 모두 confirmDailySettlement 와 동일한 트랜잭션으로 직렬 처리.
+     * 부분 실패 허용: 모두 시도 후 (성공 N, 실패 M) 카운트로 결과 보고.
+     *
+     * 시스템 책임 영역 #2 (정산 확인) 만 처리. #3 transfer 는 매니저-기사 영역으로 위임 (자동 호출 X).
+     */
+    fun confirmAllPendingDailySettlements(
+        onResult: (successCount: Int, failedCount: Int) -> Unit
+    ) {
+        if (_isConfirming.value) {
+            Log.w("SettlementViewModel", "⚠️ 이미 정산 확인 진행 중입니다. 중복 요청 무시.")
+            return
+        }
+
+        val provinceId = currentProvinceId
+        val cityId = currentCityId
+        val officeId = currentOfficeId
+        if (provinceId == null || cityId == null || officeId == null) {
+            onResult(0, 0)
+            return
+        }
+
+        val targets = _dailySettlementList.value
+            .filter { it.dailySettlement?.status == DailySettlementStatus.PENDING_CONFIRM }
+            .map { it.driverId }
+
+        if (targets.isEmpty()) {
+            onResult(0, 0)
+            return
+        }
+
+        val loginPrefs = getApplication<Application>().getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
+        val adminId = loginPrefs.getString("adminId", null) ?: "unknown"
+
+        _isConfirming.value = true
+        viewModelScope.launch {
+            var successCount = 0
+            var failedCount = 0
+
+            for (driverId in targets) {
+                try {
+                    val driverRef = firestore.collection("provinces").document(provinceId)
+                        .collection("cities").document(cityId)
+                        .collection("offices").document(officeId)
+                        .collection("designated_drivers").document(driverId)
+
+                    firestore.runTransaction { transaction ->
+                        val doc = transaction.get(driverRef)
+
+                        @Suppress("UNCHECKED_CAST")
+                        val dailySettlementMap = doc.get("dailySettlement") as? Map<String, Any?>
+                        val newBalance = if (dailySettlementMap != null) {
+                            (dailySettlementMap["calculatedCarryOver"] as? Long) ?: 0L
+                        } else {
+                            @Suppress("UNCHECKED_CAST")
+                            val carryOverMap = doc.get("carryOver") as? Map<String, Any?>
+                            (carryOverMap?.get("balance") as? Long) ?: 0L
+                        }
+
+                        // 기존 TRANSFERRED 가드 (이체 후 재확인 시 이체 플래그 보호)
+                        @Suppress("UNCHECKED_CAST")
+                        val currentCarryOverMap = doc.get("carryOver") as? Map<String, Any?>
+                        val currentCarryOverStatusStr = currentCarryOverMap?.get("status") as? String
+                        val newCarryOverStatus = when {
+                            currentCarryOverStatusStr == CarryOverStatus.TRANSFERRED.name -> CarryOverStatus.TRANSFERRED.name
+                            newBalance > 0 -> CarryOverStatus.PENDING.name
+                            newBalance < 0 -> CarryOverStatus.PENDING.name
+                            else -> CarryOverStatus.SETTLED.name
+                        }
+
+                        transaction.update(driverRef, mapOf(
+                            "dailySettlement.status" to DailySettlementStatus.CONFIRMED.name,
+                            "dailySettlement.confirmedAt" to Timestamp.now(),
+                            "dailySettlement.confirmedBy" to adminId,
+                            "carryOver.balance" to newBalance,
+                            "carryOver.status" to newCarryOverStatus,
+                            "carryOver.lastUpdatedAt" to Timestamp.now(),
+                            "status" to "WAITING"
+                        ))
+                    }.await()
+
+                    successCount++
+                    Log.d("SettlementViewModel", "[BulkConfirm] 확정 성공: $driverId (${successCount}/${targets.size})")
+
+                    // 기사에게 FCM 전송 (Cloud Function 호출) — 기존 패턴 그대로
+                    notifyDriverSettlementResult(driverId, "CONFIRMED")
+                } catch (e: Exception) {
+                    failedCount++
+                    Log.e("SettlementViewModel", "[BulkConfirm] 확정 실패: $driverId", e)
+                }
+            }
+
+            _isConfirming.value = false
+            Log.i("SettlementViewModel", "[BulkConfirm] 완료 — 성공: $successCount / 실패: $failedCount / 총: ${targets.size}")
+            onResult(successCount, failedCount)
         }
     }
 
