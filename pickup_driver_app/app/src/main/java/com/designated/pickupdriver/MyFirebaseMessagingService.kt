@@ -204,7 +204,9 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     /**
      * 사무실 단톡방 메시지 처리
      * 1) Room INSERT — Repository에서 본인 senderId면 자동 skip
-     * 2) 알림 표시 — 본인 메시지면 skip (포그라운드 여부와 무관하게 항상 알림 — 픽업앱은 BottomSheet UI가 항상 보이는 게 아니므로)
+     * 2) 본인 메시지면 알림 skip
+     * 3) 포그라운드면 시스템 알림 skip + ptt_start 사운드만 재생 (BottomSheet UI가 처리)
+     * 4) 백그라운드면 시스템 알림 표시 (chat_messages_ptt 채널)
      */
     private fun handleChatMessage(remoteMessage: RemoteMessage) {
         val data = remoteMessage.data
@@ -229,7 +231,14 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
 
-        // 3) 알림 표시 (chat_messages_ptt 채널)
+        // 3) 포그라운드면 시스템 알림 skip, sound만 재생 (BottomSheet UI가 처리)
+        if (isAppInForeground()) {
+            Log.d(TAG, "[handleChatMessage] 포그라운드 - 알림 skip, sound 재생")
+            playChatSound()
+            return
+        }
+
+        // 4) 백그라운드 알림 표시 (chat_messages_ptt 채널)
         val roleKorean = when (senderRole) {
             "MANAGER" -> "매니저"
             "DESIGNATED_DRIVER" -> "대리기사"
@@ -267,5 +276,30 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(messageId.hashCode(), notification)
         Log.d(TAG, "[handleChatMessage] 알림 표시 완료")
+    }
+
+    private fun isAppInForeground(): Boolean {
+        return try {
+            val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+            val appProcesses = activityManager.runningAppProcesses ?: return false
+            val pkg = packageName
+            appProcesses.any {
+                it.processName == pkg &&
+                    it.importance == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "[isAppInForeground] 체크 실패 — 백그라운드로 간주", e)
+            false
+        }
+    }
+
+    private fun playChatSound() {
+        try {
+            val uri = android.net.Uri.parse("android.resource://$packageName/${R.raw.ptt_start}")
+            val ringtone = android.media.RingtoneManager.getRingtone(this, uri)
+            ringtone?.play()
+        } catch (e: Exception) {
+            Log.w(TAG, "[playChatSound] ptt_start 재생 실패", e)
+        }
     }
 }
