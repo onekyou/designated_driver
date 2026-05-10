@@ -80,6 +80,9 @@ import com.designated.callmanager.service.CallManagerService
 import com.designated.callmanager.ui.dashboard.DashboardScreen
 import com.designated.callmanager.ui.dashboard.DashboardViewModel
 import com.designated.callmanager.ui.dashboard.NewCallAssignmentDialog
+import com.designated.callmanager.ui.dashboard.ReservationConfirmDialog
+import com.designated.callmanager.data.CallStatus
+import com.designated.callmanager.data.DriverInfo
 import com.designated.callmanager.data.DriverStatus
 import com.designated.callmanager.ui.drivermanagement.DriverManagementScreen
 import com.designated.callmanager.ui.customer.CustomerManagementScreen
@@ -598,17 +601,18 @@ class MainActivity : ComponentActivity() {
                     // 배차 팝업 — 어느 화면에서든 표시
                     val newCallInfo by dashboardViewModel.newCallInfo.collectAsState()
                     val drivers by dashboardViewModel.drivers.collectAsState()
+                    val callsForReservation by dashboardViewModel.calls.collectAsState()
+
+                    // 운행중 기사 클릭 시 ReservationConfirmDialog 표시용 state (NewCallAssignmentDialog 위에 모달)
+                    var pendingReservationDriver by remember { mutableStateOf<com.designated.callmanager.data.DriverInfo?>(null) }
 
                     if (showNewCallPopup && newCallInfo != null) {
-                        val waitingDrivers = drivers.filter { driver ->
-                            val statusString = driver.status?.trim() ?: ""
-                            val statusEnum = DriverStatus.fromString(statusString)
-                            statusEnum == DriverStatus.WAITING || statusEnum == DriverStatus.ONLINE
-                        }.sortedBy { it.lastLoginTime?.seconds ?: Long.MAX_VALUE }
+                        // NewCallAssignmentDialog 안에서 status 분기 (WAITING/ONLINE = 대기중 / ON_TRIP = 예약 배차)
+                        val allDriversForDialog = drivers.sortedBy { it.lastLoginTime?.seconds ?: Long.MAX_VALUE }
 
                         NewCallAssignmentDialog(
                             callInfo = newCallInfo!!,
-                            availableDrivers = waitingDrivers,
+                            availableDrivers = allDriversForDialog,
                             onDismiss = { dashboardViewModel.dismissNewCallPopup() },
                             onDriverSelect = { driver ->
                                 dashboardViewModel.assignNewCall(driver.id)
@@ -637,8 +641,36 @@ class MainActivity : ComponentActivity() {
                                         fare = parsed.fare
                                     )
                                 }
+                            },
+                            onReservationDriverSelect = { driver ->
+                                pendingReservationDriver = driver
                             }
                         )
+                    }
+
+                    // 예약 배차 확인 다이얼로그 — NewCallAssignmentDialog 위에 모달로 표시
+                    val reservationDriver = pendingReservationDriver
+                    if (reservationDriver != null) {
+                        val callToReserve = newCallInfo
+                        val currentTripCall = callsForReservation.firstOrNull { c ->
+                            c.assignedDriverId == reservationDriver.authUid &&
+                                (c.status == CallStatus.ACCEPTED.firestoreValue ||
+                                    c.status == CallStatus.IN_PROGRESS.firestoreValue ||
+                                    c.status == CallStatus.AWAITING_SETTLEMENT.firestoreValue)
+                        }
+                        if (callToReserve != null) {
+                            ReservationConfirmDialog(
+                                driver = reservationDriver,
+                                currentTripCall = currentTripCall,
+                                callToReserve = callToReserve,
+                                onDismiss = { pendingReservationDriver = null },
+                                onConfirm = {
+                                    dashboardViewModel.assignReservation(callToReserve, reservationDriver.id)
+                                    pendingReservationDriver = null
+                                    dashboardViewModel.dismissNewCallPopup()
+                                }
+                            )
+                        }
                     }
 
                     // 관리자 직접운행 정산 다이얼로그 (전역 렌더)

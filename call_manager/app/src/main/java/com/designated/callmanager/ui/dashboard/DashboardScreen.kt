@@ -1754,7 +1754,8 @@ fun NewCallAssignmentDialog(
     onDelete: () -> Unit,
     onShare: (departure: String, destination: String, fare: Int) -> Unit,
     onDirectRun: (() -> Unit)? = null,
-    onMemoUpdate: (suspend (String, ParsedMemo) -> Unit)? = null
+    onMemoUpdate: (suspend (String, ParsedMemo) -> Unit)? = null,
+    onReservationDriverSelect: ((DriverInfo) -> Unit)? = null
 ) {
     val context = LocalContext.current
 
@@ -2384,56 +2385,115 @@ fun NewCallAssignmentDialog(
                     Spacer(Modifier.height(4.dp))
                 }
 
-                // 기사 선택 목록 (공통)
-                if (availableDrivers.isNotEmpty()) {
-                    Text("대기중인 기사 선택:", fontWeight = FontWeight.Medium)
+                // 기사 선택 목록 (공통) — 대기중 + 운행중(예약 배차) 분리
+                val waitingDriversInDialog = availableDrivers.filter { d ->
+                    val s = DriverStatus.fromString(d.status?.trim() ?: "")
+                    s == DriverStatus.WAITING || s == DriverStatus.ONLINE
+                }
+                val onTripDriversInDialog = availableDrivers.filter { d ->
+                    DriverStatus.fromString(d.status?.trim() ?: "") == DriverStatus.ON_TRIP
+                }
+
+                if (waitingDriversInDialog.isEmpty() && onTripDriversInDialog.isEmpty()) {
+                    Text(
+                        "현재 배차 가능한 기사가 없습니다.",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                } else {
                     LazyColumn(
-                        modifier = Modifier.heightIn(max = 200.dp),
+                        modifier = Modifier.heightIn(max = 280.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        items(availableDrivers) { driver ->
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable(enabled = !actionsDisabled) {
-                                        if (isFromCallManager && onDriverSelectWithInfo != null) {
-                                            val fare = fareText.toLongOrNull() ?: 0L
-                                            val memo = manualMemoText.ifBlank { null }
-                                            onDriverSelectWithInfo(driver, departure, destination, fare, memo)
-                                        } else {
-                                            onDriverSelect(driver)
-                                        }
-                                    },
-                                colors = CardDefaults.cardColors(
-                                    containerColor = if (actionsDisabled)
-                                        MaterialTheme.colorScheme.surfaceVariant
-                                    else
-                                        MaterialTheme.colorScheme.surface
+                        if (waitingDriversInDialog.isNotEmpty()) {
+                            item {
+                                Text(
+                                    "대기중 기사 선택:",
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.padding(vertical = 4.dp)
                                 )
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                            }
+                            items(waitingDriversInDialog) { driver ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable(enabled = !actionsDisabled) {
+                                            if (isFromCallManager && onDriverSelectWithInfo != null) {
+                                                val fare = fareText.toLongOrNull() ?: 0L
+                                                val memo = manualMemoText.ifBlank { null }
+                                                onDriverSelectWithInfo(driver, departure, destination, fare, memo)
+                                            } else {
+                                                onDriverSelect(driver)
+                                            }
+                                        },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (actionsDisabled)
+                                            MaterialTheme.colorScheme.surfaceVariant
+                                        else
+                                            MaterialTheme.colorScheme.surface
+                                    )
                                 ) {
-                                    Text(
-                                        text = driver.name,
-                                        modifier = Modifier.weight(1f),
-                                        fontWeight = FontWeight.Medium
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = driver.name,
+                                            modifier = Modifier.weight(1f),
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Text(
+                                            text = DriverStatus.fromString(driver.status).getDisplayName(),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color.Green
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (onTripDriversInDialog.isNotEmpty() && onReservationDriverSelect != null) {
+                            item {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    "운행중 기사 (예약 배차):",
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                    modifier = Modifier.padding(vertical = 4.dp)
+                                )
+                            }
+                            items(onTripDriversInDialog) { driver ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable(enabled = !actionsDisabled) {
+                                            onReservationDriverSelect(driver)
+                                        },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant
                                     )
-                                    Text(
-                                        text = DriverStatus.fromString(driver.status).getDisplayName(),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color.Green
-                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(driver.name, fontWeight = FontWeight.Medium)
+                                            Text(
+                                                "운행중 — 운행 종료 후 처리",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Text(
+                                            text = "예약 가능",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.tertiary
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
-                } else {
-                    Text(
-                        "현재 대기중인 기사가 없습니다.",
-                        color = MaterialTheme.colorScheme.error
-                    )
                 }
             }
         },
