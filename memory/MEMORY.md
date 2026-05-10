@@ -39,6 +39,44 @@
 - **5/10 첫 진입 작업**: 신규콜 예약(RESERVED) 4-PR — `C:\Users\kala1\.claude\plans\giggly-popping-crown.md` (기반 240줄) + `C:\Users\kala1\.claude\plans\deep-wibbling-papert.md` (보강 8건). 활성화 타이밍 = 콜 단위 정산 COMPLETED 시점 (5/10 합의)
 - **클코 학습**: 5/9 70/20/10을 확정 사실로 다뤄 5/10 사용자 발화 직전까지 콜마당을 부차 트랙처럼 추론한 게 오류 — "본인 결정 대기"는 결정 전 상태, 본인 발화 전까지 영구 미결로 다룰 것
 
+## 5/11 픽업앱 BottomSheet 통일 + 운영 정합 정리 (10 commit push 완료)
+- **활성 PR**: `manager-direct-drive` 브랜치 → master, plan: `C:\Users\kala1\.claude\plans\crystalline-strolling-wadler.md` (3 commit 계획 + 검증 중 발견 5 commit + driver_app/call_manager 정합 2 commit)
+- **commit 흐름** (모두 push 완료):
+  1. `f9df20ab` BottomSheet 통일 (DashboardWithChatSheet 신규 + MainActivity·DashboardScreen + ChatCard 삭제, 4 파일 +89/-136)
+  2. `ab2a2ace` 포그라운드 chat sound only (handleChatMessage isAppInForeground/playChatSound, 1 파일 +36/-2)
+  3. `0e9bb760` WAITING 콜 제외 (CallRepository ACTIVE_STATUSES 1줄 + functions sendNewCallNotification pickup 토큰 블록 제거, 2 파일 +3/-18)
+  4. `f7e5a6c9` 콜 알림 ID 분리 (notifyCallChange `"$callId-$status".hashCode()`, 매 상태 전이 sound 재생, 1 파일 +9/-6)
+  5. `2c2f2f43` 콜 알림 무전기음 통일 (CHANNEL_CALL_CHANGES 새 ID `pickup_call_changes_ptt` + IMPORTANCE_HIGH + setSound(ptt_start) + 진동, 기존 채널 deleteNotificationChannel cleanup, 1 파일 +26/-8)
+  6. `a2416eed` functions 잔재 fix (commit 0e9bb760에서 pickupTokens/pickupSnapshot 잔재 참조 2곳 cleanup, TS 컴파일 fix, 1 파일 +1/-8)
+  7. `dc12cff1` chat sound 음감 통일 (playChatSound RingtoneManager에 AudioAttributes USAGE_NOTIFICATION+CONTENT_TYPE_SONIFICATION 명시 → 채널 sound와 동일 stream, 1 파일 +5)
+  8. `8a9f73f4` 픽업앱 chat LazyColumn nested scroll 자동 위임 차단 (NestedScrollConnection.onPostScroll에서 available 그대로 반환 → BottomSheet drag로 위임 X, 의도적 swipe는 유지, 1 파일 +17)
+  9. `84efda18` driver_app 동일 fix (chat LazyColumn nested scroll 차단, 픽업 정합)
+  10. `c4a5f023` call_manager 동일 fix (chat LazyColumn nested scroll 차단, 픽업 정합)
+- **functions deploy**: `firebase deploy --only functions:sendNewCallNotification` 적용 완료 (asia-northeast3, nodejs22). 픽업앱은 status === "WAITING" 시점에 NEW_CALL FCM 미수신 — onCallStatusChanged의 ASSIGNED 전이 시점부터 알림 + Room INSERT(handleCallStatusUpdate upsert 폴백 이미 구현 L141-145 → 회귀 risk 0)
+- **기기 적용** (양 4단말 install -r 성공):
+  - 픽업앱: S21+ R3CR312MB1L + Z Flip4 R3CT80K78NP
+  - driver_app: S21+ + S22 R5CT41TJZFP + Z Flip4
+  - call_manager: S21+
+- **사용자 결정 트레일**:
+  - 4/28 후반 픽업앱 BottomSheet 거부했던 4-fix(peek 침범/multi-line/auto-scroll/IME)는 콜매니저 `b190a2bc` + driver_app `bda7f568` 안정화 패턴이 ChatBottomSheetContent에 이미 적용되어 있어 활성화만으로 통일
+  - "기사배차된 콜만"의 정의 = 옵션 A (대리기사 배차받은 콜만, WAITING 제외) — 옵션 B(픽업 본인 배정 시스템) 미진입
+  - "쉬프 통일" B 트랙(SharedPreferences 키 정렬)은 픽업앱이 이미 깔끔(Constants.PREFS_NAME) → 별도 PR로 분리. 콜매니저 raw string 정리는 안정 운영 중이라 추후
+  - swipe 동작 처리 = 옵션 (i) 자동 위임만 차단 (의도적 swipe 열기/닫기는 유지) — `sheetSwipeEnabled = false` 거부
+- **B 트랙 (스코프 외, 별도 PR)**: 콜매니저 ChatViewModel raw string `"login_prefs"`/`"provinceId"` 등을 Constants 객체로 추출 (동작 영향 0, 명명 일관성). 픽업앱은 이미 적용 상태
+- **다음 세션 진입 후보**: ① master로 PR 생성(`gh pr create`) ② RESERVED 4-PR 사용자 환경 install 검증 ③ 내부콜 삭제 fix (옵션 A/B) ④ 상태 명명 재설계 (AWAITING_SETTLEMENT/COMPLETED) ⑤ B 트랙 (콜매니저 prefs 정리)
+
+## 5/11 RESERVED 단말 검증 + 후속 fix 5건 (모두 push 완료)
+- **단말 install + functions deploy 검증**: S21+(R3CR312MB1L) call_manager + driver_app + S22(R5CT41TJZFP) call_detector + driver_app + Z Flip4(R3CT80K78NP) driver_app 모두 install Success. Room v7→v8 무손실 자동 migration 확인. functions production 등록 확인 (oncallreserved v2 / oncallassigned v2 가드 / onCallStatusChanged v2 가드). 일반 배차 흐름(WAITING→ASSIGNED→ACCEPTED) 회귀 0 (logcat FCM 2/2 성공). admin SDK E2E 검증 스크립트 2종 commit `29c9af09` (test-reserved-trigger.js + find-active-drivers.js).
+- ✅ **PR 2 사후 fix `3cce758e`** (NewCallAssignmentDialog 운행중 기사 섹션): PR 2 의 운행중 섹션이 잘못된 다이얼로그(`DriverListDialog`)에만 적용된 게 발견. 매니저 운영 흐름은 콜 카드 클릭 → `viewModel.showCallDialog` → MainActivity 가 `NewCallAssignmentDialog` 표시. NewCallAssignmentDialog 시그니처에 `onReservationDriverSelect` 추가 + LazyColumn 분기에 운행중 섹션 + MainActivity 호출부에 pendingReservationDriver state + ReservationConfirmDialog 호출 추가. 139 insertions/47 deletions. DriverListDialog 는 보조 경로(CallInfoDialog [배차] 버튼)에서 여전히 호출되므로 유지(dead code 아님).
+- ✅ **PR 4 사후 fix 1 `75fa096b`** (reservedCall 재로드 + ACTION_RESERVATION_RECEIVED receiver): MyFirebaseMessagingService 가 LocalBroadcast 송신만 하고 받는 receiver 가 없었던 누락. `DriverViewModel.reloadReservedCall()` 신규 함수 (1회 fetch) + HomeScreen 에 broadcast receiver 등록 + confirmAndFinalizeTrip 끝에 hook 추가. 운행 완료 시점 ReservedCallCard 자동 활성화. 메모리 §listener_vs_fcm 정합 (FCM + 1회 fetch, listener 0).
+- ✅ **PR 4 사후 fix 2 `19eaf4b6`** (운행중일 때 ReservedCallCard 숨김): 사용자 보고 — ReservedCallCard 가 InProgressScreen 의 [운행 완료] 버튼을 BottomCenter overlay 로 가려 운행 종료 못 함. HomeScreen 의 카드 표시 조건에 `(activeCall == null && callForSettlement == null)` 추가. 운행 중에는 알림(FCM)으로만 인지, 운행 완료 후 화면에서 카드 표시. 5/10 활성화 타이밍 합의(정산 COMPLETED 시점)와 정합.
+- ✅ **driver_app navigate fix `f4cd1db4`** (정산 입력 후 대시보드 유지): `confirmAndFinalizeTrip` 끝의 `navigateToHistorySettlement = true` → `false` 변경. 운행 완료 후 자동으로 정산 history 페이지 이동 안 함, HomeScreen(대시보드) 그대로 유지 → ReservedCallCard 자연 표시. 사용자가 정산 history 보고 싶으면 메뉴에서 명시적 진입(`requestNavigateToSettlement`)은 그대로 유지.
+- ✅ **PR 4 사후 fix 3 `9e10013e`** (RESERVED 알림 포그라운드/백그라운드 무관 표시): 사용자 보고 "예약배차시 알림 안 옴". 진단 결과: oncallreserved 트리거 정상 발화 + 1004 기사 fcmToken 정상 + S22 FCM 수신 정상(logcat "예약 콜 FCM 수신" 확인). 단 PR 4 코드가 포그라운드일 때 LocalBroadcast 만 송신, 시스템 알림 X. + 직전 fix 19eaf4b6 로 운행 중 카드도 숨김 → 사용자 시각·청각 인지 0. MyFirebaseMessagingService call_reserved 분기 `isAppInForeground()` if/else 제거 → 둘 다 LocalBroadcast + showNotification 둘 다 송신. 운행 중 기사가 운전 중에도 알림음 + heads-up 으로 인지 가능.
+- **5/11 본 세션 commit 흐름**: `29c9af09` → `3cce758e`(PR 2 사후) → `75fa096b`(PR 4 사후 1) → `19eaf4b6`(PR 4 사후 2) → `f4cd1db4`(navigate fix) → `9e10013e`(PR 4 사후 3). 모두 manager-direct-drive 브랜치 push.
+- **운영 데이터 검증 (5/11 진단 스크립트)**: 1004 사무실(`RUbeBEvGGYP5wMhJHhMF`) — 1004 기사 ON_TRIP + fcmToken O. 양평 활성 사무실(`nEkf0X9g3LZtRX94Mrzu`) — 양세훈/근데/배드웨어/고양이 fcmToken O, 양세훈 ONLINE. 총알대리(`OyLNNY8GbFExPHHLkuMK`) — 조수현 ASSIGNED + fcmToken O.
+- **별건 발견 미해결 (5/10 누락)**: 🟡 IAM `iam.serviceAccountUser` 누락 — `oncallassigned` timeout enqueue 실패 (functions log `iam.serviceAccounts.actAs` 에러). 5/7 cloudtasks.enqueuer 추가 시 함께 했어야 함. 사용자 직접 실행 명령: `gcloud iam service-accounts add-iam-policy-binding 60275310305-compute@developer.gserviceaccount.com --member=serviceAccount:60275310305-compute@developer.gserviceaccount.com --role=roles/iam.serviceAccountUser --project=calldetector-5d61e`. 운영 영향: 기사 3분 미수락 자동 WAITING 복귀 일부 작동 안 함 (`onDriverPresenceOffline` 보호망만).
+- **다음 세션 진입 후보**: ① E2E 양평 자연 운영 트래픽으로 RESERVED 전체 흐름(매니저 [예약 배차] → 기사 알림 + 운행완료 → 카드 자동 표시 → [수락] → 정상 ACCEPTED 합류) 1회 검증 ② 별건 IAM actAs 누락 fix ③ 콜 카드 [예약 취소] UI 액션 (ViewModel 함수만 작성, UI 미진입) ④ 상태 명명 재설계 (AWAITING_SETTLEMENT/COMPLETED 별도 트랙) ⑤ pickup_driver_app RESERVED 적용 평가 ⑥ ios/ Swift 코드 ⑦ 5/10 별건 이슈 (내부콜 삭제 / PERMISSION_DENIED 추적)
+
 ## 5/10~5/11 RESERVED 4-PR 코드 트랙 종료 (push + PR 1 deploy 완료)
 - ✅ **PR 1 `ef068673` + fix `bac087f8`** (push + `firebase deploy --only firestore:rules,functions` 완료): CallStatus enum × 3 + Constants.STATUS_RESERVED + ACTION_RESERVATION_RECEIVED + DashboardScreen RESERVED→"예약" 라벨 + functions oncallassigned 첫 줄 가드 + timeout enqueue 직전 방어 + onCallStatusChanged after===RESERVED 진입만 가드(이탈 통과해 매니저/픽업 알림 정상) + 신규 oncallreserved 트리거(type=call_reserved, level=active, ttl 3600s, timeout 미enqueue) + CallData.customerAddress 필드 + firestore.rules 기사 update RESERVED↔ACCEPTED/WAITING + 손님 취소 RESERVED 허용 + iOS SHARED_LOGIC.md/ENUMS.md 동기. 786줄. **production functions 등록 확인**: oncallreserved v2 / oncallassigned v2 가드 갱신 / onCallStatusChanged v2 가드 갱신 — 모두 asia-northeast3, nodejs22.
 - ✅ **PR 2 `6b9b7b49`** (push): call_manager Room v7→v8 migration (calls.reservedAt INTEGER ALTER, 무손실) + LocalCallInfo.reservedAt: Long? 매퍼 갱신 + Firestore CallInfo.reservedAt: Timestamp? 필드 + activeCallsListener whereIn 에 RESERVED 추가 + 콜 정렬 (RESERVED 별도 섹션 하단, reservedAt DESC) + assignReservation/cancelReservation 트랜잭션 함수 (1슬롯 사전 체크 트랜잭션 밖 query + driver doc 미터치) + DriverListDialog "운행중 기사 (예약 배차)" 섹션 + 예약 1건 보유 disable + ReservationConfirmDialog (현재 운행/예약할 콜 정보 + 안내 + [예약 배차]). 346줄. **비-진입**: 콜 카드 [예약 취소] UI 액션 (ViewModel 함수만 작성, 매니저는 우선 cancelCall로 우회).
