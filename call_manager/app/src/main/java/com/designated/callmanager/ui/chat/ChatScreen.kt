@@ -51,8 +51,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.ColorPainter
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
@@ -443,6 +447,18 @@ fun ChatBottomSheetContent(
     var fullScreenUrl by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
 
+    // LazyColumn 잔여 스크롤이 BottomSheet drag로 자동 위임되는 것 차단
+    // (이전 대화 보다가 의도치 않게 sheet 닫히는 문제 해결, 의도적 swipe는 sheet 자체에서 유지)
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset = available
+        }
+    }
+
     val imagePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri -> uri?.let { viewModel.sendImageMessage(it) } }
@@ -477,6 +493,7 @@ fun ChatBottomSheetContent(
                     .weight(1f)
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .nestedScroll(nestedScrollConnection)
                     .onGloballyPositioned { coords ->
                         val pos = coords.positionInRoot()
                         Log.d("ChatLayout", "LazyColumn pos=(${pos.x.toInt()}, ${pos.y.toInt()}) size=${coords.size.width}x${coords.size.height} msgCount=${messages.size}")
