@@ -2166,10 +2166,11 @@ export const onCallStatusChanged = onDocumentUpdated(
       return;
     }
 
-    // RESERVED 진입은 oncallreserved 가, 이탈(WAITING/ACCEPTED 복귀)은 다른 트리거가 신규 status 로 처리
-    // 본 트리거에서는 RESERVED 관련 전이를 모두 스킵해 중복 FCM 방지
-    if (beforeData.status === "RESERVED" || afterData.status === "RESERVED") {
-      logger.info(`[onCallStatusChanged:${callId}] RESERVED 전이 (${beforeData.status} → ${afterData.status}) — oncallreserved/재배차 트리거 전담`);
+    // RESERVED 진입(after === RESERVED) 만 가드 — oncallreserved 가 단독 전담, 중복 FCM 방지.
+    // RESERVED 이탈(before === RESERVED, after === ACCEPTED/WAITING/CANCELED) 은 통과해
+    // 매니저/픽업기사에게 정상 status_update FCM 송신 (기사 [수락]/[거절], 매니저 [예약 취소] 인지).
+    if (afterData.status === "RESERVED") {
+      logger.info(`[onCallStatusChanged:${callId}] RESERVED 진입 (${beforeData.status} → RESERVED) — oncallreserved 전담`);
       return;
     }
 
