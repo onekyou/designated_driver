@@ -110,15 +110,26 @@ fun HomeScreen(
             }
         }
 
+        // 예약 콜(RESERVED) 수신 — 매니저가 운행중 기사에게 다음 콜 예약 시 발화
+        val reservationReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                val callId = intent?.getStringExtra("callId")
+                Log.d(TAG, "📌 예약 콜 브로드캐스트 수신: callId=$callId")
+                viewModel.reloadReservedCall()
+            }
+        }
+
         val lbm = LocalBroadcastManager.getInstance(context)
         lbm.registerReceiver(finalizedReceiver, IntentFilter(Constants.ACTION_SETTLEMENT_FINALIZED))
         lbm.registerReceiver(confirmedReceiver, IntentFilter(Constants.ACTION_SETTLEMENT_CONFIRMED))
         lbm.registerReceiver(rejectedReceiver, IntentFilter(Constants.ACTION_SETTLEMENT_REJECTED))
+        lbm.registerReceiver(reservationReceiver, IntentFilter(Constants.ACTION_RESERVATION_RECEIVED))
 
         onDispose {
             lbm.unregisterReceiver(finalizedReceiver)
             lbm.unregisterReceiver(confirmedReceiver)
             lbm.unregisterReceiver(rejectedReceiver)
+            lbm.unregisterReceiver(reservationReceiver)
         }
     }
 

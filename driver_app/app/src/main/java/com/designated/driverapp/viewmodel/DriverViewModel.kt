@@ -858,6 +858,58 @@ class DriverViewModel @Inject constructor(
         Log.d(TAG, "✅ 운행 시작 완료: $callId")
     }
 
+    /**
+     * 예약 콜(RESERVED) 만 별도로 1회 fetch 해 uiState.reservedCall 갱신.
+     *
+     * 호출 시점:
+     *  - HomeScreen 이 ACTION_RESERVATION_RECEIVED LocalBroadcast 수신 시 (매니저가 RESERVED 배차한 직후)
+     *  - confirmAndFinalizeTrip 끝 (운행 완료 후 reservedCard 활성화)
+     *
+     * 비용: 사무실당 0~1건이라 read 1회. listener 안 씀 (월 0.03$ 수준).
+     */
+    fun reloadReservedCall() {
+        viewModelScope.launch {
+            try {
+                val (provinceId, cityId, officeId) = getDriverLocationInfo()
+                val driverId = auth.currentUser?.uid ?: return@launch
+
+                val snap = firestore
+                    .collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                    .collection(Constants.COLLECTION_CITIES).document(cityId)
+                    .collection(Constants.COLLECTION_OFFICES).document(officeId)
+                    .collection(Constants.COLLECTION_CALLS)
+                    .whereEqualTo(Constants.FIELD_ASSIGNED_DRIVER_ID, driverId)
+                    .whereEqualTo(Constants.FIELD_STATUS, Constants.STATUS_RESERVED)
+                    .limit(1)
+                    .get()
+                    .await()
+
+                val reserved = snap.documents.firstOrNull()?.let { doc ->
+                    try {
+                        doc.toObject<CallInfo>()?.apply { id = doc.id }
+                    } catch (e: Exception) { null }
+                }
+
+                _uiState.update { current ->
+                    // assignedCalls 에도 동기 (중복 없이 push)
+                    val updatedAssignedCalls = if (reserved != null) {
+                        val existing = current.assignedCalls.filterNot { it.id == reserved.id }
+                        existing + reserved
+                    } else {
+                        current.assignedCalls.filterNot { it.statusEnum == CallStatus.RESERVED }
+                    }
+                    current.copy(
+                        reservedCall = reserved,
+                        assignedCalls = updatedAssignedCalls
+                    )
+                }
+                Log.d(TAG, "reloadReservedCall: ${if (reserved != null) "RESERVED 콜 ${reserved.id} 발견" else "RESERVED 콜 없음"}")
+            } catch (e: Exception) {
+                Log.e(TAG, "reloadReservedCall 실패: ${e.message}", e)
+            }
+        }
+    }
+
     fun completeCall(callId: String) = performFirestoreUpdate {
         val (provinceId, cityId, officeId) = getDriverLocationInfo()
 
@@ -1010,6 +1062,9 @@ class DriverViewModel @Inject constructor(
 
                 // 운행 완료 후 Firestore 정산 데이터 갱신
                 refreshSettlementData()
+
+                // 예약 콜(RESERVED) 재로드 — 운행 완료 후 ReservedCallCard 의 [수락] 활성화
+                reloadReservedCall()
 
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = "정산 처리 중 오류: ${e.message}", isLoading = false) }
