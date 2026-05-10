@@ -257,7 +257,7 @@ class DriverViewModel @Inject constructor(
                     ?.let { DriverStatus.entries.find { ds -> ds.value == it } }
                     ?: DriverStatus.OFFLINE
 
-                // ✅ 2. 현재 배정된 콜 조회 (ASSIGNED, ACCEPTED, IN_PROGRESS, AWAITING_SETTLEMENT)
+                // ✅ 2. 현재 배정된 콜 조회 (ASSIGNED, RESERVED, ACCEPTED, IN_PROGRESS, AWAITING_SETTLEMENT)
                 val assignedCallsSnapshot = firestore
                     .collection(Constants.COLLECTION_PROVINCES).document(provinceId)
                     .collection(Constants.COLLECTION_CITIES).document(cityId)
@@ -266,6 +266,7 @@ class DriverViewModel @Inject constructor(
                     .whereEqualTo(Constants.FIELD_ASSIGNED_DRIVER_ID, driverId)
                     .whereIn(Constants.FIELD_STATUS, listOf(
                         Constants.STATUS_ASSIGNED,
+                        Constants.STATUS_RESERVED,
                         Constants.STATUS_ACCEPTED,
                         Constants.STATUS_IN_PROGRESS,
                         Constants.STATUS_AWAITING_SETTLEMENT
@@ -287,6 +288,7 @@ class DriverViewModel @Inject constructor(
                         it.statusEnum == CallStatus.ACCEPTED || it.statusEnum == CallStatus.IN_PROGRESS
                     }
                     val newCall = assignedCalls.firstOrNull { it.statusEnum == CallStatus.ASSIGNED }
+                    val reservedCall = assignedCalls.firstOrNull { it.statusEnum == CallStatus.RESERVED }
                     val settlementCall = assignedCalls.firstOrNull {
                         it.statusEnum == CallStatus.AWAITING_SETTLEMENT &&
                         !handledSettlementIds.contains(it.id)
@@ -298,12 +300,13 @@ class DriverViewModel @Inject constructor(
                             assignedCalls = assignedCalls,
                             activeCall = activeCall,
                             newCallPopup = newCall,
+                            reservedCall = reservedCall,
                             callForSettlement = settlementCall,
                             isLoading = false
                         )
                     }
 
-                    Log.d(TAG, "✅ 앱 시작: 기사 상태=${driverStatus.value}, 운행 중인 콜 ${assignedCalls.size}개 로드됨")
+                    Log.d(TAG, "✅ 앱 시작: 기사 상태=${driverStatus.value}, 콜 ${assignedCalls.size}개 (RESERVED=${if (reservedCall != null) 1 else 0})")
                 } else {
                     // 배정된 콜 없음 → 빈 화면 (기사 상태는 반영)
                     _uiState.update {
@@ -625,6 +628,114 @@ class DriverViewModel @Inject constructor(
         }
 
         Log.d(TAG, "콜 거절 완료: callId=$callId")
+    }
+
+    /**
+     * 예약 콜 수락 — 운행 종료 후 RESERVED 카드의 [수락] 클릭 시.
+     *
+     * 트랜잭션: calls.status: RESERVED → ACCEPTED, driver.status → PREPARING.
+     * 정상 ACCEPTED 흐름과 합류 — 출발지 이동 → IN_PROGRESS → ... → COMPLETED.
+     *
+     * 활성화 조건: driver doc status == WAITING (운행 종료 후 복귀 시점). UI 측에서 enabled 분기.
+     */
+    fun acceptReservedCall(callId: String) {
+        if (_isAccepting.value) {
+            Log.w(TAG, "⚠️ 이미 콜 수락 진행 중 — 중복 요청 무시")
+            return
+        }
+        _isAccepting.value = true
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val (provinceId, cityId, officeId) = getDriverLocationInfo()
+                val driverId = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
+
+                val callRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                    .collection(Constants.COLLECTION_CITIES).document(cityId)
+                    .collection(Constants.COLLECTION_OFFICES).document(officeId)
+                    .collection(Constants.COLLECTION_CALLS).document(callId)
+                val driverRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                    .collection(Constants.COLLECTION_CITIES).document(cityId)
+                    .collection(Constants.COLLECTION_OFFICES).document(officeId)
+                    .collection(Constants.COLLECTION_DRIVERS).document(driverId)
+
+                // 즉시 로컬 UI 업데이트 — 트랜잭션 기다리지 않음
+                _uiState.update { current ->
+                    val reserved = current.reservedCall
+                    if (reserved?.id == callId) {
+                        val accepted = reserved.copy(status = Constants.STATUS_ACCEPTED)
+                        current.copy(
+                            assignedCalls = current.assignedCalls.map {
+                                if (it.id == callId) accepted else it
+                            },
+                            activeCall = accepted,
+                            reservedCall = null,
+                            driverStatus = DriverStatus.PREPARING
+                        )
+                    } else current
+                }
+
+                firestore.runTransaction { transaction ->
+                    val callSnap = transaction.get(callRef)
+                    val currentStatus = callSnap.getString(Constants.FIELD_STATUS)
+                    if (currentStatus != Constants.STATUS_RESERVED) {
+                        throw IllegalStateException("RESERVED_NOT_FOUND: current=$currentStatus")
+                    }
+                    transaction.update(callRef, Constants.FIELD_STATUS, Constants.STATUS_ACCEPTED)
+                    transaction.update(driverRef, Constants.FIELD_STATUS, DriverStatus.PREPARING.value)
+                }.await()
+
+                Log.d(TAG, "✅ 예약 콜 수락 완료: $callId")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ 예약 콜 수락 실패: ${e.message}", e)
+                _uiState.update { it.copy(errorMessage = "예약 수락 실패 — 다시 시도해주세요") }
+            } finally {
+                _isAccepting.value = false
+            }
+        }
+    }
+
+    /**
+     * 예약 콜 거절 — RESERVED 카드의 [거절] 클릭 시.
+     *
+     * 트랜잭션: calls.status RESERVED → WAITING + assignedDriverId/Name/Phone null + reservedAt 제거.
+     * driver doc 은 손대지 않음 (기사가 운행 중일 수도 있음).
+     * 매니저는 일반 배차 다이얼로그에서 다른 기사로 재배차 가능.
+     */
+    fun rejectReservedCall(callId: String) = performFirestoreUpdate {
+        val (provinceId, cityId, officeId) = getDriverLocationInfo()
+
+        val callRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+            .collection(Constants.COLLECTION_CITIES).document(cityId)
+            .collection(Constants.COLLECTION_OFFICES).document(officeId)
+            .collection(Constants.COLLECTION_CALLS).document(callId)
+
+        firestore.runTransaction { transaction ->
+            val snap = transaction.get(callRef)
+            val currentStatus = snap.getString(Constants.FIELD_STATUS)
+            if (currentStatus != Constants.STATUS_RESERVED) {
+                throw IllegalStateException("RESERVED_NOT_FOUND: current=$currentStatus")
+            }
+            val updates = mapOf<String, Any?>(
+                Constants.FIELD_STATUS to Constants.STATUS_WAITING,
+                "assignedDriverId" to null,
+                "assignedDriverName" to null,
+                "assignedDriverPhone" to null,
+                "reservedAt" to FieldValue.delete(),
+                Constants.FIELD_UPDATED_AT to FieldValue.serverTimestamp()
+            )
+            transaction.update(callRef, updates)
+        }.await()
+
+        // 즉시 로컬 UI 정리: reservedCall null + assignedCalls 에서 제거
+        _uiState.update { current ->
+            current.copy(
+                reservedCall = if (current.reservedCall?.id == callId) null else current.reservedCall,
+                assignedCalls = current.assignedCalls.filter { it.id != callId }
+            )
+        }
+
+        Log.d(TAG, "예약 콜 거절 완료: callId=$callId")
     }
 
     /**

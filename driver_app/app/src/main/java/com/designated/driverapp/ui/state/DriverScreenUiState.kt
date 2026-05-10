@@ -14,6 +14,11 @@ data class DriverScreenUiState(
     val activeCall: CallInfo? = null,
     val callForSettlement: CallInfo? = null,
     val newCallPopup: CallInfo? = null,
+    /**
+     * 예약 콜(RESERVED). 운행중 기사에게 매니저가 다음 콜로 약속해둔 상태.
+     * 운행 중 화면 하단 또는 WAITING 복귀 시 reserved 카드로 표시.
+     */
+    val reservedCall: CallInfo? = null,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val locationFetchStatus: LocationFetchStatus = LocationFetchStatus.Idle,

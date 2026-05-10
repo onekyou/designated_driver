@@ -14,13 +14,14 @@ sealed class CallState {
 
   /// Firestore 원본 status → 손님 UI CallState 매핑.
   ///
-  /// 11종 Firestore 상태(WAITING/SHARED_WAITING/ASSIGNED/ACCEPTED/PREPARING/
+  /// 12종 Firestore 상태(WAITING/SHARED_WAITING/ASSIGNED/RESERVED/ACCEPTED/PREPARING/
   /// IN_PROGRESS/AWAITING_SETTLEMENT/COMPLETED/CANCELED/CANCELLED_BY_DRIVER/
   /// CANCELLED_BY_CUSTOMER/HOLD/CLAIMED) → 6종 UI 상태.
+  /// RESERVED는 운영 디테일이라 손님 측은 WAITING과 동일하게 "배차 요청 중"으로 표시.
   /// 미매칭은 안전 기본값 `cancelled`.
   static CallState fromFirestoreStatus(String firestoreStatus) =>
       switch (firestoreStatus) {
-        'WAITING' || 'SHARED_WAITING' => const CallState.requested(),
+        'WAITING' || 'SHARED_WAITING' || 'RESERVED' => const CallState.requested(),
         'ASSIGNED' => const CallState.assigned(),
         'ACCEPTED' || 'PREPARING' => const CallState.driverArriving(),
         'IN_PROGRESS' => const CallState.inProgress(),

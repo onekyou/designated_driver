@@ -290,72 +290,91 @@ fun HomeScreen(
                 }
             }
 
-            when {
-                uiState.newCallPopup != null -> {
-                    val newCallPopup = uiState.newCallPopup!!
-                    val pendingCount = uiState.assignedCalls.count {
-                        it.id != newCallPopup.id && it.statusEnum == CallStatus.ASSIGNED
-                    }
-                    NewCallPopup(
-                        callInfo = newCallPopup,
-                        onAccept = { viewModel.acceptCall(newCallPopup.id) },
-                        onDismiss = { viewModel.dismissNewCallPopup() },
-                        pendingCallCount = pendingCount
-                    )
-                }
-                uiState.activeCall != null -> {
-                    val activeCall = uiState.activeCall!!
-                    when (activeCall.statusEnum) {
-                        CallStatus.ACCEPTED -> {
-                            TripPreparationScreen(
-                                callInfo = activeCall,
-                                onStartDriving = { departure, destination, waypoints, fare ->
-                                    viewModel.startDriving(
-                                        activeCall.id,
-                                        departure,
-                                        destination,
-                                        waypoints,
-                                        fare
-                                    )
-                                },
-                                onCancel = { cancelReason ->
-                                    viewModel.cancelTrip(activeCall.id, cancelReason)
-                                }
-                            )
+            Box(modifier = Modifier.fillMaxSize()) {
+                when {
+                    uiState.newCallPopup != null -> {
+                        val newCallPopup = uiState.newCallPopup!!
+                        val pendingCount = uiState.assignedCalls.count {
+                            it.id != newCallPopup.id && it.statusEnum == CallStatus.ASSIGNED
                         }
-                        CallStatus.IN_PROGRESS -> {
-                            InProgressScreen(
-                                callInfo = activeCall,
-                                onCompleteTrip = { viewModel.completeCall(activeCall.id) }
-                            )
-                        }
-                        else -> {
-                            WaitingScreen(
-                                driverStatus = uiState.driverStatus,
-                                onGoOnline = { viewModel.updateDriverStatus(DriverStatus.ONLINE) },
-                                onCheckPendingDispatch = { viewModel.checkForPendingDispatch() },
-                                onShowReferralQR = { navController.navigate(AppDestinations.REFERRAL_QR_ROUTE) },
-                                onSelfDispatch = { viewModel.startSelfAssignedTrip() }
-                            )
+                        NewCallPopup(
+                            callInfo = newCallPopup,
+                            onAccept = { viewModel.acceptCall(newCallPopup.id) },
+                            onDismiss = { viewModel.dismissNewCallPopup() },
+                            pendingCallCount = pendingCount
+                        )
+                    }
+                    uiState.activeCall != null -> {
+                        val activeCall = uiState.activeCall!!
+                        when (activeCall.statusEnum) {
+                            CallStatus.ACCEPTED -> {
+                                TripPreparationScreen(
+                                    callInfo = activeCall,
+                                    onStartDriving = { departure, destination, waypoints, fare ->
+                                        viewModel.startDriving(
+                                            activeCall.id,
+                                            departure,
+                                            destination,
+                                            waypoints,
+                                            fare
+                                        )
+                                    },
+                                    onCancel = { cancelReason ->
+                                        viewModel.cancelTrip(activeCall.id, cancelReason)
+                                    }
+                                )
+                            }
+                            CallStatus.IN_PROGRESS -> {
+                                InProgressScreen(
+                                    callInfo = activeCall,
+                                    onCompleteTrip = { viewModel.completeCall(activeCall.id) }
+                                )
+                            }
+                            else -> {
+                                WaitingScreen(
+                                    driverStatus = uiState.driverStatus,
+                                    onGoOnline = { viewModel.updateDriverStatus(DriverStatus.ONLINE) },
+                                    onCheckPendingDispatch = { viewModel.checkForPendingDispatch() },
+                                    onShowReferralQR = { navController.navigate(AppDestinations.REFERRAL_QR_ROUTE) },
+                                    onSelfDispatch = { viewModel.startSelfAssignedTrip() }
+                                )
+                            }
                         }
                     }
-                }
-                uiState.driverStatus == DriverStatus.OFFLINE -> {
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text("현재 오프라인 상태입니다.", style = MaterialTheme.typography.headlineSmall)
+                    uiState.driverStatus == DriverStatus.OFFLINE -> {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("현재 오프라인 상태입니다.", style = MaterialTheme.typography.headlineSmall)
+                        }
+                    }
+                    else -> {
+                        WaitingScreen(
+                            driverStatus = uiState.driverStatus,
+                            onGoOnline = { viewModel.updateDriverStatus(DriverStatus.ONLINE) },
+                            onCheckPendingDispatch = { viewModel.checkForPendingDispatch() },
+                            onShowReferralQR = { navController.navigate(AppDestinations.REFERRAL_QR_ROUTE) },
+                            onSelfDispatch = { viewModel.startSelfAssignedTrip() }
+                        )
                     }
                 }
-                else -> {
-                    WaitingScreen(
-                        driverStatus = uiState.driverStatus,
-                        onGoOnline = { viewModel.updateDriverStatus(DriverStatus.ONLINE) },
-                        onCheckPendingDispatch = { viewModel.checkForPendingDispatch() },
-                        onShowReferralQR = { navController.navigate(AppDestinations.REFERRAL_QR_ROUTE) },
-                        onSelfDispatch = { viewModel.startSelfAssignedTrip() }
+
+                // 예약 콜 카드 — 메인 화면 위에 하단 overlay 로 표시.
+                // 활성화 조건: driverStatus == WAITING (운행 종료 후 복귀 시점) → [수락]/[거절] 활성.
+                // 그 외(ACCEPTED/IN_PROGRESS/PREPARING/AWAITING_SETTLEMENT 등) → disabled + "정산 입력 후 처리 가능".
+                uiState.reservedCall?.let { reserved ->
+                    val canHandle = uiState.driverStatus == DriverStatus.WAITING ||
+                        uiState.driverStatus == DriverStatus.ONLINE
+                    ReservedCallCard(
+                        callInfo = reserved,
+                        enabled = canHandle,
+                        onAccept = { viewModel.acceptReservedCall(reserved.id) },
+                        onReject = { viewModel.rejectReservedCall(reserved.id) },
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(12.dp)
                     )
                 }
             }
@@ -1042,6 +1061,71 @@ fun SettlementSummaryPopup(
                         Text("정산 완료", fontWeight = FontWeight.Bold)
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * 예약 콜(RESERVED) 카드 — 운행 중 화면 하단 overlay 또는 WAITING 화면 하단에 표시.
+ *
+ * enabled=true (driverStatus WAITING/ONLINE) → [수락][거절] 활성, 정상 ACCEPTED 흐름 합류 가능.
+ * enabled=false (운행 중) → 버튼 disabled + "정산 입력 후 처리 가능" 안내.
+ */
+@Composable
+private fun ReservedCallCard(
+    callInfo: CallInfo,
+    enabled: Boolean,
+    onAccept: () -> Unit,
+    onReject: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (enabled) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                "📌 다음 예약 콜",
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleSmall
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "손님: ${callInfo.customerName ?: "(이름 없음)"} · ${callInfo.phoneNumber}",
+                style = MaterialTheme.typography.bodySmall
+            )
+            callInfo.customerAddress?.let {
+                Text("주소: $it", style = MaterialTheme.typography.bodySmall)
+            }
+            val fareDisplay = callInfo.fare_set ?: callInfo.fare
+            if (fareDisplay != null && fareDisplay > 0) {
+                Text("요금: ${fareDisplay}원", style = MaterialTheme.typography.bodySmall)
+            }
+            if (!enabled) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "정산 입력 후 처리 가능",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = onAccept,
+                    enabled = enabled,
+                    modifier = Modifier.weight(1f)
+                ) { Text("수락") }
+                OutlinedButton(
+                    onClick = onReject,
+                    enabled = enabled,
+                    modifier = Modifier.weight(1f)
+                ) { Text("거절") }
             }
         }
     }

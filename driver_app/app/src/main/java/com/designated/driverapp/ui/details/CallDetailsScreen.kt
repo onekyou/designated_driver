@@ -102,6 +102,13 @@ private fun CallDetailsContent(
                 }
             }
         }
+        Constants.STATUS_RESERVED -> {
+            // 예약 콜 — 운행 종료 후에 처리. CallDetailsScreen 에서는 안내만 (실 처리는 HomeScreen 의 ReservedCallCard).
+            Text(
+                text = "예약 콜 — 운행 종료 후 처리 가능",
+                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
+            )
+        }
         Constants.STATUS_ACCEPTED -> {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 OutlinedTextField(
