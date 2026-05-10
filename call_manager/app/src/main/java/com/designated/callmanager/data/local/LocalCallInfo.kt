@@ -35,6 +35,9 @@ data class LocalCallInfo(
     val assignedDriverName: String?,
     val assignedDriverPhone: String?,
 
+    // 예약(RESERVED) 진입 시각 (ms epoch). RESERVED 콜 정렬 키.
+    val reservedAt: Long? = null,
+
     // 콜 타입
     val callType: String?,  // "REGULAR", "SHARED", etc.
     val fromCallDetector: Boolean?,
@@ -70,6 +73,7 @@ fun LocalCallInfo.toCallInfo(): CallInfo {
         assignedDriverId = assignedDriverId,
         assignedDriverName = assignedDriverName,
         assignedDriverPhone = assignedDriverPhone,
+        reservedAt = reservedAt?.let { Timestamp(it / 1000, ((it % 1000) * 1000000).toInt()) },
         callType = callType,
         fromCallDetector = fromCallDetector,
         fromCallManager = fromCallManager,
@@ -95,6 +99,7 @@ fun CallInfo.toLocalCallInfo(regionId: String, officeId: String): LocalCallInfo 
         assignedDriverId = assignedDriverId,
         assignedDriverName = assignedDriverName,
         assignedDriverPhone = assignedDriverPhone,
+        reservedAt = reservedAt?.seconds?.times(1000),
         callType = callType,
         fromCallDetector = fromCallDetector,
         fromCallManager = fromCallManager,

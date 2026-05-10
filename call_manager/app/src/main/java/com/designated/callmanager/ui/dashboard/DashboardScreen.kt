@@ -375,13 +375,30 @@ fun DashboardScreen(
     if (callIdForDriverAssignment != null) {
         val waitingDrivers = drivers.filter { driver ->
             val statusString = driver.status?.trim() ?: ""
-                val statusEnum = DriverStatus.fromString(statusString)
-                val isEligible = statusEnum == DriverStatus.WAITING || statusEnum == DriverStatus.ONLINE
-                isEligible
+            val statusEnum = DriverStatus.fromString(statusString)
+            val isEligible = statusEnum == DriverStatus.WAITING || statusEnum == DriverStatus.ONLINE
+            isEligible
         }.sortedBy { it.lastLoginTime?.seconds ?: Long.MAX_VALUE }
 
+        // 운행중(ON_TRIP) 기사 — 예약 배차 대상
+        val onTripDrivers = drivers.filter { driver ->
+            val statusString = driver.status?.trim() ?: ""
+            DriverStatus.fromString(statusString) == DriverStatus.ON_TRIP
+        }.sortedBy { it.lastLoginTime?.seconds ?: Long.MAX_VALUE }
+
+        // 이미 RESERVED 보유한 기사 set (assignedDriverId 기준) — 동일 기사 중복 예약 방지 disable
+        val reservedDriverAuthUids: Set<String> = calls
+            .filter { it.status == CallStatus.RESERVED.firestoreValue }
+            .mapNotNull { it.assignedDriverId }
+            .toSet()
+
+        // 운행중 기사 행 클릭 시 표시할 확인 다이얼로그 state
+        var pendingReservationDriver by remember { mutableStateOf<DriverInfo?>(null) }
+
         DriverListDialog(
-            drivers = waitingDrivers,
+            waitingDrivers = waitingDrivers,
+            onTripDrivers = onTripDrivers,
+            reservedDriverAuthUids = reservedDriverAuthUids,
             onDismiss = { callIdForDriverAssignment = null },
             onDriverSelect = { driver ->
                 val callToAssign = calls.find { it.id == callIdForDriverAssignment }
@@ -389,8 +406,37 @@ fun DashboardScreen(
                     viewModel.assignCallToDriver(callToAssign, driver.id)
                 }
                 callIdForDriverAssignment = null
+            },
+            onReservationDriverSelect = { driver ->
+                pendingReservationDriver = driver
             }
         )
+
+        // 예약 배차 확인 다이얼로그
+        val reservationDriver = pendingReservationDriver
+        if (reservationDriver != null) {
+            val callToReserve = calls.find { it.id == callIdForDriverAssignment }
+            // 운행중 기사가 현재 들고 있는 콜 (운행 중인 콜)
+            val currentTripCall = calls.firstOrNull { c ->
+                c.assignedDriverId == reservationDriver.authUid &&
+                    (c.status == CallStatus.ACCEPTED.firestoreValue ||
+                        c.status == CallStatus.IN_PROGRESS.firestoreValue ||
+                        c.status == CallStatus.AWAITING_SETTLEMENT.firestoreValue)
+            }
+            if (callToReserve != null) {
+                ReservationConfirmDialog(
+                    driver = reservationDriver,
+                    currentTripCall = currentTripCall,
+                    callToReserve = callToReserve,
+                    onDismiss = { pendingReservationDriver = null },
+                    onConfirm = {
+                        viewModel.assignReservation(callToReserve, reservationDriver.id)
+                        pendingReservationDriver = null
+                        callIdForDriverAssignment = null
+                    }
+                )
+            }
+        }
     }
 
     if (showApprovalPopup && driverForApproval != null) {
@@ -1485,20 +1531,75 @@ fun DirectRunDialog(
 
 @Composable
 fun DriverListDialog(
-    drivers: List<DriverInfo>,
+    waitingDrivers: List<DriverInfo>,
+    onTripDrivers: List<DriverInfo> = emptyList(),
+    reservedDriverAuthUids: Set<String> = emptySet(),
     onDismiss: () -> Unit,
-    onDriverSelect: (DriverInfo) -> Unit
+    onDriverSelect: (DriverInfo) -> Unit,
+    onReservationDriverSelect: (DriverInfo) -> Unit = {}
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("대기중인 기사 선택") },
+        title = { Text("배차할 기사 선택") },
         text = {
             LazyColumn {
-                items(drivers) { driver ->
-                    ListItem(
-                        headlineContent = { Text(driver.name) },
-                        modifier = Modifier.clickable { onDriverSelect(driver) }
-                    )
+                if (waitingDrivers.isNotEmpty()) {
+                    item {
+                        Text(
+                            "대기중 기사",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    }
+                    items(waitingDrivers) { driver ->
+                        ListItem(
+                            headlineContent = { Text(driver.name) },
+                            modifier = Modifier.clickable { onDriverSelect(driver) }
+                        )
+                    }
+                }
+                if (onTripDrivers.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "운행중 기사 (예약 배차)",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    }
+                    items(onTripDrivers) { driver ->
+                        val authUid = driver.authUid
+                        val alreadyReserved = authUid != null && reservedDriverAuthUids.contains(authUid)
+                        ListItem(
+                            headlineContent = {
+                                Text(
+                                    driver.name,
+                                    color = if (alreadyReserved) Color.Gray else Color.Unspecified
+                                )
+                            },
+                            supportingContent = {
+                                Text(
+                                    if (alreadyReserved) "예약 1건 보유 중" else "운행중 — 운행 종료 후 처리",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (alreadyReserved) Color.Gray else Color(0xFF757575)
+                                )
+                            },
+                            modifier = Modifier.clickable(enabled = !alreadyReserved) {
+                                onReservationDriverSelect(driver)
+                            }
+                        )
+                    }
+                }
+                if (waitingDrivers.isEmpty() && onTripDrivers.isEmpty()) {
+                    item {
+                        Text(
+                            "배차 가능한 기사가 없습니다",
+                            modifier = Modifier.padding(16.dp),
+                            color = Color.Gray
+                        )
+                    }
                 }
             }
         },
@@ -1506,6 +1607,61 @@ fun DriverListDialog(
             TextButton(onClick = onDismiss) {
                 Text("취소")
             }
+        }
+    )
+}
+
+/**
+ * 예약 배차 확인 다이얼로그.
+ *
+ * 운행중 기사에게 RESERVED 콜을 거는 결정 — 매니저가 한 번 더 의식적으로 확정하도록.
+ * 표시: 헤더 + 현재 운행 콜 정보(있으면) + 예약할 콜 정보 + 안내 + [취소][예약 배차].
+ */
+@Composable
+fun ReservationConfirmDialog(
+    driver: DriverInfo,
+    currentTripCall: CallInfo?,
+    callToReserve: CallInfo,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.Schedule, contentDescription = "예약 배차") },
+        title = { Text("${driver.name} 기사 예약 배차") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "${driver.name} 기사는 현재 운행중입니다",
+                    fontWeight = FontWeight.Bold
+                )
+
+                if (currentTripCall != null) {
+                    Text("현재 운행 콜", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    Text("출발: ${currentTripCall.departure_set ?: currentTripCall.departure ?: "(미입력)"}", style = MaterialTheme.typography.bodySmall)
+                    Text("목적: ${currentTripCall.destination_set ?: currentTripCall.destination ?: "(미입력)"}", style = MaterialTheme.typography.bodySmall)
+                }
+
+                Text("예약할 콜", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.tertiary)
+                Text("손님: ${callToReserve.customerName ?: "(이름 없음)"} · ${callToReserve.phoneNumber}", style = MaterialTheme.typography.bodySmall)
+                Text("주소: ${callToReserve.customerAddress ?: callToReserve.address ?: "(미입력)"}", style = MaterialTheme.typography.bodySmall)
+                val fareValue = callToReserve.fare_set ?: callToReserve.fare
+                if (fareValue != null && fareValue > 0) {
+                    Text("요금: ${fareValue}원", style = MaterialTheme.typography.bodySmall)
+                }
+
+                Text(
+                    "운행 종료 후 기사가 [수락]하면 정상 배차됩니다",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF757575)
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onConfirm) { Text("예약 배차") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("취소") }
         }
     )
 }

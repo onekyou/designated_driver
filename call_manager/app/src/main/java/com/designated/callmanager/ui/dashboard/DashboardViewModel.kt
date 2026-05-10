@@ -26,6 +26,7 @@ import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.DocumentChange
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.ListenerRegistration
@@ -627,7 +628,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             .collection("cities").document(cityId)
             .collection("offices").document(officeId)
             .collection("calls")
-            .whereIn("status", listOf("OPEN", "WAITING", "ASSIGNED", "ACCEPTED", "IN_PROGRESS"))
+            .whereIn("status", listOf("OPEN", "WAITING", "ASSIGNED", "RESERVED", "ACCEPTED", "IN_PROGRESS"))
             .whereGreaterThan("timestamp", twelveHoursAgo)
             .addSnapshotListener { snapshots, e ->
                 if (e != null) {
@@ -679,7 +680,18 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun updateCallsFromCache() {
-        _calls.value = callsCache.values.sortedByDescending { it.timestampClient ?: it.timestamp.toDate().time }
+        // RESERVED 콜은 별도 섹션(하단)으로 분리 — reservedAt 시간순. 그 외는 timestamp 시간순.
+        // Screen 측은 statusEnum 으로 그룹핑해 일반 큐 / 예약 큐 별도 표시 가능.
+        _calls.value = callsCache.values.sortedWith(
+            compareBy<CallInfo> { if (it.status == CallStatus.RESERVED.firestoreValue) 1 else 0 }
+                .thenByDescending {
+                    if (it.status == CallStatus.RESERVED.firestoreValue) {
+                        it.reservedAt?.toDate()?.time ?: 0L
+                    } else {
+                        it.timestampClient ?: it.timestamp.toDate().time
+                    }
+                }
+        )
     }
 
     private fun parseCallDocument(doc: com.google.firebase.firestore.DocumentSnapshot): CallInfo? {
@@ -844,6 +856,150 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 refreshCallData()
             } finally {
                 _isAssigning.value = false
+            }
+        }
+    }
+
+    /**
+     * 신규콜 예약 배차 — 운행중(ON_TRIP) 기사에게 다음 콜을 RESERVED 상태로 걸어둠.
+     *
+     * 흐름: 매니저가 배차 다이얼로그에서 운행중 기사 선택 → 확인 다이얼로그 → 본 함수 호출.
+     *
+     * 트랜잭션:
+     *  1. 1슬롯 사전 체크 (같은 기사에 RESERVED 콜 0건이어야 진행)
+     *  2. calls.status = RESERVED, assignedDriverId = driverAuthUid, reservedAt = serverTimestamp
+     *  3. driver doc 은 손대지 않음 (status=ON_TRIP 유지) — 격리 원칙
+     *
+     * 기존 ASSIGNED 흐름과 분리: assignCallToDriver 는 status WAITING/ONLINE 만 허용 → 영향 0.
+     */
+    fun assignReservation(callInfo: CallInfo, driverId: String) {
+        Log.d(TAG, "📌 assignReservation 호출: callId=${callInfo.id}, driverId=$driverId")
+
+        if (_isAssigning.value) {
+            Log.w(TAG, "⚠️ 배차 진행 중 — 중복 요청 무시")
+            return
+        }
+
+        if (_provinceId.value == null || _cityId.value == null || _officeId.value == null) {
+            Log.e(TAG, "❌ provinceId/cityId/officeId null")
+            return
+        }
+
+        val officePath = firestore.collection("provinces").document(_provinceId.value!!)
+            .collection("cities").document(_cityId.value!!)
+            .collection("offices").document(_officeId.value!!)
+
+        _isAssigning.value = true
+        viewModelScope.launch {
+            try {
+                val driverSnapshot = officePath.collection("designated_drivers").document(driverId).get().await()
+                val driverInfo = driverSnapshot.toObject(DriverInfo::class.java) ?: run {
+                    Log.e(TAG, "❌ 기사 정보 없음")
+                    return@launch
+                }
+                val driverAuthUid = driverInfo.authUid
+                if (driverAuthUid.isNullOrBlank()) {
+                    Log.e(TAG, "❌ 기사 authUid 없음")
+                    return@launch
+                }
+
+                // 1슬롯 사전 체크 (트랜잭션 밖에서도 1차) — 같은 기사에 이미 예약 콜 있으면 abort
+                val existingReserved = officePath.collection("calls")
+                    .whereEqualTo("assignedDriverId", driverAuthUid)
+                    .whereEqualTo("status", CallStatus.RESERVED.firestoreValue)
+                    .limit(1)
+                    .get().await()
+                if (!existingReserved.isEmpty) {
+                    _snackbarMessage.value = "${driverInfo.name ?: "해당 기사"}는 이미 예약 1건 보유 중입니다"
+                    return@launch
+                }
+
+                val callRef = officePath.collection("calls").document(callInfo.id)
+
+                firestore.runTransaction { transaction ->
+                    val callDoc = transaction.get(callRef)
+                    val currentStatus = callDoc.getString("status")
+                    if (currentStatus != CallStatus.WAITING.firestoreValue && currentStatus != CallStatus.HOLD.firestoreValue) {
+                        throw IllegalStateException("CALL_NOT_WAITING")
+                    }
+
+                    val updates = mapOf(
+                        "assignedDriverId" to driverAuthUid,
+                        "assignedDriverName" to driverInfo.name,
+                        "assignedDriverPhone" to (driverInfo.phoneNumber ?: ""),
+                        "status" to CallStatus.RESERVED.firestoreValue,
+                        "reservedAt" to FieldValue.serverTimestamp(),
+                        "updatedAt" to Timestamp.now()
+                    )
+                    transaction.update(callRef, updates)
+                    // driver doc 은 의도적으로 손대지 않음 (status=ON_TRIP 유지)
+                }.await()
+
+                _snackbarMessage.value = "${driverInfo.name ?: "기사"}에게 예약 배차 완료 — 운행 종료 후 처리됩니다"
+                Log.d(TAG, "📌 예약 배차 트랜잭션 완료: ${callInfo.id}")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ 예약 배차 실패: ${e.message}", e)
+                val msg = e.message ?: ""
+                val cause = e.cause?.message ?: ""
+                _snackbarMessage.value = when {
+                    msg.contains("CALL_NOT_WAITING") || cause.contains("CALL_NOT_WAITING") ->
+                        "이미 다른 기사에게 배차되었거나 진행 중인 콜입니다"
+                    else -> "예약 배차 실패 — 네트워크 또는 권한 확인"
+                }
+                refreshCallData()
+            } finally {
+                _isAssigning.value = false
+            }
+        }
+    }
+
+    /**
+     * 신규콜 예약 취소 — 매니저가 RESERVED 콜의 [예약 취소] 누름.
+     *
+     * 트랜잭션: status RESERVED → WAITING, assignedDriverId 제거, reservedAt 제거.
+     * 매니저는 이후 일반 배차 다이얼로그에서 다른 기사로 재배차 가능.
+     */
+    fun cancelReservation(callId: String) {
+        Log.d(TAG, "📌 cancelReservation 호출: callId=$callId")
+
+        if (_provinceId.value == null || _cityId.value == null || _officeId.value == null) return
+
+        val callRef = firestore.collection("provinces").document(_provinceId.value!!)
+            .collection("cities").document(_cityId.value!!)
+            .collection("offices").document(_officeId.value!!)
+            .collection("calls").document(callId)
+
+        viewModelScope.launch {
+            try {
+                firestore.runTransaction { transaction ->
+                    val callDoc = transaction.get(callRef)
+                    val currentStatus = callDoc.getString("status")
+                    if (currentStatus != CallStatus.RESERVED.firestoreValue) {
+                        throw IllegalStateException("NOT_RESERVED")
+                    }
+                    val updates = mapOf<String, Any?>(
+                        "status" to CallStatus.WAITING.firestoreValue,
+                        "assignedDriverId" to null,
+                        "assignedDriverName" to null,
+                        "assignedDriverPhone" to null,
+                        "reservedAt" to FieldValue.delete(),
+                        "updatedAt" to Timestamp.now()
+                    )
+                    transaction.update(callRef, updates)
+                }.await()
+
+                _snackbarMessage.value = "예약 취소됨 — 다른 기사로 재배차 가능"
+                Log.d(TAG, "📌 예약 취소 트랜잭션 완료: $callId")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ 예약 취소 실패: ${e.message}", e)
+                val msg = e.message ?: ""
+                val cause = e.cause?.message ?: ""
+                _snackbarMessage.value = when {
+                    msg.contains("NOT_RESERVED") || cause.contains("NOT_RESERVED") ->
+                        "이미 처리된 콜입니다"
+                    else -> "예약 취소 실패 — 네트워크 또는 권한 확인"
+                }
+                refreshCallData()
             }
         }
     }

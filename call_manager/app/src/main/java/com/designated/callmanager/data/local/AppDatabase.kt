@@ -19,7 +19,7 @@ import android.content.Context
         LocalDriverInfo::class,
         LocalChatMessage::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -46,7 +46,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     DATABASE_NAME
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_1_2, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                 .fallbackToDestructiveMigration() // 개발 단계에서는 데이터 손실 허용
                 .build()
                 INSTANCE = instance
@@ -163,6 +163,17 @@ abstract class AppDatabase : RoomDatabase() {
                 database.execSQL("ALTER TABLE chat_messages ADD COLUMN imagePath TEXT")
                 database.execSQL("ALTER TABLE chat_messages ADD COLUMN imageWidth INTEGER")
                 database.execSQL("ALTER TABLE chat_messages ADD COLUMN imageHeight INTEGER")
+            }
+        }
+
+        /**
+         * v7 → v8 마이그레이션: calls 테이블에 reservedAt 컬럼 추가
+         * 신규콜 예약(RESERVED 상태) 진입 시각 저장 (ms epoch). 정렬 키 용.
+         * 기존 콜은 NULL (RESERVED 진입 콜만 값 보유).
+         */
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE calls ADD COLUMN reservedAt INTEGER")
             }
         }
 

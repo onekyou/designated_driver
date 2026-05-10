@@ -18,6 +18,8 @@ data class CallInfo(
     @get:PropertyName("assignedDriverId") @set:PropertyName("assignedDriverId") var assignedDriverId: String? = null,
     @get:PropertyName("assignedDriverName") @set:PropertyName("assignedDriverName") var assignedDriverName: String? = null,
     @get:PropertyName("assignedTimestamp") @set:PropertyName("assignedTimestamp") var assignedTimestamp: Timestamp? = null,
+    // 신규콜 예약(RESERVED) 진입 시 매니저 트랜잭션이 set. 정렬 키 + 감사용.
+    @get:PropertyName("reservedAt") @set:PropertyName("reservedAt") var reservedAt: Timestamp? = null,
     @get:PropertyName("customerName") @set:PropertyName("customerName") var customerName: String? = null,
     @get:PropertyName("address") @set:PropertyName("address") var address: String? = null,
     @get:PropertyName("callType") @set:PropertyName("callType") var callType: String? = null,
