@@ -17,7 +17,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.designated.pickupdriver.data.Constants
-import com.designated.pickupdriver.ui.dashboard.DashboardScreen
+import com.designated.pickupdriver.ui.chat.DashboardWithChatSheet
 import com.designated.pickupdriver.ui.login.LoginScreen
 import com.designated.pickupdriver.ui.login.SignUpScreen
 import com.designated.pickupdriver.ui.theme.PickupDriverAppTheme
@@ -85,7 +85,7 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             composable(Routes.DASHBOARD) {
-                                DashboardScreen(
+                                DashboardWithChatSheet(
                                     onLogout = {
                                         navController.navigate(Routes.LOGIN) {
                                             popUpTo(Routes.DASHBOARD) { inclusive = true }

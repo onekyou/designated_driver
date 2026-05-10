@@ -1,7 +1,6 @@
 package com.designated.pickupdriver.ui.dashboard
 
 import androidx.activity.ComponentActivity
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,13 +18,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.designated.pickupdriver.data.Constants
-import com.designated.pickupdriver.ui.chat.ChatCard
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel(),
@@ -41,7 +39,7 @@ fun DashboardScreen(
     }
 
     Scaffold(
-        contentWindowInsets = WindowInsets.systemBars.union(WindowInsets.ime),
+        contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
                 title = { Text("진행 중 ${calls.size}건") },
@@ -60,46 +58,25 @@ fun DashboardScreen(
             )
         }
     ) { paddingValues ->
-        val isImeVisible = WindowInsets.isImeVisible
-        val callWeight by animateFloatAsState(
-            targetValue = if (isImeVisible) 0.001f else 1f,
-            label = "callWeight",
-        )
-
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
+            contentAlignment = if (calls.isEmpty()) Alignment.Center else Alignment.TopStart,
         ) {
-            Box(
-                modifier = Modifier
-                    .weight(callWeight)
-                    .fillMaxWidth(),
-                contentAlignment = if (calls.isEmpty()) Alignment.Center else Alignment.TopStart,
-            ) {
-                if (calls.isEmpty()) {
-                    Text("진행 중인 콜이 없습니다", style = MaterialTheme.typography.bodyLarge)
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(items = calls, key = { it.callId }) { call ->
-                            CallCard(call = call)
-                        }
+            if (calls.isEmpty()) {
+                Text("진행 중인 콜이 없습니다", style = MaterialTheme.typography.bodyLarge)
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(items = calls, key = { it.callId }) { call ->
+                        CallCard(call = call)
                     }
                 }
             }
-
-            HorizontalDivider()
-
-            ChatCard(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(start = 8.dp, end = 8.dp, top = 8.dp),
-            )
         }
     }
 }
