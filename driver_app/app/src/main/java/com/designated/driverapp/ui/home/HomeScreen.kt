@@ -372,21 +372,23 @@ fun HomeScreen(
                     }
                 }
 
-                // 예약 콜 카드 — 메인 화면 위에 하단 overlay 로 표시.
-                // 활성화 조건: driverStatus == WAITING (운행 종료 후 복귀 시점) → [수락]/[거절] 활성.
-                // 그 외(ACCEPTED/IN_PROGRESS/PREPARING/AWAITING_SETTLEMENT 등) → disabled + "정산 입력 후 처리 가능".
-                uiState.reservedCall?.let { reserved ->
-                    val canHandle = uiState.driverStatus == DriverStatus.WAITING ||
-                        uiState.driverStatus == DriverStatus.ONLINE
-                    ReservedCallCard(
-                        callInfo = reserved,
-                        enabled = canHandle,
-                        onAccept = { viewModel.acceptReservedCall(reserved.id) },
-                        onReject = { viewModel.rejectReservedCall(reserved.id) },
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(12.dp)
-                    )
+                // 예약 콜 카드 — 운행 중일 때는 표시하지 않음 (운행 완료 버튼 가림 방지).
+                // 운행 완료 후 (activeCall == null + driverStatus WAITING/ONLINE) 시점에 표시 + [수락]/[거절] 활성.
+                // 운행 중 RESERVED 진입은 알림(FCM ACTION_RESERVATION_RECEIVED) 으로 인지.
+                if (uiState.activeCall == null && uiState.callForSettlement == null) {
+                    uiState.reservedCall?.let { reserved ->
+                        val canHandle = uiState.driverStatus == DriverStatus.WAITING ||
+                            uiState.driverStatus == DriverStatus.ONLINE
+                        ReservedCallCard(
+                            callInfo = reserved,
+                            enabled = canHandle,
+                            onAccept = { viewModel.acceptReservedCall(reserved.id) },
+                            onReject = { viewModel.rejectReservedCall(reserved.id) },
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(12.dp)
+                        )
+                    }
                 }
             }
 
