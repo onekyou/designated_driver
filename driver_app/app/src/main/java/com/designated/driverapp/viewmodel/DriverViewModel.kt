@@ -1055,7 +1055,9 @@ class DriverViewModel @Inject constructor(
                         activeCall = null,
                         callForSettlement = null,
                         driverStatus = DriverStatus.WAITING,
-                        navigateToHistorySettlement = true,
+                        // 정산 입력 완료 후 자동 navigate 제거 — HomeScreen(대시보드) 유지
+                        // 사용자가 정산 history 보고 싶으면 메뉴에서 명시적으로 requestNavigateToSettlement() 진입
+                        navigateToHistorySettlement = false,
                         isLoading = false
                     )
                 }
