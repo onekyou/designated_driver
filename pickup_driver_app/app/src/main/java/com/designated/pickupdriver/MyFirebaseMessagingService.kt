@@ -300,6 +300,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         try {
             val uri = android.net.Uri.parse("android.resource://$packageName/${R.raw.ptt_start}")
             val ringtone = android.media.RingtoneManager.getRingtone(this, uri)
+            // 채널 sound와 동일 stream/처리로 통일 — 콜 알림과 같은 음감
+            ringtone?.audioAttributes = android.media.AudioAttributes.Builder()
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+                .build()
             ringtone?.play()
         } catch (e: Exception) {
             Log.w(TAG, "[playChatSound] ptt_start 재생 실패", e)
