@@ -191,25 +191,24 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             }
         } else if (!callId.isNullOrBlank() && messageType == "call_reserved") {
             // 신규콜 예약 (RESERVED) — 운행중 기사에게 다음 콜 약속.
-            // 운행 중에는 가벼운 알림만 (FullScreenIntent X, DriverForegroundService 추가 시작 X).
+            // 가벼운 알림 (FullScreenIntent X, DriverForegroundService 추가 시작 X). 포그라운드/백그라운드 모두 표시.
             Log.d(TAG, "예약 콜 FCM 수신: callId=$callId")
 
-            if (isAppInForeground()) {
-                // 포그라운드: LocalBroadcast 만 — UI 가 reservedCall 카드 표시
-                val broadcastIntent = Intent(Constants.ACTION_RESERVATION_RECEIVED).apply {
-                    putExtra("callId", callId)
-                    putExtra("title", title)
-                    putExtra("body", body)
-                }
-                LocalBroadcastManager.getInstance(this).sendBroadcast(broadcastIntent)
-            } else {
-                // 백그라운드: 가벼운 시스템 알림 (FullScreenIntent X). showNotification 재사용.
-                showNotification(
-                    title ?: "예약 콜",
-                    body ?: "운행 종료 후 처리할 콜이 예약되었습니다",
-                    callId
-                )
+            // 1) LocalBroadcast — UI(HomeScreen) 가 reloadReservedCall 호출해 reservedCard 갱신
+            val broadcastIntent = Intent(Constants.ACTION_RESERVATION_RECEIVED).apply {
+                putExtra("callId", callId)
+                putExtra("title", title)
+                putExtra("body", body)
             }
+            LocalBroadcastManager.getInstance(this).sendBroadcast(broadcastIntent)
+
+            // 2) 시스템 알림 — 포그라운드/백그라운드 무관 (운행 중 기사가 시각·청각으로 인지 가능)
+            //    showNotification 재사용 (기존 알림 채널, FullScreenIntent X)
+            showNotification(
+                title ?: "예약 콜",
+                body ?: "운행 종료 후 처리할 콜이 예약되었습니다",
+                callId
+            )
         } else if (!callId.isNullOrBlank() && messageType == "call_cancelled") {
             Log.d(TAG, "콜 취소 FCM 수신: callId=$callId")
 
