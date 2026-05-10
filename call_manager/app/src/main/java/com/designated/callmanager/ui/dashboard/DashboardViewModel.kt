@@ -291,6 +291,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _isCleanupConfirming = MutableStateFlow(false)
     val isCleanupConfirming: StateFlow<Boolean> = _isCleanupConfirming.asStateFlow()
 
+    // 마지막 cleanup gate 체크 일자 (KST "yyyy-MM-dd"). 비정상 운영(로그아웃 없음) 게이트 비교 용.
+    private var lastCleanupGateCheckDate: String? = null
+
     private var callsListener: ListenerRegistration? = null
     private var driversListener: ListenerRegistration? = null
     private var officeStatusListener: ListenerRegistration? = null
@@ -2441,6 +2444,19 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     // Cleanup Gate (정산 dead lock 해소)
     // =====================================================================
 
+    /** KST "yyyy-MM-dd" 오늘 일자 문자열 (cleanup gate 일자 비교 용). */
+    private fun todayKstString(): String {
+        val kst = java.util.TimeZone.getTimeZone("Asia/Seoul")
+        return java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.KOREA)
+            .apply { timeZone = kst }
+            .format(java.util.Calendar.getInstance(kst).time)
+    }
+
+    /** KST 현재 시 (0~23). cleanup gate 09:00 게이트 비교 용. */
+    private fun currentKstHour(): Int =
+        java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Seoul"))
+            .get(java.util.Calendar.HOUR_OF_DAY)
+
     /**
      * Dashboard 진입(= 매니저 재로그인 시점) 시 1회 호출 — PENDING_CONFIRM 카운트 query.
      *
@@ -2450,6 +2466,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
      * snapshot listener 아님 (가벼움). 결과는 _pendingConfirmCount state.
      */
     fun refreshPendingConfirmCount() {
+        // 호출 시점에 오늘 체크 완료 표시 (LaunchedEffect 콜드스타트 + ON_RESUME 게이트 경로 공용 동기화)
+        lastCleanupGateCheckDate = todayKstString()
         if (_isCleanupGateDismissed.value) return  // 매니저가 [나중에] 누른 후엔 재진입까지 무시
         val p = _provinceId.value ?: return
         val c = _cityId.value ?: return
@@ -2476,6 +2494,36 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 _pendingConfirmCount.value = 0
             }
         }
+    }
+
+    /**
+     * 비정상 운영(로그아웃 없이 24h+ 켜놓음) 케이스 안전장치 — DashboardScreen ON_RESUME 호출.
+     *
+     * 분리 메커니즘 — 정상 로그인 케이스(콜드 스타트)와 자연 분리:
+     *   콜드 스타트 → LaunchedEffect(officeId) → refreshPendingConfirmCount()
+     *     → 함수 진입부에서 lastCleanupGateCheckDate = today 갱신
+     *     → 같은 날 ON_RESUME 재진입은 "오늘 이미 체크" 게이트로 자동 skip
+     *   로그아웃 안 한 매니저가 다음 날 09:00 이후 처음 포그라운드 복귀 시
+     *     → lastCleanupGateCheckDate < today → 게이트 통과 → banner 재발현
+     */
+    fun refreshPendingConfirmCountIfDue() {
+        if (_officeId.value.isNullOrBlank()) return
+
+        val hour = currentKstHour()
+        if (hour < 9) {
+            Log.d(TAG, "[CleanupGate] 09:00 KST 이전 — skip (현재 ${hour}시)")
+            return
+        }
+
+        val today = todayKstString()
+        if (lastCleanupGateCheckDate == today) {
+            Log.d(TAG, "[CleanupGate] 오늘 이미 체크 — skip ($today)")
+            return
+        }
+
+        Log.d(TAG, "[CleanupGate] 게이트 통과 — dismiss reset + 재조회 ($today)")
+        _isCleanupGateDismissed.value = false  // 새 날 시작 → reset
+        refreshPendingConfirmCount()           // 함수 안에서 lastCleanupGateCheckDate 자동 갱신
     }
 
     /** 매니저가 banner [나중에] 클릭 시 — 다음 dashboard 진입까지 banner 숨김 */
