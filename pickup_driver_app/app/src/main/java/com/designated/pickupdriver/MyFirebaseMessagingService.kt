@@ -114,7 +114,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         // 2) 시스템 알림
         val title = "🔔 새 콜 접수"
         val body = buildCallBody(data)
-        notifyCallChange(callId, title, body)
+        notifyCallChange(callId, status, title, body)
     }
 
     /**
@@ -139,7 +139,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         // 2) 시스템 알림 (status 라벨)
         val title = statusLabel(status)
         val body = buildCallBody(data)
-        notifyCallChange(callId, title, body)
+        notifyCallChange(callId, status, title, body)
     }
 
     private fun statusLabel(status: String): String = when (status) {
@@ -165,13 +165,16 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         }
     }
 
-    private fun notifyCallChange(callId: String, title: String, body: String) {
+    private fun notifyCallChange(callId: String, status: String, title: String, body: String) {
+        // 알림 ID를 callId+status 조합으로 분리 — 매 상태 전이마다 새 알림 + sound 재생
+        // (callId.hashCode() 단독이면 같은 ID로 update 처리 → 두 번째부터 sound 무음)
+        val notifId = "$callId-$status".hashCode()
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         val pendingIntent = PendingIntent.getActivity(
             this,
-            callId.hashCode(),
+            notifId,
             intent,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
@@ -194,8 +197,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         try {
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.notify(callId.hashCode(), notification)
-            Log.d(TAG, "[notifyCallChange] $callId / $title")
+            notificationManager.notify(notifId, notification)
+            Log.d(TAG, "[notifyCallChange] $callId / $status / $title")
         } catch (e: SecurityException) {
             Log.w(TAG, "POST_NOTIFICATIONS 권한 없음 — 알림 skip", e)
         }
