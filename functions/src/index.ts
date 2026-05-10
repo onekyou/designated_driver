@@ -915,7 +915,7 @@ export const sendNewCallNotification = onDocumentCreated(
         return;
       }
 
-      logger.info(`[new-call:${callId}] tokens: admin=${adminTokens.length}, pickup=${pickupTokens.length}`);
+      logger.info(`[new-call:${callId}] tokens: admin=${adminTokens.length} (pickup은 NEW_CALL 미수신)`);
 
       // timestamp 필드 추출 (Firestore Timestamp → ms long → String)
       const tsMs: number = (callData.timestamp && typeof callData.timestamp.toMillis === "function")
@@ -972,13 +972,6 @@ export const sendNewCallNotification = onDocumentCreated(
             adminsSnapshot.docs.forEach((doc) => {
               const adminData = doc.data();
               if (adminData.fcmToken === invalidToken) {
-                batch.update(doc.ref, {fcmToken: FieldValue.delete()});
-                invalidTokensFound++;
-              }
-            });
-            pickupSnapshot.docs.forEach((doc) => {
-              const pickupData = doc.data();
-              if (pickupData.fcmToken === invalidToken) {
                 batch.update(doc.ref, {fcmToken: FieldValue.delete()});
                 invalidTokensFound++;
               }
