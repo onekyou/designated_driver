@@ -44,8 +44,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onDriverStatusChange = exports.getOfficeReport = exports.searchArchivedCalls = exports.getArchivedStats = exports.archiveOldCalls = exports.scheduledDataCleanup = exports.onCallDetectorCrash = exports.onCustomerCountChange = exports.onDriverCountChange = exports.onNewCustomerRegistered = exports.onCallCancelledByDriver = exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.notifyCustomerOnComplete = exports.notifyCustomerOnPhoneCall = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.notifyCustomerOnOfficeClosed = exports.onSharedCallCreated = exports.sendNewCallNotification = exports.oncallassigned = exports.handleFailedNotifications = exports.retryPendingNotifications = exports.acknowledgeNotification = exports.recoverCustomerAccount = exports.checkPhoneNumberDuplicate = exports.migrateExistingOfficesWallet = exports.processWithdrawal = exports.processDeposit = exports.submitWithdrawalRequest = exports.notifyRestaurantOnNoResponse = exports.createSharedCallFromRestaurant = exports.redeemRestaurantInviteCode = exports.generateRestaurantInviteCode = exports.onChatSyncAdminRemoval = exports.onChatSyncPickupDriver = exports.onChatSyncDesignatedDriver = exports.backfillChatMembers = exports.scheduledChatMessageCleanup = exports.onChatMessageCreated = exports.aggregateMonthlyStats = exports.checkSingleCallAssignedTimeout = void 0;
-exports.homepageGate = exports.getApkDownloadUrl = exports.rejectOfficeApplication = exports.registerOwner = exports.redeemDownloadToken = exports.approveOfficeApplication = exports.submitOfficeApplication = exports.onDriverSettlementSubmitted = exports.notifyDriverSettlementResult = exports.sendDriverNotification = exports.finalizeSettlementAndNotifyDrivers = exports.notifyDriverCancellation = exports.notifyDriverAssignment = exports.manualCheckSettlementDiscrepancy = exports.autoFinalizeSettlements = exports.onCallCompletedUpdateSettlement = void 0;
+exports.getOfficeReport = exports.searchArchivedCalls = exports.getArchivedStats = exports.archiveOldCalls = exports.scheduledDataCleanup = exports.onCallDetectorCrash = exports.onCustomerCountChange = exports.onDriverCountChange = exports.onNewCustomerRegistered = exports.onCallCancelledByDriver = exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.oncallreserved = exports.notifyCustomerOnComplete = exports.notifyCustomerOnPhoneCall = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.notifyCustomerOnOfficeClosed = exports.onSharedCallCreated = exports.sendNewCallNotification = exports.oncallassigned = exports.handleFailedNotifications = exports.retryPendingNotifications = exports.acknowledgeNotification = exports.recoverCustomerAccount = exports.checkPhoneNumberDuplicate = exports.migrateExistingOfficesWallet = exports.processWithdrawal = exports.processDeposit = exports.submitWithdrawalRequest = exports.notifyRestaurantOnNoResponse = exports.createSharedCallFromRestaurant = exports.redeemRestaurantInviteCode = exports.generateRestaurantInviteCode = exports.onChatSyncAdminRemoval = exports.onChatSyncPickupDriver = exports.onChatSyncDesignatedDriver = exports.backfillChatMembers = exports.scheduledChatMessageCleanup = exports.onChatMessageCreated = exports.aggregateMonthlyStats = exports.checkSingleCallAssignedTimeout = void 0;
+exports.homepageGate = exports.getApkDownloadUrl = exports.rejectOfficeApplication = exports.registerOwner = exports.redeemDownloadToken = exports.approveOfficeApplication = exports.submitOfficeApplication = exports.onDriverSettlementSubmitted = exports.notifyDriverSettlementResult = exports.sendDriverNotification = exports.finalizeSettlementAndNotifyDrivers = exports.notifyDriverCancellation = exports.notifyDriverAssignment = exports.manualCheckSettlementDiscrepancy = exports.autoFinalizeSettlements = exports.onCallCompletedUpdateSettlement = exports.onDriverStatusChange = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -420,6 +420,11 @@ exports.oncallassigned = (0, firestore_1.onDocumentWritten)({
         logger.info(`[${callId}] 문서가 삭제되어 함수를 종료합니다.`);
         return;
     }
+    // RESERVED(예약) 콜은 oncallreserved 트리거가 단독 전담 — 일반 배차 흐름(FCM/timeout/presence) 모두 스킵
+    if (afterData.status === "RESERVED") {
+        logger.info(`[${callId}] RESERVED 상태 — oncallreserved 전담, 본 트리거 종료`);
+        return;
+    }
     // 관리자 직접운행 콜은 배차 알림 불필요 (assignedDriverId="MANAGER"로 오탐 방지)
     if (afterData.handledByManager === true) {
         logger.info(`[${callId}] 직접운행 콜 - 배차 알림 스킵`);
@@ -470,8 +475,9 @@ exports.oncallassigned = (0, firestore_1.onDocumentWritten)({
         const vehicleNumber = (driverData === null || driverData === void 0 ? void 0 : driverData.vehicleNumber) || "";
         // 3-1. ASSIGNED timeout task enqueue (이벤트 기반, 폴링 대체)
         // - selfAssigned/handledByManager 는 timeout 보호 불요 (자가배차/직접운행)
+        // - RESERVED 도 timeout 미enqueue (운행 종료까지 무한 대기) — 첫 줄 가드로 이미 빠지지만 향후 리팩터링 방어용 1줄
         // - enqueue 실패는 logger.warn 만 → FCM 흐름 보호. in-flight 콜은 onDriverPresenceOffline 트리거가 안전망.
-        if (!isSelfAssigned && !afterData.handledByManager) {
+        if (!isSelfAssigned && !afterData.handledByManager && afterData.status !== "RESERVED") {
             try {
                 const officeSnap = await admin.firestore()
                     .collection("provinces").doc(provinceId)
@@ -1676,6 +1682,75 @@ exports.notifyCustomerOnComplete = (0, firestore_1.onDocumentUpdated)({
     }
 });
 // 콜 상태 변경 시 알림 (운행시작, 정산완료 등)
+// 신규콜 예약 (RESERVED) 트리거
+// - 다른 status → RESERVED 진입 시 1회 발화
+// - 운행중 기사에게 가벼운 FCM 1회 (type=call_reserved) — FullScreenIntent 안 씀, timeout enqueue 안 함
+// - oncallassigned / onCallStatusChanged 는 RESERVED 가드로 빠져 본 트리거가 RESERVED 진입을 단독 전담
+// - RESERVED → ACCEPTED/WAITING 이탈은 일반 트리거(oncallassigned 등)가 신규 status 로 처리
+exports.oncallreserved = (0, firestore_1.onDocumentUpdated)({
+    region: "asia-northeast3",
+    document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/calls/{callId}",
+}, async (event) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    const { provinceId, cityId, officeId, callId } = event.params;
+    if (!((_a = event.data) === null || _a === void 0 ? void 0 : _a.before) || !((_b = event.data) === null || _b === void 0 ? void 0 : _b.after)) {
+        logger.warn(`[oncallreserved:${callId}] before/after 데이터 없음 — 종료`);
+        return;
+    }
+    const beforeData = event.data.before.data();
+    const afterData = event.data.after.data();
+    // RESERVED 진입 시점만 처리 (그 외 전이 무시)
+    if ((beforeData === null || beforeData === void 0 ? void 0 : beforeData.status) === "RESERVED" || afterData.status !== "RESERVED") {
+        return;
+    }
+    const driverId = afterData.assignedDriverId;
+    if (!driverId) {
+        logger.warn(`[oncallreserved:${callId}] assignedDriverId 누락 — 종료`);
+        return;
+    }
+    logger.info(`[oncallreserved:${callId}] RESERVED 진입 감지 (before=${beforeData === null || beforeData === void 0 ? void 0 : beforeData.status} → after=RESERVED), driver=${driverId}`);
+    try {
+        const driverRef = admin.firestore()
+            .collection("provinces").doc(provinceId)
+            .collection("cities").doc(cityId)
+            .collection("offices").doc(officeId)
+            .collection(DRIVER_COLLECTION_NAME).doc(driverId);
+        const driverDoc = await driverRef.get();
+        if (!driverDoc.exists) {
+            logger.error(`[oncallreserved:${callId}] 기사 문서 [${driverId}] 없음`);
+            return;
+        }
+        const driverFcmToken = (_c = driverDoc.data()) === null || _c === void 0 ? void 0 : _c.fcmToken;
+        if (!driverFcmToken) {
+            logger.warn(`[oncallreserved:${callId}] 기사 [${driverId}] FCM 토큰 없음 — 알림 스킵`);
+            return;
+        }
+        const customerName = (_d = afterData.customerName) !== null && _d !== void 0 ? _d : "";
+        const customerAddress = (_e = afterData.customerAddress) !== null && _e !== void 0 ? _e : "";
+        const destination = (_f = afterData.destination) !== null && _f !== void 0 ? _f : "";
+        const fareValue = (_h = (_g = afterData.fare) !== null && _g !== void 0 ? _g : afterData.fare_set) !== null && _h !== void 0 ? _h : 0;
+        const message = (0, fcmPayload_1.buildFcmPayload)({
+            data: {
+                type: "call_reserved",
+                callId: String(callId),
+                customerName: String(customerName),
+                customerAddress: String(customerAddress),
+                destination: String(destination),
+                fare: String(fareValue),
+                timestamp: String(Date.now()),
+            },
+            title: "예약 콜",
+            body: "운행 종료 후 처리할 콜이 예약되었습니다",
+            level: "active",
+            ttlSeconds: 3600,
+        }, driverFcmToken);
+        const response = await admin.messaging().send(message);
+        logger.info(`[oncallreserved:${callId}] FCM 송신 완료 → driver=${driverId}, response=${response}`);
+    }
+    catch (err) {
+        logger.error(`[oncallreserved:${callId}] FCM 송신 오류:`, err);
+    }
+});
 exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
     region: "asia-northeast3",
     document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/calls/{callId}",
@@ -1706,6 +1781,12 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
     // 관리자 직접운행 콜은 콜매니저 본인이 처리하므로 FCM 알림 불필요
     if (afterData.handledByManager === true) {
         logger.info(`[onCallStatusChanged:${callId}] 직접운행 콜 - 알림 스킵`);
+        return;
+    }
+    // RESERVED 진입은 oncallreserved 가, 이탈(WAITING/ACCEPTED 복귀)은 다른 트리거가 신규 status 로 처리
+    // 본 트리거에서는 RESERVED 관련 전이를 모두 스킵해 중복 FCM 방지
+    if (beforeData.status === "RESERVED" || afterData.status === "RESERVED") {
+        logger.info(`[onCallStatusChanged:${callId}] RESERVED 전이 (${beforeData.status} → ${afterData.status}) — oncallreserved/재배차 트리거 전담`);
         return;
     }
     logger.info(`[onCallStatusChanged:${callId}] Status changed: ${beforeData.status} → ${afterData.status}`);

@@ -5,6 +5,7 @@ enum class CallStatus(val firestoreValue: String) {
     PENDING("PENDING"),
     MATCHED("MATCHED"),
     DISPATCHED("DISPATCHED"),
+    RESERVED("RESERVED"),
     COMPLETED("COMPLETED"),
     CANCELLED("CANCELLED");
 

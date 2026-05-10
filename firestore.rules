@@ -151,11 +151,11 @@ service cloud.firestore {
         // 관리자, 배정된 기사, 또는 고객 본인이 업데이트 가능
         allow update: if
           isOfficeAdmin(provinceId, cityId, officeId) ||
-          // 고객이 자신의 콜을 취소하는 경우 (WAITING/ASSIGNED/ACCEPTED/PREPARING)
+          // 고객이 자신의 콜을 취소하는 경우 (WAITING/ASSIGNED/RESERVED/ACCEPTED/PREPARING)
           (isAuthenticated() &&
            (resource.data.status == "WAITING" || resource.data.status == "REQUESTED" ||
-            resource.data.status == "ASSIGNED" || resource.data.status == "ACCEPTED" ||
-            resource.data.status == "PREPARING") &&
+            resource.data.status == "ASSIGNED" || resource.data.status == "RESERVED" ||
+            resource.data.status == "ACCEPTED" || resource.data.status == "PREPARING") &&
            request.resource.data.status == "CANCELLED_BY_CUSTOMER") ||
           (
             // 업데이트 요청자가 해당 콜에 배정된 기사인지 확인
@@ -165,6 +165,10 @@ service cloud.firestore {
               (resource.data.status == "ASSIGNED" && request.resource.data.status == "ACCEPTED") ||
               // 기사가 콜을 거절할 때: ASSIGNED → WAITING 허용 (rejectCall)
               (resource.data.status == "ASSIGNED" && request.resource.data.status == "WAITING") ||
+              // 기사가 예약 콜을 수락: RESERVED → ACCEPTED (운행 종료 후 [수락])
+              (resource.data.status == "RESERVED" && request.resource.data.status == "ACCEPTED") ||
+              // 기사가 예약 콜을 거절: RESERVED → WAITING (매니저 재배차 가능)
+              (resource.data.status == "RESERVED" && request.resource.data.status == "WAITING") ||
               (resource.data.status == "ACCEPTED" && request.resource.data.status == "IN_PROGRESS") ||
               (resource.data.status == "IN_PROGRESS" && request.resource.data.status == "AWAITING_SETTLEMENT") ||
               (resource.data.status == "AWAITING_SETTLEMENT" && request.resource.data.status == "COMPLETED") ||

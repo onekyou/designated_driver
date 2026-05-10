@@ -75,6 +75,7 @@ interface CallData {
     customerPhone?: string;
     departure?: string;
     departure_set?: string;
+    customerAddress?: string;
     destination?: string;
     destination_set?: string;
     waypoints_set?: string;
@@ -538,6 +539,12 @@ export const oncallassigned = onDocumentWritten(
             return;
         }
 
+        // RESERVED(예약) 콜은 oncallreserved 트리거가 단독 전담 — 일반 배차 흐름(FCM/timeout/presence) 모두 스킵
+        if (afterData.status === "RESERVED") {
+            logger.info(`[${callId}] RESERVED 상태 — oncallreserved 전담, 본 트리거 종료`);
+            return;
+        }
+
         // 관리자 직접운행 콜은 배차 알림 불필요 (assignedDriverId="MANAGER"로 오탐 방지)
         if ((afterData as any).handledByManager === true) {
             logger.info(`[${callId}] 직접운행 콜 - 배차 알림 스킵`);
@@ -601,8 +608,9 @@ export const oncallassigned = onDocumentWritten(
 
             // 3-1. ASSIGNED timeout task enqueue (이벤트 기반, 폴링 대체)
             // - selfAssigned/handledByManager 는 timeout 보호 불요 (자가배차/직접운행)
+            // - RESERVED 도 timeout 미enqueue (운행 종료까지 무한 대기) — 첫 줄 가드로 이미 빠지지만 향후 리팩터링 방어용 1줄
             // - enqueue 실패는 logger.warn 만 → FCM 흐름 보호. in-flight 콜은 onDriverPresenceOffline 트리거가 안전망.
-            if (!isSelfAssigned && !(afterData as any).handledByManager) {
+            if (!isSelfAssigned && !(afterData as any).handledByManager && afterData.status !== "RESERVED") {
                 try {
                     const officeSnap = await admin.firestore()
                         .collection("provinces").doc(provinceId)
@@ -2033,6 +2041,91 @@ export const notifyCustomerOnComplete = onDocumentUpdated(
 );
 
 // 콜 상태 변경 시 알림 (운행시작, 정산완료 등)
+// 신규콜 예약 (RESERVED) 트리거
+// - 다른 status → RESERVED 진입 시 1회 발화
+// - 운행중 기사에게 가벼운 FCM 1회 (type=call_reserved) — FullScreenIntent 안 씀, timeout enqueue 안 함
+// - oncallassigned / onCallStatusChanged 는 RESERVED 가드로 빠져 본 트리거가 RESERVED 진입을 단독 전담
+// - RESERVED → ACCEPTED/WAITING 이탈은 일반 트리거(oncallassigned 등)가 신규 status 로 처리
+export const oncallreserved = onDocumentUpdated(
+  {
+    region: "asia-northeast3",
+    document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/calls/{callId}",
+  },
+  async (event: any) => {
+    const { provinceId, cityId, officeId, callId } = event.params;
+
+    if (!event.data?.before || !event.data?.after) {
+      logger.warn(`[oncallreserved:${callId}] before/after 데이터 없음 — 종료`);
+      return;
+    }
+
+    const beforeData = event.data.before.data() as CallData | undefined;
+    const afterData = event.data.after.data() as CallData;
+
+    // RESERVED 진입 시점만 처리 (그 외 전이 무시)
+    if (beforeData?.status === "RESERVED" || afterData.status !== "RESERVED") {
+      return;
+    }
+
+    const driverId = afterData.assignedDriverId;
+    if (!driverId) {
+      logger.warn(`[oncallreserved:${callId}] assignedDriverId 누락 — 종료`);
+      return;
+    }
+
+    logger.info(`[oncallreserved:${callId}] RESERVED 진입 감지 (before=${beforeData?.status} → after=RESERVED), driver=${driverId}`);
+
+    try {
+      const driverRef = admin.firestore()
+        .collection("provinces").doc(provinceId)
+        .collection("cities").doc(cityId)
+        .collection("offices").doc(officeId)
+        .collection(DRIVER_COLLECTION_NAME).doc(driverId);
+
+      const driverDoc = await driverRef.get();
+      if (!driverDoc.exists) {
+        logger.error(`[oncallreserved:${callId}] 기사 문서 [${driverId}] 없음`);
+        return;
+      }
+
+      const driverFcmToken = driverDoc.data()?.fcmToken;
+      if (!driverFcmToken) {
+        logger.warn(`[oncallreserved:${callId}] 기사 [${driverId}] FCM 토큰 없음 — 알림 스킵`);
+        return;
+      }
+
+      const customerName = afterData.customerName ?? "";
+      const customerAddress = afterData.customerAddress ?? "";
+      const destination = afterData.destination ?? "";
+      const fareValue = (afterData as any).fare ?? (afterData as any).fare_set ?? 0;
+
+      const message = buildFcmPayload(
+        {
+          data: {
+            type: "call_reserved",
+            callId: String(callId),
+            customerName: String(customerName),
+            customerAddress: String(customerAddress),
+            destination: String(destination),
+            fare: String(fareValue),
+            timestamp: String(Date.now()),
+          },
+          title: "예약 콜",
+          body: "운행 종료 후 처리할 콜이 예약되었습니다",
+          level: "active",
+          ttlSeconds: 3600,
+        },
+        driverFcmToken,
+      );
+
+      const response = await admin.messaging().send(message);
+      logger.info(`[oncallreserved:${callId}] FCM 송신 완료 → driver=${driverId}, response=${response}`);
+    } catch (err) {
+      logger.error(`[oncallreserved:${callId}] FCM 송신 오류:`, err);
+    }
+  }
+);
+
 export const onCallStatusChanged = onDocumentUpdated(
   {
     region: "asia-northeast3",
@@ -2040,7 +2133,7 @@ export const onCallStatusChanged = onDocumentUpdated(
   },
   async (event) => {
     const { provinceId, cityId, officeId, callId } = event.params;
-    
+
     if (!event.data) {
       logger.warn(`[onCallStatusChanged:${callId}] No event data.`);
       return;
@@ -2070,6 +2163,13 @@ export const onCallStatusChanged = onDocumentUpdated(
     // 관리자 직접운행 콜은 콜매니저 본인이 처리하므로 FCM 알림 불필요
     if (afterData.handledByManager === true) {
       logger.info(`[onCallStatusChanged:${callId}] 직접운행 콜 - 알림 스킵`);
+      return;
+    }
+
+    // RESERVED 진입은 oncallreserved 가, 이탈(WAITING/ACCEPTED 복귀)은 다른 트리거가 신규 status 로 처리
+    // 본 트리거에서는 RESERVED 관련 전이를 모두 스킵해 중복 FCM 방지
+    if (beforeData.status === "RESERVED" || afterData.status === "RESERVED") {
+      logger.info(`[onCallStatusChanged:${callId}] RESERVED 전이 (${beforeData.status} → ${afterData.status}) — oncallreserved/재배차 트리거 전담`);
       return;
     }
 

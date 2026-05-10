@@ -11,6 +11,7 @@ import kotlinx.parcelize.RawValue
 enum class CallStatus(val firestoreValue: String, val displayName: String) {
     WAITING(Constants.STATUS_WAITING, "대기중"),
     ASSIGNED(Constants.STATUS_ASSIGNED, "배차완료"),
+    RESERVED(Constants.STATUS_RESERVED, "예약"),
     ACCEPTED(Constants.STATUS_ACCEPTED, "수락"),
     IN_PROGRESS(Constants.STATUS_IN_PROGRESS, "운행중"),
     AWAITING_SETTLEMENT(Constants.STATUS_AWAITING_SETTLEMENT, "정산대기"),

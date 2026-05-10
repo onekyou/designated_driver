@@ -6,6 +6,7 @@ enum class CallStatus(val firestoreValue: String, val displayName: String) {
     CLAIMED("CLAIMED", "수락됨"),
     PENDING("PENDING", "기사승인대기"),
     ASSIGNED("ASSIGNED", "배차완료"),
+    RESERVED("RESERVED", "예약"),
     ACCEPTED("ACCEPTED", "수락"),
     PICKUP_COMPLETE("PICKUP_COMPLETE", "픽업완료"),
     IN_PROGRESS("IN_PROGRESS", "운행중"),

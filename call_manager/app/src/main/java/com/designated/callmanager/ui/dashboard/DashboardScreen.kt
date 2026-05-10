@@ -114,6 +114,7 @@ fun CallStatus.getDisplayName(): String {
         CallStatus.CLAIMED -> "수락됨"
         CallStatus.PENDING -> "기사승인대기"
         CallStatus.ASSIGNED -> "배차완료"
+        CallStatus.RESERVED -> "예약"
         CallStatus.ACCEPTED -> "수락"
         CallStatus.PICKUP_COMPLETE -> "픽업완료"
         CallStatus.IN_PROGRESS -> "운행중"
@@ -255,6 +256,9 @@ fun DashboardScreen(
                     backgroundTime = System.currentTimeMillis()
                 }
                 Lifecycle.Event.ON_RESUME -> {
+                    // Cleanup gate 안전장치 — 게이트 함수가 자체 검증 (콜드 스타트는 lastCheckedDate==today 로 자동 skip)
+                    viewModel.refreshPendingConfirmCountIfDue()
+
                     val currentTime = System.currentTimeMillis()
                     val timeDifference = currentTime - backgroundTime
 
