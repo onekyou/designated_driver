@@ -17,14 +17,31 @@ class PickupDriverApplication : Application() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(NotificationManager::class.java) ?: return
 
-            val callChannel = NotificationChannel(
-                CHANNEL_CALL_CHANGES,
-                "콜 상태 변경",
-                NotificationManager.IMPORTANCE_DEFAULT
-            ).apply {
-                description = "사무실 콜의 신규/상태 변경 알림"
+            // 이전 콜 알림 채널(IMPORTANCE_DEFAULT/시스템 기본 사운드) 정리 — 무전기음 통일
+            try { nm.deleteNotificationChannel(CHANNEL_CALL_CHANGES_LEGACY) } catch (_: Exception) {}
+
+            // 콜 상태 변경 채널 — HIGH/ptt_start 효과음 (무전기 운영체계 통일)
+            if (nm.getNotificationChannel(CHANNEL_CALL_CHANGES) == null) {
+                val callChannel = NotificationChannel(
+                    CHANNEL_CALL_CHANGES,
+                    "콜 상태 변경",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "사무실 콜의 신규/상태 변경 알림"
+                    enableVibration(true)
+                    vibrationPattern = longArrayOf(0, 250)
+                    setShowBadge(true)
+                    lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+                    setSound(
+                        Uri.parse("android.resource://$packageName/${R.raw.ptt_start}"),
+                        AudioAttributes.Builder()
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                            .build()
+                    )
+                }
+                nm.createNotificationChannel(callChannel)
             }
-            nm.createNotificationChannel(callChannel)
 
             // 사무실 단톡방 채널 (스펙 §10) — HIGH/ptt_start 효과음/DND 우회 X
             if (nm.getNotificationChannel(CHANNEL_CHAT_MESSAGES) == null) {
@@ -53,7 +70,8 @@ class PickupDriverApplication : Application() {
     }
 
     companion object {
-        const val CHANNEL_CALL_CHANGES = "pickup_call_changes"
+        const val CHANNEL_CALL_CHANGES = "pickup_call_changes_ptt"
+        private const val CHANNEL_CALL_CHANGES_LEGACY = "pickup_call_changes"
         const val CHANNEL_CHAT_MESSAGES = "chat_messages_ptt"
     }
 }
