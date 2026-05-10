@@ -39,8 +39,8 @@ class CallRepository @Inject constructor(
     companion object {
         private const val TAG = "PickupCallRepo"
         private const val INITIAL_LOAD_LIMIT = 100L
+        // WAITING 제외: 픽업기사는 대리기사가 배차받은 콜만 모니터링 (2026-05-11)
         private val ACTIVE_STATUSES = listOf(
-            Constants.STATUS_WAITING,
             Constants.STATUS_ASSIGNED,
             Constants.STATUS_ACCEPTED,
             Constants.STATUS_IN_PROGRESS,

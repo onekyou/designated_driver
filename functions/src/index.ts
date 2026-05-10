@@ -907,23 +907,8 @@ export const sendNewCallNotification = onDocumentCreated(
         }
       });
 
-      // 같은 사무실의 픽업기사 FCM 토큰 조회
-      const pickupSnapshot = await admin.firestore()
-        .collection("provinces").doc(provinceId)
-        .collection("cities").doc(cityId)
-        .collection("offices").doc(officeId)
-        .collection("pickup_drivers")
-        .get();
-
-      const pickupTokens: string[] = [];
-      pickupSnapshot.forEach((doc) => {
-        const pickupData = doc.data();
-        if (pickupData.fcmToken) {
-          pickupTokens.push(pickupData.fcmToken);
-        }
-      });
-
-      const tokens: string[] = [...adminTokens, ...pickupTokens];
+      // 픽업기사는 NEW_CALL(WAITING) 미수신 (2026-05-11) — onCallStatusChanged의 ASSIGNED 전이 시점부터 알림 수신
+      const tokens: string[] = [...adminTokens];
 
       if (tokens.length === 0) {
         logger.warn(`[new-call:${callId}] FCM 토큰을 가진 관리자/픽업기사가 없습니다.`);
