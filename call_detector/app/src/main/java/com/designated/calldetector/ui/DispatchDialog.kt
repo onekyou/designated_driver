@@ -29,6 +29,54 @@ import com.designated.calldetector.util.ParsedMemo
 import com.designated.calldetector.util.VoiceInputHelper
 import kotlinx.coroutines.launch
 
+/**
+ * 운행중 기사 예약 배차 확인 다이얼로그.
+ * DispatchDialog 위에 모달로 표시 — 매니저가 한 번 더 의식적으로 확정.
+ */
+@Composable
+fun ReservationConfirmDialog(
+    driver: DriverInfo,
+    callInfo: CallInfo,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("${driver.name} 기사 예약 배차") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "${driver.name} 기사는 현재 운행중입니다",
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text("예약할 콜", style = MaterialTheme.typography.labelMedium, color = Color(0xFF80CBC4))
+                Text(callInfo.phoneNumber, style = MaterialTheme.typography.bodySmall)
+                callInfo.customerName?.let {
+                    Text("손님: $it", style = MaterialTheme.typography.bodySmall)
+                }
+                callInfo.customerAddress?.let {
+                    Text("주소: $it", style = MaterialTheme.typography.bodySmall)
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "운행 종료 후 기사가 [수락]하면 정상 배차됩니다",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF90A4AE)
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onConfirm) { Text("예약 배차") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("취소") }
+        }
+    )
+}
+
 // 기사 정보 데이터 클래스
 data class DriverInfo(
     val id: String,
@@ -275,54 +323,108 @@ fun DispatchDialog(
                     }
                 }
 
-                // 대기중인 기사 목록
-                if (availableDrivers.isNotEmpty()) {
-                    Text("대기중인 기사 선택:", fontWeight = FontWeight.Medium)
+                // 대기중 / 운행중 기사 분리 표시
+                val waitingDrivers = availableDrivers.filter { it.status == "WAITING" || it.status == "ONLINE" }
+                val onTripDrivers = availableDrivers.filter { it.status == "ON_TRIP" }
+
+                if (waitingDrivers.isEmpty() && onTripDrivers.isEmpty()) {
+                    Text(
+                        "현재 배차 가능한 기사가 없습니다.",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                } else {
                     LazyColumn(
-                        modifier = Modifier.heightIn(max = 200.dp),
+                        modifier = Modifier.heightIn(max = 280.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        items(availableDrivers) { driver ->
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable(enabled = !actionsDisabled) {
-                                        onDriverSelect(driver)
-                                    },
-                                colors = CardDefaults.cardColors(
-                                    containerColor = if (actionsDisabled)
-                                        MaterialTheme.colorScheme.surfaceVariant
-                                    else
-                                        MaterialTheme.colorScheme.surface
+                        if (waitingDrivers.isNotEmpty()) {
+                            item {
+                                Text(
+                                    "대기중 기사 선택:",
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.padding(vertical = 4.dp)
                                 )
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = driver.name,
-                                        modifier = Modifier.weight(1f),
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Text(
-                                        text = when(driver.status) {
-                                            "WAITING" -> "대기중"
-                                            "BUSY" -> "운행중"
-                                            else -> driver.status
+                            }
+                            items(waitingDrivers) { driver ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable(enabled = !actionsDisabled) {
+                                            onDriverSelect(driver)
                                         },
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = if (driver.status == "WAITING") Color.Green else Color.Gray
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (actionsDisabled)
+                                            MaterialTheme.colorScheme.surfaceVariant
+                                        else
+                                            MaterialTheme.colorScheme.surface
                                     )
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = driver.name,
+                                            modifier = Modifier.weight(1f),
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Text(
+                                            text = when (driver.status) {
+                                                "WAITING" -> "대기중"
+                                                "ONLINE" -> "온라인"
+                                                else -> driver.status
+                                            },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color.Green
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (onTripDrivers.isNotEmpty()) {
+                            item {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    "운행중 기사 (예약 배차):",
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFFB0BEC5),
+                                    modifier = Modifier.padding(vertical = 4.dp)
+                                )
+                            }
+                            items(onTripDrivers) { driver ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable(enabled = !actionsDisabled) {
+                                            onDriverSelect(driver)
+                                        },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(driver.name, fontWeight = FontWeight.Medium)
+                                            Text(
+                                                "운행중 — 운행 종료 후 처리",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color(0xFF90A4AE)
+                                            )
+                                        }
+                                        Text(
+                                            text = "예약 가능",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color(0xFF80CBC4)
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
-                } else {
-                    Text(
-                        "현재 대기중인 기사가 없습니다.",
-                        color = MaterialTheme.colorScheme.error
-                    )
                 }
             }
         },

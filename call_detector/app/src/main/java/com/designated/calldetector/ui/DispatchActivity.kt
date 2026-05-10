@@ -60,8 +60,8 @@ class DispatchActivity : ComponentActivity() {
                             snapshot?.documents?.forEach { doc ->
                                 val name = doc.getString("name")
                                 val status = doc.getString("status") ?: ""
-                                // WAITING 또는 ONLINE 상태만 필터링
-                                if (name != null && (status == "WAITING" || status == "ONLINE")) {
+                                // WAITING/ONLINE = 일반 배차 대상, ON_TRIP = 예약 배차 대상
+                                if (name != null && (status == "WAITING" || status == "ONLINE" || status == "ON_TRIP")) {
                                     allDrivers.add(
                                         DriverInfo(
                                             id = doc.id,
@@ -76,7 +76,7 @@ class DispatchActivity : ComponentActivity() {
 
                             drivers = allDrivers
                             isLoading = false
-                            Log.d("DispatchActivity", "기사 목록 업데이트: ${allDrivers.size}명")
+                            Log.d("DispatchActivity", "기사 목록 업데이트: ${allDrivers.size}명 (예약 가능 기사 포함)")
                         }
 
                     onDispose {
@@ -93,6 +93,8 @@ class DispatchActivity : ComponentActivity() {
                         CircularProgressIndicator()
                     }
                 } else {
+                    var pendingReservationDriver by remember { mutableStateOf<DriverInfo?>(null) }
+
                     DispatchDialog(
                         callInfo = CallInfo(
                             phoneNumber = phoneNumber,
@@ -101,6 +103,11 @@ class DispatchActivity : ComponentActivity() {
                         ),
                         availableDrivers = drivers,
                         onDriverSelect = { driver ->
+                            // 운행중 기사는 예약 배차 흐름 — 즉시 배차하지 않고 확인 다이얼로그 표시
+                            if (driver.status == "ON_TRIP") {
+                                pendingReservationDriver = driver
+                                return@DispatchDialog
+                            }
                             if (callId != null && !callId.startsWith("temp_")) {
                                 // Firebase ID가 있으면 기존 문서 업데이트
                                 updateCallWithDriver(callId, driver, provinceId, cityId, officeId)
@@ -138,6 +145,32 @@ class DispatchActivity : ComponentActivity() {
                             }
                         } else null
                     )
+
+                    // 운행중 기사 예약 배차 확인 다이얼로그 — DispatchDialog 위에 모달로 표시
+                    val reservationDriver = pendingReservationDriver
+                    if (reservationDriver != null) {
+                        ReservationConfirmDialog(
+                            driver = reservationDriver,
+                            callInfo = CallInfo(
+                                phoneNumber = phoneNumber,
+                                customerName = contactName,
+                                customerAddress = contactAddress
+                            ),
+                            onDismiss = { pendingReservationDriver = null },
+                            onConfirm = {
+                                if (callId != null && !callId.startsWith("temp_")) {
+                                    reserveCallToDriver(callId, reservationDriver, provinceId, cityId, officeId)
+                                } else {
+                                    createCallWithReservation(
+                                        phoneNumber, contactName, contactAddress,
+                                        reservationDriver, provinceId, cityId, officeId, deviceName
+                                    )
+                                }
+                                pendingReservationDriver = null
+                                finish()
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -229,6 +262,137 @@ class DispatchActivity : ComponentActivity() {
                 Toast.makeText(applicationContext, "배차 실패 - 네트워크를 확인해주세요", Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    /**
+     * 운행중(ON_TRIP) 기사에게 신규콜 예약 배차 — calls.status=RESERVED + reservedAt set.
+     *
+     * 트랜잭션:
+     *  1. 1슬롯 사전 체크 (트랜잭션 밖 query) — 같은 기사에 RESERVED 콜 0건
+     *  2. calls.status: WAITING → RESERVED, assignedDriverId/Name/Phone set, reservedAt = serverTimestamp
+     *  3. driver doc 손대지 않음 (status=ON_TRIP 유지)
+     *
+     * Cloud Functions oncallreserved 트리거가 기사 FCM (type=call_reserved) 자동 송신.
+     */
+    private fun reserveCallToDriver(
+        callId: String,
+        driver: DriverInfo,
+        provinceId: String,
+        cityId: String,
+        officeId: String
+    ) {
+        val db = FirebaseFirestore.getInstance()
+        val officePath = "provinces/$provinceId/cities/$cityId/offices/$officeId"
+        val callRef = db.document("$officePath/calls/$callId")
+        val driverAuthUid = driver.authUid.ifEmpty { driver.id }
+        val ctx = applicationContext
+
+        db.collection("$officePath/calls")
+            .whereEqualTo("assignedDriverId", driverAuthUid)
+            .whereEqualTo("status", "RESERVED")
+            .limit(1)
+            .get()
+            .addOnSuccessListener { snap ->
+                if (!snap.isEmpty) {
+                    Toast.makeText(ctx, "${driver.name} 기사는 이미 예약 1건 보유 중입니다", Toast.LENGTH_LONG).show()
+                    return@addOnSuccessListener
+                }
+
+                val updateData = hashMapOf<String, Any>(
+                    "status" to "RESERVED",
+                    "assignedDriverId" to driverAuthUid,
+                    "assignedDriverName" to driver.name,
+                    "assignedDriverPhone" to driver.phone,
+                    "reservedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                )
+
+                db.runTransaction { transaction ->
+                    val callDoc = transaction.get(callRef)
+                    val currentStatus = callDoc.getString("status")
+                    if (currentStatus != "WAITING") {
+                        throw IllegalStateException("CALL_NOT_WAITING")
+                    }
+                    transaction.update(callRef, updateData)
+                }.addOnSuccessListener {
+                    Log.d("DispatchActivity", "예약 배차 완료: ${driver.name}, callId=$callId")
+                    Toast.makeText(ctx, "${driver.name} 기사에게 예약 배차 완료 — 운행 종료 후 처리", Toast.LENGTH_SHORT).show()
+                }.addOnFailureListener { e ->
+                    Log.e("DispatchActivity", "예약 배차 실패", e)
+                    val msg = if (e.message?.contains("CALL_NOT_WAITING") == true)
+                        "이미 다른 기사에게 배차되었거나 진행 중인 콜입니다"
+                    else "예약 배차 실패 — 네트워크를 확인해주세요"
+                    Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.e("DispatchActivity", "예약 사전 체크 실패", e)
+                Toast.makeText(ctx, "예약 배차 실패 — 권한/네트워크 확인", Toast.LENGTH_LONG).show()
+            }
+    }
+
+    /**
+     * 폴백용: Firebase ID가 없을 때 신규 콜을 RESERVED 상태로 직접 생성.
+     */
+    private fun createCallWithReservation(
+        phoneNumber: String,
+        contactName: String?,
+        contactAddress: String?,
+        driver: DriverInfo,
+        provinceId: String,
+        cityId: String,
+        officeId: String,
+        deviceName: String
+    ) {
+        val db = FirebaseFirestore.getInstance()
+        val officePath = "provinces/$provinceId/cities/$cityId/offices/$officeId"
+        val driverAuthUid = driver.authUid.ifEmpty { driver.id }
+        val ctx = applicationContext
+
+        db.collection("$officePath/calls")
+            .whereEqualTo("assignedDriverId", driverAuthUid)
+            .whereEqualTo("status", "RESERVED")
+            .limit(1)
+            .get()
+            .addOnSuccessListener { snap ->
+                if (!snap.isEmpty) {
+                    Toast.makeText(ctx, "${driver.name} 기사는 이미 예약 1건 보유 중입니다", Toast.LENGTH_LONG).show()
+                    return@addOnSuccessListener
+                }
+
+                val callData = hashMapOf<String, Any>(
+                    "phoneNumber" to phoneNumber,
+                    "customerName" to (contactName ?: phoneNumber),
+                    "detectedTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                    "provinceId" to provinceId,
+                    "cityId" to cityId,
+                    "officeId" to officeId,
+                    "deviceName" to deviceName,
+                    "status" to "RESERVED",
+                    "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                    "callType" to "수신",
+                    "timestampClient" to System.currentTimeMillis(),
+                    "assignedDriverId" to driverAuthUid,
+                    "assignedDriverName" to driver.name,
+                    "assignedDriverPhone" to driver.phone,
+                    "reservedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                    "expireAt" to com.google.firebase.Timestamp(java.util.Date(System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000))
+                )
+                contactAddress?.let { callData["customerAddress"] = it }
+
+                db.collection("$officePath/calls").add(callData)
+                    .addOnSuccessListener { docRef ->
+                        Log.d("DispatchActivity", "신규 RESERVED 콜 생성: ${docRef.id}")
+                        Toast.makeText(ctx, "${driver.name} 기사에게 예약 배차 완료", Toast.LENGTH_SHORT).show()
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e("DispatchActivity", "RESERVED 콜 생성 실패", e)
+                        Toast.makeText(ctx, "예약 배차 실패 — 네트워크 확인", Toast.LENGTH_LONG).show()
+                    }
+            }
+            .addOnFailureListener { e ->
+                Log.e("DispatchActivity", "예약 사전 체크 실패", e)
+                Toast.makeText(ctx, "예약 배차 실패 — 권한/네트워크 확인", Toast.LENGTH_LONG).show()
+            }
     }
 
     /**
