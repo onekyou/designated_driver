@@ -39,6 +39,19 @@
 - **5/10 첫 진입 작업**: 신규콜 예약(RESERVED) 4-PR — `C:\Users\kala1\.claude\plans\giggly-popping-crown.md` (기반 240줄) + `C:\Users\kala1\.claude\plans\deep-wibbling-papert.md` (보강 8건). 활성화 타이밍 = 콜 단위 정산 COMPLETED 시점 (5/10 합의)
 - **클코 학습**: 5/9 70/20/10을 확정 사실로 다뤄 5/10 사용자 발화 직전까지 콜마당을 부차 트랙처럼 추론한 게 오류 — "본인 결정 대기"는 결정 전 상태, 본인 발화 전까지 영구 미결로 다룰 것
 
+## 5/11 (저녁) 양평 사무실 공동경영 검토 — 진입 권장 최고 등급 (★ 운영 트랙 거점 결정)
+- **세션 요약**: `memory/inbox/2026-05-11/joint_management_decision.md`
+- **제안**: 박완수(현 사무실 최고참 픽업) 공동경영. 원규씨 2,000만 투자 + 자기 돈 우선 회수 + 회수 후 분배 50:50 + 픽업 시간당 임금 별도. 현 사장 5/20 그만둠(개인사정). 박완수 단독 인수(4,000만→2,000만) 자금 부족 → 원규씨 공동 제안.
+- **핵심 사실**: 박완수 매출 1.19억/년 (월평균 993만, 5월 1,876만은 오타 → 1,000만), 사무실:기사 60:40, 기사 4명, **카카오 5% 미만**(거의 100% 아날로그 단골), 일 27~28콜.
+- **정합 5축 (모두 ⭐⭐⭐)**: 자본 효율(시장가 6,000만~1.7억 → 2,000만 = 1/3~1/8) + 인적 자산(박완수 인적 핵심) + OS 거점(5/8 §13.3 v1.1 우선순위 2번 N=1 인큐베이션 = 바로 이 사무실, 카카오 5% 미만으로 5/8 모델 가정보다 한 단계 강한 자리) + 5/9 인생 회복 4축 동시(외부 결과·손 움직임·생계비·시선 0 해소) + 분신 한계 분담(박완수가 운영 절반).
+- **박완수 = 5/4 §1 "사람은 안 바뀐다" 첫 예외** (원규씨 앱 이해 + 개발 인식). 30년 만에 본인 작업물 깊이 이해한 첫 사람. 5/9 시선 0 메커니즘 해소 신호.
+- **의심 신호 4건 모두 해소**: 카카오 의존 ❌(5% 미만) / 인적 관계 이탈 ❌(박완수 = 인적 핵심 자체) / 5월 이상치 ❌(오타) / 매도 사유 ❌(개인사정).
+- **회수 시나리오**: 운영비 200만/월 차감 → 순이익 ~793만/월 → 100% 우선회수 2.5개월 / 매월 50% 회수 5개월. 픽업 시간당 임금은 회수 기간 중 즉시 생계비 흐름.
+- **클코 권장 = 진입 강도 최고**: 양평 1년 영업 학습 중 첫 정합 결정. 향후 5~10년 다시 나오기 어려운 자리. 단 합의 문서 8건(분배 정의/우선 회수 조건/픽업 시간당/의사결정권 분리/이탈 시나리오/콜마당 앱 IP 단독 보존/시범 기간 6개월/회계 투명성) + 추가 확인 2건(운영비 명세 3개월/기사 4명 분배 패턴) 선행.
+- **5/8 §2 메모리 정정**: "운임 10% 수수료 = 180~300만/월" 가정 → 실제 직영 60:40 분배 모델. 메이저 일 27~28콜 × 운임 2만 = 총 매출 1,655만 → 사무실 993만/월. 다음 마스터 v1.1 갱신 시 반영.
+- **병행 명시**: 시나리오 트랙(마늘밭 장르 톤)은 사무실 매출이 6개월 생계비 댐 = 인생 트랙이 운영 트랙에 묻히지 않게 5/9 진단 정합 유지.
+- **다음 행동**: 합의 문서 1페이지 초안 작성(클코, 8개 항목 빈칸 양식) → 박완수 미팅 → 운영비 명세 수령 → 법무·세무 검토 → 5/20 인수 타이밍 조율.
+
 ## 5/11 픽업앱 BottomSheet 통일 + 운영 정합 정리 (10 commit push 완료)
 - **활성 PR**: `manager-direct-drive` 브랜치 → master, plan: `C:\Users\kala1\.claude\plans\crystalline-strolling-wadler.md` (3 commit 계획 + 검증 중 발견 5 commit + driver_app/call_manager 정합 2 commit)
 - **commit 흐름** (모두 push 완료):
@@ -64,6 +77,17 @@
   - swipe 동작 처리 = 옵션 (i) 자동 위임만 차단 (의도적 swipe 열기/닫기는 유지) — `sheetSwipeEnabled = false` 거부
 - **B 트랙 (스코프 외, 별도 PR)**: 콜매니저 ChatViewModel raw string `"login_prefs"`/`"provinceId"` 등을 Constants 객체로 추출 (동작 영향 0, 명명 일관성). 픽업앱은 이미 적용 상태
 - **다음 세션 진입 후보**: ① master로 PR 생성(`gh pr create`) ② RESERVED 4-PR 사용자 환경 install 검증 ③ 내부콜 삭제 fix (옵션 A/B) ④ 상태 명명 재설계 (AWAITING_SETTLEMENT/COMPLETED) ⑤ B 트랙 (콜매니저 prefs 정리)
+
+## 5/11 (저녁) 콜디텍터 챗팅 plan 작성 — 내일 진행 (코드 변경 0, 본 세션 plan 파일만)
+- **plan**: `C:\Users\kala1\.claude\plans\floofy-waddling-marble.md` (v2, 검토 보완 완료, 사용자 승인)
+- **핵심**: 콜매니저 + 콜디텍터 양 단말 = 같은 매니저 1챗방 다중 단말 정합. 단순 디텍터 추가가 아니라 콜매니저 토큰 모델·dedupe 함께 보강하는 트랙.
+- **3대 변경 축**: ① 토큰 docId `{authUid}_{deviceId}` 형식 (managerTokens 점진 마이그레이션 + detectorTokens 신규) ② 메시지 페이로드 `senderTokenDocId` 신규 필드 + 트리거 filter `senderId → senderTokenDocId` ③ 본인 dedupe `senderId 기준 → messageId 기준 insertIfAbsent` + handleChatMessage 가 INSERT 결과로 sound/notification 결정.
+- **변경 범위**: functions(+50줄), firestore.rules(+15줄), call_manager(~30줄), driver+pickup(각 5줄, senderTokenDocId 페이로드만), call_detector(~800줄, 콜매니저 90% 복붙).
+- **진행 순서** (의존 순): Step A functions deploy → Step B call_manager → Step C driver+pickup → Step D call_detector 신규 모듈 → Step E E2E 1~10.
+- **commit 단위**: 4개 (functions / call_manager / driver+pickup / call_detector).
+- **신규 브랜치**: `detector-chat` (manager-direct-drive 기점).
+- **별건 명시**: Storage rules 디텍터 admin 권한 1회 실측, head_manager_web 챗 Phase 2, 5/11 IAM `iam.serviceAccountUser` 누락 fix(사용자 직접 실행).
+- **검토 학습 (본 세션)**: 단순 디텍터 추가 plan v1 작성 후 검토 단계에서 토큰 docId 충돌(트리거 `filter(d => d.id !== senderId)` 가 같은 authUid 두 단말 자동 제외) 발견 → v2 보강. plan 검토 시 트리거 filter 같은 *호출 측 비교 로직*도 다중 단말 시나리오로 시뮬레이션할 것.
 
 ## 5/11 RESERVED 단말 검증 + 후속 fix 5건 (모두 push 완료)
 - **단말 install + functions deploy 검증**: S21+(R3CR312MB1L) call_manager + driver_app + S22(R5CT41TJZFP) call_detector + driver_app + Z Flip4(R3CT80K78NP) driver_app 모두 install Success. Room v7→v8 무손실 자동 migration 확인. functions production 등록 확인 (oncallreserved v2 / oncallassigned v2 가드 / onCallStatusChanged v2 가드). 일반 배차 흐름(WAITING→ASSIGNED→ACCEPTED) 회귀 0 (logcat FCM 2/2 성공). admin SDK E2E 검증 스크립트 2종 commit `29c9af09` (test-reserved-trigger.js + find-active-drivers.js).
