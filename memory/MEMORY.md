@@ -120,6 +120,11 @@
 - **검증 학습 (5/10)**: 사용자가 1차 cleanup banner 검증(콜드 스타트 + ON_RESUME 토글) 후 매니저앱 finalize without confirm 실행 → cleanup banner self-heal 확인. 5/7 incident 패턴은 cleanup banner 메커니즘으로 정상 자가 해소 — 별도 finalize-side 구조 fix 미필요. (5/7 메모리 노트 (4) "finalize-side 구조 fix 미진입"은 self-heal 메커니즘 보강으로 일부 대체)
 - **다음 세션 진입 후보**: ① 내부콜 삭제 fix (옵션 A/B 결정 후) ② RESERVED PR 2 (call_manager UI/트랜잭션) ③ PERMISSION_DENIED 추적 (반복 발생 시)
 
+## 5/12 시나리오 작가성 척추 30년 만의 갱신 → movie 프로젝트로 분리
+- **별개 프로젝트로 이전**: `C:\Users\kala1\movie\` (CLAUDE.md + memory/MEMORY.md + author_charter + session_2026-05-12). 콜마당과 메모리 완전 분리, 양 트랙 병행.
+- **5/12 도달 한 줄**: "아옹다옹에 대한 진짜 희극. 사소한 감정과 오해들이 본인 안에서 누적되어 거대한 바람을 만든다. 가까이는 비극, 멀리는 희극."
+- **운영 트랙 정합**: 작가성 갱신은 별도 인생 트랙. 운영 우선순위는 5/10 본인 결정대로 (양평 인프라 → 박완수 공동경영 → 식당앱). 운영 매출이 6개월 생계비 댐 → 시나리오 트랙 가능.
+
 ## 도메인별 진입점
 | 도메인 | 인덱스 | 상태 |
 |--------|--------|------|
@@ -135,6 +140,7 @@
 | 최종 손님앱 (T최종) | `memory/customer_super_app/README.md` | placeholder |
 | 사고 모드 (피드백 9개) | `memory/feedback/README.md` | 도메인 공통 |
 | 사용자 프로필 | `memory/user_profile/README.md` | 도메인 공통 |
+| **시나리오 (인생 트랙, 별개 프로젝트)** | `C:\Users\kala1\movie\CLAUDE.md` | 작가성 척추 5/12 갱신, 콜마당과 메모리 완전 분리 |
 
 ## 최근 달성 (5개)
 - ✅ 2026-05-07 **운영 fix 3종 + 직전 commit 2건 반영** (`ae2ab55b` + `993681b0` push 완료, IAM/인덱스/트리거는 직접 실행). (1) **`ae2ab55b` Cloud Tasks 이벤트 기반 timeout** — `checkAssignedTimeout` 매분 전국 풀스캔(reads 25만/일) 제거 → `oncallassigned` 트리거에서 1분 deferred task enqueue → 단일 콜 검증. `functions/src/handlers/timeout.ts` 신규(checkSingleCallAssignedTimeout 활성, presence/in-progress 분기 휴면 — index.ts export 주석), `oncallassigned` 안에 `enqueueAssignedTimeoutTask` try/catch FCM 보호. ~330줄 폴링 코드 삭제. 효과: reads/일 25만→~150-300 (99.9%↓). 이전 세션이 우려했던 `functions/src/index.ts 380줄 미커밋`은 이 commit에 흡수됨(확인 완료). (2) **`993681b0` cleanup gate banner** — 매니저 dashboard 진입(=재로그인 시점)에 PENDING_CONFIRM 잔류 정산 자동 인지 + 1클릭 일괄 확정. 5/7 incident "마감대기중 잔존" self-heal. `DashboardViewModel.refreshPendingConfirmCount` + `confirmAllPendingDailySettlements` + sticky banner UI([전체 확정][개별 검토][나중에]) + `SettlementViewModel` filter 어제 PENDING_CONFIRM 매니저 화면 잔류(휴무 기사 dead lock 해소). 일괄 confirm 시 driver doc `dailySettlement.calculatedCarryOver` 사용(통합 패턴 정확값). driver_app/server 변경 0. (3) **5/7 운영 fix 3종 (오늘 실행)** — ① IAM: `gcloud projects add-iam-policy-binding calldetector-5d61e --member=serviceAccount:60275310305-compute@developer.gserviceaccount.com --role=roles/cloudtasks.enqueuer --condition=None` (gen2 default Compute SA). **사용자 직접 실행 필수** (sandbox 권한 상승 차단). 효과: `oncallassigned` task enqueue silent fail 해소, 3분 미수락 자동 WAITING 복귀 작동. ② Firestore composite index: `gcloud firestore indexes composite create --collection-group=calls --query-scope=COLLECTION --field-config="field-path=status,order=ascending" --field-config="field-path=completedAt,order=descending"` (**PowerShell 콤마 파싱 회피로 따옴표 필수** — sandbox는 production index 생성도 차단). 기존 `firestore.indexes.json` 정의는 `completedAt:ASC` 였으나 archiveOldCalls 코드는 `.orderBy("completedAt","desc")` → **방향 어긋남이 진짜 원인** (직전 메모리 기록 "ASC+ASC"는 잘못이었음). 결과: `status:ASC + completedAt:DESC` READY. ③ archiveOldCalls 즉시 트리거: `gcloud scheduler jobs run firebase-schedule-archiveOldCalls-asia-northeast3 --location=asia-northeast3 --project=calldetector-5d61e` exit 0 → 4/29~5/6 8일 누적 백그라운드 정리. (4) **남은 작업**: 5/5 후속 사용자 환경 5단계(flutterfire configure / build_runner / Z Flip4 식당앱 빌드+설치 / S21+ call_manager 재빌드 + wallet UI 검증 / Plan §10 통합 E2E 14종) + 미커밋 70개 중 homepage 인증 게이트 트랙(14일 dangling, `homepage/auth-gate/` + `functions/scripts/copy-homepage.js` + `functions/lib/public/` + firebase.json hosting + express deps) 별도 commit 또는 격리 결정. (5) **PR 후보 (별도 세션 미진입)**: `finalizeSettlementSession` 안에 PENDING_CONFIRM 일괄 CONFIRMED 처리(개별 검증 건너뛰기 위험 평가 필요) — `993681b0` cleanup banner로 일부 self-heal됐으나 finalize-side 구조 fix는 미진입.
