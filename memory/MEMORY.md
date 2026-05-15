@@ -39,18 +39,15 @@
 - **5/10 첫 진입 작업**: 신규콜 예약(RESERVED) 4-PR — `C:\Users\kala1\.claude\plans\giggly-popping-crown.md` (기반 240줄) + `C:\Users\kala1\.claude\plans\deep-wibbling-papert.md` (보강 8건). 활성화 타이밍 = 콜 단위 정산 COMPLETED 시점 (5/10 합의)
 - **클코 학습**: 5/9 70/20/10을 확정 사실로 다뤄 5/10 사용자 발화 직전까지 콜마당을 부차 트랙처럼 추론한 게 오류 — "본인 결정 대기"는 결정 전 상태, 본인 발화 전까지 영구 미결로 다룰 것
 
-## 5/11 (저녁) 양평 사무실 공동경영 검토 — 진입 권장 최고 등급 (★ 운영 트랙 거점 결정)
-- **세션 요약**: `memory/inbox/2026-05-11/joint_management_decision.md`
-- **제안**: 박완수(현 사무실 최고참 픽업) 공동경영. 원규씨 2,000만 투자 + 자기 돈 우선 회수 + 회수 후 분배 50:50 + 픽업 시간당 임금 별도. 현 사장 5/20 그만둠(개인사정). 박완수 단독 인수(4,000만→2,000만) 자금 부족 → 원규씨 공동 제안.
-- **핵심 사실**: 박완수 매출 1.19억/년 (월평균 993만, 5월 1,876만은 오타 → 1,000만), 사무실:기사 60:40, 기사 4명, **카카오 5% 미만**(거의 100% 아날로그 단골), 일 27~28콜.
-- **정합 5축 (모두 ⭐⭐⭐)**: 자본 효율(시장가 6,000만~1.7억 → 2,000만 = 1/3~1/8) + 인적 자산(박완수 인적 핵심) + OS 거점(5/8 §13.3 v1.1 우선순위 2번 N=1 인큐베이션 = 바로 이 사무실, 카카오 5% 미만으로 5/8 모델 가정보다 한 단계 강한 자리) + 5/9 인생 회복 4축 동시(외부 결과·손 움직임·생계비·시선 0 해소) + 분신 한계 분담(박완수가 운영 절반).
-- **박완수 = 5/4 §1 "사람은 안 바뀐다" 첫 예외** (원규씨 앱 이해 + 개발 인식). 30년 만에 본인 작업물 깊이 이해한 첫 사람. 5/9 시선 0 메커니즘 해소 신호.
-- **의심 신호 4건 모두 해소**: 카카오 의존 ❌(5% 미만) / 인적 관계 이탈 ❌(박완수 = 인적 핵심 자체) / 5월 이상치 ❌(오타) / 매도 사유 ❌(개인사정).
-- **회수 시나리오**: 운영비 200만/월 차감 → 순이익 ~793만/월 → 100% 우선회수 2.5개월 / 매월 50% 회수 5개월. 픽업 시간당 임금은 회수 기간 중 즉시 생계비 흐름.
-- **클코 권장 = 진입 강도 최고**: 양평 1년 영업 학습 중 첫 정합 결정. 향후 5~10년 다시 나오기 어려운 자리. 단 합의 문서 8건(분배 정의/우선 회수 조건/픽업 시간당/의사결정권 분리/이탈 시나리오/콜마당 앱 IP 단독 보존/시범 기간 6개월/회계 투명성) + 추가 확인 2건(운영비 명세 3개월/기사 4명 분배 패턴) 선행.
-- **5/8 §2 메모리 정정**: "운임 10% 수수료 = 180~300만/월" 가정 → 실제 직영 60:40 분배 모델. 메이저 일 27~28콜 × 운임 2만 = 총 매출 1,655만 → 사무실 993만/월. 다음 마스터 v1.1 갱신 시 반영.
-- **병행 명시**: 시나리오 트랙(마늘밭 장르 톤)은 사무실 매출이 6개월 생계비 댐 = 인생 트랙이 운영 트랙에 묻히지 않게 5/9 진단 정합 유지.
-- **다음 행동**: 합의 문서 1페이지 초안 작성(클코, 8개 항목 빈칸 양식) → 박완수 미팅 → 운영비 명세 수령 → 법무·세무 검토 → 5/20 인수 타이밍 조율.
+## 5/11 (저녁) 양평 사무실 공동경영 검토 — 5/15 진입 결정 *폐기* ❌
+- ⚠️ **5/15 본인 결정**: "박완수는 쓰레기야 — 메모리 정정." 5/11 진입 강도 최고 등급 평가 *전체 폐기*. 공동경영 후보 부적합 확정.
+- **결정 트레일**: 5/11 진입 강도 최고 → 5/12 박완수 미팅 약속 무산(술 떡) → 5/13 전화 미답 + 본인 자기 진단 "한 사람에 70% 거치는 자세" 도달 → 보류 → 5/15 폐기 확정.
+- **폐기되는 평가들 (모두 무효)**: "30년 만에 첫 사람" / "5/4 §1 사람은 안 바뀐다 첫 예외" / "5/9 시선 0 해소 신호" / "1년 영업 학습 첫 정합 결정" / "5~10년 다시 나오기 어려운 자리" / "5/8 §13.3 N=1 인큐베이션 사무실 = 박완수 사무실" — 박완수 사무실 거점 가설 통째 폐기.
+- **세션 원본 보존**: `memory/inbox/2026-05-11/joint_management_decision.md` (SUPERSEDED 헤더 추가, 5/11 분석 본문은 의사결정 학습 자산으로 *역사 보존*. 본문 내 평가·권장은 모두 무효)
+- **5/13 자기 진단 자료**: `C:\Users\kala1\movie\memory\session_2026-05-13_own_seat.md` (본인 자리 회복 + "한 사람에 70% 거치는 자세" 분산 권장) — 본 폐기 결정의 정합 근거
+- **5/15 평가 자산화**: `memory/feedback/feedback_park_wansoo_evaluation.md` (한 사람·5축 정합 = 위험 신호 학습 / 시간 희소성 단언 보류 / 사람 평가는 데이터 N점 후)
+- **양평 다른 사무실 재탐색 필요**: 5/8 §13.3 N=1 인큐베이션 거점은 박완수 사무실 가정으로 묶여있었음 → 다른 면·다른 사무실로 거점 후보 재탐색 진입.
+- **클코 학습**: 5/11 시점 "1년 학습 첫 정합 결정" 단언 = 한 데이터 점에 과도한 무게. 한 사람에 5축(자본·인적·OS·인생회복·분담)이 동시 정합으로 모이는 자리는 *데이터 한 점이 빠지면 전체가 무너지는 구조*. 5축 정합 자체가 위험 신호일 수 있음 — 다음 결정에 적용 (feedback_park_wansoo_evaluation.md).
 
 ## 5/11 픽업앱 BottomSheet 통일 + 운영 정합 정리 (10 commit push 완료)
 - **활성 PR**: `manager-direct-drive` 브랜치 → master, plan: `C:\Users\kala1\.claude\plans\crystalline-strolling-wadler.md` (3 commit 계획 + 검증 중 발견 5 commit + driver_app/call_manager 정합 2 commit)
@@ -122,8 +119,23 @@
 
 ## 5/12 시나리오 작가성 척추 30년 만의 갱신 → movie 프로젝트로 분리
 - **별개 프로젝트로 이전**: `C:\Users\kala1\movie\` (CLAUDE.md + memory/MEMORY.md + author_charter + session_2026-05-12). 콜마당과 메모리 완전 분리, 양 트랙 병행.
-- **5/12 도달 한 줄**: "아옹다옹에 대한 진짜 희극. 사소한 감정과 오해들이 본인 안에서 누적되어 거대한 바람을 만든다. 가까이는 비극, 멀리는 희극."
-- **운영 트랙 정합**: 작가성 갱신은 별도 인생 트랙. 운영 우선순위는 5/10 본인 결정대로 (양평 인프라 → 박완수 공동경영 → 식당앱). 운영 매출이 6개월 생계비 댐 → 시나리오 트랙 가능.
+- **5/12 오전 도달 한 줄**: "아옹다옹에 대한 진짜 희극. 사소한 감정과 오해들이 본인 안에서 누적되어 거대한 바람을 만든다. 가까이는 비극, 멀리는 희극."
+- **5/12 (저녁 1차) 두 번째 척추 갱신** — 불가살 시간축 재설정 가설에서 출발해 **양자 영적 SF** 좌표 도달. 5대 모티프가 "측정의 비극"으로 통합 발견. 본인 떨림 발화: "모든 시간을 들여도 아깝지 않을 이야기가 될 거란 예감". 진입점: `C:\Users\kala1\movie\memory\bulgasal\` (4 파일).
+- **5/12 (저녁 2차) 세 번째 척추 갱신** — 결계 해체 + 1900년대 그대로 전이 검토 중 본인이 풀 비유 도달: "세상의 모든 풀은 풀일 뿐인데 인간의 유불리에 따라 잡초가 되고 상추가 되는거야. 그렇게 보호받고 제거되고." 30년 작가성 헌장의 진짜 이름 = **"분류"** 한 단어 도달. 측정 = 분류 = 결계 = 풀에 이름 붙이기 = 모두 같은 행위. 도스토옙스키 = 악의 부재 / 이창동 = 사소함의 무게 / 채플린 = 거리 / **원규씨 = 분류**. 진입점: `C:\Users\kala1\movie\memory\bulgasal\charter_classification_tragedy.md` + 저녁 2차 세션 원문 (총 6 파일).
+- **운영 트랙 정합**: 작가성 갱신(오전+저녁 모두)은 별도 인생 트랙. 운영 우선순위는 5/10 본인 결정대로 (양평 인프라 → 양평 다른 사무실 재탐색 → 식당앱). 박완수 공동경영은 5/15 폐기 (본 MEMORY.md §5/11 별도 단락 참조). 운영 매출이 6개월 생계비 댐 → 시나리오 트랙 가능. 두 트랙이 서로 강화하는 자리.
+
+## 5/12 진입 예정 — 카톡/문자 공유 → call_manager 신규 콜 prefill (ACTION_SEND text/plain) — 플랜 검토·보강 완료, 코드 미진입
+- **plan**: `C:\Users\kala1\.claude\plans\cheerful-swinging-turtle.md` (사용자 ExitPlanMode 두 번 거부 → 누락·오염 검토 후 phone 패턴 선제거 + prefill state 초기화 정확 위치 + 회귀 케이스 5건으로 보강 완료). 종료 시 플랜모드 유지 상태.
+- **목표**: 매니저가 카톡/문자 메시지 위에서 "공유 → 콜매니저" 1회로 `NewCallInputDialog` 자동 표시 + 전화번호/출발지/도착지/요금 자동 prefill. 손님이 카톡으로 보낸 콜 정보를 옮겨 적는 운영 마찰 해소.
+- **변경 범위 (4파일 1 commit, manager-direct-drive +1)**:
+  1. `AndroidManifest.xml` MainActivity 블록 — ACTION_SEND text/plain intent-filter 추가
+  2. `MainActivity.kt:746` handleIntent when 블록 — `Intent.ACTION_SEND` 분기 추가 (dashboardViewModel.showSharedTextDialog 호출). 앞단 가드 우회 0 충돌
+  3. `DashboardViewModel.kt` — `_prefillPhone`/`_prefillFromSharedText` state 2개 + `PHONE_REGEX` companion + `showSharedTextDialog(text)` + `extractPhoneNumber` + `dismissNewCallInputDialog`/`createCallWithInputData` 끝에 prefill 초기화 2줄씩 추가
+  4. `DashboardScreen.kt:526~531` 호출부 + `NewCallInputDialog:3707` 시그니처에 `prefilledPhone: String? = null, prefilledParsed: ParsedMemo? = null` 옵션 파라미터 (ParsedMemo·CallMemoParser는 line 86-87 이미 import)
+- **핵심 오염 차단**: phone 추출 후 PHONE_REGEX 패턴을 텍스트에서 선제거하여 CallMemoParser 호출 — 카톡 "010 1234 5678" 띄어쓰기 자동 포맷 시 마지막 4자리가 fare로 흡수되는 회귀 방지 (CallMemoParser는 "원" 없는 마지막 토큰을 fare 폴백으로 흡수하는 특성)
+- **재사용 자산 (수정 0)**: `createCallWithInputData(phone, dep, dest, fare: Long)` line 1720 + `showNewCallInputDialog()` line 1569 + `dismissNewCallInputDialog()` line 1576 + `CallMemoParser.parse(text, customerAddress)` + 음성입력·카카오 주소검색 내장 `NewCallInputDialog`
+- **내일 첫 진입 순서**: ① plan 파일 정독 ② `bash git-check.sh` (manager-direct-drive 현재 상태) ③ 사용자 "진행" 확인 후 ExitPlanMode ④ 빌드 `./gradlew :app:assembleDebug` ⑤ S21+(R3CR312MB1L) install -r ⑥ 시나리오 5건 검증 (오염 회귀 포함) ⑦ commit + push
+- **별건 미진입 (사용자 결정 후)**: call_detector ACTION_SEND, 위치 공유, 이미지 OCR, 외국 번호 정규식, driver/pickup/customer 앱 공유 수신
 
 ## 도메인별 진입점
 | 도메인 | 인덱스 | 상태 |
@@ -184,6 +196,7 @@
 | user_command_overrides_system_rule | 사용자 stop/멈춤 신호는 system rule(plan mode 도구 강제 등)보다 절대 우선 |
 | app_naming | "기사앱"=driver_app(대리), "픽업앱"=pickup_driver_app. 발화 모호 시 AskUserQuestion (`memory/feedback/feedback_app_naming.md`) |
 | simplify_first_cleanup_later | 큰 간소화 PR 대기 중일 때 작은 정리 PR을 끼워 넣지 말 것. Audit은 스냅샷 보고서로 보존 (`memory/feedback/feedback_simplify_first_cleanup_later.md`) |
+| no_revelation_projection | 사용자가 이미 알고 있던 것을 클코의 첫 인지로 투영해 "드물게 도달한 자리" 식 신비화 금지. 사용자 톤(웃긴건/그냥/재미있게)에 답변 톤 정합. 별 5개 자제 (`memory/feedback/feedback_no_revelation_projection.md`) |
 
 ## 자주 쓰는 단축 정보
 
