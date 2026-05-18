@@ -54,6 +54,14 @@ class ChatViewModel @Inject constructor(
     private val _senderName = MutableStateFlow<String?>(cachedSession?.driverName)
     val senderName: StateFlow<String?> = _senderName.asStateFlow()
 
+    // 채팅 입력바 텍스트 (외부 공유 prefill 수신을 위해 ViewModel 보유)
+    private val _inputText = MutableStateFlow("")
+    val inputText: StateFlow<String> = _inputText.asStateFlow()
+
+    // 외부에서 채팅 BottomSheet 펼침 요청 (ACTION_SEND 수신 시 1회 trigger)
+    private val _shouldExpandSheet = MutableStateFlow(false)
+    val shouldExpandSheet: StateFlow<Boolean> = _shouldExpandSheet.asStateFlow()
+
     private val isReady: Boolean
         get() = provinceId.isNotBlank() && cityId.isNotBlank() &&
                 officeId.isNotBlank() && senderId.isNotBlank()
@@ -126,6 +134,22 @@ class ChatViewModel @Inject constructor(
 
     fun retryMessage(message: LocalChatMessage) {
         chatRepository.retryMessage(message)
+    }
+
+    fun setInputText(text: String) {
+        _inputText.value = text
+    }
+
+    fun clearInputText() {
+        _inputText.value = ""
+    }
+
+    fun requestExpandSheet() {
+        _shouldExpandSheet.value = true
+    }
+
+    fun consumeExpandRequest() {
+        _shouldExpandSheet.value = false
     }
 
     /**

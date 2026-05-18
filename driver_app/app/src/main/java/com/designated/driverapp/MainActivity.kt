@@ -32,6 +32,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.activity.viewModels
+import com.designated.driverapp.ui.chat.ChatViewModel
 import com.designated.driverapp.viewmodel.DriverViewModel
 import com.designated.driverapp.navigation.AppNavigation
 import com.designated.driverapp.ui.theme.DriverAppTheme
@@ -53,6 +54,10 @@ import com.designated.driverapp.worker.SettlementSyncWorker
 class MainActivity : ComponentActivity() {
 
     private val driverViewModel: DriverViewModel by viewModels()
+
+    // Activity scope ChatViewModel — AppNavigation 경유 명시 전달 (NavBackStackEntry scope race 회피)
+    // ACTION_SEND 수신 시 채팅 입력 prefill + sheet expand trigger 용
+    private val chatViewModel: ChatViewModel by viewModels()
 
     private val TAG = "MainActivity"
     private lateinit var auth: FirebaseAuth
@@ -135,6 +140,9 @@ class MainActivity : ComponentActivity() {
             handleLockScreenWakeUp()
             cancelNotification(callId)
         }
+
+        // 카톡/문자 공유 텍스트 수신 → 사무실 단톡방 입력바 prefill + sheet expand
+        handleSharedTextIntent(intent)
 
         // 정산 알림 클릭으로 앱이 시작된 경우
         val initialNavigateTo = intent.getStringExtra("navigateTo")
@@ -360,6 +368,9 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
 
+        // 카톡/문자 공유 텍스트 수신 (앱 켜져있는 상태) → 채팅 prefill + sheet expand
+        handleSharedTextIntent(intent)
+
         // 알림 클릭으로 들어온 callId 처리 - StateFlow로 전달하여 Compose가 반응하도록 함
         val callId = intent.getStringExtra("callId")
         if (!callId.isNullOrBlank() && auth.currentUser != null) {
@@ -379,6 +390,21 @@ class MainActivity : ComponentActivity() {
         if (navigateTo == "settlement") {
             Log.d(TAG, "onNewIntent: navigateTo settlement")
             driverViewModel.requestNavigateToSettlement()
+        }
+    }
+
+    private fun handleSharedTextIntent(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_SEND || intent.type != "text/plain") return
+        // 미로그인 가드 — chatViewModel state 세팅하면 향후 로그인 후 home 진입 시
+        // 첫 composition 에서 옛 prefill 텍스트가 갑자기 sheet expand 되는 회귀 차단
+        if (auth.currentUser == null) {
+            Log.d(TAG, "[handleSharedTextIntent] 미로그인 — 공유 무시")
+            return
+        }
+        intent.getStringExtra(Intent.EXTRA_TEXT)?.takeIf { it.isNotBlank() }?.let { text ->
+            Log.d(TAG, "[handleSharedTextIntent] text/plain 수신, length=${text.length}")
+            chatViewModel.setInputText(text)
+            chatViewModel.requestExpandSheet()
         }
     }
 

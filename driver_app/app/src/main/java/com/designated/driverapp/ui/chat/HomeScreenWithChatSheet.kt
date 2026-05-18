@@ -11,13 +11,14 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import com.designated.driverapp.ui.home.HomeScreen
 import com.designated.driverapp.viewmodel.DriverViewModel
@@ -34,8 +35,8 @@ import kotlinx.coroutines.launch
 fun HomeScreenWithChatSheet(
     navController: NavHostController,
     driverViewModel: DriverViewModel,
+    chatViewModel: ChatViewModel,
 ) {
-    val chatViewModel: ChatViewModel = hiltViewModel()
     val scaffoldState = rememberBottomSheetScaffoldState()
     val sheetTargetValue = scaffoldState.bottomSheetState.targetValue
     val isExpanded = sheetTargetValue == SheetValue.Expanded
@@ -47,6 +48,14 @@ fun HomeScreenWithChatSheet(
     LaunchedEffect(sheetTargetValue) {
         if (sheetTargetValue == SheetValue.PartiallyExpanded || sheetTargetValue == SheetValue.Hidden) {
             keyboardController?.hide()
+        }
+    }
+    // 외부(ACTION_SEND) 에서 sheet 펼침 요청 감지 — 카톡 등 공유 수신 시 자동 expand
+    val shouldExpand by chatViewModel.shouldExpandSheet.collectAsState()
+    LaunchedEffect(shouldExpand) {
+        if (shouldExpand) {
+            scaffoldState.bottomSheetState.expand()
+            chatViewModel.consumeExpandRequest()
         }
     }
     val density = LocalDensity.current

@@ -1,6 +1,8 @@
 package com.designated.driverapp.navigation
 
+import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -11,6 +13,7 @@ import androidx.navigation.navArgument
 import com.designated.driverapp.ui.login.LoginScreen
 import com.designated.driverapp.ui.login.ForgotPasswordScreen
 import com.designated.driverapp.ui.home.HomeScreen
+import com.designated.driverapp.ui.chat.ChatViewModel
 import com.designated.driverapp.ui.chat.HomeScreenWithChatSheet
 import com.designated.driverapp.ui.login.SignUpScreen
 import com.designated.driverapp.viewmodel.DriverViewModel
@@ -39,7 +42,7 @@ object AppDestinations {
 fun AppNavigation(
     navController: NavHostController,
     startDestination: String,
-    driverViewModel: DriverViewModel
+    driverViewModel: DriverViewModel,
 ) {
     val uiState by driverViewModel.uiState.collectAsState()
 
@@ -84,7 +87,11 @@ fun AppNavigation(
             )
         }
         composable(AppDestinations.HOME_ROUTE) {
-            HomeScreenWithChatSheet(navController, driverViewModel)
+            // ChatViewModel 인스턴스화를 home route 진입 시점으로 늦춤 (Auth 복원 race 회피).
+            // Activity scope 명시 — MainActivity 의 by viewModels() 와 동일 ViewModelStoreOwner → 같은 인스턴스 보장.
+            val activity = LocalContext.current as ComponentActivity
+            val chatViewModel: ChatViewModel = hiltViewModel(activity)
+            HomeScreenWithChatSheet(navController, driverViewModel, chatViewModel)
         }
         composable(AppDestinations.FORGOT_PASSWORD_ROUTE) {
             ForgotPasswordScreen(
