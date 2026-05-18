@@ -146,6 +146,10 @@ class MainActivity : ComponentActivity() {
         androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory(application)
     }
 
+    // Activity scope ChatViewModel — Compose 안 viewModel() 호출과 동일 인스턴스
+    // ACTION_SEND 수신 시 채팅 입력 prefill + sheet expand trigger 용
+    private val chatViewModel: ChatViewModel by viewModels()
+
     private var provinceId: String? = null
     private var cityId: String? = null
     private var officeId: String? = null
@@ -465,6 +469,7 @@ class MainActivity : ComponentActivity() {
 
                             DashboardWithChatSheet(
                                 dashboardViewModel = dashboardViewModel,
+                                chatViewModel = chatViewModel,
                                 onLogout = { showLogoutConfirmDialog = true },
                                 onNavigateToSettings = { screenState = Screen.Settings },
                                 onNavigateToWallet = { screenState = Screen.Wallet },
@@ -744,6 +749,16 @@ class MainActivity : ComponentActivity() {
         }
 
         when (intent?.action) {
+            // 카톡/문자 등에서 텍스트 공유 받기 → 사무실 단톡방 입력바 prefill + sheet expand
+            Intent.ACTION_SEND -> {
+                if (intent.type == "text/plain") {
+                    intent.getStringExtra(Intent.EXTRA_TEXT)?.takeIf { it.isNotBlank() }?.let { text ->
+                        Log.d("MainActivity", "[handleIntent] ACTION_SEND text/plain 수신, length=${text.length}")
+                        chatViewModel.setInputText(text)
+                        chatViewModel.requestExpandSheet()
+                    }
+                }
+            }
             ACTION_SHOW_CALL_POPUP -> {
                 val callId = intent.getStringExtra(EXTRA_CALL_ID)
                 if (callId != null) {
@@ -1422,12 +1437,12 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun DashboardWithChatSheet(
     dashboardViewModel: DashboardViewModel,
+    chatViewModel: ChatViewModel,
     onLogout: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToWallet: () -> Unit,
     onNavigateToSettlement: () -> Unit,
 ) {
-    val chatViewModel: ChatViewModel = viewModel()
     val scaffoldState = rememberBottomSheetScaffoldState()
     val sheetTargetValue = scaffoldState.bottomSheetState.targetValue
     val isExpanded = sheetTargetValue == SheetValue.Expanded
@@ -1436,6 +1451,14 @@ private fun DashboardWithChatSheet(
     LaunchedEffect(sheetTargetValue) {
         if (sheetTargetValue == SheetValue.PartiallyExpanded || sheetTargetValue == SheetValue.Hidden) {
             keyboardController?.hide()
+        }
+    }
+    // 외부(ACTION_SEND) 에서 sheet 펼침 요청 감지 — 카톡 등 공유 수신 시 자동 expand
+    val shouldExpand by chatViewModel.shouldExpandSheet.collectAsState()
+    LaunchedEffect(shouldExpand) {
+        if (shouldExpand) {
+            scaffoldState.bottomSheetState.expand()
+            chatViewModel.consumeExpandRequest()
         }
     }
     androidx.activity.compose.BackHandler(enabled = isExpanded) {

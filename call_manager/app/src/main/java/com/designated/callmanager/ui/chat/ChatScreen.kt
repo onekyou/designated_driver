@@ -443,7 +443,7 @@ fun ChatBottomSheetContent(
     val messages by viewModel.messages.collectAsState()
     val latestMessage by viewModel.latestMessage.collectAsState()
     val currentUserId = viewModel.currentUserId
-    var inputText by remember { mutableStateOf("") }
+    val inputText by viewModel.inputText.collectAsState()
     var fullScreenUrl by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
 
@@ -526,12 +526,12 @@ fun ChatBottomSheetContent(
 
             ChatInputBar(
                 value = inputText,
-                onValueChange = { inputText = it },
+                onValueChange = { viewModel.setInputText(it) },
                 onSend = {
                     val trimmed = inputText.trim()
                     if (trimmed.isNotEmpty()) {
                         viewModel.sendMessage(trimmed)
-                        inputText = ""
+                        viewModel.clearInputText()
                     }
                 },
                 onPickImage = {
