@@ -1,6 +1,12 @@
 package com.designated.pickupdriver.ui.chat
 
 import android.util.Log
+import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -243,12 +249,23 @@ private fun ChatMessageRow(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MessageBubble(text: String, color: Color) {
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
     Surface(
         color = color,
         shape = MaterialTheme.shapes.medium,
-        modifier = Modifier.widthIn(max = 280.dp),
+        modifier = Modifier
+            .widthIn(max = 280.dp)
+            .combinedClickable(
+                onClick = {},
+                onLongClick = {
+                    clipboardManager.setText(AnnotatedString(text))
+                    Toast.makeText(context, "메시지를 복사했어요", Toast.LENGTH_SHORT).show()
+                },
+            ),
     ) {
         Text(
             text = text,
