@@ -124,18 +124,22 @@
 - **5/12 (저녁 2차) 세 번째 척추 갱신** — 결계 해체 + 1900년대 그대로 전이 검토 중 본인이 풀 비유 도달: "세상의 모든 풀은 풀일 뿐인데 인간의 유불리에 따라 잡초가 되고 상추가 되는거야. 그렇게 보호받고 제거되고." 30년 작가성 헌장의 진짜 이름 = **"분류"** 한 단어 도달. 측정 = 분류 = 결계 = 풀에 이름 붙이기 = 모두 같은 행위. 도스토옙스키 = 악의 부재 / 이창동 = 사소함의 무게 / 채플린 = 거리 / **원규씨 = 분류**. 진입점: `C:\Users\kala1\movie\memory\bulgasal\charter_classification_tragedy.md` + 저녁 2차 세션 원문 (총 6 파일).
 - **운영 트랙 정합**: 작가성 갱신(오전+저녁 모두)은 별도 인생 트랙. 운영 우선순위는 5/10 본인 결정대로 (양평 인프라 → 양평 다른 사무실 재탐색 → 식당앱). 박완수 공동경영은 5/15 폐기 (본 MEMORY.md §5/11 별도 단락 참조). 운영 매출이 6개월 생계비 댐 → 시나리오 트랙 가능. 두 트랙이 서로 강화하는 자리.
 
-## 5/12 진입 예정 — 카톡/문자 공유 → call_manager 신규 콜 prefill (ACTION_SEND text/plain) — 플랜 검토·보강 완료, 코드 미진입
-- **plan**: `C:\Users\kala1\.claude\plans\cheerful-swinging-turtle.md` (사용자 ExitPlanMode 두 번 거부 → 누락·오염 검토 후 phone 패턴 선제거 + prefill state 초기화 정확 위치 + 회귀 케이스 5건으로 보강 완료). 종료 시 플랜모드 유지 상태.
-- **목표**: 매니저가 카톡/문자 메시지 위에서 "공유 → 콜매니저" 1회로 `NewCallInputDialog` 자동 표시 + 전화번호/출발지/도착지/요금 자동 prefill. 손님이 카톡으로 보낸 콜 정보를 옮겨 적는 운영 마찰 해소.
-- **변경 범위 (4파일 1 commit, manager-direct-drive +1)**:
-  1. `AndroidManifest.xml` MainActivity 블록 — ACTION_SEND text/plain intent-filter 추가
-  2. `MainActivity.kt:746` handleIntent when 블록 — `Intent.ACTION_SEND` 분기 추가 (dashboardViewModel.showSharedTextDialog 호출). 앞단 가드 우회 0 충돌
-  3. `DashboardViewModel.kt` — `_prefillPhone`/`_prefillFromSharedText` state 2개 + `PHONE_REGEX` companion + `showSharedTextDialog(text)` + `extractPhoneNumber` + `dismissNewCallInputDialog`/`createCallWithInputData` 끝에 prefill 초기화 2줄씩 추가
-  4. `DashboardScreen.kt:526~531` 호출부 + `NewCallInputDialog:3707` 시그니처에 `prefilledPhone: String? = null, prefilledParsed: ParsedMemo? = null` 옵션 파라미터 (ParsedMemo·CallMemoParser는 line 86-87 이미 import)
-- **핵심 오염 차단**: phone 추출 후 PHONE_REGEX 패턴을 텍스트에서 선제거하여 CallMemoParser 호출 — 카톡 "010 1234 5678" 띄어쓰기 자동 포맷 시 마지막 4자리가 fare로 흡수되는 회귀 방지 (CallMemoParser는 "원" 없는 마지막 토큰을 fare 폴백으로 흡수하는 특성)
-- **재사용 자산 (수정 0)**: `createCallWithInputData(phone, dep, dest, fare: Long)` line 1720 + `showNewCallInputDialog()` line 1569 + `dismissNewCallInputDialog()` line 1576 + `CallMemoParser.parse(text, customerAddress)` + 음성입력·카카오 주소검색 내장 `NewCallInputDialog`
-- **내일 첫 진입 순서**: ① plan 파일 정독 ② `bash git-check.sh` (manager-direct-drive 현재 상태) ③ 사용자 "진행" 확인 후 ExitPlanMode ④ 빌드 `./gradlew :app:assembleDebug` ⑤ S21+(R3CR312MB1L) install -r ⑥ 시나리오 5건 검증 (오염 회귀 포함) ⑦ commit + push
-- **별건 미진입 (사용자 결정 후)**: call_detector ACTION_SEND, 위치 공유, 이미지 OCR, 외국 번호 정규식, driver/pickup/customer 앱 공유 수신
+## 5/18~19 공유 prefill + 채팅 long-press 복사 (manager-direct-drive +4 commit, 완료)
+- ⚠️ **5/12 §"카톡/문자 공유 → NewCallInputDialog prefill" 의도 SUPERSEDED**: 사용자 5/18 발화 "기사들에게 전달" → 채팅창 prefill 로 의도 정정. 기존 plan `cheerful-swinging-turtle.md` 폐기 → 신규 plan `magical-tinkering-otter.md` 두 번 작성 (manager / driver 트랙).
+- **상세**: `memory/designated_drive/share_intent_chat_copy_2026-05-18.md` (트랙 3개 + Auth race 회귀 진단 + 호스팅 + 클코 학습 4건)
+- **commit 트레일**:
+  1. `a39c267e` call_manager 공유 prefill (5/18)
+  2. `b4828bdc` driver_app 공유 prefill + Auth race 회피 (5/18)
+  3. `e86437d3` hosting APK 3종 교체 + deploy (5/18, calldetector-5d61e.web.app)
+  4. `055a5c1c` 3앱 채팅 long-press 클립보드 복사 (5/19)
+- **트랙 1 — 공유 prefill** (ACTION_SEND text/plain): 카톡/문자 길게 누름 → "공유 → 콜매니저/기사앱" → 사무실 단톡방 BottomSheet 자동 펼침 + 입력바 prefill + 매니저/기사 [전송] 직접 누름. 카톡·Gmail 등 표준 UX. ViewModel state ascension (Composable internal `var inputText by remember` → `inputText: StateFlow<String>`) 으로 race 회피.
+- **트랙 2 — 채팅 long-press 복사** (3앱 통일): MessageBubble 에 `combinedClickable` + `onLongClick` → `LocalClipboardManager.setText(AnnotatedString(text))` + "메시지를 복사했어요" Toast + 햅틱. ImageBubble / SelectionContainer / 컨텍스트 메뉴 확장은 별도 트랙.
+- **트랙 3 — 호스팅 APK 교체**: `public/apk_downloads/` 3종 (manager + driver + pickup) 5/18 빌드로 교체. `firebase deploy --only hosting:calldetector` 3 files uploaded. `.gitignore *.apk` 정책으로 driver_app 1개만 git tracked (5/11 `f2bb9b8c` 패턴 정합). call_detector / customer_app 변경 0 → 5/11 / 4/23 그대로.
+- **driver_app Auth race 회귀 진단**: AppNavigation 시그니처에 chatViewModel 전달 → setContent 첫 evaluation 시점에 by viewModels() lazy 발동 → 미로그인 화면에서도 ChatViewModel 인스턴스화 → Firebase Auth 복원 race → `senderId=""` 영구 박힘 → 빈 채팅. **회피**: AppNavigation 시그니처에서 chatViewModel 제거, `composable(HOME_ROUTE)` 람다 안에서 `hiltViewModel(activity)` 호출 (Activity scope) → home 진입 시점으로 인스턴스화 늦춤. `handleSharedTextIntent` 에 `auth.currentUser == null` 가드 추가.
+- **S22 카톡·삼성 메시지 시트 미노출 이슈**: OS 레벨은 driver_app 정상 등록 (query-activities 결과). 카톡·메시지 자체 공유 시트가 외부 앱 캐싱·필터링. *우리 코드 영향 0*. 시스템 chooser 강제 디스패치 (`am start -a android.intent.action.SEND`) 로는 정상 노출 + driver_app 정상 동작 확인.
+- **단말 적용**: S21+ (R3CR312MB1L) call_manager E2E 5종 통과 / S22 (R5CT41TJZFP) driver_app 검증 + 회귀 수정 후 채팅 복구 확인 / Z Flip4 (R3CT80K78NP) driver_app + pickup install Success. S21+ 잔여 install (S21+ driver_app + S21+ pickup) 단말 재연결 후.
+- **클코 학습 4건** (토픽 파일 §클코 학습): ① 사용자 의도 자명 X 일 때 명시 확인 절차가 plan 깊이보다 우선 ② race 회피 변경 자체가 *새 race 만들 수 있음* — timing 영향 검토 항목 추가 ③ plan v1 race 검토 8건 + 회귀 9건 점검에 *미로그인 화면 진입* 시나리오 누락 — 모든 startDestination 화면 검토 ④ `.gitignore *.apk` 정책으로 호스팅 APK 와 git history 분리 가능 (5/11 패턴 정합)
+- **다음 세션 진입 후보**: ① master PR 생성 (`gh pr create` 4 commit 묶음) ② S21+ 잔여 install ③ vCard 단말 실측 (카톡 친구 카드 mime) ④ ImageBubble long-press 복사 / SelectionContainer / 컨텍스트 메뉴 확장 별도 트랙
 
 ## 도메인별 진입점
 | 도메인 | 인덱스 | 상태 |
