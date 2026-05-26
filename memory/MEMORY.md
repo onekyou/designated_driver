@@ -232,6 +232,24 @@
 - **클코 학습 (본 세션 추측 패턴 적발 2건)**: #12 + §11.5 모두 클코의 *변수 이름·UI 자리만 보고 추측 패턴*. 본인 "실제 코드 확인해봐" 지시 → 폐기. 5/25 §피드백 실효성 입증 (코드 그대로 명문화 → 추측 X)
 - **코드 진입 시점**: 5/19 결정 ("PTT 이전 콜마당 수정 전면 보류") 유지. 본 결정들은 *문서 차원*만, 코드 변경 0. 실제 코드 작업은 PTT plan `harmonic-sparking-hedgehog.md` §3 진입 시점에 일괄
 
+## 5/27 (★ 본 세션) PTT §3 코드 진입 P3·P4 + P1 폐기 결정
+- **plan**: `C:\Users\kala1\.claude\plans\zippy-bubbling-kettle.md` (Plan 모드 본인 승인, 자연어 위주 7 commit 진입 흐름)
+- **본 세션 commit 2건** (manager-direct-drive, push 대기):
+  - `cf7226ac` feat(settlement): PTT §3 P3·P4 — 영업일 시간 6시 → 10시 (functions cron + handler workDate + 매니저 SettlementViewModel + 기사 DriverViewModel, 8 파일 +18/-38)
+  - `be012355` docs(memory): PTT §3 진입 결정 + P1 폐기 결정 (`ptt_section3_entry_2026-05-27.md` 신규 +120, §7 P1 폐기 결정 본문 포함)
+- **본인 의문 적발 P1 폐기**: 외상 Firestore 동기 자리 진입 → 빌드 OK 후 본인 "외상 왜 동기? 비용은?" 의문 제기 → 클코 *self-loop + 비용 + 양평 현재 정산 사용 X* 자리 인정 → 4파일 rollback. 외상 백업 본질은 살아있되 미래 식당앱 + 다른 사무실 보급 시점에 자연 재고.
+- **plan agent 누락 1자리 발견**: call_manager SettlementViewModel.kt:1029 `getTodaySessionDate()` 자리. P3·P4 commit에 함께 포함
+- **클코 학습 누적** (`ptt_section3_entry_2026-05-27.md` §7.5):
+  - plan agent 결과 = 기술 차원만. 운영 차원 (비용·self-loop·현재 사용도·미래 활용·PTT 활성 후 정합·보급 정합) 사전 검토 클코 책임
+  - 본인 발화 *현상*만 받고 *원인 임의 추측* 금지. 명시 이유 직접 인용 또는 물어볼 것
+  - 본인 결정 자리 *임의 해석 폐기 권장* 금지. 본인 결정 *그대로 살아있다*가 default
+  - *부분 의문 → 전체 폐기 비약* 금지
+- **본인 자리 남은 작업**:
+  - functions deploy = `firebase deploy --only functions:autoFinalizeSettlements` 등 calculateWorkDate 호출자 함수 모두 (정확한 함수 자리는 다음 세션 Grep 후 안내)
+  - 양평 단말 install 선택 (정산 현재 사용 X, install 우선순위 작음)
+  - git push 본인 OK 자리 (5/27 종료 시점 push 안 함, 다음 세션 진입 시 결정)
+- **다음 세션 진입**: P5 (정산 상태 4개 → 2개 `SUBMITTED ↔ CONFIRMED` + REJECTED 폐기 + confirmDailySettlement 축소). plan `zippy-bubbling-kettle.md` §"2) P5 commit" 본문 참조
+
 ## 도메인별 진입점
 | 도메인 | 인덱스 | 상태 |
 |--------|--------|------|
