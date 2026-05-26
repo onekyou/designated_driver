@@ -54,13 +54,13 @@ interface CallSettlement {
 }
 
 /**
- * 근무일 계산 (새벽 6시 이전은 전날로 처리)
+ * 근무일 계산 (오전 10시 이전은 전날로 처리)
  * UTC 입력을 KST로 변환 후 판단
  */
 function calculateWorkDate(timestamp: Date): string {
   const utc = new Date(timestamp);
   const koreaTime = new Date(utc.getTime() + (9 * 60 * 60 * 1000));
-  if (koreaTime.getHours() < 6) {
+  if (koreaTime.getHours() < 10) {
     koreaTime.setDate(koreaTime.getDate() - 1);
   }
   return koreaTime.toISOString().substring(0, 10); // YYYY-MM-DD

@@ -5002,12 +5002,12 @@ export const onCallCompletedUpdateSettlement = onDocumentUpdated(
 );
 
 // =============================
-// 일일 정산 자동 마감: 매일 새벽 6시 10분 실행
+// 일일 정산 자동 마감: 매일 오전 10시 10분 실행
 // - 전날 정산 세션을 자동으로 마감 처리
 // =============================
 export const autoFinalizeSettlements = onSchedule(
   {
-    schedule: "10 6 * * *", // 매일 새벽 6시 10분 (한국 시간)
+    schedule: "10 10 * * *", // 매일 오전 10시 10분 (한국 시간)
     timeZone: "Asia/Seoul",
     region: "asia-northeast3",
     memory: "512MiB",

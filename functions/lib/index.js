@@ -705,26 +705,13 @@ exports.sendNewCallNotification = (0, firestore_1.onDocumentCreated)({
                 adminTokens.push(adminData.fcmToken);
             }
         });
-        // 같은 사무실의 픽업기사 FCM 토큰 조회
-        const pickupSnapshot = await admin.firestore()
-            .collection("provinces").doc(provinceId)
-            .collection("cities").doc(cityId)
-            .collection("offices").doc(officeId)
-            .collection("pickup_drivers")
-            .get();
-        const pickupTokens = [];
-        pickupSnapshot.forEach((doc) => {
-            const pickupData = doc.data();
-            if (pickupData.fcmToken) {
-                pickupTokens.push(pickupData.fcmToken);
-            }
-        });
-        const tokens = [...adminTokens, ...pickupTokens];
+        // 픽업기사는 NEW_CALL(WAITING) 미수신 (2026-05-11) — onCallStatusChanged의 ASSIGNED 전이 시점부터 알림 수신
+        const tokens = [...adminTokens];
         if (tokens.length === 0) {
             logger.warn(`[new-call:${callId}] FCM 토큰을 가진 관리자/픽업기사가 없습니다.`);
             return;
         }
-        logger.info(`[new-call:${callId}] tokens: admin=${adminTokens.length}, pickup=${pickupTokens.length}`);
+        logger.info(`[new-call:${callId}] tokens: admin=${adminTokens.length} (pickup은 NEW_CALL 미수신)`);
         // timestamp 필드 추출 (Firestore Timestamp → ms long → String)
         const tsMs = (callData.timestamp && typeof callData.timestamp.toMillis === "function")
             ? callData.timestamp.toMillis()
@@ -775,13 +762,6 @@ exports.sendNewCallNotification = (0, firestore_1.onDocumentCreated)({
                     adminsSnapshot.docs.forEach((doc) => {
                         const adminData = doc.data();
                         if (adminData.fcmToken === invalidToken) {
-                            batch.update(doc.ref, { fcmToken: firestore_2.FieldValue.delete() });
-                            invalidTokensFound++;
-                        }
-                    });
-                    pickupSnapshot.docs.forEach((doc) => {
-                        const pickupData = doc.data();
-                        if (pickupData.fcmToken === invalidToken) {
                             batch.update(doc.ref, { fcmToken: firestore_2.FieldValue.delete() });
                             invalidTokensFound++;
                         }
@@ -4151,11 +4131,11 @@ exports.onCallCompletedUpdateSettlement = (0, firestore_1.onDocumentUpdated)({
     }
 });
 // =============================
-// 일일 정산 자동 마감: 매일 새벽 6시 10분 실행
+// 일일 정산 자동 마감: 매일 오전 10시 10분 실행
 // - 전날 정산 세션을 자동으로 마감 처리
 // =============================
 exports.autoFinalizeSettlements = (0, scheduler_1.onSchedule)({
-    schedule: "10 6 * * *", // 매일 새벽 6시 10분 (한국 시간)
+    schedule: "10 10 * * *", // 매일 오전 10시 10분 (한국 시간)
     timeZone: "Asia/Seoul",
     region: "asia-northeast3",
     memory: "512MiB",

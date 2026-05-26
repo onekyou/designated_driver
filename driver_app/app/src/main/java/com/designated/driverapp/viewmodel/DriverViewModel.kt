@@ -1653,9 +1653,9 @@ class DriverViewModel @Inject constructor(
                 // 통합 기준 carryOver 재계산 (원본 carryOver 기준)
                 val remainingCarryOver = originalCarryOverBalance - mergedFinalDeposit.toInt() + mergedRealDeposit.toInt()
 
-                // 날짜 계산: 6시 이전이면 전날로 처리 (콜매니저와 동일한 로직)
+                // 날짜 계산: 10시 이전이면 전날로 처리 (콜매니저와 동일한 로직)
                 val cal = java.util.Calendar.getInstance()
-                if (cal.get(java.util.Calendar.HOUR_OF_DAY) < 6) {
+                if (cal.get(java.util.Calendar.HOUR_OF_DAY) < 10) {
                     cal.add(java.util.Calendar.DAY_OF_MONTH, -1)
                 }
                 val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())

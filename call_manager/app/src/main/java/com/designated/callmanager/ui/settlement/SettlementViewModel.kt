@@ -384,7 +384,7 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
         val calendar = Calendar.getInstance()
         calendar.timeInMillis = timestamp
 
-        if (calendar.get(Calendar.HOUR_OF_DAY) < 6) {
+        if (calendar.get(Calendar.HOUR_OF_DAY) < 10) {
             calendar.add(Calendar.DAY_OF_MONTH, -1)
         }
 
@@ -1025,8 +1025,8 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
      */
     private fun getTodaySessionDate(): String {
         val calendar = Calendar.getInstance()
-        // 새벽 6시 이전이면 전날로 처리
-        if (calendar.get(Calendar.HOUR_OF_DAY) < 6) {
+        // 오전 10시 이전이면 전날로 처리
+        if (calendar.get(Calendar.HOUR_OF_DAY) < 10) {
             calendar.add(Calendar.DAY_OF_MONTH, -1)
         }
         return SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.time)
