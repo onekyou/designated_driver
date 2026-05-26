@@ -200,6 +200,34 @@
   - **클코 학습 4건** (메모 2 §클코 학습): ① 영업 카드 ≠ 제품 정체성 분리 ② 본인 결정 기준 = 시간·정신·안정성 (사업가 사고) ③ pay-as-you-go SaaS 마진율 ↑는 변동비→고정비 전환 필요 ④ 클코 오염 정정 (listener 재사용 표현 위반)
   - **상세**: `memory/coupon/ptt_market_replacement_card.md` (대폭 보강) + `ptt_operation_scenario.md` (시스템 이벤트 + Data Push 정합 + 영업 연결 추가)
 
+## 5/27 정산 재설계 세션 — 블랙아웃 복원 + 본인 결정 누적 (★ PTT plan §3 실행 매트릭스)
+- **본 세션**: 컴퓨터 블랙아웃 후 마지막 세션(5/25 19:55 db9cb9ba) 복원으로 시작 → 5/25 settlement_logic_definitive 33KB 정독 + 검증 → 본인 결정 누적 → 책임 분리 정정 → STT 자산 재배치 결정
+- **자료 3종 (책임 분리)**:
+  - 코드 사실 단일 출처: `memory/designated_drive/settlement_logic_definitive_2026-05-25.md` (§1~9 + §13~14, 본문 정정 반영)
+  - **재설계 단일 출처**: `memory/designated_drive/settlement_redesign_2026-05-27.md` (본인 결정 + Zero-base 모델 + 강제 게이트 인벤토리 + 코드 모듈 분리 원칙 + 5/7 incident 후보 + 잠재 문제 + PTT plan §3 연결)
+  - 세션 인계 스냅샷: `memory/designated_drive/settlement_session_2026-05-27.md` (블랙아웃 복원·명문화 검증·결정 누적·미완료 작업·클코 학습 5건)
+- **명문화 검증 결과**: 5/25 작업이 코드 정독 기반 (Read 12 / Grep 3 / 검증 근거 파일 10 중 8 ✅ Read, 2 △ Grep). DriverViewModel + index.ts 직접 정독 → 라인 자리 100% 정확 + 누락 디테일 3건 정정 반영 (definitive §6.2 + §6.5 + §7.2)
+- **본인 두 원칙**: ① 최소 개입 ② 다음 날 새로 시작
+- **본인 결정 (Q1~Q3 + Q2-2)**:
+  - Q1 영업일 **오전 10시** (코드 새벽 6시 → 변경, calculateWorkDate + autoFinalize cron)
+  - Q2 강제 게이트 설계 — 실수 패턴 12개 차단 ("원인 특정 부차, 모든 경우 차단이 주")
+  - Q2-2 **이체·수령 절차 폐기** (transferCarryOver / confirmReceiveCarryOver / carryOver.status 머신 / 매니저-기사 송금 절차 코드 밖)
+  - Q3 **그날 끝 Zero-base 모델** (carryOver 변수 자체 코드에서 완전 제거)
+- **책임 분리 결정 (본인 통찰 "누더기 우려" + SRP)**: 정산 로직 ↔ 차단 기능 분리. 2 파일 분리 (definitive 사실 + redesign 설계) + 코드 모듈 분리 (SettlementCalculator/Calc/ts ↔ EnforcementGate 모듈 신규) + definitive §10/§11/§12 redesign 이전 (5/27 추가 정정)
+- **STT 자산 재배치 결정**: 내부콜 STT/음성메모 → PTT 발화로 대체 → 해제된 자산(CallMemoParser Phase B-ext 완료 + Firebase Storage 음성메모)을 **공유콜 업로드 흐름으로 전환**. 자산 폐기 0, 자리 이동만. 채팅 블랙박스(PTT plan §9)는 별개 트랙
+- **강제 게이트 인벤토리** (실수 패턴 12 × 게이트):
+  - ✅ 자연 해소 2 (#6, #7 — 이체·수령 폐기)
+  - 🟢 이미 작동 2 (#8 calculateWorkDate+isFinalized, #10 rejectDailySettlement)
+  - 🟡 부분 작동 3 (#3 driver.status=PENDING_CONFIRM 배차 차단 *이미*, #4 cleanup banner, #11 cron 있음)
+  - 🔴 신규 4 (#1 logout 가드, #2 logout 차단, #5 매니저 일괄 마감 강제, #9 #5에 묶음)
+- **강제 게이트 본인 결정 (5/27 확정)**:
+  - **#4 모달화 강도** = 옵션 A 닫기 X 모달 + (a) 개별 정산확인 + (b) 개별 검토. [전체 확인] 1버튼 제거. 본인 발화 "정산확인은 최소개입과 상관없잖아 — 매니저 본질 책임"
+  - **#5 영업일 종료 강도** = X1 (10시 즉시 잠금, 알림 X). 새벽 2-4시 마감 패턴이라 grace 불필요
+  - **#12 기사 수치 조작 검증** ✅ **폐기** — 코드 정독 결과 자동 검증 자리 자체가 없음 (서버 calls 기반 자동 계산, 기사 입력값은 `realDeposit` 1개뿐, 정상 변동값)
+  - **§11.5 "현금+포인트" 코드 버그** ✅ **폐기** — 코드 정독 결과 변수 이름만 다르고 결과 동일. cashAmount=null/0 케이스 동일 처리
+- **클코 학습 (본 세션 추측 패턴 적발 2건)**: #12 + §11.5 모두 클코의 *변수 이름·UI 자리만 보고 추측 패턴*. 본인 "실제 코드 확인해봐" 지시 → 폐기. 5/25 §피드백 실효성 입증 (코드 그대로 명문화 → 추측 X)
+- **코드 진입 시점**: 5/19 결정 ("PTT 이전 콜마당 수정 전면 보류") 유지. 본 결정들은 *문서 차원*만, 코드 변경 0. 실제 코드 작업은 PTT plan `harmonic-sparking-hedgehog.md` §3 진입 시점에 일괄
+
 ## 도메인별 진입점
 | 도메인 | 인덱스 | 상태 |
 |--------|--------|------|
