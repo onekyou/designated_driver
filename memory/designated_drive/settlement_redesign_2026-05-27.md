@@ -267,19 +267,24 @@ PTT plan `harmonic-sparking-hedgehog.md` §3 본인 결정 (2026-05-25):
 - `DriverDailySettlement`의 `calculatedCarryOver` / `originalCarryOver` / `originalTripCount` / `originalTotalFare` / `originalRealDeposit` 필드
 - `originalCarryOver - finalDeposit + realDeposit` 공식 자체
 
-### 9.2 변경 대상
-- `dailySettlement.status` 4상태 → 단순화 (예: SETTLED만 + 일일 마감 플래그)
-- `confirmDailySettlement` — 단순 *영업 종료 확인*으로 축소 또는 폐기
+### 9.2 변경 대상 (5/27 본인 결정 반영)
+- `dailySettlement.status` 4상태 → **2상태 (옵션 B)**: `SUBMITTED` (기사 제출) ↔ `CONFIRMED` (매니저 확인). REJECTED는 별도 상태 X, *재제출 시 덮어쓰기* (자주 발생 X)
+- `confirmDailySettlement` — **축소 (옵션 A)**: 매니저 [정산확인] 액션 *유지* (본인 #4 결정 "매니저 본질 책임"). 부수 효과 단순화 — 이체 알림 등 제거, *도장(status=CONFIRMED) + 배차 잠금 풀기(driver.status=WAITING)* 2가지만 남김
 - `calculateRealIncome` — *포인트 차감*은 유지 (사무실 실손 모델 정합), 단 이월 변수 없이 *그날 단위*만
 - `calculateWorkDate` — *< 10* (§2.1 영업일 10시 결정)
 - `autoFinalizeSettlements` cron — `"10 10 * * *"` (§2.1)
 
-### 9.3 신규 자리 (강제 게이트 모듈, §7 코드 모듈 분리 원칙 정합)
+### 9.3 신규 자리 (강제 게이트 모듈 + 외상 Firestore 동기, §10 코드 모듈 분리 원칙 정합)
 - 앱 시작 시 어제 마감 여부 게이트 (driver_app + call_manager)
 - 영업일 종료 선언 버튼 강제 (#5 게이트, X1 즉시 잠금)
-- 미확인 기사 모달화 (#4 게이트, 옵션 A 닫기 X)
+- 미확인 기사 모달화 (#4 게이트, 옵션 A 닫기 X + 개별 정산확인 + 개별 검토)
 - logout 가드 (#1·#2 게이트)
-- 외상 채권 테이블 별도 트랙 (선택 — `CreditManagementScreen` 활용)
+- **외상 채권 Firestore 동기** (5/27 본인 정정, 별도 트랙 X — PTT §3 안 자연 자리)
+  - 신규 컬렉션 (예: `offices/{o}/creditPersons/{phoneNumber}`)
+  - Room (CreditPersonEntity + CreditEntryEntity) ↔ Firestore 동기 로직 (call_manager측)
+  - 마이그레이션: 현 Room 데이터 일괄 업로드
+  - 이유: 외상 명단은 *그날과 무관, 받을 때까지 살아있어야* 함. 현재 Room 로컬만 → 매니저 디바이스 분실 시 외상 명단 통째 휘발 위험
+  - driver_app `PendingSyncEntity` 손실 빈도 작은 자리도 함께 검토
 
 ### 9.4 유지 대상
 - `paymentMethod` 5종 (카드 미사용)
