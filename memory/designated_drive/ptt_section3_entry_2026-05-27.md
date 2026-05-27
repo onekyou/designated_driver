@@ -111,6 +111,51 @@ P1 진입 → CreditFirestoreRepository.kt 신규 + firestore.rules + Settlement
 
 ---
 
+## 8. 본 세션 (5/27 후속) 결과 + 다음 세션 P5 진입 안내
+
+### 8.1 본 세션 (5/27 후속) 결과
+
+- ✅ **P3·P4 deploy 유보 결정**: 본인 의문 "현재 디플로이가 의미가 있나?" → 클코 사실 검증 → P5~P8 묶음 deploy 권장 (이유: ① settlement.ts·index.ts는 P5~P8에서 또 변경, autoFinalizeSettlements는 P5에서 status 단순화 ② 양평 정산 실 사용 X — 6시→10시 운영 impact 0 ③ "최소 개입" 원칙 정합). commit `cf7226ac` 로컬 보존 + push는 5/27 본 세션에 이미 완료(0/0 동기화).
+- ✅ **Functions vs Hosting 회계 사실 정정** (본인 의문 "함수 때문에 호스팅 용량" 인과 추측): Functions 본문 71 MB는 Hosting 14.8 GB와 *무관*. 14.8 GB 진짜 정체 = **Hosting 배포 히스토리 누적** (APK 220 MB × 매 deploy × 166회 = calldetector-5d61e 13.8 GB).
+- ✅ **Hosting 옛 release 일괄 정리**: 206/206 성공, **14.34 GB 회수**, 166초 소요. 보존 정책 = 각 사이트 live + 직전 DEPLOY 2개씩 (총 6 versions, ~513 MB). calldetector-5d61e 164개 / callmadang-web 33개 / head-manager-web 9개 삭제.
+  - 콘솔 반영: 통상 수 분~수십 분 지연. **14.8 GB → ~500 MB**, 무료 4.8 GB 한도 안 안전 진입.
+  - 부수 권장 (별건, 본인 미결): APK hosting 동봉 정책 = 분기별 정리 cron vs APK Firebase Storage/GitHub Release 분리.
+
+### 8.2 다음 세션 P5 진입 안내 (본인 요청 자리)
+
+본인 발화 (2026-05-27 후속): "진행해줘 다음세션 진입시 설명해주고"
+
+**P5 본질** — `dailySettlement.status` 4상태 → 2상태 (settlement_redesign §9.2 + 본 파일 §3.2):
+- 현재 4상태: `PENDING_CONFIRM` → `CONFIRMED` → `TRANSFERRED` → `SETTLED`
+- 변경 후 2상태: `SUBMITTED` ↔ `CONFIRMED` (도장 1개, REJECTED는 재제출 *덮어쓰기*)
+- `confirmDailySettlement` *축소*: 도장(CONFIRMED) + 배차 잠금 풀기 *2가지만*. 이체·송금 알림 등 부수 효과 제거 (Q2-2 본인 결정 = 이체·수령 절차 폐기 정합).
+
+**P5 코드 자리** (5/27 미진입, plan agent 시점 인용 — 진입 시 Grep 재검증 필수):
+- `functions/src/handlers/settlement.ts` — `confirmDailySettlement` callable 축소 (PENDING_CONFIRM→CONFIRMED 단순 transition, 부수 효과 제거)
+- `call_manager/.../viewmodel/SettlementViewModel.kt:1860` — `confirmDailySettlement` 호출자 축소
+- `driver_app/.../viewmodel/DriverViewModel.kt` — `dailySettlement.status` SUBMITTED/CONFIRMED 분기 단순화
+- REJECTED 분기 자리 모두 폐기 + 재제출 시 덮어쓰기 흐름 (rejectDailySettlement 폐기 또는 재제출로 자연 흡수)
+- Firestore `dailySettlements/{driverId}/{date}.status` enum 4→2
+
+**P5 진입 흐름** (plan `zippy-bubbling-kettle.md` §"2) P5 commit" 본문):
+1. 본 메모 정독 + settlement_redesign §9.2 + ptt_section3_entry §3.2 본문 정독
+2. Grep all paths (피드백 §grep_all_paths): `PENDING_CONFIRM` / `TRANSFERRED` / `SETTLED` / `REJECTED` / `confirmDailySettlement` / `rejectDailySettlement` / `dailySettlement.status`
+3. plan agent 호출 (P5 단독 또는 P5~P8 묶음 — 본인 결정)
+4. 본인 승인 후 코드 진입
+5. P3·P4 commit과 함께 deploy + push (묶음 1회)
+
+**P5 비용·운영 사전 검토** (P1 폐기 학습 §7.5 정합):
+- 비용: deploy 1회 추가 비용 0 (functions 호출 빈도 영향 0). Firestore mutation 절감 (TRANSFERRED·SETTLED 단계 제거 → mutation 2회/정산 감소, 양평 저빈도라 절감 폭 작음).
+- self-loop: 매니저 1대 ↔ 기사 N대 — self-loop X (정상).
+- 현재 사용도: 양평 정산 실 사용 X (5/27 본인 발화) → 본 변경의 즉시 운영 impact = 낮음. 미래 식당앱·다른 사무실 보급 시점에 본격 효과.
+- PTT 활성 후 정합: PTT plan §3 정합 (본 단순화가 PTT §3 본질). PTT 활성 후 매니저 도장 흐름과 잘 어울림.
+
+**5/27 본인 두 원칙 정합 점검**:
+- 최소 개입: ✅ confirmDailySettlement 축소 = 부수 효과 제거, *기능 추가 0*
+- 다음 날 새로 시작: ✅ status 2상태 단순화 + REJECTED 덮어쓰기 = 그날 종료 후 다음 날 깨끗 시작
+
+---
+
 ## 6. 관련 메모
 
 - [[ptt-plan-entry-decision-2026-05-25]] — PTT 진입 결정 본문

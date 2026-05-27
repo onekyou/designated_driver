@@ -250,6 +250,15 @@
   - git push 본인 OK 자리 (5/27 종료 시점 push 안 함, 다음 세션 진입 시 결정)
 - **다음 세션 진입**: P5 (정산 상태 4개 → 2개 `SUBMITTED ↔ CONFIRMED` + REJECTED 폐기 + confirmDailySettlement 축소). plan `zippy-bubbling-kettle.md` §"2) P5 commit" 본문 참조
 
+## 5/27 (★ 후속 세션) Hosting 정리 14.34 GB 회수 + 다음 세션 P5 진입 안내 (본인 요청)
+- **본인 의문 두 자리 사실 정정**: ① 함수 대대적 변경? = YES (P5~P8 settlement.ts 절반 폐기 + EnforcementGate 신규 + PTT §시나리오 8 Data Push 라우터) ② Functions가 Hosting 용량? = **NO, 별개 회계** (Functions 본문 71 MB vs Hosting 14.8 GB)
+- **14.8 GB 진짜 정체**: Hosting 배포 히스토리 누적 (calldetector-5d61e 166 versions × APK 220 MB = 13.8 GB)
+- **Hosting REST API 일괄 DELETE 진행**: ADC token + `x-goog-user-project` 헤더 + 보존 정책 = 각 사이트 live + 직전 DEPLOY 2개씩. **206/206 성공, 14.34 GB 회수, 166초**. 보존 6 versions (~513 MB). calldetector 164 / callmadang-web 33 / head-manager 9 삭제
+- **콘솔 반영**: 통상 수 분~수십 분 지연. 14.8 GB → ~500 MB, 무료 4.8 GB 한도 안 안전
+- **부수 권장 (별건 트랙, 미결)**: APK hosting 동봉 정책 = (A) 분기별 정리 cron vs (B) APK Firebase Storage/GitHub Release 분리. 본인 결정 자리
+- **P3·P4 deploy 유보 결정**: 본인 의문 "현재 deploy 의미?" → 클코 사실 검증 → 유보 권장 채택 (P5~P8 묶음으로 통합). commit `cf7226ac` 이미 origin push 완료 (0/0 동기화 확인). 양평 정산 실 사용 X → 6시→10시 운영 impact 0
+- **다음 세션 P5 진입 안내**: 상세 본문 `memory/designated_drive/ptt_section3_entry_2026-05-27.md` §8.2 (P5 본질 + 코드 자리 4개 + 진입 흐름 5단계 + 비용·운영 사전 검토 + 본인 두 원칙 정합 점검). 다음 세션 시작 시 본 단락 + §8.2 정독 후 본인에게 설명 자리 마련
+
 ## 도메인별 진입점
 | 도메인 | 인덱스 | 상태 |
 |--------|--------|------|
