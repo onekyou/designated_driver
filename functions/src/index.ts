@@ -14,7 +14,7 @@ import * as admin from "firebase-admin";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 import { processSharedCallPoints, processCustomerPointsOnComplete, refundCustomerPointsOnCancel, processRestaurantCallPayout, checkOfficeWalletForClaim } from "./handlers/points";
-import { addCallToSettlementSession, autoFinalizeSettlementSessions, checkSettlementDiscrepancies, notifyDriversSettlementFinalized, notifyDriverSettlementResultHandler, getTodayWorkDate } from "./handlers/settlement";
+import { addCallToSettlementSession, autoFinalizeSettlementSessions, checkSettlementDiscrepancies, notifyDriversSettlementFinalized, getTodayWorkDate } from "./handlers/settlement";
 import { buildFcmPayload, buildMulticastFcmPayload } from "./utils/fcmPayload";
 import { recordAcceptanceEvent } from "./analytics/acceptanceEvents";
 import { enqueueAssignedTimeoutTask } from "./handlers/timeout";
@@ -5354,18 +5354,6 @@ export const sendDriverNotification = onCall(
       logger.error("[sendDriverNotification] 오류:", error);
       return { success: false, error: String(error) };
     }
-  }
-);
-
-/**
- * 매니저가 정산 확인/거절 시 해당 기사에게 FCM 전송
- */
-export const notifyDriverSettlementResult = onCall(
-  {
-    region: "asia-northeast3",
-  },
-  async (request) => {
-    return notifyDriverSettlementResultHandler(request.data);
   }
 );
 

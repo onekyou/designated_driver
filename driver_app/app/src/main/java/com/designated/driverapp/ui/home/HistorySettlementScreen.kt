@@ -390,16 +390,10 @@ fun HistorySettlementScreen(
                     },
                     confirmButton = {
                         Button(
-                            onClick = {
-                                viewModel.confirmReceiveCarryOver { success, message ->
-                                    if (success) {
-                                        showReceiveConfirmDialog = false
-                                    }
-                                }
-                            },
+                            onClick = { showReceiveConfirmDialog = false },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
                         ) {
-                            Text("예, 수령했습니다")
+                            Text("확인")
                         }
                     },
                     dismissButton = {
@@ -885,111 +879,34 @@ fun HistorySettlementScreen(
                 )
             }
 
-            // 정산 확인 완료 → 퇴근 다이얼로그
-            var showConfirmedDialog by remember { mutableStateOf(false) }
-            var showRejectedDialog by remember { mutableStateOf(false) }
-
-            // 상태 변화 감지
-            LaunchedEffect(settlementStatus) {
-                when (settlementStatus) {
-                    DailySettlementStatus.CONFIRMED -> showConfirmedDialog = true
-                    DailySettlementStatus.REJECTED -> showRejectedDialog = true
-                    else -> {}
-                }
-            }
-
-            if (showConfirmedDialog) {
-                AlertDialog(
-                    onDismissRequest = {},
-                    title = { Text("정산 확인 완료", color = Color.White) },
-                    text = {
-                        Text("매니저가 정산을 확인했습니다.\n퇴근하시겠습니까?", color = Color.White)
-                    },
-                    confirmButton = {
-                        Button(
-                            onClick = {
-                                showConfirmedDialog = false
-                                viewModel.clearSettlement(
-                                    onSuccess = {
-                                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                                            val loginPrefs = context.getSharedPreferences("driver_login_prefs", Context.MODE_PRIVATE)
-                                            loginPrefs.edit()
-                                                .putBoolean("auto_login", false)
-                                                .remove("identifier")
-                                                .remove("password")
-                                                .apply()
-                                            FirebaseAuth.getInstance().signOut()
-                                            (context as? Activity)?.finishAffinity()
-                                        }, 500)
-                                    },
-                                    onError = { errorMsg ->
-                                        Log.e("HistorySettlement", "퇴근 처리 실패: $errorMsg")
-                                    }
-                                )
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
-                        ) {
-                            Text("퇴근하기")
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showConfirmedDialog = false }) {
-                            Text("계속 대기", color = Color.White)
-                        }
-                    },
-                    containerColor = Color(0xFF2A2A2A)
-                )
-            }
-
-            if (showRejectedDialog) {
-                AlertDialog(
-                    onDismissRequest = { showRejectedDialog = false },
-                    title = { Text("정산 거절", color = Color(0xFFFF6666)) },
-                    text = {
-                        Text("매니저가 정산을 거절했습니다.\n실납입액을 확인 후 다시 제출해주세요.", color = Color.White)
-                    },
-                    confirmButton = {
-                        Button(
-                            onClick = { showRejectedDialog = false },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
-                        ) {
-                            Text("확인")
-                        }
-                    },
-                    containerColor = Color(0xFF2A2A2A)
-                )
-            }
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 when (settlementStatus) {
                     DailySettlementStatus.PENDING_CONFIRM -> {
-                        // 매니저 확인 대기 중
+                        // 마감 완료 → [퇴근하기]
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFF3A3A00))
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF1A3A1A))
                         ) {
                             Column(
                                 modifier = Modifier.padding(16.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Text(
-                                    "매니저 확인 대기 중...",
-                                    color = Color(0xFFFFEB3B),
+                                    "마감 완료",
+                                    color = Color(0xFF4CAF50),
                                     fontWeight = FontWeight.Bold
                                 )
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    "정산 확인이 완료되면 퇴근할 수 있습니다.",
+                                    "운행 자료가 저장되었습니다.",
                                     color = Color.Gray,
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
                         }
-                    }
-                    DailySettlementStatus.CONFIRMED -> {
-                        // 확인 완료 → 퇴근 가능
                         Button(
                             onClick = {
                                 viewModel.clearSettlement(
@@ -1017,21 +934,7 @@ fun HistorySettlementScreen(
                         }
                     }
                     else -> {
-                        // WORKING, REJECTED → 업무마감 버튼 (재제출 가능)
-                        if (settlementStatus == DailySettlementStatus.REJECTED) {
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFF3A0000))
-                            ) {
-                                Text(
-                                    "정산이 거절되었습니다. 실납입액을 확인 후 다시 제출해주세요.",
-                                    color = Color(0xFFFF6666),
-                                    modifier = Modifier.padding(12.dp),
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                            Spacer(Modifier.height(4.dp))
-                        }
+                        // WORKING → 업무마감 버튼
                         Button(
                             onClick = { showEndWorkDialog = true },
                             modifier = Modifier.fillMaxWidth(),
@@ -1042,7 +945,7 @@ fun HistorySettlementScreen(
                             )
                         ) {
                             Text(
-                                if (settlementStatus == DailySettlementStatus.REJECTED) "재제출" else "업무마감",
+                                "업무마감",
                                 fontWeight = FontWeight.Bold,
                                 color = if (isDepositConfirmed && totalCount > 0) Color.White else Color.Gray
                             )

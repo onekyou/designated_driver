@@ -162,17 +162,6 @@ fun DashboardScreen(
     val isConnected by viewModel.isConnected.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Cleanup Gate (정산 dead lock 해소) — dashboard 진입 시 1회 query
-    val pendingConfirmCount by viewModel.pendingConfirmCount.collectAsStateWithLifecycle()
-    val isCleanupGateDismissed by viewModel.isCleanupGateDismissed.collectAsStateWithLifecycle()
-    val isCleanupConfirming by viewModel.isCleanupConfirming.collectAsStateWithLifecycle()
-    // officeId 가 비동기로 set 되므로 officeId 변경 시 query (Unit 으로 두면 첫 진입 시점에 officeId=null 이라 skip 가능)
-    LaunchedEffect(officeId) {
-        if (!officeId.isNullOrBlank()) {
-            viewModel.refreshPendingConfirmCount()
-        }
-    }
-
     var callIdForDriverAssignment by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
@@ -256,9 +245,6 @@ fun DashboardScreen(
                     backgroundTime = System.currentTimeMillis()
                 }
                 Lifecycle.Event.ON_RESUME -> {
-                    // Cleanup gate 안전장치 — 게이트 함수가 자체 검증 (콜드 스타트는 lastCheckedDate==today 로 자동 skip)
-                    viewModel.refreshPendingConfirmCountIfDue()
-
                     val currentTime = System.currentTimeMillis()
                     val timeDifference = currentTime - backgroundTime
 
@@ -611,87 +597,6 @@ fun DashboardScreen(
                     }
                 }
 
-                // Cleanup Gate banner — 어제 이전 PENDING_CONFIRM 정산 일괄 처리 안내
-                if (pendingConfirmCount > 0 && !isCleanupGateDismissed) {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = Color(0xFF7E5800)  // 어두운 주황 (다크 테마 정합)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Filled.Warning,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    "미확정 정산 ${pendingConfirmCount}명",
-                                    color = Color.White,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                TextButton(
-                                    onClick = {
-                                        if (!isCleanupConfirming) {
-                                            viewModel.confirmAllPendingDailySettlements { success, failed ->
-                                                val msg = if (failed == 0) {
-                                                    "${success}명 정산 확정 완료"
-                                                } else {
-                                                    "${success}명 확정 / ${failed}명 실패"
-                                                }
-                                                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
-                                            }
-                                        }
-                                    },
-                                    enabled = !isCleanupConfirming,
-                                    colors = ButtonDefaults.textButtonColors(
-                                        contentColor = Color.White
-                                    ),
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text(
-                                        if (isCleanupConfirming) "처리 중..." else "전체 확정",
-                                        fontSize = 13.sp
-                                    )
-                                }
-                                TextButton(
-                                    onClick = {
-                                        // banner 닫고 정산 화면으로 이동 (개별 카드별 [확정][이체])
-                                        viewModel.dismissCleanupGate()
-                                        onNavigateToSettlement()
-                                    },
-                                    enabled = !isCleanupConfirming,
-                                    colors = ButtonDefaults.textButtonColors(
-                                        contentColor = Color.White
-                                    ),
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("개별 검토", fontSize = 13.sp)
-                                }
-                                TextButton(
-                                    onClick = { viewModel.dismissCleanupGate() },
-                                    enabled = !isCleanupConfirming,
-                                    colors = ButtonDefaults.textButtonColors(
-                                        contentColor = Color.White
-                                    ),
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("나중에", fontSize = 13.sp)
-                                }
-                            }
-                        }
-                    }
-                }
 
                 CallListContainer(
                     modifier = Modifier.fillMaxWidth().weight(5.4f),

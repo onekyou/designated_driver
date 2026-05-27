@@ -6,7 +6,7 @@
 import * as admin from "firebase-admin";
 import { Timestamp } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
-import { buildFcmPayload, buildMulticastFcmPayload } from "../utils/fcmPayload";
+import { buildMulticastFcmPayload } from "../utils/fcmPayload";
 
 // 정산 세션 인터페이스
 interface SettlementSession {
@@ -537,62 +537,3 @@ export async function notifySettlementDiscrepancy(
   }
 }
 
-/**
- * 매니저가 정산 확인/거절 시 해당 기사에게 FCM 전송 (Callable)
- * data: { driverId, result: "CONFIRMED"|"REJECTED", provinceId, cityId, officeId }
- */
-export async function notifyDriverSettlementResultHandler(data: any): Promise<{ success: boolean }> {
-  const { driverId, result, provinceId, cityId, officeId } = data;
-
-  if (!driverId || !result || !provinceId || !cityId || !officeId) {
-    logger.error("[notifyDriverSettlementResult] Missing required fields");
-    return { success: false };
-  }
-
-  const db = admin.firestore();
-
-  try {
-    // 기사 문서에서 FCM 토큰 조회
-    const driverDoc = await db
-      .collection("provinces").doc(provinceId)
-      .collection("cities").doc(cityId)
-      .collection("offices").doc(officeId)
-      .collection("designated_drivers").doc(driverId)
-      .get();
-
-    if (!driverDoc.exists) {
-      logger.warn(`[notifyDriverSettlementResult] Driver not found: ${driverId}`);
-      return { success: false };
-    }
-
-    const fcmToken = driverDoc.data()?.fcmToken;
-    if (!fcmToken) {
-      logger.warn(`[notifyDriverSettlementResult] No FCM token for driver: ${driverId}`);
-      return { success: false };
-    }
-
-    const isConfirmed = result === "CONFIRMED";
-    const title = isConfirmed ? "정산 확인 완료" : "정산 거절";
-    const body = isConfirmed
-      ? "매니저가 정산을 확인했습니다. 퇴근할 수 있습니다."
-      : "매니저가 정산을 거절했습니다. 재제출해주세요.";
-
-    await admin.messaging().send(buildFcmPayload({
-      data: {
-        type: isConfirmed ? "SETTLEMENT_CONFIRMED" : "SETTLEMENT_REJECTED",
-        driverId: driverId,
-        title: title,
-        body: body,
-      },
-      title: title,
-      body: body,
-      level: "active",
-    }, fcmToken));
-
-    logger.info(`[notifyDriverSettlementResult] FCM sent: ${result} to driver ${driverId}`);
-    return { success: true };
-  } catch (error) {
-    logger.error(`[notifyDriverSettlementResult] Failed:`, error);
-    return { success: false };
-  }
-}

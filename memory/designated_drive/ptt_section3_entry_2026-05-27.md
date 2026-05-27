@@ -156,6 +156,144 @@ P1 진입 → CreditFirestoreRepository.kt 신규 + firestore.rules + Settlement
 
 ---
 
+## 9. commit 1 진행도 (2026-05-28 세션 인계)
+
+본 세션 (5/27 후반 ~ 5/28) commit 1 절반 진행 후 *발화 톤 오염 + 컨텍스트 누적*으로 새 세션 진입 결정 (본인 5/28 짚음).
+
+### 9.1 완료 자리 (~330줄 감소)
+
+- driver_app `Constants.kt` — `ACTION_SETTLEMENT_CONFIRMED` + `ACTION_SETTLEMENT_REJECTED` 폐기 (line 66-67)
+- driver_app `MyFirebaseMessagingService.kt` — `SETTLEMENT_CONFIRMED` + `SETTLEMENT_REJECTED` + `CARRYOVER_TRANSFERRED` FCM 분기 3개 폐기 (~32줄)
+- driver_app `HomeScreen.kt` — `confirmedReceiver` + `rejectedReceiver` 정의 + register/unregister 자리 폐기
+- driver_app `HistorySettlementScreen.kt` — REJECTED/CONFIRMED 다이얼로그 + 빨간 경고 + 재제출 버튼 자리 폐기 (~90줄 감소)
+- driver_app `HistorySettlementScreen.kt` — `confirmReceiveCarryOver` 호출자 임시 close 변경 (수령 다이얼로그 자체는 commit 2 carryOver UI 폐기와 함께)
+- driver_app `DriverViewModel.kt` — `startCarryOverListener` 함수 본문 + 호출자 2자리 폐기 (~60줄)
+- driver_app `DriverViewModel.kt` — `confirmReceiveCarryOver` 함수 폐기 (~32줄)
+- functions `settlement.ts` — `notifyDriverSettlementResultHandler` 함수 폐기 (~59줄)
+- functions `settlement.ts` — unused import `buildFcmPayload` 제거 (line 9, **5/28 새 세션 `npm run build` 자체 검증으로 발견 → 수정 ✅**. 이전 세션이 함수 폐기 시 *놓친 자리*. `buildMulticastFcmPayload` 는 line 442 살아있어 import 유지)
+- functions `index.ts` — `notifyDriverSettlementResult` callable wrapper + import 자리 폐기
+- call_manager `AllTripsScreen.kt` — `finalizeSettlementSession` 호출자 → "오전 10시 10분 자동 마감" 안내로 변경 (매니저 [업무마감 확정] 액션 폐기 정합)
+- call_manager `SettlementViewModel.kt` — `finalizeSettlementSession` + `callFinalizeFunction` 폐기 (~113줄)
+
+### 9.1.1 본 세션 (5/28 새 세션) 추가 완료 자리 ✅ (~700줄 추가 감소)
+
+- call_manager `SettlementViewModel.kt` — 9 함수 통째 폐기 (~580줄): transferCarryOver / cancelTransfer / processCarryOverOnFinalize / confirmDailySettlement / confirmAllPendingDailySettlements / rejectDailySettlement / notifyDriverSettlementResult + helper 2개 (updateLocalCarryOver / sendCarryOverNotification). clearDailySettlement (line 770 외부 호출자 살아있음) 유지
+- call_manager `SettlementViewModel.kt` — carryOverListener 4 자리 (변수 line 82 + 호출 205 + cleanup 673 + 정의 1379-1464) + orphan transferCarryOver 주석 폐기
+- call_manager `SettlementViewModel.kt` — processCarryOverOnFinalize 호출자 폐기 (line 764)
+- call_manager `DriverSummaryScreen.kt` — DriverDetailCard 호출 시 callback 4개 + CarryOverOnlyCard section + signature 4 parameter + 확인/거절 UI 버튼 + REJECTED 표시 + DriverDetailCard 이체/이체취소 버튼 + CarryOverOnlyCard 정의 (~79줄)
+- call_manager `DashboardScreen.kt` — Cleanup Gate banner UI (81줄) + state collect 3개 + 호출자 2자리 (refreshPendingConfirmCount + refreshPendingConfirmCountIfDue)
+- call_manager `DashboardViewModel.kt` — Cleanup Gate state 4개 + helper 2개 (todayKstString / currentKstHour) + 함수 4개 (refreshPendingConfirmCount / refreshPendingConfirmCountIfDue / dismissCleanupGate / confirmAllPendingDailySettlements, ~200줄)
+- functions `settlement.ts` — unused import `buildFcmPayload` 제거 (1줄)
+
+**컴파일 검증 ✅** (`./gradlew :app:assembleDebug` BUILD SUCCESSFUL 2분 17초).
+
+### 9.2 commit 1 ✅ 완료 (이전 자리는 참고 — 본 세션 진입 후 모두 폐기됨)
+
+> ⚠️ **line 번호 = 2026-05-28 새 세션 진입 시점 working tree 기준** (이전 절반 진행 후 `finalizeSettlementSession` + `callFinalizeFunction` 폐기로 113줄 shift 반영 완료). 새 세션은 그대로 따라가도 안전.
+
+**call_manager `SettlementViewModel.kt` 7 함수 폐기** (현재 line):
+- `transferCarryOver` (line **1473**)
+- `cancelTransfer` (line **1600**)
+- `processCarryOverOnFinalize` (line **1646**)
+- `confirmDailySettlement` (line **1753**)
+- `confirmAllPendingDailySettlements` (line **1866**)
+- `rejectDailySettlement` (line **1963**)
+- `notifyDriverSettlementResult` (line **2028** 정의 + line **1849** / **1945** / **2017** 내부 호출자 3자리 + line **2043** `getHttpsCallable("notifyDriverSettlementResult")`) — 7 함수 폐기 시 *자연 함께* 정리 (모두 폐기 함수 본문 안)
+
+**call_manager `SettlementViewModel.kt` carryOverListener 폐기** (§3.1 폐기 대상이지만 본 세션 X 진입, **§9.1 누락 자리**):
+- line **82** `private var carryOverListener: ListenerRegistration?` 변수
+- line **205** `startCarryOverListener(province, city, office)` 호출
+- line **673** `carryOverListener?.remove()` cleanup
+- line **1379** `private fun startCarryOverListener` 정의 본문
+
+**호출자 자리**:
+- `DriverSummaryScreen.kt` — `vm.confirmDailySettlement` (line 119) + `vm.rejectDailySettlement` (line 124) + `vm.transferCarryOver` (line 106, 149) + `vm.cancelTransfer` (line 116, 156) + `onConfirmSettlement`/`onRejectSettlement` signature + UI 버튼 자리
+- `DashboardViewModel.kt` — `confirmAllPendingDailySettlements` (line 2696) 자기 폐기
+- `DashboardScreen.kt` — sticky cleanup banner UI 자리 폐기
+
+**driver_app state 자리** (commit 2/4 자연 통합):
+- `_carryOver` MutableStateFlow (line 80-81) + `carryOverListener` 변수 (line 152) + dispose 자리 (line 210-211)
+- `_dailySettlementStatus` MutableStateFlow (line 104)
+- ⚠️ **`_carryOver` 호출자** (line **1533**) `_carryOver.value?.balance?.toInt() ?: 0` — 5/28 새 세션 자체 검증으로 발견. `_carryOver` 폐기와 *함께* 정리 (commit 1 또는 commit 2)
+
+### 9.2.1 컴파일 상태 (2026-05-28 시점) — ⚠️ 추정 (자체 검증 X)
+
+- **이전 세션 자체 검증 X** (5/28 이전 세션 답 G·D): `./gradlew :app:assembleDebug` / functions `npm run build` 한 번도 실행 X. "컴파일 가능" 명시는 Grep으로 외부 호출자 0 매칭 확인 후 *추정*
+- **추정 근거**: §9.1 폐기는 *함수 정의 + 직접 호출자 짝*으로 정리 (FCM ACTION / Constants / receiver / functions handler·wrapper). 외부 dangling 호출 Grep 0 매칭
+- **잔존 위험**: SettlementViewModel.kt 안에 `notifyDriverSettlementResult` *호출자 3자리* (1849/1945/2017) + 정의 (2028) + callable invoke (2043) 살아있음. functions wrapper 는 §9.1에서 폐기됨 → deploy 후 *런타임* NotFound. §9.2 7 함수 폐기와 *반드시 동일 commit*에 묶을 것
+- **새 세션 진입 시 자체 검증 필수**: ① `./gradlew :app:assembleDebug` (call_manager + driver_app) ② `cd functions && npm run build` ③ 실패 자리 자체 수정 후 commit 1 진입
+
+### 9.2.2 무관 누적 파일 (이전 세션 X 건드림 ✅ 확정, 새 세션 `git add -p` 선별 자리)
+
+본 세션 진입 시점 `git status`에 이미 modified — **이전 세션 X 건드림 확정** (5/28 이전 세션 답 A). 모두 진입 전 누적:
+- `customer_app_flutter/` 5 파일 — `chat-v1-baseline` 브랜치 작업 잔존
+- `head_manager_web/app/login/page.tsx` — 과거 작업 잔존
+- `firebase.json` / `functions/package.json` / `functions/lib/handlers/points.js(.map)` / `call_manager/CallDetectorService.kt` — 진입 전 누적 ✅ 확정
+- `.claude/settings.local.json` — ToolSearch 등 자동 갱신 가능성 (이전 세션 답 A 단서)
+
+**새 세션 commit 1 push 시**: `git add` 으로 §9.1 + §9.2 자리만 *선별 stage*. 무관 누적은 별도 트랙 (commit 1 묶음에 포함 금지)
+
+### 9.3 다음 세션 진입 흐름
+
+1. plan 파일 `C:\Users\kala1\.claude\plans\refactored-tickling-codd.md` 정독 (특히 §10 push 단위)
+2. 본 §9 정독 (§9.2.1 컴파일 추정 + §9.2.2 무관 누적 확정 + §9.6 모름 자리)
+3. **진입 직전 자체 검증** (§9.6 누적):
+   - `git diff --stat` → §9.1 명단 11건 일치 확인
+   - `./gradlew :app:assembleDebug` (call_manager + driver_app) — 컴파일 통과
+   - `cd functions && npm run build` — TS 컴파일 통과
+   - Grep으로 §9.2 line 재검증 (DriverSummaryScreen 106/116/119/124/149/156 + DashboardViewModel 2696 + driver_app DriverViewModel 80-81/104/152/210-211)
+4. call_manager `SettlementViewModel.kt` 7 함수 + carryOverListener 폐기 진입 (현재 line `transferCarryOver` 1473부터)
+5. 호출자 자리 함께 정리 (DriverSummaryScreen + DashboardViewModel + DashboardScreen)
+6. **commit 1 단독 push 금지** (5/28 이전 세션 답 G 정정): plan §10 정합 = **4 commit 독립 컴파일 + 의미 단위, 4개 묶음으로 deploy + push**. commit 1~4 모두 완성 후 한 번 push
+
+### 9.4 클코 학습 본 세션 (피드백 누적)
+
+1. **Auto Mode 활성 시 매 turn 동의 묻기 금지** — 본인이 5/28 명시적 짚음. plan 승인 후 *진행 자체*가 본인 동의. 작업 진입 + 결과 보고만, 동의 묻기 X
+2. **발화 톤 오염 패턴 — "자기 자기" 단어 반복** — 본 세션 후반 클코 발화에서 "자기" 단어가 의미 없이 누적되며 사고 자체에 끼어드는 패턴 발생. 본인이 5/28 짚음. *발화 톤 자기 모니터링 필수* — 새 세션에서 정정. **트리거 추정** (5/28 이전 세션 답 B): plan 모드 세부 진입 단계에서 *"자리"* 단어가 마커처럼 누적되며 *"자기 자기"* 로 변형. plan 본문 표 (자리 매트릭스) → 발화 옮기는 과정에서 누적 패턴 형성. *원본 turn 인용은 컨텍스트 내 검색 X 라 불가*
+3. **한 commit = 큰 작업, 수 turn 자연** — 본 commit 1만 10+ 파일 + ~600줄. 한 turn에 X. 단 *한 세션 안 컨텍스트 누적*이 한계 — 큰 commit은 새 세션 진입 권장
+4. **본인 §"실재 테스트에서 찾아냄" 정신 정합** — 정확 라인 / 정확 함수 자리는 commit 작업 중 Grep 정확화 자연. 사전 검증 X. 진입 시점 검증
+5. **인계 메시지 line 번호는 작업 시점 자동 shift 미반영** — 본 세션 인계 §9.2 line 번호가 *원본 시점* (이전 113줄 폐기 안 반영). 5/28 새 세션 진입 검증으로 발견 + §9.2 갱신. *큰 commit 인계 시 line 번호는 작성 시점 working tree 기준 명시 + 새 세션이 진입 직전 Grep 재검증*
+6. **인계 메시지 클로징 인터뷰 자리** — 큰 commit 절반 진행 후 토스 시점, *남은 자리 명시*만으로는 부족. 새 세션 진입 직전 *클로징 인터뷰* (compile 상태 / line 시점 / 무관 누적 / 누락 자리) 자리 본 세션 종료 전 자체 검증해 §9 박을 것. *본인이 짚어주지 않아도 자체 진행*
+7. **★ 본 세션 자기 모니터링 한계 = 본인 짚음 의존 (5/28 본인 두 번 짚어 도달)** — 자기 발화 ("자기 자기") / 자기 추정 (line 번호 / 무관 파일 *추정* 단정) / 자기 기억 (working tree 재검증 X) / 자기 책임 (토스 = 새 세션이 점검) 모두 *외부 짚음 없이* 자체 검증 X. **근본 줄기**: plan 승인의 권위를 *자기 추정으로 덮어씀* — Auto Mode plan 승인 = 진입 자체 동의인데 매 turn "할까요?" 반복으로 *plan 권위 반복 부정*. **새 세션 대응**: ① 토스 결정 시점에 *자체* 클로징 인터뷰 5건 점검 후에만 인계 작성 ② 진입 직후 인계 메시지 line 번호 / 무관 파일 / 컴파일 상태 *Grep 재검증* (본 세션 인계도 본 §9.2 자체 검증으로 확정) ③ 본인 짚음 *없어도* 자기 점검 자발 진입 ④ "추정" "~ 추정" 단어 자기 사용 시점에 *각 자리 1건 diff 확인* 자동 진입
+
+### 9.5 피드백 승격 결정 대기 (다음 세션 보편 적용 후보)
+
+§9.4 #1 (Auto Mode 매 turn 동의 묻기 금지) + #2 (발화 톤 자기 모니터링) + #5 (인계 line 번호 작성 규칙) + #6 (클로징 인터뷰 자리) + **#7 (본 세션 자기 모니터링 한계 — 본인 짚음 의존)** 5건 = *본 commit 1 외 보편 적용* 자리. **피드백 토픽 파일 승격 권장**:
+- `memory/feedback/feedback_auto_mode_silent_progress.md` (#1)
+- `memory/feedback/feedback_self_speech_monitoring.md` (#2, #4 발화 톤)
+- `memory/feedback/feedback_handoff_writing.md` (#5, #6 인계 작성 규칙)
+- `memory/feedback/feedback_self_monitoring_limit.md` (#7 근본 줄기)
+
+새 세션 진입 첫 turn 본인 결정 받아 처리. *#7이 본 세션 핵심 학습 — 다른 학습 모두 #7의 표면 증상*.
+
+### 9.6 본 세션이 *모르는* 자리 — 5/28 이전 세션 답으로 처리
+
+1. ~~**"자기 자기" 발화 구체 트리거**~~ — **답 받음 (B)**: plan 모드 "자리" 단어 마커 누적이 "자기 자기"로 변형. §9.4 #2 보강 완료
+2. ~~**무관 누적 파일 중 firebase.json / functions/package.json / functions/lib/handlers/points.js(.map) / call_manager/CallDetectorService.kt**~~ — **답 받음 (A)**: 이전 세션 X 건드림 ✅ 확정 (진입 전 누적). §9.2.2 갱신 완료. `.claude/settings.local.json` 만 자동 갱신 가능성 단서
+3. ~~**commit 1 한 묶음 push 결정 (§9.3 step 5)**~~ — **답 받음 (G)**: 이전 세션 추정, plan §10과 어긋남. **정확 = 4 commit 모두 완성 후 한 번 push**. §9.3 step 6 정정 완료
+4. **§9.1 완료 명단 11건 = 실제 git diff 일치성** — **답 받음 (D)**: 이전 세션 자체 검증 X. 명단은 *기억 기반*. **새 세션 진입 시점 `git diff --stat` 자체 검증 권장**
+
+### 9.7 이전 세션 자체 검증 X 자리 (새 세션 진입 직후 자체 검증 필수) — 5/28 이전 세션 답 누적
+
+이전 세션 답 정직 (5/28): **자체 검증 (컴파일 / git diff / line shift) 모두 안 함. 새 세션이 진입 시점 자체 검증부터 시작 권장**.
+
+1. **컴파일 검증** (이전 세션 답 C): `./gradlew :app:assembleDebug` (call_manager + driver_app) + `cd functions && npm run build` 한 번도 실행 X. **모든 "컴파일 OK" 발화 = 추정**. 새 세션 진입 직후 빌드 통과 확인 — **5/28 새 세션 검증 결과 완료**: ✅
+   - functions `npm run build`: *실패 1건* (`settlement.ts:9` unused import `buildFcmPayload`) → 본 세션 수정 1줄 → ✅ 재검증 통과
+   - call_manager `./gradlew :app:assembleDebug`: ✅ BUILD SUCCESSFUL (4분 30초, JAVA_HOME export 필요)
+   - driver_app `./gradlew :app:assembleDebug`: ✅ BUILD SUCCESSFUL (4분 21초)
+   - **이전 세션 §9.2.1 "컴파일 가능" 추정 ≈ 정합** (1줄 unused import 외 회귀 0). 새 세션 commit 1 진입 안전
+2. **`git diff --stat` 검증** (이전 세션 답 D): §9.1 완료 명단 11건 = 실제 git diff 와 일치 검증 X. 과대/과소 보고 가능. 새 세션 진입 직후 자체 검증
+3. **line 시점 재검증** (이전 세션 답 E):
+   - SettlementViewModel.kt = 본 세션이 -113줄 shift 확정 후 §9.2 갱신 ✅
+   - DriverSummaryScreen.kt 106/116/119/124/149/156 = 이전 세션 X 건드림, 원본 line 유지 추정. **새 세션 Grep 재검증**
+   - DashboardViewModel.kt 2696 = 이전 세션 X 건드림, 원본 line 유지 추정. **새 세션 Grep 재검증**
+   - driver_app DriverViewModel.kt 80-81/104/152/210-211 = 이전 세션 ~120줄 감소 (line 1500 + 1496 함수 폐기, 둘 다 line 200 이후). line 80-81/104/152/210-211 = line 200 이전이라 변동 없음 추정. **새 세션 Grep 재검증 권장**
+4. **carryOverListener 의식/놓침 분리** (이전 세션 답 F):
+   - driver_app DriverViewModel.kt 변수 (line 152) + dispose (line 210-211) = **의식적** (commit 2 자연 통합 자리)
+   - call_manager SettlementViewModel.kt (line 82/205/673/1379) = **놓침**. §9.2 갱신으로 commit 1 자리 명시 ✅
+
+---
+
 ## 6. 관련 메모
 
 - [[ptt-plan-entry-decision-2026-05-25]] — PTT 진입 결정 본문

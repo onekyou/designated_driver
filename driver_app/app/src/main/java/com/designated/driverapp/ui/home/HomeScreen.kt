@@ -94,22 +94,6 @@ fun HomeScreen(
             }
         }
 
-        // 정산 확인/거절 FCM 브로드캐스트 수신 (HistorySettlementScreen의 StateFlow로도 감지되지만, 다른 화면에 있을 때를 위해)
-        val confirmedReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                Log.d(TAG, "정산 확인 브로드캐스트 수신")
-                // Firestore listener가 _dailySettlementStatus를 업데이트하므로
-                // HistorySettlementScreen에서 자동으로 CONFIRMED 다이얼로그 표시
-            }
-        }
-        val rejectedReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                Log.d(TAG, "정산 거절 브로드캐스트 수신")
-                // Firestore listener가 _dailySettlementStatus를 업데이트하므로
-                // HistorySettlementScreen에서 자동으로 REJECTED 다이얼로그 표시
-            }
-        }
-
         // 예약 콜(RESERVED) 수신 — 매니저가 운행중 기사에게 다음 콜 예약 시 발화
         val reservationReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
@@ -121,14 +105,10 @@ fun HomeScreen(
 
         val lbm = LocalBroadcastManager.getInstance(context)
         lbm.registerReceiver(finalizedReceiver, IntentFilter(Constants.ACTION_SETTLEMENT_FINALIZED))
-        lbm.registerReceiver(confirmedReceiver, IntentFilter(Constants.ACTION_SETTLEMENT_CONFIRMED))
-        lbm.registerReceiver(rejectedReceiver, IntentFilter(Constants.ACTION_SETTLEMENT_REJECTED))
         lbm.registerReceiver(reservationReceiver, IntentFilter(Constants.ACTION_RESERVATION_RECEIVED))
 
         onDispose {
             lbm.unregisterReceiver(finalizedReceiver)
-            lbm.unregisterReceiver(confirmedReceiver)
-            lbm.unregisterReceiver(rejectedReceiver)
             lbm.unregisterReceiver(reservationReceiver)
         }
     }

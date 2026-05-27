@@ -462,16 +462,8 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel(), onHome: (() -> Unit)? 
                 if (!isFinalizingInProgress && finalizeResultMessage == null) {
                     Button(
                         onClick = {
-                            isFinalizingInProgress = true
-                            vm.finalizeSettlementSession { success, message ->
-                                isFinalizingInProgress = false
-                                if (success) {
-                                    vm.clearAllTrips()
-                                    finalizeResultMessage = message
-                                } else {
-                                    finalizeResultMessage = "마감 실패: $message"
-                                }
-                            }
+                            vm.clearAllTrips()
+                            finalizeResultMessage = "오전 10시 10분에 자동 마감됩니다"
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF4444))
                     ) {

@@ -100,63 +100,13 @@ fun DriverSummaryScreen(vm: SettlementViewModel = viewModel()) {
                     stat = stat,
                     carryOver = carryOver,
                     todayUnpaid = todayUnpaid,
-                    dailySettlement = dailySettlement,
-                    onTransferClick = { id ->
-                        val carryOverBalance = carryOver?.balance ?: 0L
-                        vm.transferCarryOver(
-                            driverId = id,
-                            driverName = stat.name,
-                            carryOverBalance = carryOverBalance,
-                            todayUnpaid = todayUnpaid.toLong()
-                        ) { _, msg ->
-                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    onCancelClick = { id ->
-                        vm.cancelTransfer(id) { _, _ -> }
-                    },
-                    onConfirmSettlement = { id, diff ->
-                        vm.confirmDailySettlement(id, diff) { success, msg ->
-                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    onRejectSettlement = { id ->
-                        vm.rejectDailySettlement(id) { success, msg ->
-                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                        }
-                    }
+                    dailySettlement = dailySettlement
                 ) {
                     val list = filteredTrips.filter { (it.driverName.ifBlank { "미지정" }) == stat.name }
                     selectedDriver = stat.name to list
                 }
             }
 
-            // 운행 없지만 미지급금이 있는 기사들 섹션
-            if (carryOverOnlyDrivers.isNotEmpty()) {
-                item {
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        "미지급금 현황 (오늘 운행 없음)",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color(0xFFFFAA00)
-                    )
-                    Spacer(Modifier.height(8.dp))
-                }
-                items(carryOverOnlyDrivers) { carryOverItem ->
-                    CarryOverOnlyCard(
-                        carryOver = carryOverItem,
-                        onTransferClick = {
-                            vm.transferCarryOver(
-                                driverId = carryOverItem.driverId,
-                                driverName = carryOverItem.driverName,
-                                carryOverBalance = carryOverItem.balance,
-                                todayUnpaid = 0L  // 오늘 운행 없음
-                            ) { _, _ -> }
-                        },
-                        onCancelClick = { vm.cancelTransfer(it) { _, _ -> } }
-                    )
-                }
-            }
         }
     }
 
@@ -182,10 +132,6 @@ private fun DriverDetailCard(
     carryOver: DriverCarryOverSummary? = null,
     todayUnpaid: Int = 0,
     dailySettlement: DriverDailySettlementSummary? = null,
-    onTransferClick: (String) -> Unit = {},
-    onCancelClick: (String) -> Unit = {},
-    onConfirmSettlement: (String, Long) -> Unit = { _, _ -> },
-    onRejectSettlement: (String) -> Unit = {},
     onClick: () -> Unit
 ) {
     // 미지급금 계산 - 기사앱과 동일한 통합 로직 적용
@@ -338,41 +284,6 @@ private fun DriverDetailCard(
                     }
                 }
 
-                // 확인/거절 버튼 (마감대기 상태에서만 표시)
-                if (hasSubmitted && !isConfirmed && !isRejected) {
-                    Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = { onConfirmSettlement(stat.driverId, settlement.settlementDiff) },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
-                        ) {
-                            Text("✓ 확인", fontWeight = FontWeight.Bold)
-                        }
-                        OutlinedButton(
-                            onClick = { onRejectSettlement(stat.driverId) },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFF6666)),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF6666))
-                        ) {
-                            Text("✗ 거절", fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-                // 거절됨 상태 표시
-                if (isRejected) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "기사 재제출 대기 중",
-                        color = Color(0xFFFF6666),
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-                }
             }
 
             // 미지급금 섹션 - 상태별 분기
@@ -454,116 +365,9 @@ private fun DriverDetailCard(
                         }
                     }
 
-                // 이체하기 / 이체취소 버튼 (미지급금이 있을 때)
-                val displayedUnpaid = if (isConfirmed) carryOverBalance else totalUnpaid
-                if (displayedUnpaid > 0) {
-                    val status = carryOver?.status ?: CarryOverStatus.PENDING
-                    when (status) {
-                        CarryOverStatus.PENDING -> {
-                            Button(
-                                onClick = { onTransferClick(stat.driverId) },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                            ) {
-                                Text("이체하기", style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                        CarryOverStatus.TRANSFERRED -> {
-                            Button(
-                                onClick = { onCancelClick(stat.driverId) },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800)),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                            ) {
-                                Text("이체취소", style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                        CarryOverStatus.SETTLED -> {
-                            // 수령완료 상태에서는 버튼 없음
-                        }
-                    }
-                }
             }
             }
         }
     }
 }
 
-@Composable
-private fun CarryOverOnlyCard(
-    carryOver: DriverCarryOverSummary,
-    onTransferClick: (String) -> Unit,
-    onCancelClick: (String) -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF3D2020))
-    ) {
-        Column(Modifier.padding(12.dp)) {
-            Text(
-                carryOver.driverName,
-                color = Color.White,
-                style = MaterialTheme.typography.titleMedium
-            )
-            Divider(color = Color(0xFFFFAA00), thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        "누적 미지급: ${"%,d".format(carryOver.balance)}원",
-                        color = Color(0xFFFF6666),
-                        fontWeight = FontWeight.Bold
-                    )
-                    if (carryOver.todayAmount > 0) {
-                        Text(
-                            "(오늘 +${"%,d".format(carryOver.todayAmount)}원)",
-                            color = Color(0xFFFFAA00),
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    when (carryOver.status) {
-                        CarryOverStatus.PENDING -> {
-                            Text("상태: 미지급", color = Color(0xFFFF6666), style = MaterialTheme.typography.bodySmall)
-                        }
-                        CarryOverStatus.TRANSFERRED -> {
-                            val timeText = carryOver.transferredAt?.let {
-                                SimpleDateFormat("MM/dd HH:mm", Locale.getDefault()).format(it.toDate())
-                            } ?: ""
-                            Text("상태: 이체됨 ($timeText)", color = Color(0xFFFFCC00), style = MaterialTheme.typography.bodySmall)
-                        }
-                        CarryOverStatus.SETTLED -> {
-                            Text("상태: 수령완료", color = Color(0xFF66FF66), style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                }
-
-                when (carryOver.status) {
-                    CarryOverStatus.PENDING -> {
-                        Button(
-                            onClick = { onTransferClick(carryOver.driverId) },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                        ) {
-                            Text("이체하기", style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                    CarryOverStatus.TRANSFERRED -> {
-                        Button(
-                            onClick = { onCancelClick(carryOver.driverId) },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800)),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                        ) {
-                            Text("이체취소", style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                    CarryOverStatus.SETTLED -> {
-                        // 수령완료 상태에서는 버튼 없음
-                    }
-                }
-            }
-        }
-    }
-}

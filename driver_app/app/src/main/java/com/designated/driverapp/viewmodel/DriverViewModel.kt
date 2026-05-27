@@ -225,8 +225,6 @@ class DriverViewModel @Inject constructor(
         if (auth.currentUser?.uid == driverId) {
             // ✅ 리스너 대신 1회 조회로 현재 운행 중인 콜 확인 (앱 재시작 시 복구)
             loadCurrentActiveCall(provinceId, cityId, officeId, driverId)
-            // ✅ 이월 정산 (미수령금) 리스너 시작
-            startCarryOverListener(provinceId, cityId, officeId, driverId)
             // ✅ 분배비율 + 오늘 정산 로드 (calls 기반)
             loadSettlementData(provinceId, cityId, officeId, driverId)
         } else {
@@ -1329,7 +1327,6 @@ class DriverViewModel @Inject constructor(
 
         if (!provinceId.isNullOrBlank() && !cityId.isNullOrBlank() && !officeId.isNullOrBlank()) {
             loadCurrentActiveCall(provinceId, cityId, officeId, driverId)
-            startCarryOverListener(provinceId, cityId, officeId, driverId)
             loadSettlementData(provinceId, cityId, officeId, driverId)
         }
     }
@@ -1491,99 +1488,6 @@ class DriverViewModel @Inject constructor(
 
 
     // ====== 이월 정산 (미수령금) 관련 기능 ======
-
-    /**
-     * 이월 정산 (미수령금) 실시간 리스너
-     * 내 기사 문서의 carryOver 필드를 실시간 감시
-     * PENDING_CONFIRM 상태의 dailySettlement가 있으면 calculatedCarryOver 사용
-     */
-    private fun startCarryOverListener(provinceId: String, cityId: String, officeId: String, driverId: String) {
-        carryOverListener?.remove()
-
-        val driverRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
-            .collection(Constants.COLLECTION_CITIES).document(cityId)
-            .collection(Constants.COLLECTION_OFFICES).document(officeId)
-            .collection(Constants.COLLECTION_DRIVERS).document(driverId)
-
-        carryOverListener = driverRef.addSnapshotListener { snapshot, e ->
-            if (e != null) {
-                Log.e(TAG, "CarryOver listener error", e)
-                return@addSnapshotListener
-            }
-
-            if (snapshot != null && snapshot.exists()) {
-                @Suppress("UNCHECKED_CAST")
-                val carryOverMap = snapshot.get("carryOver") as? Map<String, Any?>
-                val carryOver = DriverCarryOver.fromMap(carryOverMap)
-
-                // dailySettlement 확인 - PENDING_CONFIRM 상태면 calculatedCarryOver 사용
-                @Suppress("UNCHECKED_CAST")
-                val dailySettlementMap = snapshot.get("dailySettlement") as? Map<String, Any?>
-                val dailySettlement = DriverDailySettlement.fromMap(dailySettlementMap)
-
-                // 일일 정산 상태 emit (UI에서 대기/확인/거절 상태 표시용)
-                _dailySettlementStatus.value = dailySettlement.status
-
-                // 매니저가 이체한 carryOver(status=TRANSFERRED)는 Firestore 원본값이 확정값이므로 마스킹하지 않음
-                // SETTLED는 "어제 수령완료 후 오늘 제출"인 케이스가 있어 PENDING_CONFIRM 시 계속 masking 필요
-                val alreadyProcessedByManager = carryOver.status == CarryOverStatus.TRANSFERRED
-                val effectiveCarryOver = if (dailySettlement.status == DailySettlementStatus.PENDING_CONFIRM && !alreadyProcessedByManager) {
-                    // 업무마감 후 매니저 확인 대기 중 - 계산된 carryOver 사용
-                    val calculatedBalance = dailySettlement.calculatedCarryOver
-                    Log.d(TAG, "Using calculatedCarryOver from dailySettlement: $calculatedBalance (original: ${carryOver.balance})")
-                    carryOver.copy(balance = calculatedBalance)
-                } else {
-                    // 일반 상태 또는 매니저 처리 완료 - 원본 carryOver 사용
-                    carryOver
-                }
-
-                // 미수령금/미납금이 있거나, TRANSFERRED 상태(수령확인 대기)인 경우 표시
-                if (effectiveCarryOver.status == CarryOverStatus.TRANSFERRED ||
-                    (effectiveCarryOver.balance != 0L && effectiveCarryOver.status != CarryOverStatus.SETTLED)) {
-                    _carryOver.value = effectiveCarryOver
-                    Log.d(TAG, "CarryOver updated: balance=${effectiveCarryOver.balance}, status=${effectiveCarryOver.status}")
-                } else {
-                    _carryOver.value = null
-                }
-            } else {
-                _carryOver.value = null
-            }
-        }
-    }
-
-    /**
-     * 수령완료 - 이체받은 미수령금 수령 확인
-     * 상태를 SETTLED로 변경하고 잔액을 0으로 리셋
-     */
-    fun confirmReceiveCarryOver(onResult: (Boolean, String) -> Unit) {
-        viewModelScope.launch {
-            try {
-                val (provinceId, cityId, officeId) = getDriverLocationInfo()
-                val driverId = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
-
-                val driverRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
-                    .collection(Constants.COLLECTION_CITIES).document(cityId)
-                    .collection(Constants.COLLECTION_OFFICES).document(officeId)
-                    .collection(Constants.COLLECTION_DRIVERS).document(driverId)
-
-                driverRef.update(
-                    mapOf(
-                        "carryOver.balance" to 0L,
-                        "carryOver.status" to CarryOverStatus.SETTLED.name,
-                        "carryOver.transferredAt" to null,
-                        "carryOver.transferredBy" to null,
-                        "carryOver.lastUpdatedAt" to Timestamp.now()
-                    )
-                ).await()
-
-                Log.d(TAG, "CarryOver received and settled")
-                onResult(true, "수령 완료")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to confirm carryOver receive", e)
-                onResult(false, "수령 확인 실패: ${e.message}")
-            }
-        }
-    }
 
     /**
      * 업무마감 - 실납입 확인 후 정산 제출
