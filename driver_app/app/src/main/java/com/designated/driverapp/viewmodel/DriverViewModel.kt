@@ -109,6 +109,7 @@ class DriverViewModel @Inject constructor(
 
     // 운행내역 카드용 개별 콜 목록 (Firestore 기반)
     data class TripHistoryItem(
+        val callId: String = "",
         val tripNumber: Int,
         val customerName: String,
         val departure: String,
@@ -1021,6 +1022,7 @@ class DriverViewModel @Inject constructor(
                 val newTripNumber = _tripHistoryList.value.size + 1
 
                 val newTripItem = TripHistoryItem(
+                    callId = callId,
                     tripNumber = newTripNumber,
                     customerName = customerName,
                     departure = departure,
@@ -1651,6 +1653,7 @@ class DriverViewModel @Inject constructor(
                 val cashAmount = doc.getLong("cashReceived")?.toInt()
 
                 tripItems.add(TripHistoryItem(
+                    callId = doc.id,
                     tripNumber = tripCount,
                     customerName = customerName,
                     departure = departure,
@@ -1754,6 +1757,67 @@ class DriverViewModel @Inject constructor(
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to clear settlement", e)
                 onError("정산 초기화 실패: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * 콜 단위 결제수단 정정 (일과 끝 정산 화면, [제출] 전에만 호출)
+     * - calls/{callId} 의 paymentMethod + 연동 필드(cashReceived/creditAmount) 재계산
+     * - 현금/외상/이체 3종만 (포인트 계열은 보류 트랙 — 호출 측에서 차단)
+     * - status(COMPLETED)·fareFinal·pointsUsed·completedAt 불변 (firestore.rules 화이트리스트 정합)
+     * - 기록 후 refreshSettlementData() 로 _todaySettlement·_tripHistoryList 권위 재계산
+     */
+    fun updateCallPaymentMethod(callId: String, newPaymentMethod: String, onResult: (Boolean, String) -> Unit) {
+        val provinceId = sharedPreferences.getString(Constants.PREF_KEY_PROVINCE_ID, null)
+        val cityId = sharedPreferences.getString(Constants.PREF_KEY_CITY_ID, null)
+        val officeId = sharedPreferences.getString(Constants.PREF_KEY_OFFICE_ID, null)
+
+        if (provinceId.isNullOrBlank() || cityId.isNullOrBlank() || officeId.isNullOrBlank()) {
+            onResult(false, "로그인 정보가 없습니다")
+            return
+        }
+        if (newPaymentMethod !in listOf("현금", "외상", "이체")) {
+            onResult(false, "현금/외상/이체만 정정할 수 있습니다")
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val callRef = firestore.collection(Constants.COLLECTION_PROVINCES).document(provinceId)
+                    .collection(Constants.COLLECTION_CITIES).document(cityId)
+                    .collection(Constants.COLLECTION_OFFICES).document(officeId)
+                    .collection(Constants.COLLECTION_CALLS).document(callId)
+
+                val snapshot = callRef.get().await()
+                val fareFinal = snapshot.getLong(Constants.FIELD_FARE_FINAL)?.toInt()
+                    ?: snapshot.getLong("fare_set")?.toInt()
+                    ?: 0
+
+                // 결제수단별 연동 필드 재계산 (confirmAndFinalizeTrip 로직 정합)
+                val updates = hashMapOf<String, Any>(
+                    Constants.FIELD_PAYMENT_METHOD to newPaymentMethod
+                )
+                when (newPaymentMethod) {
+                    "현금" -> {
+                        updates[Constants.FIELD_CASH_RECEIVED] = fareFinal
+                        updates["creditAmount"] = FieldValue.delete()
+                    }
+                    "외상", "이체" -> {
+                        updates["creditAmount"] = fareFinal
+                        updates[Constants.FIELD_CASH_RECEIVED] = FieldValue.delete()
+                    }
+                }
+                callRef.update(updates).await()
+
+                // 통계 권위 재계산 (Firestore 재로드 — 수동 delta 없이 drift 0)
+                refreshSettlementData()
+
+                Log.d(TAG, "콜 결제수단 정정 완료: callId=$callId → $newPaymentMethod")
+                onResult(true, "결제수단을 ${newPaymentMethod}(으)로 정정했습니다")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to update call payment method", e)
+                onResult(false, "정정 실패: ${e.message}")
             }
         }
     }

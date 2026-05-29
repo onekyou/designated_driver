@@ -181,6 +181,14 @@ service cloud.firestore {
                resource.data.callType == "SHARED")
             )
           ) ||
+          // ✅ 기사 본인 COMPLETED 콜 결제수단 정정 (commit 4 #3, 정산 재설계 §5.2 자기 정정)
+          // status·fare·completedAt 불변 보장, 결제 관련 필드만 화이트리스트로 허용
+          (isAuthenticated() &&
+           resource.data.assignedDriverId == request.auth.uid &&
+           resource.data.status == "COMPLETED" &&
+           request.resource.data.status == "COMPLETED" &&
+           request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['paymentMethod', 'cashReceived', 'creditAmount', 'finalFare'])) ||
           // 공유콜 취소 시 원본 사무실 콜을 원래 상태로 복구 허용
           // 기사가 공유콜을 취소할 때 원본 사무실의 콜을 복구할 수 있도록 허용
           (isAuthenticated() &&

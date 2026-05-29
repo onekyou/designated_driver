@@ -187,6 +187,18 @@ P1 진입 → CreditFirestoreRepository.kt 신규 + firestore.rules + Settlement
 
 **컴파일 검증 ✅** (`./gradlew :app:assembleDebug` BUILD SUCCESSFUL 2분 17초).
 
+### 9.1.2 commit 1 ✅ commit 완료 (2026-05-28)
+
+- **commit hash**: `e7403ded`
+- **stat**: 13 files / +152 / -1622 (순감 1470줄)
+- **branch**: manager-direct-drive
+- **push X** (plan §10 정합 — 4 commit 모두 완성 후 한 묶음 push)
+- **무관 누적 stage 제외** (§9.2.2): customer_app_flutter / head_manager_web / firebase.json / functions/package.json / functions/lib/* / call_manager/CallDetectorService.kt / .claude/settings.local.json 모두 unstaged 유지
+
+### 9.1.3 본 commit 잔존 자리 (commit 2 자연 흡수, compile warning 만)
+
+- **SettlementViewModel.kt:740-756** — `driverShare` / `cashReceived` / `driverTotalFare` / `driverDeposit` unused local val (5/28 본 세션 점검 발견). 본 자리 = `processCarryOverOnFinalize` 호출자 폐기 후 forEach 안 *clearDailySettlement(driverId) 호출 자리만 살림*. 컴파일 통과 (warning 만). commit 2 enum + data class 정리 시 자연 흡수 — forEach 자리 통째 단순화 권장 (clearDailySettlement 호출만 살리는 minimal forEach)
+
 ### 9.2 commit 1 ✅ 완료 (이전 자리는 참고 — 본 세션 진입 후 모두 폐기됨)
 
 > ⚠️ **line 번호 = 2026-05-28 새 세션 진입 시점 working tree 기준** (이전 절반 진행 후 `finalizeSettlementSession` + `callFinalizeFunction` 폐기로 113줄 shift 반영 완료). 새 세션은 그대로 따라가도 안전.
@@ -262,9 +274,10 @@ P1 진입 → CreditFirestoreRepository.kt 신규 + firestore.rules + Settlement
 - `memory/feedback/feedback_auto_mode_silent_progress.md` (#1)
 - `memory/feedback/feedback_self_speech_monitoring.md` (#2, #4 발화 톤)
 - `memory/feedback/feedback_handoff_writing.md` (#5, #6 인계 작성 규칙)
-- `memory/feedback/feedback_self_monitoring_limit.md` (#7 근본 줄기)
+- `memory/feedback/feedback_self_monitoring_limit.md` (#7 근본 줄기) — ✅ **2026-05-29 승격 완료** (본 세션 #7 재발 = `pointsUsed`→"쿠폰 트랙" 코드 확인 전 단정, §11.2-A. 재발이 승격 근거). name=`self-monitoring-limit`, README 등록 완료.
+- 나머지 3개(#1 auto_mode / #2 self_speech / #5·#6 handoff)는 미승격 — 다음 재발/본인 결정 시 처리.
 
-새 세션 진입 첫 turn 본인 결정 받아 처리. *#7이 본 세션 핵심 학습 — 다른 학습 모두 #7의 표면 증상*.
+새 세션 진입 첫 turn 본인 결정 받아 처리. *#7이 본 세션 핵심 학습 — 다른 학습 모두 #7의 표면 증상*. → #7 승격됨(2026-05-29).
 
 ### 9.6 본 세션이 *모르는* 자리 — 5/28 이전 세션 답으로 처리
 
@@ -291,6 +304,131 @@ P1 진입 → CreditFirestoreRepository.kt 신규 + firestore.rules + Settlement
 4. **carryOverListener 의식/놓침 분리** (이전 세션 답 F):
    - driver_app DriverViewModel.kt 변수 (line 152) + dispose (line 210-211) = **의식적** (commit 2 자연 통합 자리)
    - call_manager SettlementViewModel.kt (line 82/205/673/1379) = **놓침**. §9.2 갱신으로 commit 1 자리 명시 ✅
+
+---
+
+## 10. commit 2 완료 (2026-05-29 세션)
+
+- **commit hash**: `8426984f` (manager-direct-drive, **push X** — 4 commit 묶음 완성 후, plan §10)
+- **stat**: 16 files / +113 / -1695 (순감 1582줄, commit 1과 맞먹음)
+- **검증 ✅**: 양 앱 main(`assembleDebug`) + test(`compileDebugUnitTestKotlin` + `compileDebugAndroidTestKotlin`) 모두 BUILD SUCCESSFUL. (Divider deprecation warning만, 무해)
+
+### 10.1 폐기/변경 자리
+- enum: `DailySettlementStatus` / `CarryOverStatus` / `SettlementFilter` 폐기 (양 앱)
+- data class: `DriverCarryOver` / `DriverCarryOverSummary` 폐기
+- `DriverDailySettlement` 16→**8필드** (폐기: status + calculatedCarryOver/originalCarryOver/originalTripCount/originalTotalFare/originalRealDeposit + confirmedAt/confirmedBy). ⚠️ **plan §1.2 "6필드" 대비 정정 — `finalDeposit`/`settlementDiff` 유지**. 근거: carryOver 무관 *당일 정산 결과값*이라 Zero-base 원칙 무관 + 화면 표시 보존 + commit 4 재구조 전 의미 단위 유지. settlementDiff = `realDeposit - finalDeposit` (carryOver 성분 제거)
+- `DriverDailySettlementSummary`: `hasSubmitted`(submittedAt 문서유무)만, `isConfirmed`/`isRejected` 폐기 (매니저 확인 액션 commit 1 폐기 정합)
+- `SettlementCalc` 3종(calculateAdjustedDeposit/RemainingCarryOver/UsedFromCarryOver) + `SettlementCalculator.calculateTodayUnpaidByDriver` 폐기. 유지: calculateOfficeDeposit/DriverShare/RawFinalDeposit/DriverStats/PaymentBreakdown/RealIncome 등
+- `DriverViewModel`: `_carryOver`/`_dailySettlementStatus` state + dead `carryOverListener` 변수 폐기 + `submitDailySettlement` 단순 제출 재작성(통합/이월 제거)
+- `HistorySettlementScreen`: carryOver UI(수령 다이얼로그/이체 버튼/누적 미수령금 카드/미환급 공제) 전부 폐기 + **`settlementStatus`→`uiState.driverStatus`** (★회귀 수정)
+- `SettingsScreen`: `dailySettlementStatus`→`uiState.driverStatus`
+- `SettlementViewModel`: dead `_carryOverList`/`_dailySettlementList` 폐기 + `clearAllTrips` forEach 단순화(§9.1.3 unused local val 흡수)
+- `DriverSummaryScreen`: 통계 카드만 재작성. `AllTripsScreen`: 미지급 현황 카드/DriverUnpaidSummary/checkBeforeFinalize carryOver·정산확인 부분 폐기
+- test 5파일(SettlementCalcTest는 직접, 나머지 4개 sub-agent): 폐기 함수 참조 @Test 케이스만 제거, 살아있는 test 보존
+
+### 10.2 클코 학습 (본 세션)
+- **plan 추정(~40자리)보다 컸음** — carryOver "표시/계산" UI가 commit 1에서 안 지워지고 commit 2로 흡수(ptt §9.1.3 예고대로). 실제 14 main파일 + test 5파일, 순감 1582줄
+- **dead state 회귀 발견·수정** — `_carryOver`/`_dailySettlementStatus`/`_carryOverList`/`_dailySettlementList`는 commit 1 carryOverListener 폐기로 *set하는 곳이 사라져 항상 초기값*. 호출자 화면(특히 HistorySettlementScreen "퇴근하기" 분기, AllTripsScreen 미지급 현황)이 빈 데이터로 작동 중이던 회귀를 commit 2가 정리. *commit을 나눌 때 한쪽(listener)만 먼저 폐기하면 반대쪽(state 구독 UI)이 dead로 남는 패턴 — 분할 시 양방 동시 점검*
+
+### 10.3 다음 세션 진입 (commit 3 → 4 → push)
+- **commit 3** — 외상 자리 폐기 (plan §10 + §7 오염2): call_manager `CallManagerDatabase` v7→v8 (entities에서 `CreditPersonEntity`/`CreditEntryEntity` 제거, `fallbackToDestructiveMigration()` line 34 이미 설정 → 자동 destructive) + `CreditDao` + `SettlementCacheRepository`/`SettlementDao` 외상 함수 + `CreditManagementScreen` + `CreditDialog` + `SettlementDatabase`(dead v1) + `CreditEntity` + driver_app `confirmAndFinalizeTrip` 외상 분기 단순화. ~35자리. **진입 시 Grep 재검증 필수**
+  - ★ **범위 확정 (2026-05-29 본인 결정 = 옵션1 전체 폐기)**: plan §10.3이 과소 집계했던 **매니저 per-call 이체/외상 정산 *처리* 흐름도 함께 폐기**. 추가 폐기 대상: `PendingSettlementsScreen`(탭1 대기, 순수 [이체확인]/[외상등록] 처리 화면) + `SettlementTabHost` 탭 **전체/기사별/일일 3개로 축소**(대기·외상 탭 제거) + ViewModel `markTripCredited`/`creditedTripIds`/`fetchPhoneForCall`/`addOrIncrementCredit`/`reduceCredit`/`_creditPersons`/`CreditPerson`/`CreditEntry` + `AllTripsScreen.checkBeforeFinalize` 이체/외상 미처리 경고.
+  - **근거**: redesign §2.2(기사 결제수단 4버튼 원클릭으로 일원화 → 매니저 재입력은 이중작업) + §3.1(매니저 정산화면 능동 0) + §6(외상 손님정보 수집 폐기, 본인 기결정). 콜별 결제수단(외상/이체) *조회*는 전체 탭(`AllTripsScreen` 결제수단별 합계 + `TripListTable`)이 이미 커버 → 별도 흡수/보존 불필요 (본인 "최소개입 — 기재되어 확인 가능하면 폐기" 정합).
+  - **directRunTrips는 손대지 않음** (§10.4 참조 — commit 3 외상 폐기와 무관).
+  - 클코 학습: 초안에서 "조회 전체탭 흡수" + "directRun 합치기 점검" 사족 2건 덧붙였다가 코드 확인·본인 지적으로 둘 다 철회. *scope 밖 작업 덧붙이지 말 것 — 최소개입.*
+- **commit 4** — 콜 완료 4버튼 원클릭(`completeRide`) + 일과 끝 정정 모달 + `updateCallPaymentMethod` + firestore.rules + `autoFinalizeSettlementSessions` 본문 단순화 + 메모리 갱신. ~33자리
+  - ⚠️ **누락 보강 (commit 2 검토 발견)**: commit 1에서 carryOverListener 폐기 → `_dailySettlementList` set 로직 사라짐 → commit 2에서 dead state 폐기. 결과 **매니저가 기사 제출 일일 정산(finalDeposit/settlementDiff/submittedAt)을 조회하는 기능이 현재 없음**. plan §3.3 "매니저 그날 종료 화면(미납/환급 표시)" 구현하려면 commit 4에서 **dailySettlement 재로드 로직 신규**(`SettlementViewModel`에서 designated_drivers 문서의 dailySettlement 1회 fetch 또는 리스너) + `_dailySettlementList` 복원 + `DriverSummaryScreen`/`AllTripsScreen` 매니저 정산 요약 표시 복원 필요. `DriverDailySettlementSummary`(hasSubmitted getter) 모델은 이 복원 위해 commit 2에서 의도적 유지.
+- **push** — 4 commit 모두 완성 후 한 묶음 (plan §10)
+- **deploy** — commit 4 후 functions + firestore.rules 1회
+- 본 §10 + MEMORY.md 인덱스는 **commit 4에 함께 commit** (메모리 갱신은 commit 4 자리)
+
+### 10.4 directRunTrips(직접운행) 당분간 동결 (2026-05-29 본인 확정)
+
+- **결정**: `directRunTrips`(직접운행) **기능 전반 당분간 동결**. 정산 재설계 트랙뿐 아니라 *어느 트랙에서도* directRun 신규 변경 X. 현행 유지. **재개는 본인 명시적 결정 후만**.
+- commit 3 외상/이체 처리 폐기는 directRun과 무관 — directRun 조회/합계 로직(`AllTripsScreen` 직접운행 매출 표시, `applyDirectRunFilter`, `directRunTrips` StateFlow)은 **손대지 않고 그대로 둠**.
+- directRun은 PTT 시나리오(`ptt_operation_scenario.md` — 직접운행 9필드 → PTT 발화+결제 1탭)에서 다룰 *후보*였으나, 본인 결정으로 **동결** — PTT 트랙 진입 시에도 directRun 부분은 제외.
+- ⚠️ 최초 동결 결정의 정확한 출처는 메모리 미기록(클코 확인 못 함). 본인 2026-05-29 환기·확정으로 박음.
+
+---
+
+## 11. commit 3 완료 (2026-05-29 세션) + commit 4 새 세션 진입 가이드
+
+### 11.1 commit 3 완료
+
+- **commit hash**: `6defedb1` (manager-direct-drive, **push X** — 4 commit 묶음 완성 후, plan §10)
+- **stat**: 16 files / +7 / −1059 (순감 1052줄)
+- **검증 ✅ (실측, 추정 아님)**: call_manager + driver_app 양 앱 `:app:assembleDebug` + `:app:compileDebugUnitTestKotlin` + `:app:compileDebugAndroidTestKotlin` 모두 **BUILD SUCCESSFUL** (Gradle 8.10 deprecation warning만, 무해). dangling 참조 0건 (Grep 전수 확인).
+- **범위**: 2026-05-29 본인 결정 = **옵션1 전체 폐기**(§10.3 ★ 범위 확정). 외상 명단뿐 아니라 매니저 per-call 이체/외상 *처리* 흐름까지.
+
+**삭제 11파일**:
+- active 외상 Room: `CreditPersonEntity.kt` / `CreditEntryEntity.kt` / `CreditDao.kt` (data.local)
+- dead 체인: `SettlementDatabase.kt`(v1) / `repository/SettlementCacheRepository.kt` / `dao/SettlementDao.kt` / `entity/CreditEntity.kt` / `entity/SettlementEntity.kt` (인스턴스화·getDatabase 외부 호출 0건 실측 확인 후 체인 통째 삭제)
+- per-call 처리 UI: `PendingSettlementsScreen.kt`(탭1 대기) / `CreditManagementScreen.kt`(탭4 외상, +CreditDetailDialog+shareCreditDetails) / `CreditDialog.kt`
+
+**편집 5파일**:
+- `CallManagerDatabase.kt` — entities에서 CreditPersonEntity/CreditEntryEntity 제거 + `creditDao()` 폐기 + **version 7→8** (`fallbackToDestructiveMigration()` 기설정 → 자동 destructive, 외상 명단 손실 = 본인 "다음 날 새 시작" 정합)
+- `SettlementTabHost.kt` — `pages` "전체/기사별/일일" **3개**로 축소(대기·외상 제거) + `when(selected)` 0=AllTrips/1=DriverSummary/2=DailySession 재배치
+- `MainActivity.kt` — `_settlementInitialTab.value = 2 → 1` (ACTION_SHOW_SETTLEMENT "기사별" 탭, 재배치 정합)
+- `SettlementViewModel.kt` — import 2개 + `creditDao` 필드 + getAllCreditPersons collect 블록 + `CreditEntry`/`CreditPerson` data class + `_creditPersons`/`creditPersons` + `addOrIncrementCredit`/`reduceCredit` + `_creditedTripIds`/`creditedTripIds`/`markTripCredited`/`fetchPhoneForCall` 폐기. (`import kotlinx.coroutines.flow.first`는 line 661에서 여전히 사용 → 유지)
+- `AllTripsScreen.kt` — CreditDialog import + `creditedIds`/`showCreditDialog` + `checkBeforeFinalize`(이체/외상 미처리 경고) + `showPreFinalizeWarning`/`preFinalizeWarnings` state + 경고 다이얼로그 블록 폐기 + 업무마감 버튼 onClick 직접 `showFinalizeDialog=true`. **직접운행 매출·통계·미수금(creditSum) 표시는 유지**.
+
+**무변경 (의도)**:
+- **driver_app** — `confirmAndFinalizeTrip` 외상 분기(creditAmount set)는 손님정보 수집(CreditDialog)이 아니라 redesign이 *유지*하는 미수금 통계 입력이라 제거 시 통계 깨짐 → 손대지 않음. 결제수단 4버튼 UI 단순화(HomeScreen 812~)는 **commit 4(completeRide) 자리**.
+- **directRunTrips** — §10.4 동결. AllTripsScreen 직접운행 매출/`applyDirectRunFilter`/StateFlow 그대로.
+
+**plan 대비 정정 2건 (클코 학습)**:
+1. dead 체인이 plan §10.3 명시(`SettlementDatabase`+`CreditEntity`)보다 넓었음 — 같은 죽은 체인 3파일(SettlementCacheRepository/dao.SettlementDao/entity.SettlementEntity) 인스턴스화 0 실측 후 함께 삭제. *진입 전 Grep으로 "체인 전체 생사" 확인이 plan 파일 목록보다 우선*.
+2. driver_app 외상 분기 = 통계 입력이라 무변경. *plan 항목을 글자대로 받지 말고 "그 코드가 유지 기능에 쓰이는지" 확인 — 최소개입*(§10.3 클코 학습 정합).
+
+### 11.2 commit 4 새 세션 진입 가이드
+
+**commit 4 = 매니저 정산 조회 복원 + 기사 정정 모달 + rules + cron 단순화 + 메모리 갱신** (plan §10 commit 4 중 #1 제외). 신규 코드 多 → 새 세션 권장(§9.4 #3).
+**★ 2026-05-29 본인 결정 = 옵션1**: commit 4 범위에서 **#1(콜 완료 결제 다이얼로그 재작성) 분리**. 아래 §11.2-A 참조. commit 4는 **#2·#3·#5·#6만**.
+
+**작업 자리** (모두 *진입 시 Grep 재검증 필수* — 아래 line/함수는 2026-05-29 시점 추정):
+1. ~~**콜 완료 4버튼 원클릭**~~ — **분리·보류** (§11.2-A). commit 4 미포함.
+2. **일과 끝 정정 모달 + `updateCallPaymentMethod(callId, newMethod)` 신규** — 기사 정산 화면 콜 행 클릭 → 결제수단 변경 → 통계 자동 재계산 (DriverViewModel 신규 함수 + HistorySettlementScreen UI).
+3. **firestore.rules** — 기사 본인 콜 `paymentMethod` update 권한 1줄.
+4. **`autoFinalizeSettlementSessions` 본문 단순화** — functions/src/handlers/settlement.ts. ✅ **2026-05-29 Grep/Read 재검증 = 이미 단순(무변경)**: settlement.ts:246~308 본문이 이미 `metadata.isFinalized` 토글 + version/timestamp만, carryOver 자리 **없음**. → commit 4에서 **코드 변경 불필요**(확인만). plan §10 #4는 commit 3 driver 외상분기와 같은 "이미 됨" 패턴.
+5. **★ §10.3 누락 보강 — 매니저 dailySettlement 재로드 복원**: commit 1에서 carryOverListener 폐기 → `_dailySettlementList` set 로직 소멸 → commit 2에서 dead state 폐기됨. 결과 **매니저가 기사 제출 일일 정산(finalDeposit/settlementDiff/submittedAt) 조회 기능이 현재 없음**. commit 4에서 `SettlementViewModel`에 designated_drivers 문서 dailySettlement **1회 fetch(또는 리스너)** 신규 + `_dailySettlementList` 복원 + `DriverSummaryScreen`/`AllTripsScreen` 매니저 정산 요약 표시 복원. `DriverDailySettlementSummary`(hasSubmitted getter)는 이 복원 위해 commit 2에서 의도적 유지함.
+6. **메모리 갱신** — 본 §11(commit 3 완료) + commit 4 결과 + MEMORY.md 인덱스. **commit 4에 함께 commit**(메모리 갱신은 commit 4 자리, §10.3).
+
+**진입 절차**: ① 본 §11(특히 §11.2-A) + plan §10 + redesign §3.3/§5.2 정독 → ② Grep 재검증(`HistorySettlementScreen` 콜 행/정정 / `dailySettlement` / `_dailySettlementList` / `DriverSummaryScreen`·`AllTripsScreen` 매니저 요약 / `autoFinalizeSettlementSessions`) → ③ plan agent(필요 시) → ④ 본인 승인 → ⑤ 코드 진입 → ⑥ 양 앱 assembleDebug + test 컴파일 + functions `npm run build` → ⑦ 외상·포인트 무관 자리만 선별 stage commit 4.
+
+**commit 4 후**: 4 commit 묶음(1~4) **한 번 push** + functions/firestore.rules **1회 deploy**(commit 4 후) + 단말 install(양평 정산 현재 사용 X라 우선순위 낮음).
+
+### 11.2-A #1 결제 다이얼로그 분리 결정 (2026-05-29 본인 = 옵션1)
+
+- **막힌 자리**: redesign §3.2/§5.1 "4버튼 원클릭(현금/이체/외상/포인트), 1액션" vs §9.4 "paymentMethod 5종 유지 + creditAmount 계산 유지" vs 인계 §11.2(구) "4버튼 + 현금+포인트 자연 유지" — **3개 설계 자리가 서로 충돌**. "원클릭(입력 0)"과 "포인트 결제(금액 입력 필수)"는 본질적 양립 불가.
+- **사실 검증 (코드 실측)**: driver_app `HomeScreen.kt` 693~752 = `"앱 회원 리워드 포인트"` 카드 (`customerPointInfo` currentPoints/grade + `rewardPointsToUse` 입력) + `confirmAndFinalizeTrip` `pointsUsed`/`finalFare`. = **기존 손님 적립 포인트 결제 기능** (식당 4중 노드 포인트 적립 + customer_app + functions/points.js 계열). **쿠폰(할인권) 앱과 다른 시스템**. 정산 재설계(PTT §3 = 매니저·기사 정산 흐름) 스코프 *아님*.
+- ⚠️ **클코 오류 정정 (2026-05-29, 본인 지적 "쿠폰트랙이 왜 나오지?")**: 최초 보고에서 pointsUsed를 보고 "5/4 P0 포인트 결제 풀 = 쿠폰 트랙"으로 *코드 확인 없이 단정*. 실측 결과 = 손님 리워드 포인트 결제(기존 기능). 포인트 결제 풀(P0)과 쿠폰앱(5/19)은 관련 있어도 같은 트랙 아님. §9.4 #7(추정을 사실로 덮어씀) 재발 — *코드 확인 전 트랙 귀속 단정 금지*.
+- **본인 결정(옵션1)**: commit 4에서 **#1 분리**. 근거(정정 후) = ① 정산 재설계 스코프 밖(다른 시스템) ② 기존 손님 포인트 결제 기능 회귀 위험 ③ 문서 충돌(§3.2/§5.1 "4버튼 원클릭 입력0" ↔ §9.4 "5종 유지" + 포인트는 금액 입력 필수). 옵션1 = 손상 0·되돌릴 것 0(보존적) + "최소개입" 정합.
+- **재개 조건**: 손님 포인트 결제 UX 재설계는 별도 결정(포인트/식당 트랙 또는 결제 UX 통합 시점). 그 전까지 현행 5버튼 다이얼로그 그대로 유지(creditAmount·pointsUsed 로직 무변경).
+- ⚠️ **redesign 문서 정정 필요**(별도): §3.2/§5.1 "4버튼 원클릭" 함의는 §9.4(5종 유지)·손님 포인트 결제와 충돌 → 재설계 전까지 §9.4가 우선. redesign 갱신 시 명시.
+
+### 11.3 클로징 인터뷰 (2026-05-29 본 세션 자체 점검, §9.4 #6·#7)
+
+1. **컴파일** = 추정 아님. 양 앱 BUILD SUCCESSFUL **실측** 확인 후 commit. ✅
+2. **line 번호** = 본 §11 자리들은 2026-05-29 working tree 기준 *추정*. 새 세션 진입 직후 **Grep 재검증** 필수(특히 HomeScreen 결제수단 다이얼로그 line).
+3. **무관 누적 미터치** = commit 3 stage에 16파일만 선별. `CallDetectorService.kt`/customer_app_flutter/head_manager_web/functions(lib·package) 모두 미커밋 그대로 ✅ (git status 확인).
+4. **메모리 미커밋 상태** = 본 파일(ptt §3) + MEMORY.md는 commit 4 자리라 **의도적으로 미커밋**. commit 4 stage 시 함께. commit 4 *전* 다른 commit에 섞지 말 것.
+5. **push/deploy 방침** = 4 commit 모두 완성 후 한 묶음 push + commit 4 후 deploy 1회. commit 3 단독 push 금지(plan §10).
+
+### 11.4 commit 4 완료 (2026-05-29 세션) — 본 커밋
+
+- **plan**: `C:\Users\kala1\.claude\plans\woolly-fluttering-feather.md` (승인). 스코프 = #2/#3/#5/#6 (#1 분리·#4 무변경).
+- **검증 ✅ (실측)**: call_manager + driver_app `:app:assembleDebug` + `:app:compileDebugUnitTestKotlin` + `:app:compileDebugAndroidTestKotlin` 모두 **BUILD SUCCESSFUL** (Divider deprecation·obsolete options 경고만, 무해).
+- **#2 기사 정정 모달 + `updateCallPaymentMethod`** (driver_app):
+  - `DriverViewModel`: `TripHistoryItem`에 `callId` 추가(loadTodaySettlement `doc.id` + confirmAndFinalizeTrip `callId` 채움) + 신규 `updateCallPaymentMethod(callId,newMethod,onResult)` — calls doc의 paymentMethod + cashReceived/creditAmount 재계산(현금/외상/이체 3종), 기록 후 `refreshSettlementData()`로 권위 재로드(수동 delta X).
+  - `HistorySettlementScreen`: 콜 행 `tripHistoryList` 객체 순회 + 조건부 `clickable` → 정정 AlertDialog(현금/외상/이체 3버튼). **게이트 2중**: 포인트 계열 콜 비활성 + 제출 후(PENDING_CONFIRM) 비활성. Toast import 추가.
+- **#3 firestore.rules**: calls update에 기사 본인 COMPLETED 콜 결제필드 정정 OR 절 추가 — `affectedKeys().hasOnly(['paymentMethod','cashReceived','creditAmount','finalFare'])`, status·fare·completedAt 불변(offices L114 화이트리스트 패턴 정합).
+- **#5 매니저 dailySettlement 재로드 복원** (call_manager):
+  - `SettlementViewModel`: `_dailySettlementList: StateFlow<List<DriverDailySettlementSummary>>` 신규 + import. **기존 `fetchCompletedCalls`의 designated_drivers fetch 재사용**(추가 read 0, 리스너·carryOver 명칭 X) — 각 doc `dailySettlement` → `fromMap` → `submittedAt != null`만 summary로 → submittedAt desc.
+  - `DriverSummaryScreen`(ui/settlement/**screen**/): dailySettlementList collect → driverId 매핑 → `DriverDetailCard`에 제출 배지+finalDeposit/realDeposit/settlementDiff(환급/미납)/마감시간 표시 복원.
+- **#4**: `autoFinalizeSettlementSessions` 이미 단순(isFinalized 토글만) → **무변경 확정**(commit 4 코드 0).
+- **★ 오염/누락 검토 + 결정 A (본인)**: `onCallCompletedUpdateSettlement`(index.ts:4985)는 COMPLETED **전이**에서만 발화 + addCallToSettlementSession callId 중복 스킵 → #2 정정이 settlementSessions·dailySettlement에 전파 안 됨. **결정 A** = 전파 안 함 + 정정 모달 **제출 전 한정**(dailySettlement 항상 fresh 기록). 매니저 라이브 통계(전체/기사별 탭)는 calls 직접이라 정정 반영됨. **함수 변경 0**, deploy = firestore.rules만.
+- **클로징 인터뷰**: 컴파일 실측 ✅ / 무관 누적(CallDetectorService·customer_app·head_manager·functions lib·package) 미터치 ✅ / source/ 백업 미터치 ✅(DriverSummaryScreen 실경로 = ui/settlement/screen/).
+- **남은 단계**: push(1~4 묶음) + firestore.rules deploy 1회 + (선택)단말 install. **#1 결제 다이얼로그·directRun은 보류 유지**.
 
 ---
 

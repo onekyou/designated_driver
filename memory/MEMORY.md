@@ -259,6 +259,21 @@
 - **P3·P4 deploy 유보 결정**: 본인 의문 "현재 deploy 의미?" → 클코 사실 검증 → 유보 권장 채택 (P5~P8 묶음으로 통합). commit `cf7226ac` 이미 origin push 완료 (0/0 동기화 확인). 양평 정산 실 사용 X → 6시→10시 운영 impact 0
 - **다음 세션 P5 진입 안내**: 상세 본문 `memory/designated_drive/ptt_section3_entry_2026-05-27.md` §8.2 (P5 본질 + 코드 자리 4개 + 진입 흐름 5단계 + 비용·운영 사전 검토 + 본인 두 원칙 정합 점검). 다음 세션 시작 시 본 단락 + §8.2 정독 후 본인에게 설명 자리 마련
 
+## 5/28 PTT §3 commit 1 ✅ — 확인/이체/거절 함수 + UI + FCM + cleanup gate 폐기
+- **commit `e7403ded`** (manager-direct-drive, 13 files / +152 / -1622 / 순감 1470줄, push X — plan §10 정합 = 4 commit 모두 완성 후 한 묶음)
+- **본 세션 자체 검증 4건 통과**: git diff vs §9.1 명단 일치 / Grep §9.2 line 정확 + 누락 1건 발견 (DriverViewModel.kt:1533 `_carryOver` 호출자, commit 2 자리) / functions npm run build ✅ (이전 세션 unused import `buildFcmPayload` 1줄 fix) / call_manager + driver_app assembleDebug ✅
+- **plan**: `C:\Users\kala1\.claude\plans\refactored-tickling-codd.md`. 다음 세션 진입: commit 2 (enum + data class). 자체 검증 의무·line 재검증 4건: `memory/designated_drive/ptt_section3_entry_2026-05-27.md` §9 (§9.1.1 본 세션 결과 + §9.1.2 commit hash + §9.7 자체 검증 + §9.4 #7 학습)
+- **본 commit 후 잔존** (commit 2 자연 흡수): SettlementViewModel.kt:740-756 unused 자리 (`driverShare` / `cashReceived` / `driverTotalFare` / `driverDeposit` — `clearDailySettlement` 호출만 살리려 forEach 자리 살림, 컴파일 warning 만)
+- **클코 학습 §9.4 #7 (본 세션 핵심)**: 자기 모니터링 한계 = 본인 짚음 의존 (plan 권위 부정 / "자기 자기" 발화 톤 / 인계 line 자동 shift 미반영 / 본인 답 자리 자기 회고로 메움). §9.5 피드백 4종 승격 권장 (다음 세션 첫 turn 본인 결정)
+
+## 5/29 PTT §3 commit 2·3·4 ✅ — enum/data class + 외상 폐기 + 기사 정정·매니저 조회 (다음 = push+deploy)
+- **commit 2 `3b3d808b`** (16 files +113/-1695, 순감 1582): enum(DailySettlementStatus/CarryOverStatus/SettlementFilter) + DriverCarryOver* data class + DriverDailySettlement 16→8필드 + SettlementCalc carryOver 3종 폐기 + carryOver UI·계산 정리 + dead state(_carryOver 등) 회귀 수정. 양 앱 main+test BUILD SUCCESSFUL.
+- **commit 3 `6defedb1`** (16 files +7/-1059, 순감 1052): **외상 전체 폐기(옵션1)** — Room v7→v8(CreditPersonEntity/CreditEntryEntity 제거 + creditDao 폐기) + dead 체인 5파일(SettlementDatabase/SettlementCacheRepository/dao.SettlementDao/entity.CreditEntity·SettlementEntity) + per-call 처리(PendingSettlementsScreen 탭1 / CreditManagementScreen 탭4 / CreditDialog) + SettlementTabHost 3탭(전체/기사별/일일) + MainActivity initTab 2→1 + ViewModel 외상 자리 전부 + AllTripsScreen 이체/외상 경고. **driver_app 무변경**(creditAmount는 미수금 통계용 유지), **directRunTrips 동결**(§10.4). 양 앱 main+test BUILD SUCCESSFUL(실측).
+- **push X / deploy X** — 4 commit 묶음 완성 후 1회(plan §10). commit 1·2·3 = `e7403ded`·`3b3d808b`·`6defedb1`.
+- **commit 4 ✅ (본 세션, push 전)**: #2 기사 콜 정정 모달+`updateCallPaymentMethod`(현금/외상/이체 3종, 제출 전·포인트 무관 게이트, Firestore 기록 후 refreshSettlementData 재로드) + #3 firestore.rules(기사 본인 COMPLETED 콜 결제필드 화이트리스트) + #5 매니저 dailySettlement 재로드 복원(기존 designated_drivers fetch 재사용, 리스너 0 / DriverSummaryScreen 제출 요약 표시) + #6 메모리. **#4(autoFinalizeSettlementSessions)는 이미 단순=무변경**. 양 앱 main+test BUILD SUCCESSFUL(실측). **#1 결제 다이얼로그·directRun은 보류 유지**. ★오염 검토 결정 A: settlementSessions·dailySettlement 정정 전파 안 함(제출 전 정정만 허용→제출본 정합, 라이브 통계는 calls 직접이라 반영) → 함수 변경 0. 상세 = ptt §11.4.
+- **#1 분리 근거(ptt §11.2-A)**: HomeScreen 5버튼/pointsUsed = **기존 손님 적립 포인트 결제**(식당 4중노드 + customer_app/points.js, **쿠폰앱 아님**) + 스코프 밖 + 회귀 위험 + 설계 충돌(§3.2 vs §9.4). ⚠️ 최초 "쿠폰 트랙" 단정 = 클코 오류(§9.4 #7, 정정+feedback_self_monitoring_limit.md 승격).
+- **다음 = push + deploy**: 4 commit(`e7403ded`·`3b3d808b`·`6defedb1`·commit4) **한 묶음 push** + `firebase deploy --only firestore:rules` 1회(functions deploy 불필요 — #4 무변경) + (선택)단말 install. **진입 가이드 단일 출처**: ptt §11.4(commit4 결과)·§11.2-A(#1)·§11.3(클로징). plan: `woolly-fluttering-feather.md`.
+
 ## 도메인별 진입점
 | 도메인 | 인덱스 | 상태 |
 |--------|--------|------|

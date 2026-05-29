@@ -32,6 +32,7 @@ import com.designated.callmanager.data.settlement.CallSettlement
 import com.designated.callmanager.data.settlement.SettlementMetadata
 import com.designated.callmanager.data.settlement.SettlementTotals
 import com.designated.callmanager.data.settlement.DriverDailySettlement
+import com.designated.callmanager.data.settlement.DriverDailySettlementSummary
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.functions.FirebaseFunctions
@@ -99,6 +100,10 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
     // 개별 기사 정산 완료(퇴근) 시 갱신된 기사별 마감 시점
     private val _driverLastClearedMap = MutableStateFlow<Map<String, Long>>(emptyMap())
     val driverLastClearedMap: StateFlow<Map<String, Long>> = _driverLastClearedMap.asStateFlow()
+
+    // ✅ 매니저 dailySettlement 조회 복원 (commit 4 #5) — 기사 제출 일일 정산 요약 (1회 fetch, 리스너 X)
+    private val _dailySettlementList = MutableStateFlow<List<DriverDailySettlementSummary>>(emptyList())
+    val dailySettlementList: StateFlow<List<DriverDailySettlementSummary>> = _dailySettlementList.asStateFlow()
 
     private val database = CallManagerDatabase.getInstance(getApplication())
     private val repository = SettlementRepository(database)
@@ -330,12 +335,28 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
             .get()
             .addOnSuccessListener { driversSnapshot ->
                 val driverClearedMap = mutableMapOf<String, Long>()
+                val dailySettlements = mutableListOf<DriverDailySettlementSummary>()
                 driversSnapshot.documents.forEach { doc ->
                     val driverCleared = doc.getTimestamp("settlementLastCleared")?.toDate()?.time ?: 0L
                     driverClearedMap[doc.id] = driverCleared
+
+                    // ✅ 기사 제출 일일 정산(dailySettlement) 파싱 — 같은 fetch 재사용 (commit 4 #5)
+                    @Suppress("UNCHECKED_CAST")
+                    val dsMap = doc.get("dailySettlement") as? Map<String, Any?>
+                    val ds = DriverDailySettlement.fromMap(dsMap)
+                    if (ds.submittedAt != null) {
+                        dailySettlements.add(
+                            DriverDailySettlementSummary(
+                                driverId = doc.id,
+                                driverName = doc.getString("name") ?: "이름없음",
+                                dailySettlement = ds
+                            )
+                        )
+                    }
                 }
                 _driverLastClearedMap.value = driverClearedMap
-                Log.d("SettlementViewModel", "Driver settlementLastCleared map loaded: ${driverClearedMap.size} drivers")
+                _dailySettlementList.value = dailySettlements.sortedByDescending { it.dailySettlement?.submittedAt }
+                Log.d("SettlementViewModel", "Driver settlementLastCleared map loaded: ${driverClearedMap.size} drivers, dailySettlements: ${dailySettlements.size}")
 
                 // 2단계: COMPLETED 콜 조회
                 fetchCompletedCallsWithDriverFilter(provinceId, cityId, officeId, effectiveLastCleared)

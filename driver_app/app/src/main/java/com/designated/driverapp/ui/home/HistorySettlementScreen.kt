@@ -46,6 +46,7 @@ import java.util.Date
 import java.util.Locale
 import java.text.SimpleDateFormat
 import androidx.compose.foundation.clickable
+import android.widget.Toast
 import kotlinx.coroutines.launch
 import com.designated.driverapp.ui.home.logoutUserAndExitApp
 import androidx.compose.runtime.rememberCoroutineScope
@@ -98,6 +99,12 @@ fun HistorySettlementScreen(
     val tripHistoryList by viewModel.tripHistoryList.collectAsStateWithLifecycle()
     // 표시용 문자열 변환
     val tripHistory = tripHistoryList.map { it.toDisplayString() }
+
+    // 콜 단위 결제수단 정정 모달 (제출 전 + 현금/외상/이체 콜만). 제출 후(PENDING_CONFIRM)엔 잠금 —
+    // settlementSessions·dailySettlement 정정 전파 안 함(제출 전 정정만 허용해 제출본 정합 보장)
+    var editTargetCallId by remember { mutableStateOf<String?>(null) }
+    var editTargetMethod by remember { mutableStateOf("") }
+    val canEditPayment = uiState.driverStatus != DriverStatus.PENDING_CONFIRM
 
     // 정산 값 (Firestore calls 기반)
     val totalCount = todaySettlement.tripCount
@@ -287,22 +294,28 @@ fun HistorySettlementScreen(
                                 modifier = Modifier.padding(16.dp)
                             )
                         } else {
-                            tripHistory.forEach { summary ->
+                            tripHistoryList.forEach { item ->
+                                val editable = canEditPayment &&
+                                    item.callId.isNotBlank() &&
+                                    item.paymentMethod in listOf("현금", "외상", "이체")
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = CardDefaults.cardColors(containerColor = Color(0xFF3A3A3A)),
                                     shape = RoundedCornerShape(0.dp)
                                 ) {
-                                    val parts = summary.split("|timestamp=")
-                                    val displaySummary = parts[0]
-
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
+                                            .then(
+                                                if (editable) Modifier.clickable {
+                                                    editTargetCallId = item.callId
+                                                    editTargetMethod = item.paymentMethod
+                                                } else Modifier
+                                            )
                                             .padding(horizontal = 16.dp, vertical = 10.dp)
                                     ) {
                                         Text(
-                                            text = displaySummary,
+                                            text = item.toDisplayString(),
                                             style = MaterialTheme.typography.bodyLarge,
                                             fontWeight = FontWeight.Normal,
                                             color = Color.White
@@ -314,6 +327,30 @@ fun HistorySettlementScreen(
                     }
                 }
             }
+            // 콜 단위 결제수단 정정 모달 (현금/외상/이체 3버튼 원클릭)
+            editTargetCallId?.let { targetId ->
+                AlertDialog(
+                    onDismissRequest = { editTargetCallId = null },
+                    title = { Text("결제수단 정정") },
+                    text = { Text("이 콜의 결제수단을 변경합니다. (현재: $editTargetMethod)") },
+                    confirmButton = {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("현금", "외상", "이체").forEach { m ->
+                                TextButton(onClick = {
+                                    viewModel.updateCallPaymentMethod(targetId, m) { _, msg ->
+                                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                    }
+                                    editTargetCallId = null
+                                }) { Text(m) }
+                            }
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { editTargetCallId = null }) { Text("취소") }
+                    }
+                )
+            }
+
             Spacer(modifier = Modifier.height(12.dp))
 
             // 최종 납입액 계산 (사무실 몫 - 외상)
