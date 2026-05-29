@@ -187,23 +187,6 @@ class SettlementCalculatorTest {
     }
 
     @Test
-    fun day3_CP13_carryOverGeneration() {
-        // 1차 운행 후 미지급금 발생 확인
-        // B: 이체 7건 × 25000 = 175000 → deposit = 105000, credit = 175000
-        // rawFinalDeposit = 105000 - 175000 = -70000 → 미지급금 70000
-        val firstShift = TestSettlementFactory.createDay3Calls_firstShift()
-        val unpaid = SettlementCalculator.calculateTodayUnpaidByDriver(firstShift, RATIO)
-
-        val bUnpaid = unpaid["driver_B"] ?: 0
-        // B의 fare = 7 × 25000 = 175000
-        val bFare = 175000
-        val bDeposit = SettlementCalculator.calculateOfficeDeposit(bFare, RATIO) // 105000
-        val bCredit = bFare // 이체 전액 외상 = 175000
-        val expectedUnpaid = -(bDeposit - bCredit) // -(105000 - 175000) = 70000
-        assertEquals("B 미지급금 = 70,000", expectedUnpaid, bUnpaid)
-    }
-
-    @Test
     fun day3_CP14_multiDriverFilterIndependent() {
         // A와 B의 마감 시점이 다를 때 각각 독립적으로 필터
         val firstShift = TestSettlementFactory.createDay3Calls_firstShift()
@@ -446,24 +429,6 @@ class SettlementCalculatorTest {
 
             val expected = officeDeposit - breakdown.totalFare + breakdown.cashSum + breakdown.bankSum + breakdown.creditSum - breakdown.pointSum
             assertEquals("Day${dayIdx + 1}: realIncome 항등식", expected, realIncome)
-        }
-    }
-
-    @Test
-    fun crossValidation_todayUnpaid_negativeRealDepositOnly() {
-        // 미지급금은 realDeposit < 0인 기사에게만 발생
-        val calls = TestSettlementFactory.createDay1Calls()
-        val stats = SettlementCalculator.calculateDriverStats(calls, RATIO)
-        val unpaid = SettlementCalculator.calculateTodayUnpaidByDriver(calls, RATIO)
-
-        stats.forEach { stat ->
-            val driverUnpaid = unpaid[stat.driverId] ?: 0
-            if (stat.realDeposit >= 0) {
-                assertEquals("${stat.name}: realDeposit >= 0 → 미지급금 0", 0, driverUnpaid)
-            } else {
-                assertEquals("${stat.name}: realDeposit < 0 → 미지급금 = -realDeposit",
-                    -stat.realDeposit, driverUnpaid)
-            }
         }
     }
 }

@@ -33,12 +33,7 @@ import com.designated.callmanager.data.settlement.SettlementSession
 import com.designated.callmanager.data.settlement.CallSettlement
 import com.designated.callmanager.data.settlement.SettlementMetadata
 import com.designated.callmanager.data.settlement.SettlementTotals
-import com.designated.callmanager.data.settlement.CarryOverStatus
-import com.designated.callmanager.data.settlement.DailySettlementStatus
-import com.designated.callmanager.data.settlement.DriverCarryOver
-import com.designated.callmanager.data.settlement.DriverCarryOverSummary
 import com.designated.callmanager.data.settlement.DriverDailySettlement
-import com.designated.callmanager.data.settlement.DriverDailySettlementSummary
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.functions.FirebaseFunctions
@@ -136,14 +131,6 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
 
     private val _hasCloudBackups = MutableStateFlow(false)
     val hasCloudBackups: StateFlow<Boolean> = _hasCloudBackups.asStateFlow()
-
-    // 이월 정산 (기사별 미지급금) 관련 StateFlow
-    private val _carryOverList = MutableStateFlow<List<DriverCarryOverSummary>>(emptyList())
-    val carryOverList: StateFlow<List<DriverCarryOverSummary>> = _carryOverList.asStateFlow()
-
-    // 일일 정산 (기사별 업무마감) 관련 StateFlow
-    private val _dailySettlementList = MutableStateFlow<List<DriverDailySettlementSummary>>(emptyList())
-    val dailySettlementList: StateFlow<List<DriverDailySettlementSummary>> = _dailySettlementList.asStateFlow()
 
     // 정산 확인 중 (중복 클릭 방지)
     private val _isConfirming = MutableStateFlow(false)
@@ -736,27 +723,9 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                     }
             }
 
-            // ✅ 기사별 미지급금 계산 및 carryOver 저장
-            val driverTrips = trips.groupBy { it.driverId }
-            driverTrips.forEach { (driverId, driverTripList) ->
-                if (driverId.isBlank()) return@forEach
-
-                // 기사 몫 계산
-                val driverTotalFare = driverTripList.sumOf { it.fare }
-                val driverDeposit = (driverTotalFare * ratio / 100)
-                val driverShare = driverTotalFare - driverDeposit
-
-                // 현금 수령액 계산
-                val cashReceived = driverTripList.sumOf { trip ->
-                    when {
-                        trip.paymentMethod == "현금" -> trip.fare
-                        trip.paymentMethod.startsWith("현금+") -> trip.cashAmount ?: 0
-                        else -> 0
-                    }
-                }
-
-                // ✅ dailySettlement 초기화 (다음 세션을 위해)
-                clearDailySettlement(driverId)
+            // ✅ dailySettlement 초기화 (다음 세션을 위해)
+            trips.groupBy { it.driverId }.keys.forEach { driverId ->
+                if (driverId.isNotBlank()) clearDailySettlement(driverId)
             }
         }
 

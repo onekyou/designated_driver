@@ -16,9 +16,6 @@ import com.designated.driverapp.data.Constants
 import com.designated.driverapp.data.repository.CustomerPointsRepository
 import com.designated.driverapp.data.repository.SettlementRepository
 import com.designated.driverapp.data.settlement.CallSettlement
-import com.designated.driverapp.data.settlement.CarryOverStatus
-import com.designated.driverapp.data.settlement.DailySettlementStatus
-import com.designated.driverapp.data.settlement.DriverCarryOver
 import com.designated.driverapp.data.settlement.DriverDailySettlement
 import com.google.firebase.Timestamp
 import com.designated.driverapp.model.CallInfo
@@ -76,10 +73,6 @@ class DriverViewModel @Inject constructor(
     private val _notificationCallId = MutableStateFlow<String?>(null)
     val notificationCallId: StateFlow<String?> = _notificationCallId.asStateFlow()
 
-    // 이월 정산 (미수령금) StateFlow
-    private val _carryOver = MutableStateFlow<DriverCarryOver?>(null)
-    val carryOver: StateFlow<DriverCarryOver?> = _carryOver.asStateFlow()
-
     // 분배비율 (Firestore offices에서 읽기)
     private val _depositRatio = MutableStateFlow(60)
     val depositRatio: StateFlow<Int> = _depositRatio.asStateFlow()
@@ -99,10 +92,6 @@ class DriverViewModel @Inject constructor(
     // 업무마감 중 (중복 클릭 방지)
     private val _isSubmittingSettlement = MutableStateFlow(false)
     val isSubmittingSettlement: StateFlow<Boolean> = _isSubmittingSettlement.asStateFlow()
-
-    // 일일 정산 상태 (carryOverListener에서 업데이트)
-    private val _dailySettlementStatus = MutableStateFlow(DailySettlementStatus.WORKING)
-    val dailySettlementStatus: StateFlow<DailySettlementStatus> = _dailySettlementStatus.asStateFlow()
 
     // calls 기반 오늘 정산 데이터
     data class TodaySettlement(
@@ -149,7 +138,6 @@ class DriverViewModel @Inject constructor(
     private var assignedCallsListener: ListenerRegistration? = null
     private var driverStatusListener: ListenerRegistration? = null
     private var completedCallsListener: ListenerRegistration? = null
-    private var carryOverListener: ListenerRegistration? = null
 
     private val fusedLocationClient: FusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(appContext)
     private val geocoder: Geocoder = Geocoder(appContext, Locale.KOREA)
@@ -207,8 +195,6 @@ class DriverViewModel @Inject constructor(
         driverStatusListener = null
         completedCallsListener?.remove()
         completedCallsListener = null
-        carryOverListener?.remove()
-        carryOverListener = null
     }
 
     fun initializeListenersWithInfo(provinceId: String, cityId: String, officeId: String, driverId: String) {
@@ -1514,48 +1500,13 @@ class DriverViewModel @Inject constructor(
                     .collection(Constants.COLLECTION_OFFICES).document(officeId)
                     .collection(Constants.COLLECTION_DRIVERS).document(driverId)
 
-                // 기존 dailySettlement 읽기 (통합 여부 확인)
-                val driverDoc = driverRef.get().await()
-                @Suppress("UNCHECKED_CAST")
-                val existingSettlementMap = driverDoc.get("dailySettlement") as? Map<String, Any?>
-                val prevSettlement = DriverDailySettlement.fromMap(existingSettlementMap)
-                val isIntegration = prevSettlement.status == DailySettlementStatus.PENDING_CONFIRM
-
                 val settlement = _todaySettlement.value
                 val ratio = _depositRatio.value
 
-                // 통합 시: 원본 carryOver.balance 사용, 신규 시: 현재 carryOver 사용
-                val originalCarryOverBalance = if (isIntegration) {
-                    // 통합: 이전 마감에 기록된 originalCarryOver 사용 (최초 값 유지)
-                    prevSettlement.originalCarryOver.toInt()
-                } else {
-                    // 신규: 현재 carryOver 사용
-                    _carryOver.value?.balance?.toInt() ?: 0
-                }
-
-                // 통합 시 이전 세션 값 합산
-                val mergedTripCount = if (isIntegration) prevSettlement.tripCount + settlement.tripCount else settlement.tripCount
-                val mergedTotalFare = if (isIntegration) prevSettlement.totalFare + settlement.totalFare else settlement.totalFare.toLong()
-                val mergedTotalCredit = if (isIntegration) prevSettlement.totalCredit + settlement.totalCredit else settlement.totalCredit.toLong()
-                val mergedRealDeposit = if (isIntegration) prevSettlement.realDeposit + realDeposit else realDeposit.toLong()
-
-                // 통합 시 1차 원본 값 보존 (이미 통합된 상태면 기존 original 유지)
-                val origTripCount = if (isIntegration) {
-                    if (prevSettlement.originalTripCount > 0) prevSettlement.originalTripCount else prevSettlement.tripCount
-                } else 0
-                val origTotalFare = if (isIntegration) {
-                    if (prevSettlement.originalTotalFare > 0) prevSettlement.originalTotalFare else prevSettlement.totalFare
-                } else 0L
-                val origRealDeposit = if (isIntegration) {
-                    if (prevSettlement.originalRealDeposit > 0) prevSettlement.originalRealDeposit else prevSettlement.realDeposit
-                } else 0L
-
-                // 통합된 값 기준으로 납입금 계산
-                val mergedOfficeDeposit = (mergedTotalFare * ratio / 100)
-                val mergedFinalDeposit = mergedOfficeDeposit - mergedTotalCredit
-
-                // 통합 기준 carryOver 재계산 (원본 carryOver 기준)
-                val remainingCarryOver = originalCarryOverBalance - mergedFinalDeposit.toInt() + mergedRealDeposit.toInt()
+                // 당일 정산 계산 (이월 없음 — 그날 단위)
+                val officeDeposit = (settlement.totalFare.toLong() * ratio / 100)
+                val finalDeposit = officeDeposit - settlement.totalCredit
+                val settlementDiff = realDeposit.toLong() - finalDeposit
 
                 // 날짜 계산: 10시 이전이면 전날로 처리 (콜매니저와 동일한 로직)
                 val cal = java.util.Calendar.getInstance()
@@ -1567,19 +1518,13 @@ class DriverViewModel @Inject constructor(
 
                 val dailySettlement = DriverDailySettlement(
                     date = today,
-                    finalDeposit = mergedFinalDeposit,
-                    realDeposit = mergedRealDeposit,
-                    settlementDiff = (mergedRealDeposit - mergedFinalDeposit) + originalCarryOverBalance,
-                    totalFare = mergedTotalFare,
-                    totalCredit = mergedTotalCredit,
-                    tripCount = mergedTripCount,
-                    status = DailySettlementStatus.PENDING_CONFIRM,
-                    submittedAt = Timestamp.now(),
-                    calculatedCarryOver = remainingCarryOver.toLong(),
-                    originalCarryOver = originalCarryOverBalance.toLong(),
-                    originalTripCount = origTripCount,
-                    originalTotalFare = origTotalFare,
-                    originalRealDeposit = origRealDeposit
+                    finalDeposit = finalDeposit,
+                    realDeposit = realDeposit.toLong(),
+                    settlementDiff = settlementDiff,
+                    totalFare = settlement.totalFare.toLong(),
+                    totalCredit = settlement.totalCredit.toLong(),
+                    tripCount = settlement.tripCount,
+                    submittedAt = Timestamp.now()
                 )
 
                 // dailySettlement 저장 + 기사 상태를 PENDING_CONFIRM으로 변경 (배차 차단)
@@ -1593,19 +1538,8 @@ class DriverViewModel @Inject constructor(
                 // 로컬 상태도 즉시 반영
                 _uiState.update { it.copy(driverStatus = DriverStatus.PENDING_CONFIRM) }
 
-                val logMsg = if (isIntegration) {
-                    "Daily settlement MERGED: prev=${prevSettlement.tripCount}건 + curr=${settlement.tripCount}건 = ${mergedTripCount}건, realDeposit=$mergedRealDeposit"
-                } else {
-                    "Daily settlement submitted: tripCount=${mergedTripCount}, realDeposit=$mergedRealDeposit"
-                }
-                Log.d(TAG, logMsg)
-
-                val resultMsg = if (isIntegration) {
-                    "업무마감이 완료되었습니다. (이전 ${prevSettlement.tripCount}건 + 추가 ${settlement.tripCount}건 통합)"
-                } else {
-                    "업무마감이 완료되었습니다. 매니저 확인을 기다려주세요."
-                }
-                onResult(true, resultMsg)
+                Log.d(TAG, "Daily settlement submitted: tripCount=${settlement.tripCount}, realDeposit=$realDeposit")
+                onResult(true, "업무마감이 완료되었습니다.")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to submit daily settlement", e)
                 onResult(false, "업무마감 실패: ${e.message}")

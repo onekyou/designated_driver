@@ -323,15 +323,6 @@ data class DriverSettlementStat(
 }
 
 /**
- * 정산 확인 상태 필터
- */
-enum class SettlementFilter {
-    ALL,         // 전체
-    PENDING,     // 확인 대기
-    CONFIRMED    // 확인 완료
-}
-
-/**
  * 결제 방식 필터
  */
 enum class PaymentFilter {
@@ -343,25 +334,6 @@ enum class PaymentFilter {
 }
 
 /**
- * 이월 정산 상태
- */
-enum class CarryOverStatus {
-    PENDING,      // 미지급 상태
-    TRANSFERRED,  // 이체 완료 (기사 확인 대기)
-    SETTLED       // 정산 완료 (기사 수령 확인)
-}
-
-/**
- * 일일 정산 확인 상태
- */
-enum class DailySettlementStatus {
-    WORKING,          // 근무 중 (아직 마감 안 함)
-    PENDING_CONFIRM,  // 마감 완료, 매니저 확인 대기
-    CONFIRMED,        // 매니저 확인 완료
-    REJECTED          // 매니저 거절 (재제출 필요)
-}
-
-/**
  * 기사의 일일 정산 데이터 (업무마감 시 저장)
  * Firestore 경로: drivers/{driverId} 문서의 dailySettlement 필드
  */
@@ -369,19 +341,11 @@ data class DriverDailySettlement(
     val date: String = "",                 // YYYY-MM-DD
     val finalDeposit: Long = 0,            // 최종 납입액 (사무실 몫 - 외상)
     val realDeposit: Long = 0,             // 실납입 (기사가 실제로 낸 금액)
-    val settlementDiff: Long = 0,          // 정산 차액 (실납입 - 최종 납입액 + 이월)
+    val settlementDiff: Long = 0,          // 정산 차액 (실납입 - 최종 납입액)
     val totalFare: Long = 0,               // 총 운행료
     val totalCredit: Long = 0,             // 총 외상
     val tripCount: Int = 0,                // 운행 횟수
-    val status: DailySettlementStatus = DailySettlementStatus.WORKING,
-    val submittedAt: Timestamp? = null,    // 기사 마감 시간
-    val confirmedAt: Timestamp? = null,    // 매니저 확인 시간
-    val confirmedBy: String? = null,       // 확인한 매니저 ID
-    val calculatedCarryOver: Long = 0,     // 업무마감 시점 계산된 남은 미환급금
-    val originalCarryOver: Long = 0,       // 업무마감 시점 이월 미환급금 (원본)
-    val originalTripCount: Int = 0,        // 1차 마감 운행 횟수 (추가 운행 없으면 0)
-    val originalTotalFare: Long = 0,       // 1차 마감 총 운행료
-    val originalRealDeposit: Long = 0      // 1차 마감 실납입
+    val submittedAt: Timestamp? = null     // 기사 마감 시간
 ) {
     companion object {
         fun fromMap(map: Map<String, Any?>?): DriverDailySettlement {
@@ -394,19 +358,7 @@ data class DriverDailySettlement(
                 totalFare = (map["totalFare"] as? Long) ?: 0,
                 totalCredit = (map["totalCredit"] as? Long) ?: 0,
                 tripCount = (map["tripCount"] as? Long)?.toInt() ?: 0,
-                status = try {
-                    DailySettlementStatus.valueOf((map["status"] as? String) ?: "WORKING")
-                } catch (e: Exception) {
-                    DailySettlementStatus.WORKING
-                },
-                submittedAt = map["submittedAt"] as? Timestamp,
-                confirmedAt = map["confirmedAt"] as? Timestamp,
-                confirmedBy = map["confirmedBy"] as? String,
-                calculatedCarryOver = (map["calculatedCarryOver"] as? Long) ?: 0,
-                originalCarryOver = (map["originalCarryOver"] as? Long) ?: 0,
-                originalTripCount = (map["originalTripCount"] as? Long)?.toInt() ?: 0,
-                originalTotalFare = (map["originalTotalFare"] as? Long) ?: 0,
-                originalRealDeposit = (map["originalRealDeposit"] as? Long) ?: 0
+                submittedAt = map["submittedAt"] as? Timestamp
             )
         }
     }
@@ -419,92 +371,19 @@ data class DriverDailySettlement(
         "totalFare" to totalFare,
         "totalCredit" to totalCredit,
         "tripCount" to tripCount,
-        "status" to status.name,
-        "submittedAt" to submittedAt,
-        "confirmedAt" to confirmedAt,
-        "confirmedBy" to confirmedBy,
-        "calculatedCarryOver" to calculatedCarryOver,
-        "originalCarryOver" to originalCarryOver,
-        "originalTripCount" to originalTripCount,
-        "originalTotalFare" to originalTotalFare,
-        "originalRealDeposit" to originalRealDeposit
+        "submittedAt" to submittedAt
     )
 }
-
-/**
- * 기사별 이월 정산 데이터
- * Firestore 경로: drivers/{driverId}/carryOver (필드)
- */
-data class DriverCarryOver(
-    val balance: Long = 0,                    // 누적 미지급금 (양수 = 기사가 받아야 함)
-    val status: CarryOverStatus = CarryOverStatus.PENDING,
-    val lastUpdatedAt: Timestamp? = null,
-    val transferredAt: Timestamp? = null,     // 이체하기 클릭 시점
-    val transferredBy: String? = null,        // 이체 처리한 매니저 ID
-    val todayAmount: Long = 0                 // 오늘 발생한 미지급금
-) {
-    companion object {
-        fun fromMap(map: Map<String, Any?>?): DriverCarryOver {
-            if (map == null) return DriverCarryOver()
-            return DriverCarryOver(
-                balance = (map["balance"] as? Long) ?: 0,
-                status = try {
-                    CarryOverStatus.valueOf((map["status"] as? String) ?: "PENDING")
-                } catch (e: Exception) {
-                    CarryOverStatus.PENDING
-                },
-                lastUpdatedAt = map["lastUpdatedAt"] as? Timestamp,
-                transferredAt = map["transferredAt"] as? Timestamp,
-                transferredBy = map["transferredBy"] as? String,
-                todayAmount = (map["todayAmount"] as? Long) ?: 0
-            )
-        }
-    }
-
-    fun toMap(): Map<String, Any?> = mapOf(
-        "balance" to balance,
-        "status" to status.name,
-        "lastUpdatedAt" to lastUpdatedAt,
-        "transferredAt" to transferredAt,
-        "transferredBy" to transferredBy,
-        "todayAmount" to todayAmount
-    )
-}
-
-/**
- * 콜매니저에서 표시할 기사별 이월 정산 요약
- */
-data class DriverCarryOverSummary(
-    val driverId: String,
-    val driverName: String,
-    val balance: Long,             // 누적 미지급금
-    val todayAmount: Long,         // 오늘 발생 미지급금
-    val status: CarryOverStatus,
-    val transferredAt: Timestamp?
-)
 
 /**
  * 콜매니저에서 표시할 기사별 일일 정산 요약
- * carryOver 정보와 dailySettlement 정보를 합친 것
  */
 data class DriverDailySettlementSummary(
     val driverId: String,
     val driverName: String,
-    // dailySettlement 정보
-    val dailySettlement: DriverDailySettlement?,
-    // carryOver 정보
-    val carryOverBalance: Long,        // 이월 환급금
-    val carryOverStatus: CarryOverStatus
+    val dailySettlement: DriverDailySettlement?
 ) {
-    /** 업무마감 상태인지 */
+    /** 업무마감(제출)했는지 — dailySettlement 문서 존재로 판정 */
     val hasSubmitted: Boolean
-        get() = dailySettlement?.status == DailySettlementStatus.PENDING_CONFIRM
-
-    /** 확인 완료 상태인지 */
-    val isConfirmed: Boolean
-        get() = dailySettlement?.status == DailySettlementStatus.CONFIRMED
-
-    /** 거절 상태인지 */
-    val isRejected: Boolean
-        get() = dailySettlement?.status == DailySettlementStatus.REJECTED
+        get() = dailySettlement?.submittedAt != null
 }

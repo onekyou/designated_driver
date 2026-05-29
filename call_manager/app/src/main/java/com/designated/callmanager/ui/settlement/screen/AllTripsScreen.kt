@@ -21,8 +21,6 @@ import com.designated.callmanager.data.SettlementData
 import com.designated.callmanager.ui.settlement.SettlementViewModel
 import com.designated.callmanager.ui.settlement.SettlementCalculator
 import com.designated.callmanager.ui.settlement.screen.CreditDialog
-import com.designated.callmanager.data.settlement.DriverCarryOverSummary
-import com.designated.callmanager.data.settlement.CarryOverStatus
 import android.app.Activity
 import android.content.Context
 import androidx.compose.ui.platform.LocalContext
@@ -40,69 +38,6 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel(), onHome: (() -> Unit)? 
 
     var paymentDialog by remember { mutableStateOf<Pair<String, List<SettlementData>>?>(null) }
 
-    // 이월 정산 (기사별 미지급금) 데이터
-    val carryOverList by vm.carryOverList.collectAsState()
-
-    // 일일 정산 (기사별 업무마감) 데이터
-    val dailySettlementList by vm.dailySettlementList.collectAsState()
-
-    // 기사별 오늘 미지급금 계산 (로컬 trips 기반) - 기사앱과 동일한 로직
-    val todayUnpaidByDriver = remember(trips, ratio) {
-        SettlementCalculator.calculateTodayUnpaidByDriver(trips, ratio)
-    }
-
-    // 기사별 통합 미지급 현황 (이월분 + 오늘분)
-    data class DriverUnpaidSummary(
-        val driverId: String,
-        val driverName: String,
-        val carryOver: Long,      // 이월분 (Firestore)
-        val todayUnpaid: Int,     // 오늘분 (로컬 계산)
-        val total: Long,          // 합계
-        val status: CarryOverStatus
-    )
-
-    val driverUnpaidList = remember(carryOverList, todayUnpaidByDriver, trips, dailySettlementList) {
-        // 이월분이 있는 기사
-        val fromCarryOver = carryOverList.map { co ->
-            val todayAmount = todayUnpaidByDriver[co.driverId] ?: 0
-            val ds = dailySettlementList.find { it.driverId == co.driverId }
-            // balance가 확정값(오늘 포함)인 경우 todayAmount 재합산 금지:
-            // - TRANSFERRED/SETTLED: 매니저 이체/기사 수령 후 확정
-            // - dailySettlement.isConfirmed: 매니저 정산확인으로 calculatedCarryOver 저장됨
-            val managerFinalized = co.status == CarryOverStatus.TRANSFERRED ||
-                    co.status == CarryOverStatus.SETTLED ||
-                    ds?.isConfirmed == true
-            val displayTodayUnpaid = if (managerFinalized) 0 else todayAmount
-            val displayTotal = if (managerFinalized) co.balance else co.balance + todayAmount
-            DriverUnpaidSummary(
-                driverId = co.driverId,
-                driverName = co.driverName,
-                carryOver = co.balance,
-                todayUnpaid = displayTodayUnpaid,
-                total = displayTotal,
-                status = co.status
-            )
-        }
-
-        // 오늘 새로 미지급 발생한 기사 (이월분 없는)
-        val carryOverDriverIds = carryOverList.map { it.driverId }.toSet()
-        val fromToday = todayUnpaidByDriver
-            .filter { it.key !in carryOverDriverIds && it.value > 0 }
-            .map { (driverId, todayAmount) ->
-                val driverName = trips.find { it.driverId == driverId }?.driverName ?: "미지정"
-                DriverUnpaidSummary(
-                    driverId = driverId,
-                    driverName = driverName,
-                    carryOver = 0L,
-                    todayUnpaid = todayAmount,
-                    total = todayAmount.toLong(),
-                    status = CarryOverStatus.PENDING
-                )
-            }
-
-        (fromCarryOver + fromToday).sortedByDescending { it.total }
-    }
-
     // 업무 마감 확인 다이얼로그 상태
     var showFinalizeDialog by remember { mutableStateOf(false) }
     var isFinalizingInProgress by remember { mutableStateOf(false) }
@@ -117,15 +52,7 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel(), onHome: (() -> Unit)? 
     fun checkBeforeFinalize(): List<String> {
         val warnings = mutableListOf<String>()
 
-        // 1. 마감 대기 중인 기사 확인 (정산확인 안 된 기사)
-        val pendingConfirmDrivers = dailySettlementList.filter { it.hasSubmitted && !it.isConfirmed }
-        if (pendingConfirmDrivers.isNotEmpty()) {
-            val names = pendingConfirmDrivers.take(3).map { it.driverName }
-            val suffix = if (pendingConfirmDrivers.size > 3) " 외 ${pendingConfirmDrivers.size - 3}명" else ""
-            warnings.add("🔔 정산확인 대기: ${names.joinToString(", ")}$suffix")
-        }
-
-        // 2. 대기탭의 이체/외상 콜 미처리 확인 (creditedIds에 없는 이체/외상 콜)
+        // 대기탭의 이체/외상 콜 미처리 확인 (creditedIds에 없는 이체/외상 콜)
         val pendingPaymentTrips = trips.filter {
             it.paymentMethod in listOf("이체", "외상") && !creditedIds.contains(it.callId)
         }
@@ -136,16 +63,6 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel(), onHome: (() -> Unit)? 
             if (transferCount > 0) details.add("이체 ${transferCount}건")
             if (creditCount > 0) details.add("외상 ${creditCount}건")
             warnings.add("💳 정산 미처리: ${details.joinToString(", ")}")
-        }
-
-        // 3. 미지급금 이체 대기 확인 (PENDING 상태)
-        val pendingTransferDrivers = carryOverList.filter {
-            it.balance > 0 && it.status == CarryOverStatus.PENDING
-        }
-        if (pendingTransferDrivers.isNotEmpty()) {
-            val names = pendingTransferDrivers.take(3).map { it.driverName }
-            val suffix = if (pendingTransferDrivers.size > 3) " 외 ${pendingTransferDrivers.size - 3}명" else ""
-            warnings.add("💰 미지급금 이체 대기: ${names.joinToString(", ")}$suffix")
         }
 
         return warnings
@@ -261,111 +178,6 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel(), onHome: (() -> Unit)? 
             }
         }
 
-        Spacer(Modifier.height(12.dp))
-
-        // 기사별 미지급금 테이블 (타이틀 클릭 시 펼침)
-        var unpaidExpanded by remember { mutableStateOf(false) }
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF3A3A3A))
-        ) {
-            Column(Modifier.padding(12.dp)) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { unpaidExpanded = !unpaidExpanded },
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "기사별 미지급 현황",
-                            color = Color(0xFFFFAA00),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            if (unpaidExpanded) "▾" else "▸",
-                            color = Color(0xFFFFAA00),
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                    }
-                    Text(
-                        "총 ${"%,d".format(driverUnpaidList.sumOf { it.total })}원",
-                        color = if (driverUnpaidList.sumOf { it.total } > 0) Color(0xFFFF6666) else Color.Gray,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-
-                if (unpaidExpanded) {
-                    Spacer(Modifier.height(8.dp))
-
-                if (driverUnpaidList.isEmpty()) {
-                    Text(
-                        "미지급금 없음",
-                        color = Color.Gray,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                } else {
-                    // 테이블 헤더
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("기사", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-                        Text("이월", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-                        Text("오늘", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-                        Text("합계", color = Color.Gray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-                    }
-                    HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f), modifier = Modifier.padding(vertical = 4.dp))
-
-                    // 기사별 행 (최대 5명까지만 표시)
-                    driverUnpaidList.take(5).forEach { item ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                item.driverName.take(4),
-                                color = Color.White,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                if (item.carryOver > 0) "${"%,d".format(item.carryOver)}" else "-",
-                                color = if (item.carryOver > 0) Color.White else Color.Gray,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                if (item.todayUnpaid > 0) "+${"%,d".format(item.todayUnpaid)}" else "-",
-                                color = if (item.todayUnpaid > 0) Color(0xFFFFAA00) else Color.Gray,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                "${"%,d".format(item.total)}",
-                                color = Color(0xFFFF6666),
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-
-                    if (driverUnpaidList.size > 5) {
-                        Text(
-                            "외 ${driverUnpaidList.size - 5}명 더보기 → 기사별 탭",
-                            color = Color.Gray,
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                    }
-                }
-                } // if (unpaidExpanded)
-            }
-        }
         Spacer(Modifier.height(8.dp))
 
         Box(Modifier.weight(1f)) {

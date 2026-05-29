@@ -197,35 +197,6 @@ class SettlementConsistencyTest {
         assertEquals("realIncome 항등식", expected, realIncome)
     }
 
-    // ===== Test 3: 미지급금 계산 정합성 =====
-
-    @Test
-    fun firestoreTrips_unpaidCalculationConsistency() {
-        val snapshot = Tasks.await(
-            getCallsCollection()
-                .whereEqualTo("status", "COMPLETED")
-                .limit(100)
-                .get()
-        )
-
-        val trips = snapshot.documents.mapNotNull { documentToSettlementData(it) }
-            .filter { it.driverId.isNotBlank() }
-        if (trips.isEmpty()) return
-
-        val stats = SettlementCalculator.calculateDriverStats(trips, RATIO)
-        val unpaid = SettlementCalculator.calculateTodayUnpaidByDriver(trips, RATIO)
-
-        // realDeposit < 0인 기사에게만 미지급금 발생
-        stats.forEach { stat ->
-            val driverUnpaid = unpaid[stat.driverId] ?: 0
-            if (stat.realDeposit >= 0) {
-                assertEquals("${stat.name}: realDeposit >= 0 → 미지급금 0", 0, driverUnpaid)
-            } else {
-                assertEquals("${stat.name}: 미지급금 = -realDeposit", -stat.realDeposit, driverUnpaid)
-            }
-        }
-    }
-
     // ===== Test 4: 테스트 콜 생성 → 계산 → 삭제 =====
 
     @Test

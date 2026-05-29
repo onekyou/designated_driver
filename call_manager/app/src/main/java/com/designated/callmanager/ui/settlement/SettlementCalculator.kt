@@ -68,25 +68,6 @@ object SettlementCalculator {
     }
 
     /**
-     * 기사별 오늘 미지급금 계산
-     * rawFinalDeposit = deposit - totalCredit
-     * rawFinalDeposit < 0 이면 미지급금 발생 (사무실이 기사에게 줘야 할 돈)
-     */
-    fun calculateTodayUnpaidByDriver(trips: List<SettlementData>, ratio: Int): Map<String, Int> {
-        return trips.groupBy { it.driverId }
-            .filter { it.key.isNotBlank() }
-            .mapValues { (_, driverTrips) ->
-                val fareSum = driverTrips.sumOf { it.fare }
-                val totalCredit = driverTrips.sumOf { trip ->
-                    calculateCreditForTrip(trip.fare, trip.paymentMethod, trip.cashAmount)
-                }
-                val deposit = calculateOfficeDeposit(fareSum, ratio)
-                val rawFinalDeposit = deposit - totalCredit
-                if (rawFinalDeposit < 0) -rawFinalDeposit else 0
-            }
-    }
-
-    /**
      * AllTripsScreen용: 결제방법별 합계 계산
      */
     data class PaymentBreakdown(

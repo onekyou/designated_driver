@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.designated.driverapp.data.Constants
-import com.designated.driverapp.data.settlement.DailySettlementStatus
+import com.designated.driverapp.model.DriverStatus
 import com.designated.driverapp.navigation.AppDestinations
 import com.designated.driverapp.util.SecurePreferencesManager
 import com.designated.driverapp.util.SessionManager
@@ -64,7 +64,6 @@ fun SettingsScreen(
     val securePreferencesManager = remember { entryPoint.securePreferencesManager() }
     val sessionManager = remember { entryPoint.sessionManager() }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val dailySettlementStatus by viewModel.dailySettlementStatus.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val systemUiController = rememberSystemUiController()
 
@@ -457,7 +456,7 @@ fun SettingsScreen(
                             // 차단 조건 확인
                             val hasActiveCall = uiState.activeCall != null
                             val hasNewCall = uiState.newCallPopup != null
-                            val hasPendingSettlement = dailySettlementStatus == DailySettlementStatus.PENDING_CONFIRM
+                            val hasPendingSettlement = uiState.driverStatus == DriverStatus.PENDING_CONFIRM
 
                             when {
                                 hasActiveCall || hasNewCall -> {

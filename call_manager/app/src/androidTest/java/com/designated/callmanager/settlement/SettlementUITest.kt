@@ -164,8 +164,7 @@ class SettlementUITest {
             "settlement_driver_count_$driverId",
             "settlement_driver_totalFare_$driverId",
             "settlement_driver_deposit_$driverId",
-            "settlement_driver_totalCredit_$driverId",
-            "settlement_driver_carryOver_$driverId"
+            "settlement_driver_totalCredit_$driverId"
         )
 
         // 각 testTag의 기대 텍스트 매핑
@@ -426,44 +425,4 @@ class SettlementUITest {
         Log.d(TAG, "계산기 ↔ testTag 포맷 일관성 검증 완료")
     }
 
-    // ===== Test 5: 미지급금 계산 ↔ DriverSummaryScreen testTag =====
-
-    @Test
-    fun unpaidCalculation_matchesDriverSummaryTestTag() {
-        val snapshot = Tasks.await(
-            getCallsCollection()
-                .whereEqualTo("status", "COMPLETED")
-                .limit(100)
-                .get()
-        )
-        val trips = snapshot.documents.mapNotNull { documentToSettlementData(it) }
-            .filter { it.driverId.isNotBlank() }
-        if (trips.isEmpty()) {
-            Log.w(TAG, "COMPLETED 콜이 없어 테스트 건너뜀")
-            return
-        }
-
-        val stats = SettlementCalculator.calculateDriverStats(trips, RATIO)
-        val unpaid = SettlementCalculator.calculateTodayUnpaidByDriver(trips, RATIO)
-
-        stats.forEach { stat ->
-            val driverUnpaid = unpaid[stat.driverId] ?: 0
-
-            // DriverSummaryScreen에서 사용하는 계산과 동일해야 함
-            val rawFinalDeposit = stat.realDeposit.toLong()
-            val calculatedTodayUnpaid = if (rawFinalDeposit < 0) -rawFinalDeposit else 0L
-
-            assertEquals(
-                "${stat.name}: calculateTodayUnpaidByDriver = rawFinalDeposit 기반 계산",
-                calculatedTodayUnpaid.toInt(),
-                driverUnpaid
-            )
-
-            // testTag settlement_driver_carryOver_{driverId}에 표시될 값 검증
-            // carryOverBalance는 Firestore에서 가져오므로 여기서는 todayUnpaid만 검증
-            Log.d(TAG, "${stat.name}: realDeposit=${stat.realDeposit}, todayUnpaid=$driverUnpaid")
-        }
-
-        Log.d(TAG, "미지급금 계산 검증 완료: ${stats.size}명 기사")
-    }
 }
