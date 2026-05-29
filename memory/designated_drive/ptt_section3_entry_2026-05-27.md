@@ -441,6 +441,18 @@ P1 진입 → CreditFirestoreRepository.kt 신규 + firestore.rules + Settlement
 - **테스트 무변경**: `calculateRawFinalDeposit` 유지(net 계산)라 SettlementCalcTest/DriverSettlementConsistencyTest 그대로. 폐기 심볼 단언 0(실측).
 - **deploy 불필요**(functions·rules·Room 스키마 무변경 — OnConflictStrategy는 스키마 무관). **push: commit 5 단독**(commit 1~4는 이미 push). #1 다이얼로그·directRun·매니저 finalize(큐)는 보류 유지.
 
+### 11.6 보류 큐 — 상세 (2026-05-30 인계, 다음 세션 후보)
+
+1. **★ 매니저 수동 업무마감 = 즉시 봉인(isFinalized)** — 본인 5/30 제기 ("당연히 업무마감 시 마감이 진행돼야 하지 않나"). 검증 우선으로 **보류**, 다음 세션 결정/진입 대기.
+   - **현재 동작(실측)**: 매니저 [업무마감]→`SettlementViewModel.clearAllTrips`(612~679)는 ① 로컬 Room 세션 아카이브+markTripsFinalized ② office `settlementLastCleared`=now(뷰 컷오프) ③ 기사 dailySettlement 삭제 — **그러나 Firestore `settlementSession.isFinalized`는 안 건드림**. 클라우드 세션 봉인은 10:10 cron(`autoFinalizeSettlementSessions`)만. 화면 문구 "오전 10시 10분에 자동 마감됩니다"(`AllTripsScreen.kt:192`).
+   - **본인 의도**: 10:10 cron = *미마감 fallback*. 수동 마감 시엔 *그 자리에서 봉인*돼야.
+   - **권장 수정(소규모, call_manager만)**: `clearAllTrips`에 현재 근무일 `settlementSessions/{getTodaySessionDate()}.metadata.isFinalized=true` set(**merge** — 콜 0건 시 doc 부재 대비) 추가 + 문구 "마감되었습니다". cron은 fallback 유지. functions·rules 무관, **deploy 불필요**. (commit 1에서 폐기한 `finalizeSettlementSession`의 최소 복원 성격 — 단 "매니저 능동 0" 원칙 일부 되돌림 = 본인 명시 의도.)
+2. **#1 콜 완료 결제 다이얼로그**(`SettlementSummaryPopup`, 5버튼/포인트 결제) — 손님 적립 포인트 결제 트랙과 함께 별도 결정. 보류(§11.2-A).
+3. **directRun**(§10.4 동결) / **리스너 0 전면 전환**(비용 — 다수 사무실 보급 시점).
+4. **cosmetic(미노출, 다음 functions deploy 때)**: `onDriverSettlementSubmitted`(index.ts:5386 로그·5415 notifBody) "실납입"→"납입금"(FCM data-only·앱 자체 빌드라 사용자 안 보임) + `DriverViewModel.kt:1481` 함수 doc 주석 stale.
+5. **redesign 문서 정정**: §3.2/§5.1 "4버튼 원클릭" ↔ §9.4 "5종 유지" 충돌 — 재개 전까지 §9.4 우선(§11.2-A).
+6. **§9.5 나머지 피드백 승격**(#1 auto_mode / #2 self_speech / #5·#6 handoff) — 재발/본인 결정 시.
+
 ---
 
 ## 6. 관련 메모
