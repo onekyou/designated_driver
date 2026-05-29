@@ -8,10 +8,10 @@ interface SettlementDao {
     @Query("SELECT * FROM settlements WHERE isFinalized = 0 ORDER BY completedAt DESC")
     fun flowActive(): Flow<List<SettlementEntity>>
 
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(items: List<SettlementEntity>)
 
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(item: SettlementEntity)
 
     @Query("SELECT COUNT(*) FROM settlements WHERE callId = :callId")

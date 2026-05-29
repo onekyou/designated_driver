@@ -137,7 +137,7 @@ fun SettingsScreen(
                     Text("총 수입: ${sm["totalFare"] ?: "-"}원")
                     Text("총 납입: ${sm["totalDeposit"] ?: "-"}원")
                     Text("총 외상: ${sm["totalCredit"] ?: "-"}원")
-                    Text("실 납입: ${sm["realDeposit"] ?: "-"}원")
+                    Text("납입금: ${sm["realDeposit"] ?: "-"}원")
                     Text("실 수입: ${sm["realIncome"] ?: "-"}원")
                 }
             },

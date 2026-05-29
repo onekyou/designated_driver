@@ -428,7 +428,18 @@ P1 진입 → CreditFirestoreRepository.kt 신규 + firestore.rules + Settlement
 - **#4**: `autoFinalizeSettlementSessions` 이미 단순(isFinalized 토글만) → **무변경 확정**(commit 4 코드 0).
 - **★ 오염/누락 검토 + 결정 A (본인)**: `onCallCompletedUpdateSettlement`(index.ts:4985)는 COMPLETED **전이**에서만 발화 + addCallToSettlementSession callId 중복 스킵 → #2 정정이 settlementSessions·dailySettlement에 전파 안 됨. **결정 A** = 전파 안 함 + 정정 모달 **제출 전 한정**(dailySettlement 항상 fresh 기록). 매니저 라이브 통계(전체/기사별 탭)는 calls 직접이라 정정 반영됨. **함수 변경 0**, deploy = firestore.rules만.
 - **클로징 인터뷰**: 컴파일 실측 ✅ / 무관 누적(CallDetectorService·customer_app·head_manager·functions lib·package) 미터치 ✅ / source/ 백업 미터치 ✅(DriverSummaryScreen 실경로 = ui/settlement/screen/).
-- **남은 단계**: push(1~4 묶음) + firestore.rules deploy 1회 + (선택)단말 install. **#1 결제 다이얼로그·directRun은 보류 유지**.
+- **남은 단계**: push(1~4 묶음) + firestore.rules deploy 1회 + (선택)단말 install. **#1 결제 다이얼로그·directRun은 보류 유지**. → push+deploy 완료(commit 4), 단말 검증은 §11.5로 이어짐.
+
+### 11.5 commit 5 — 실납입/환급 개념 폐기 + 단말 검증 발견 DAO 수정 (2026-05-30 세션)
+
+- **본인 결정 (5/30)**: 실납입(actualDeposit)·정정 버튼·환급금/미납금 개념 **전부 폐기** → 기사 정산 화면은 **납입금(net = 사무실 몫 − 외상/이체/포인트, 부호) 한 줄**. 실제 정산은 현장에서 알아서. "최소개입/다음날 새 시작" 귀결. (commit 4 단말 검증 중 실납입이 결제수단 변경을 안 추종하고 총환급금이 엉뚱하던 것 → 이월 시절 잔재 로직 발견 → 개념 폐기로 정리.)
+- **방식 = Option B**(필드 유지·값 단순화): `DriverDailySettlement.realDeposit/settlementDiff` 필드는 *유지*(Firestore 기존 문서 호환 + functions 무변경), 의미만 죽임 — `realDeposit=finalDeposit(net)`, `settlementDiff=0`. UX에서만 개념 제거.
+- **코드 5파일**: driver `HistorySettlementScreen`(실납입 카드/정정 다이얼로그/환급·미납 행 폐기, 납입금 net 부호 + 상단 라벨 "납입금"→"사무실 몫") + `DriverViewModel.submitDailySettlement`(realDeposit 인자 제거, net 기록, settlementDiff=0) + `SettingsScreen`(실납입→납입금 라벨) / manager `DriverSummaryScreen`(#5 실납입·환급 제거 → 납입금 net 한 줄) + `MyFirebaseMessagingService`(실납입→납입금 라벨).
+- **★ 단말 검증 중 발견·수정 — 매니저가 per-call 정정 반영 안 함**: `SettlementDao.insertAll`이 `OnConflictStrategy.IGNORE`(다른 DAO는 REPLACE)라, 기사 정정(콜 doc MODIFIED)을 매니저 `callsListener`가 잡아도 Room 교체가 무시됨(+ .get 재조회도 `existsById==0` 신규-only). → **IGNORE→REPLACE**(SettlementDao.kt L11·L14). 이제 기존 callsListener MODIFIED → Room REPLACE → 매니저 실시간 반영.
+  - 비용 논의(본인 제기): 리스너는 정산 화면 열림 시에만·매니저 1대·기존 자산 → 추가 비용 0. 과거 $414/월은 기사 per-기사 상시 리스너(다른 성격). "리스너 0 전면 전환"은 다수 사무실 보급 시점 별도 트랙. → **A(REPLACE 1줄) 권장 채택**.
+- **검증 ✅ (실측)**: 양 앱 main+test BUILD SUCCESSFUL. 단말 — 기사(R3CT80K78NP) 정정 시 납입금 net 즉시 추종(실납입/환급 사라짐) + 매니저(R3CR312MB1L) 정산화면 현금↔외상 **실시간 교체** 확인.
+- **테스트 무변경**: `calculateRawFinalDeposit` 유지(net 계산)라 SettlementCalcTest/DriverSettlementConsistencyTest 그대로. 폐기 심볼 단언 0(실측).
+- **deploy 불필요**(functions·rules·Room 스키마 무변경 — OnConflictStrategy는 스키마 무관). **push: commit 5 단독**(commit 1~4는 이미 push). #1 다이얼로그·directRun·매니저 finalize(큐)는 보류 유지.
 
 ---
 

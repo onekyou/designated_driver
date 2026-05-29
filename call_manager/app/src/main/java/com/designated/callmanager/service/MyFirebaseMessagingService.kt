@@ -100,13 +100,13 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             val driverName = remoteMessage.data["driverName"] ?: "기사"
             val tripCount = remoteMessage.data["tripCount"] ?: "0"
             val realDeposit = remoteMessage.data["realDeposit"] ?: "0"
-            Log.d(TAG, "🔔 SETTLEMENT_SUBMITTED - $driverName, ${tripCount}건, 실납입: ${realDeposit}원")
+            Log.d(TAG, "🔔 SETTLEMENT_SUBMITTED - $driverName, ${tripCount}건, 납입금: ${realDeposit}원")
             showNotification(
                 channelId = STATUS_CHANGE_CHANNEL_ID,
                 notificationId = "settlement_$driverId".hashCode(),
                 title = "업무마감 제출",
                 content = "${driverName}님이 업무마감을 제출했습니다.",
-                bigText = "기사: $driverName\n운행: ${tripCount}건\n실납입: ${realDeposit}원",
+                bigText = "기사: $driverName\n운행: ${tripCount}건\n납입금: ${realDeposit}원",
                 callId = driverId,
                 color = ContextCompat.getColor(this, android.R.color.holo_orange_dark),
                 autoCancel = true,

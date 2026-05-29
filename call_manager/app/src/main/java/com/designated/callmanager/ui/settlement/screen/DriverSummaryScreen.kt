@@ -102,25 +102,15 @@ private fun DriverDetailCard(
                 fontWeight = FontWeight.Bold
             )
 
-            // ✅ 기사 제출 일일 정산 (commit 4 #5) — dailySettlement 조회 복원
+            // ✅ 기사 제출 일일 정산 (commit 4 #5 + commit 5: 실납입/환급 폐기, 납입금 net 한 줄)
             val ds = dailySettlement?.dailySettlement
             if (dailySettlement?.hasSubmitted == true && ds != null) {
                 Divider(color = Color(0xFFFFB000), thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
                 Text("📋 기사 마감 제출", color = Color(0xFFFFB000), fontWeight = FontWeight.Bold)
-                Text("최종 납입액: ${"%,d".format(ds.finalDeposit)}원", color = Color.White)
-                Text("실납입: ${"%,d".format(ds.realDeposit)}원", color = Color(0xFF00BFFF), fontWeight = FontWeight.Bold)
-                val diff = ds.settlementDiff
+                // 납입금(net) = 사무실 몫 − 외상/이체/포인트 (부호). + 입금 / − 사무실이 정산
                 Text(
-                    when {
-                        diff > 0 -> "환급 발생: +${"%,d".format(diff)}원"
-                        diff < 0 -> "미납 발생: ${"%,d".format(diff)}원"
-                        else -> "정산 일치"
-                    },
-                    color = when {
-                        diff > 0 -> Color(0xFF66FF66)
-                        diff < 0 -> Color(0xFFFF6666)
-                        else -> Color.Gray
-                    },
+                    "납입금: ${"%,d".format(ds.finalDeposit)}원",
+                    color = if (ds.finalDeposit >= 0) Color(0xFF66FF66) else Color(0xFFFF6666),
                     fontWeight = FontWeight.Bold
                 )
                 ds.submittedAt?.let {

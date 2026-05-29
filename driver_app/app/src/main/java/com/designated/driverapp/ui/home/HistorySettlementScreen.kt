@@ -353,38 +353,18 @@ fun HistorySettlementScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 최종 납입액 계산 (사무실 몫 - 외상)
-            val rawFinalDeposit = SettlementCalc.calculateRawFinalDeposit(officeDeposit, totalCredit)
-
-            // 실제 납입해야 할 금액 (음수면 0 — 외상이 사무실 몫보다 큰 경우)
-            val adjustedDeposit = if (rawFinalDeposit > 0) rawFinalDeposit else 0
-
-            // 실납입 상태 (입력 필드 없이 기본값 표시 + 확인/정정)
-            var isDepositEdited by remember { mutableStateOf(false) }
-            var actualDeposit by remember { mutableStateOf(adjustedDeposit) }
-            // 정정하지 않은 상태에서는 adjustedDeposit 변경에 동기화
-            if (!isDepositEdited) {
-                actualDeposit = adjustedDeposit
-            }
-            var isDepositConfirmed by remember { mutableStateOf(true) }
-            var showDepositEditDialog by remember { mutableStateOf(false) }
-            var depositEditInput by remember { mutableStateOf("") }
+            // 납입금(net) = 사무실 몫 − 외상/이체/포인트 (부호, 음수 허용)
+            // + 면 사무실에 입금, − 면 사무실에서 정산받음. 실제 정산은 현장에서 알아서.
+            val net = SettlementCalc.calculateRawFinalDeposit(officeDeposit, totalCredit)
 
             // 정산 카드 접기/펼치기 상태
             var isSettlementExpanded by remember { mutableStateOf(false) }
 
-            // 표시 금액: 확인 전이면 adjustedDeposit (미환급금 공제 후), 확인 후면 actualDeposit
-            val displayDeposit = if (isDepositConfirmed) actualDeposit else adjustedDeposit
-
             // 현금 수령액
             val cashReceived = todaySettlement.cashReceived
 
-            // 최종 수입금 = 기사 몫 (총운행료 × (1 - 납입비율))
+            // 최종 수입금 = 기사 몫
             val actualReceived = realIncome
-
-            // 총 정산 차액 = (실납입 - 조정된 납입액)
-            // 양수: 환급금 (기사가 받을 돈), 음수: 미납금 (기사가 더 낼 돈)
-            val totalSettlementDiff = displayDeposit - adjustedDeposit
 
             // 통합 정산 카드 (접기/펼치기)
             Card(
@@ -448,7 +428,7 @@ fun HistorySettlementScreen(
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("납입금", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                        Text("사무실 몫", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
                         Text("%,d원".format(officeDeposit), color = Color.White, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("settlement_today_officeDeposit"))
                     }
 
@@ -473,7 +453,7 @@ fun HistorySettlementScreen(
                     }
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // 실납입 카드 (입력 필드 없이 금액 표시 + 확인/정정 버튼)
+                    // 납입금 (사무실 몫 − 외상/이체/포인트, 부호). + 입금 / − 정산받음. 실제 정산은 현장에서.
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF333333)),
@@ -486,112 +466,22 @@ fun HistorySettlementScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            // 실납입 라벨
-                            Text("실납입", color = Color.White, style = MaterialTheme.typography.bodyMedium)
-
-                            // 금액 + 버튼
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                // 금액 표시
-                                Text(
-                                    "%,d원".format(displayDeposit),
-                                    color = if (isDepositConfirmed) Color(0xFF4CAF50) else Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.testTag("settlement_today_displayDeposit")
-                                )
-
-                                Spacer(modifier = Modifier.width(12.dp))
-
-                                // 정정 버튼
-                                Button(
-                                    onClick = {
-                                        depositEditInput = displayDeposit.toString()
-                                        showDepositEditDialog = true
-                                    },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFF666666)
-                                    ),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                    modifier = Modifier.height(32.dp)
-                                ) {
-                                    Text("정정", style = MaterialTheme.typography.bodySmall)
-                                }
-                            }
+                            Text("납입금", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                "%,d원".format(net),
+                                color = if (net >= 0) Color(0xFF4CAF50) else Color(0xFFFF6666),
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.testTag("settlement_today_net")
+                            )
                         }
                     }
-
-                    // 실납입 정정 다이얼로그
-                    if (showDepositEditDialog) {
-                        AlertDialog(
-                            onDismissRequest = { showDepositEditDialog = false },
-                            title = { Text("실납입 금액 수정", color = Color.White) },
-                            text = {
-                                Column {
-                                    Text("실제 납입한 금액을 입력하세요", color = Color.Gray)
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    BasicTextField(
-                                        value = depositEditInput,
-                                        onValueChange = { newValue ->
-                                            if (newValue.all { it.isDigit() }) {
-                                                depositEditInput = newValue
-                                            }
-                                        },
-                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                        singleLine = true,
-                                        textStyle = androidx.compose.ui.text.TextStyle(
-                                            color = Color.White,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = MaterialTheme.typography.headlineSmall.fontSize,
-                                            textAlign = androidx.compose.ui.text.style.TextAlign.End
-                                        ),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .background(Color(0xFF222222), RoundedCornerShape(8.dp))
-                                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                                        decorationBox = { innerTextField ->
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.End,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-                                                    if (depositEditInput.isEmpty()) {
-                                                        Text(
-                                                            "0",
-                                                            color = Color.Gray,
-                                                            fontWeight = FontWeight.Bold,
-                                                            fontSize = MaterialTheme.typography.headlineSmall.fontSize,
-                                                            textAlign = androidx.compose.ui.text.style.TextAlign.End
-                                                        )
-                                                    }
-                                                    innerTextField()
-                                                }
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Text("원", color = Color.White, style = MaterialTheme.typography.bodyLarge)
-                                            }
-                                        }
-                                    )
-                                }
-                            },
-                            confirmButton = {
-                                Button(
-                                    onClick = {
-                                        actualDeposit = depositEditInput.toIntOrNull() ?: 0
-                                        isDepositEdited = true
-                                        isDepositConfirmed = true
-                                        showDepositEditDialog = false
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
-                                ) {
-                                    Text("확인")
-                                }
-                            },
-                            dismissButton = {
-                                TextButton(onClick = { showDepositEditDialog = false }) {
-                                    Text("취소", color = Color.White)
-                                }
-                            },
-                            containerColor = Color(0xFF2A2A2A)
+                    if (net < 0) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            "사무실에서 정산받을 금액입니다",
+                            color = Color.Gray,
+                            style = MaterialTheme.typography.bodySmall
                         )
                     }
 
@@ -608,25 +498,6 @@ fun HistorySettlementScreen(
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Bold
                         )
-                    }
-
-                    // 총 정산 차액 (실납입 확인 시에만 표시, 이월 환급금 포함)
-                    if (isDepositConfirmed && totalSettlementDiff != 0) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(
-                                if (totalSettlementDiff > 0) "총 환급금" else "총 미납금",
-                                color = if (totalSettlementDiff > 0) Color(0xFF4CAF50) else Color(0xFFFF6666),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                "%,d원".format(kotlin.math.abs(totalSettlementDiff)),
-                                color = if (totalSettlementDiff > 0) Color(0xFF4CAF50) else Color(0xFFFF6666),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
                     }
 
                         }
@@ -647,15 +518,7 @@ fun HistorySettlementScreen(
                         Column {
                             Text("업무를 마감하시겠습니까?", color = Color.White)
                             Spacer(modifier = Modifier.height(12.dp))
-                            Text("실납입: %,d원".format(actualDeposit), color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
-                            if (totalSettlementDiff != 0) {
-                                Text(
-                                    if (totalSettlementDiff > 0) "총 환급금: %,d원".format(totalSettlementDiff)
-                                    else "총 미납금: %,d원".format(kotlin.math.abs(totalSettlementDiff)),
-                                    color = if (totalSettlementDiff > 0) Color(0xFF4CAF50) else Color(0xFFFF6666),
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                            Text("납입금: %,d원".format(net), color = if (net >= 0) Color(0xFF4CAF50) else Color(0xFFFF6666), fontWeight = FontWeight.Bold)
                             Spacer(modifier = Modifier.height(12.dp))
                             Divider(color = Color(0xFF666666))
                             Spacer(modifier = Modifier.height(8.dp))
@@ -668,7 +531,7 @@ fun HistorySettlementScreen(
                         Button(
                             onClick = {
                                 isSubmitting = true
-                                viewModel.submitDailySettlement(actualDeposit) { success, message ->
+                                viewModel.submitDailySettlement { success, message ->
                                     if (success) {
                                         // 로컬 아카이브 저장
                                         val now = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
@@ -677,7 +540,7 @@ fun HistorySettlementScreen(
                                             "totalFare" to totalFare,
                                             "totalDeposit" to officeDeposit,
                                             "totalCredit" to totalCredit,
-                                            "realDeposit" to actualDeposit,
+                                            "realDeposit" to net,
                                             "realIncome" to realIncome
                                         )
                                         val newSession = SessionData(now, tripHistory, summaryMap)
@@ -770,7 +633,7 @@ fun HistorySettlementScreen(
                     Button(
                         onClick = { showEndWorkDialog = true },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = isDepositConfirmed && totalCount > 0,
+                        enabled = totalCount > 0,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFFFF9800),
                             disabledContainerColor = Color(0xFF555555)
@@ -779,7 +642,7 @@ fun HistorySettlementScreen(
                         Text(
                             "업무마감",
                             fontWeight = FontWeight.Bold,
-                            color = if (isDepositConfirmed && totalCount > 0) Color.White else Color.Gray
+                            color = if (totalCount > 0) Color.White else Color.Gray
                         )
                     }
                 }

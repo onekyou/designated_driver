@@ -1482,7 +1482,6 @@ class DriverViewModel @Inject constructor(
      * Firestore drivers/{driverId} 문서에 dailySettlement 필드 저장
      */
     fun submitDailySettlement(
-        realDeposit: Int,
         onResult: (Boolean, String) -> Unit
     ) {
         // 중복 클릭 방지
@@ -1505,10 +1504,10 @@ class DriverViewModel @Inject constructor(
                 val settlement = _todaySettlement.value
                 val ratio = _depositRatio.value
 
-                // 당일 정산 계산 (이월 없음 — 그날 단위)
+                // 당일 정산 계산 (이월 없음 + 실납입/환급 개념 폐기 — net 한 값)
+                // 납입금(net) = 사무실 몫 − 외상/이체/포인트 (부호, 음수 허용). 실제 정산은 현장에서.
                 val officeDeposit = (settlement.totalFare.toLong() * ratio / 100)
                 val finalDeposit = officeDeposit - settlement.totalCredit
-                val settlementDiff = realDeposit.toLong() - finalDeposit
 
                 // 날짜 계산: 10시 이전이면 전날로 처리 (콜매니저와 동일한 로직)
                 val cal = java.util.Calendar.getInstance()
@@ -1521,8 +1520,8 @@ class DriverViewModel @Inject constructor(
                 val dailySettlement = DriverDailySettlement(
                     date = today,
                     finalDeposit = finalDeposit,
-                    realDeposit = realDeposit.toLong(),
-                    settlementDiff = settlementDiff,
+                    realDeposit = finalDeposit,
+                    settlementDiff = 0L,
                     totalFare = settlement.totalFare.toLong(),
                     totalCredit = settlement.totalCredit.toLong(),
                     tripCount = settlement.tripCount,
@@ -1540,7 +1539,7 @@ class DriverViewModel @Inject constructor(
                 // 로컬 상태도 즉시 반영
                 _uiState.update { it.copy(driverStatus = DriverStatus.PENDING_CONFIRM) }
 
-                Log.d(TAG, "Daily settlement submitted: tripCount=${settlement.tripCount}, realDeposit=$realDeposit")
+                Log.d(TAG, "Daily settlement submitted: tripCount=${settlement.tripCount}, net=$finalDeposit")
                 onResult(true, "업무마감이 완료되었습니다.")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to submit daily settlement", e)
