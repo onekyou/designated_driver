@@ -8,17 +8,14 @@ import androidx.room.RoomDatabase
 @Database(
     entities = [
         SettlementEntity::class,
-        SessionEntity::class,
-        CreditPersonEntity::class,
-        CreditEntryEntity::class
+        SessionEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class CallManagerDatabase : RoomDatabase() {
     abstract fun settlementDao(): SettlementDao
     abstract fun sessionDao(): SessionDao
-    abstract fun creditDao(): CreditDao
 
     companion object {
         @Volatile

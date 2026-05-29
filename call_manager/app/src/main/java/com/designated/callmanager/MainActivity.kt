@@ -837,7 +837,7 @@ class MainActivity : ComponentActivity() {
             }
             ACTION_SHOW_SETTLEMENT -> {
                 lifecycleScope.launch {
-                    _settlementInitialTab.value = 2  // 기사별 탭
+                    _settlementInitialTab.value = 1  // 기사별 탭
                     _screenState.value = Screen.Settlement
                 }
             }

@@ -22,8 +22,6 @@ import com.designated.callmanager.data.local.SettlementRepository
 import kotlinx.coroutines.launch
 import androidx.lifecycle.viewModelScope
 import com.designated.callmanager.data.local.SessionEntity
-import com.designated.callmanager.data.local.CreditPersonEntity
-import com.designated.callmanager.data.local.CreditEntryEntity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
@@ -104,7 +102,6 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
 
     private val database = CallManagerDatabase.getInstance(getApplication())
     private val repository = SettlementRepository(database)
-    private val creditDao = database.creditDao()
 
     // 세션별 직접운행 건수 (일일 탭 뱃지용)
     val managerCountsBySession: StateFlow<Map<String, Int>> = repository.dao
@@ -148,40 +145,6 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                 _sessionList.value = sess.map { SessionInfo(it.sessionId, null, it.totalFare, it.totalTrips) }
             }
         }
-        viewModelScope.launch {
-            creditDao.getAllCreditPersons().collect { entities ->
-                val creditPersonsWithEntries = entities.map { entity ->
-                    CreditPerson(
-                        id = entity.id,
-                        name = entity.name,
-                        phone = entity.phone,
-                        memo = entity.memo,
-                        amount = entity.totalAmount,
-                        entries = emptyList()
-                    )
-                }
-                _creditPersons.value = creditPersonsWithEntries
-
-                entities.forEach { entity ->
-                    launch {
-                        val entries = creditDao.getCreditEntriesByPerson(entity.id).map { entryEntity ->
-                            CreditEntry(
-                                date = entryEntity.date,
-                                departure = entryEntity.departure,
-                                destination = entryEntity.destination,
-                                amount = entryEntity.amount
-                            )
-                        }
-                        _creditPersons.value = _creditPersons.value.map { person ->
-                            if (person.id == entity.id) {
-                                person.copy(entries = entries)
-                            } else person
-                        }
-                    }
-                }
-            }
-        }
-
         val loginPrefs = getApplication<Application>().getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
         val province = loginPrefs.getString("provinceId", null)
         val city = loginPrefs.getString("cityId", null)
@@ -312,56 +275,6 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                 .addOnFailureListener { e ->
                     Log.e("SettlementViewModel", "depositRatio 저장 실패", e)
                 }
-        }
-    }
-
-    data class CreditEntry(
-        val date: String,
-        val departure: String,
-        val destination: String,
-        val amount: Int
-    )
-
-    data class CreditPerson(
-        val id: String = UUID.randomUUID().toString(),
-        val name: String,
-        val phone: String,
-        val memo: String = "",
-        val amount: Int = 0,
-        val entries: List<CreditEntry> = emptyList()
-    )
-
-    private val _creditPersons = MutableStateFlow<List<CreditPerson>>(emptyList())
-    val creditPersons: StateFlow<List<CreditPerson>> = _creditPersons
-
-    fun addOrIncrementCredit(name: String, phone: String, addAmount: Int, detail: CreditEntry? = null) {
-        if (addAmount <= 0) return
-
-        viewModelScope.launch {
-            if (detail != null) {
-                creditDao.addOrIncrementCredit(
-                    name = name,
-                    phone = phone,
-                    amount = addAmount,
-                    customerName = name,
-                    driverName = "미지정",
-                    date = detail.date,
-                    departure = detail.departure,
-                    destination = detail.destination
-                )
-            } else {
-                creditDao.addOrIncrementCredit(name, phone, addAmount)
-            }
-        }
-    }
-
-    fun reduceCredit(id: String, reduceAmount: Int) {
-        viewModelScope.launch {
-            creditDao.decrementCreditAmount(id, reduceAmount)
-            val person = creditDao.getAllCreditPersons().first().find { it.id == id }
-            if (person?.totalAmount == 0) {
-                creditDao.deleteCreditPersonById(id)
-            }
         }
     }
 
@@ -757,32 +670,6 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
         val o = currentOfficeId ?: return
         val key = "${p}_${c}_${o}_lastCleared"
         prefs.edit().putLong(key, ts).apply()
-    }
-
-    private val _creditedTripIds = MutableStateFlow<Set<String>>(emptySet())
-    val creditedTripIds: StateFlow<Set<String>> = _creditedTripIds.asStateFlow()
-
-    fun markTripCredited(callId: String) {
-        _creditedTripIds.value = _creditedTripIds.value + callId
-    }
-
-    /**
-     * 고객 전화번호를 비동기로 가져오는 헬퍼 (간이 버전)
-     * 현재 slim ViewModel에는 calls 컬렉션을 직접 조회하는 기능이 없으므로
-     * 임시로 Room 캐시에서 검색하거나 null 콜백.
-     */
-    fun fetchPhoneForCall(callId: String, cb: (String?) -> Unit) {
-        val province = currentProvinceId
-        val city = currentCityId
-        val office = currentOfficeId
-        if(province==null || city==null || office==null) { cb(null); return }
-        firestore.collection("provinces").document(province)
-            .collection("cities").document(city)
-            .collection("offices").document(office)
-            .collection("calls").document(callId)
-            .get()
-            .addOnSuccessListener { snap -> cb(snap.getString("phoneNumber")) }
-            .addOnFailureListener { cb(null) }
     }
 
     // ====== 백업/복원 기능 ======

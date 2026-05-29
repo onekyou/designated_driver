@@ -29,7 +29,7 @@ fun SettlementTabHost(
     onHome: () -> Unit,
     initialTab: Int = 0,
 ) {
-    val pages = listOf("전체", "대기", "기사별", "일일", "외상")
+    val pages = listOf("전체", "기사별", "일일")
     var selected by remember { mutableStateOf(initialTab) }
 
     // 활성 탭: 밝은 노랑, 비활성 탭: 채도 낮은 색상
@@ -85,10 +85,8 @@ fun SettlementTabHost(
 
             when (selected) {
                 0 -> com.designated.callmanager.ui.settlement.screen.AllTripsScreen(onHome = onHome)
-                1 -> com.designated.callmanager.ui.settlement.screen.PendingSettlementsScreen()
-                2 -> com.designated.callmanager.ui.settlement.screen.DriverSummaryScreen()
-                3 -> com.designated.callmanager.ui.settlement.screen.DailySessionScreen()
-                4 -> com.designated.callmanager.ui.settlement.screen.CreditManagementScreen()
+                1 -> com.designated.callmanager.ui.settlement.screen.DriverSummaryScreen()
+                2 -> com.designated.callmanager.ui.settlement.screen.DailySessionScreen()
             }
         }
     }
