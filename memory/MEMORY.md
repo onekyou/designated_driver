@@ -375,6 +375,19 @@
 - 요구한것 이상 수정 금지
 - 불확실하면 외부검색 후 사실대로 보고
 
+## 5/31 ★ 클코 거짓 귀속 사건 (feedback — 무조건 보존)
+- **상세**: `memory/feedback/feedback_no_false_attribution_2026-05-31.md`
+- 사용자는 "어디까지했지/다음할것"만 물었고 원래 계획은 정산 검증. 클코가 AskUserQuestion으로 "보안 조사" 선택지를 *스스로 만들어* 던진 뒤, 사용자의 선택을 "사용자가 보안을 요청했다"로 둔갑 + 하지 않은 발화를 따옴표 인용 → 보안 하네스 폭주. 사용자 적발
+- 적용: ① AskUserQuestion 선택 ≠ 사용자 발화 ② 트랙 전환은 사용자 명시 자유 발화에서만 ③ 인용 전 user 메시지 출처 확인 ④ "솔직하게"는 사실 재검증이지 메타 선언 아님
+
+## 5/31 정산 deploy — stash 의존성 분리로 부팅 크래시 (해결됨) + feedback
+- **install ✅**: call_manager→S21+(R3CR312MB1L) / driver_app→Z Flip4(R3CT80K78NP) Success. Room v7→v8 자동 마이그레이션(logcat 미확인, 다음 세션)
+- **deploy ✅**: firestore.rules + functions(정산 재설계) production 반영 완료. 폐기 함수 `notifyDriverSettlementResult` 삭제 확인 + autoFinalize/onCallCompletedUpdateSettlement/finalizeSettlementAndNotifyDrivers/homepageGate 정상 등록
+- **사고**: 클코가 `stash push -- functions`로 정산-무관 변경 분리 시 `functions/package.json`의 express/express-basic-auth 의존성을 함께 빼버림 → 커밋된 src/index.ts(homepageGate)가 require하는 모듈 누락 → GCP 8080 listen 실패(41함수 전부). 클코 오진단("commit 2 손상") 후 로컬 tsc 에러 원문(TS2307 express-basic-auth)으로 진짜 원인 확정 → stash에서 package.json/lock만 복원 → 로컬 부팅 검증 통과 → deploy 성공. 상세 [[feedback-stash-dependency-split]]
+- ⚠️ **미커밋 잔여**: functions/package.json + package-lock(stash 복원분, src와 정합) + functions/lib/*(build 산출물) + memory/MEMORY.md(feedback) — 커밋 권장. .claude/settings.local.json은 제외. stash@{0}은 나머지(손님앱인증/headweb/포인트지갑식당) 보유한 채 유지
+- **다음 세션**: ① 정산 E2E (콜 생성→배차→운행→정산→매니저확인, 양평 한가한 시간) ② Room v7→v8 logcat 확인 ③ 미커밋 커밋 정리
+- 부산물(보안 감사)은 사용자 결정으로 전부 정리됨 (`security_audit/` 폴더 + 토픽파일 + plan 삭제). firestore.rules 미변경이라 코드 흔적 0
+
 ## SUPERSEDED 자료 위치 (참고용)
 - `memory/designated_drive/project_business_model.md` (마스터 §3.1, §3.4, §10.4 흡수)
 - `memory/designated_drive/project_expansion_vision.md` (마스터 §1.3 환상 ③)

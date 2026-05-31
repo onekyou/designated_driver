@@ -45,7 +45,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getOfficeReport = exports.searchArchivedCalls = exports.getArchivedStats = exports.archiveOldCalls = exports.scheduledDataCleanup = exports.onCallDetectorCrash = exports.onCustomerCountChange = exports.onDriverCountChange = exports.onNewCustomerRegistered = exports.onCallCancelledByDriver = exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.oncallreserved = exports.notifyCustomerOnComplete = exports.notifyCustomerOnPhoneCall = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.notifyCustomerOnOfficeClosed = exports.onSharedCallCreated = exports.sendNewCallNotification = exports.oncallassigned = exports.handleFailedNotifications = exports.retryPendingNotifications = exports.acknowledgeNotification = exports.recoverCustomerAccount = exports.checkPhoneNumberDuplicate = exports.migrateExistingOfficesWallet = exports.processWithdrawal = exports.processDeposit = exports.submitWithdrawalRequest = exports.notifyRestaurantOnNoResponse = exports.createSharedCallFromRestaurant = exports.redeemRestaurantInviteCode = exports.generateRestaurantInviteCode = exports.onChatSyncAdminRemoval = exports.onChatSyncPickupDriver = exports.onChatSyncDesignatedDriver = exports.backfillChatMembers = exports.scheduledChatMessageCleanup = exports.onChatMessageCreated = exports.aggregateMonthlyStats = exports.checkSingleCallAssignedTimeout = void 0;
-exports.homepageGate = exports.getApkDownloadUrl = exports.rejectOfficeApplication = exports.registerOwner = exports.redeemDownloadToken = exports.approveOfficeApplication = exports.submitOfficeApplication = exports.onDriverSettlementSubmitted = exports.notifyDriverSettlementResult = exports.sendDriverNotification = exports.finalizeSettlementAndNotifyDrivers = exports.notifyDriverCancellation = exports.notifyDriverAssignment = exports.manualCheckSettlementDiscrepancy = exports.autoFinalizeSettlements = exports.onCallCompletedUpdateSettlement = exports.onDriverStatusChange = void 0;
+exports.homepageGate = exports.getApkDownloadUrl = exports.rejectOfficeApplication = exports.registerOwner = exports.redeemDownloadToken = exports.approveOfficeApplication = exports.submitOfficeApplication = exports.onDriverSettlementSubmitted = exports.sendDriverNotification = exports.finalizeSettlementAndNotifyDrivers = exports.notifyDriverCancellation = exports.notifyDriverAssignment = exports.manualCheckSettlementDiscrepancy = exports.autoFinalizeSettlements = exports.onCallCompletedUpdateSettlement = exports.onDriverStatusChange = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -4401,14 +4401,6 @@ exports.sendDriverNotification = (0, https_1.onCall)({
         logger.error("[sendDriverNotification] 오류:", error);
         return { success: false, error: String(error) };
     }
-});
-/**
- * 매니저가 정산 확인/거절 시 해당 기사에게 FCM 전송
- */
-exports.notifyDriverSettlementResult = (0, https_1.onCall)({
-    region: "asia-northeast3",
-}, async (request) => {
-    return (0, settlement_1.notifyDriverSettlementResultHandler)(request.data);
 });
 /**
  * 기사가 업무마감(dailySettlement) 제출 시 매니저에게 FCM 알림
