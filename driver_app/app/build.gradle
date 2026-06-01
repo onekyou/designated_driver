@@ -143,6 +143,9 @@ dependencies {
     // QR Code Generation (ZXing)
     implementation 'com.google.zxing:core:3.5.2'
 
+    // Agora PTT (음성 전용 RTC, 수신측. RTM 미사용)
+    implementation 'io.agora.rtc:voice-sdk:4.5.2'
+
     // Gson (JSON 직렬화)
     implementation 'com.google.code.gson:gson:2.10.1'
 

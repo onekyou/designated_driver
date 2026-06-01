@@ -239,6 +239,17 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
             // 알림 표시
             showSettlementNotification(title, body, sessionDate)
+        } else if (messageType == "ptt_dispatch") {
+            // PTT wake — 매니저 발화 → 수신측 깨워 Agora fast-join (Doze 관통). 알림 X(무음 wake).
+            val channelName = remoteMessage.data["channelName"] ?: ""
+            val senderName = remoteMessage.data["senderName"] ?: "매니저"
+            Log.d(TAG, "PTT wake 수신: channel=$channelName from=$senderName")
+            val serviceIntent = DriverForegroundService.newPttDispatchIntent(this, channelName, senderName)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
         } else if (messageType == "NEW_CHAT_MESSAGE") {
             // 사무실 단톡방 메시지
             handleChatMessage(remoteMessage)

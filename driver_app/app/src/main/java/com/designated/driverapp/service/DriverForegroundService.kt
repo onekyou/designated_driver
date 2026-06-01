@@ -41,6 +41,10 @@ class DriverForegroundService : Service() {
     private val _assignedCall = MutableStateFlow<CallInfo?>(null)
     val assignedCall: StateFlow<CallInfo?> = _assignedCall
 
+    // PTT 수신 매니저 (FCM ptt_dispatch wake → fast-join → 음성 재생). 수신전용.
+    // 엔진은 onWake 시점 Service 컨텍스트로 생성(컨텍스트 불안정 회피).
+    private val pttAudioManager = PttAudioManager()
+
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "DriverForegroundService onCreate")
@@ -80,6 +84,19 @@ class DriverForegroundService : Service() {
                 Log.d(TAG, "기사 상태 업데이트: $status")
                 _driverStatus.value = DriverStatus.fromString(status)
             }
+            ACTION_PTT_JOIN_CHANNEL -> {
+                val channelName = intent.getStringExtra(EXTRA_CHANNEL_NAME)
+                val senderName = intent.getStringExtra(EXTRA_SENDER_NAME)
+                val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+                val regionId = prefs.getString(Constants.PREF_KEY_PROVINCE_ID, null)
+                val officeId = prefs.getString(Constants.PREF_KEY_OFFICE_ID, null)
+                Log.d(TAG, "PTT wake: channel=$channelName from=$senderName region=$regionId office=$officeId")
+                if (regionId.isNullOrBlank() || officeId.isNullOrBlank()) {
+                    Log.w(TAG, "PTT wake: 사무실 정보 없음 — join 불가")
+                } else {
+                    pttAudioManager.onWake(this, regionId, officeId, channelName)
+                }
+            }
         }
     }
 
@@ -94,6 +111,7 @@ class DriverForegroundService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "DriverForegroundService onDestroy")
+        pttAudioManager.release()
     }
 
     private val binder = LocalBinder()
@@ -165,11 +183,14 @@ class DriverForegroundService : Service() {
         const val ACTION_NEW_CALL_ASSIGNED = "com.designated.driverapp.ACTION_NEW_CALL_ASSIGNED"
         const val ACTION_CLEAR_CALL = "com.designated.driverapp.ACTION_CLEAR_CALL"
         const val ACTION_UPDATE_STATUS = "com.designated.driverapp.ACTION_UPDATE_STATUS"
+        const val ACTION_PTT_JOIN_CHANNEL = "com.designated.driverapp.ACTION_PTT_JOIN_CHANNEL"
 
         const val EXTRA_CALL_ID = "callId"
         const val EXTRA_TITLE = "title"
         const val EXTRA_BODY = "body"
         const val EXTRA_DRIVER_STATUS = "driverStatus"
+        const val EXTRA_CHANNEL_NAME = "channelName"
+        const val EXTRA_SENDER_NAME = "senderName"
 
         fun newCallAssignedIntent(context: Context, callId: String, title: String, body: String): Intent {
             return Intent(context, DriverForegroundService::class.java).apply {
@@ -183,6 +204,14 @@ class DriverForegroundService : Service() {
         fun clearCallIntent(context: Context): Intent {
             return Intent(context, DriverForegroundService::class.java).apply {
                 action = ACTION_CLEAR_CALL
+            }
+        }
+
+        fun newPttDispatchIntent(context: Context, channelName: String, senderName: String): Intent {
+            return Intent(context, DriverForegroundService::class.java).apply {
+                action = ACTION_PTT_JOIN_CHANNEL
+                putExtra(EXTRA_CHANNEL_NAME, channelName)
+                putExtra(EXTRA_SENDER_NAME, senderName)
             }
         }
     }

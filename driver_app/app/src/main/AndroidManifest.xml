@@ -17,6 +17,8 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- 음성 인식 권한 (음성 입력 기능) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- PTT 오디오 라우팅 (Agora 수신) -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- 배터리 최적화 예외 요청 (Doze 모드에서 FCM 수신 필수) -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- 화면 깨우기 권한 (FCM 알림 수신 시) -->
