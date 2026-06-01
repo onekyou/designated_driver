@@ -282,6 +282,16 @@
 - **PTT 자료 정합화 4/10→8/10**: 마스터 plan `harmonic-sparking-hedgehog.md`에 "★2026-06-01 갱신" 섹션 역병합 + `ptt_operation_scenario` §8 음성 전달 모델 1문장 + `ptt_market_replacement_card` 비용표 각주(620만원=상시 join 가정, Trigger Join 시 하향, Phase 2 재계산). **단일 진입점 = 마스터 plan(6/1 섹션) + [[ptt_volume_button_principle]]**
 - **다음 세션 진입**: Phase 2 Plan agent (8+1 시나리오 → 코드 구현 매핑, **FCM wake→fast-join 핸드셰이크 신뢰성 1순위**). 무거운 설계라 신선한 세션 권장. "Phase 2 진입해줘" 한마디로 시작
 
+## 6/2 ★ PTT 구현 완료 — PoC + UX 증분 작동·커밋·배포 (일방 브로드캐스트 루프)
+- **상세**: `memory/coupon/ptt_implementation_2026-06-02.md`
+- **3 commit push** (manager-direct-drive): `0bf9ebe4` functions(generateAgoraToken+sendPttWake+minInstances+agora-token) / `20c02fc2` call_manager 송신(hold-to-talk+2비프+발화중 배너) / `0fb15cd2` driver_app 수신(ptt_dispatch wake→fast-join+종료 오버톤). functions 배포 완료.
+- **검증** (S21+ 송신/Z Flip4 수신 화면꺼짐): 콜드 ~1.4초 / 웜 즉시 / "Not connected" 0. minInstances로 sendPttWake 2초→0.4초.
+- **UX 모델**(본인 공동설계): 탭→hold-to-talk(떼면 종료, stuck-on 0) / 시작 2비프=연결창(2차 비프=onUserJoined ready, 마이크는 합류 후만 라이브→첫 음절 0) / 종료 1비프=오버톤(양쪽, 무전 관행) / 5초 종료-기준 워밍창(비용 다이얼·상수, 지연은 비프가 가림, 진짜 가치=재-wake 회피 안정성).
+- **★ 함정 3건**: ① **broadcaster role**(LIVE_BROADCASTING audience는 매니저 onUserJoined 미발화→3초 타임아웃, 수신측도 broadcaster+마이크미publish로 해결) ② **getApplication()/applicationContext가 onCreate에서 null**(이 S21+ 단말)→엔진은 발화시점 Activity 컨텍스트로 생성 ③ 콜드 5.5초=함수 콜드스타트×2직렬→minInstances.
+- **Agora**: project DesignatedDriver-PTT, App ID `e5aae3aa…`(공개), Certificate=Secret Manager만. ⚠️ 다수 사무실 실배포 전 rotate 권장.
+- **별도 트랙(미진입)**: 양방향+픽업(call_manager 수신+pickup 송수신+wake 팬아웃) / 함수 1콜 통합+토큰 FCM 동봉 / 정산 단순화 / call_detector 연동 / 상태명명 재설계.
+- **다음 후보**: master PR / 양방향+픽업 설계 / S22 포함 3단말 + 오버톤 청취 재확인 / Certificate rotate.
+
 ## 도메인별 진입점
 | 도메인 | 인덱스 | 상태 |
 |--------|--------|------|
