@@ -55,3 +55,36 @@ export function buildMulticastFcmPayload(
     tokens,
   };
 }
+
+/**
+ * PTT wake용 data-only high-priority 멀티캐스트 페이로드.
+ *  notification 블록 없음 → 클라 onMessageReceived 가 Doze에서도 호출되어 fast-join 수행.
+ *  ttl 짧게(10s) — 무전기 즉시성, 만료 후 도착은 무의미.
+ */
+export function buildMulticastPttWakePayload(
+  data: Record<string, string>,
+  tokens: string[]
+): MulticastMessage {
+  const ttlSeconds = 10;
+  const expiration = Math.floor(Date.now() / 1000) + ttlSeconds;
+  return {
+    data,
+    android: {
+      priority: "high" as const,
+      ttl: ttlSeconds * 1000,
+    },
+    apns: {
+      headers: {
+        "apns-push-type": "background" as const,
+        "apns-priority": "10" as const,
+        "apns-expiration": String(expiration),
+      },
+      payload: {
+        aps: {
+          "content-available": 1,
+        },
+      },
+    },
+    tokens,
+  };
+}

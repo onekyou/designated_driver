@@ -47,6 +47,7 @@ export {
   processDeposit,
   processWithdrawal,
 } from "./handlers/wallet";
+export { generateAgoraToken, sendPttWake } from "./handlers/ptt";
 export { migrateExistingOfficesWallet } from "./scripts/migrateExistingOfficesWallet";
 import { addChatMember } from "./handlers/chat";
 import express from "express";

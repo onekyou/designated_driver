@@ -16,17 +16,18 @@
   },
   "main": "lib/index.js",
   "dependencies": {
-    "firebase-admin": "^12.6.0",
-    "firebase-functions": "^6.4.0",
+    "agora-token": "^2.0.5",
     "express": "^4.21.2",
-    "express-basic-auth": "^1.2.1"
+    "express-basic-auth": "^1.2.1",
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^6.4.0"
   },
   "devDependencies": {
-    "firebase-functions-test": "^3.1.0",
-    "typescript": "^5.7.3",
-    "ts-node": "^10.9.2",
+    "@types/express": "^4.17.21",
     "@types/node": "^22.0.0",
-    "@types/express": "^4.17.21"
+    "firebase-functions-test": "^3.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
   },
   "private": true
 }
