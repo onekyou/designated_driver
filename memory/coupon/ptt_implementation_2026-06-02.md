@@ -36,6 +36,17 @@
 ## 단말
 - S21+ R3CR312MB1L: call_manager(송신) / Z Flip4 R3CT80K78NP: driver_app(수신). S22 R5CT41TJZFP 미연결(이번 세션).
 
+## ★ 운영 전제 정정 (2026-06-02 본인) — 매니저 = 운전 중 사용 → screen-off 송신 필수
+- **매니저는 픽업을 병행**, 즉 **운전 중에 콜매니저로 PTT**. 거치형 사무실 단말이 *아님*. "편하게 사무실에서 할 거면 앱을 왜 써" — 과거에 "무리해서" screen-off 볼륨 캡처를 시도한 이유.
+- ⚠️ **현재 구현(dispatchKeyEvent)은 foreground 전용** → 화면 켜진 채 앱 열어야만 송신. **실사용(운전 중 화면 off)과 미스매치.** `FLAG_KEEP_SCREEN_ON`은 답 아님(운전 중 화면 못 켜둠).
+- **Play Store 정책 우려 무효**: call_manager는 권한 때문에 **홈페이지 사이드로드 전용** → Accessibility 등 민감 권한 *자유롭게 사용 가능*.
+- **과거 screen-off 송신은 성공한 자산**: "송신측 완전 꺼짐+볼륨다운 2회 성공"(`6ae77f74`·`17bcd8b3` AccessibilityPermissionHelper+BackgroundPTTService). 1월 제거는 *수신측 RTM "Not connected"* 때문 — **이번에 FCM+Agora로 수신측 해결됨** → 검증된 송신측 자산 복구 가능.
+- **기술적 본질**: foreground 밖(화면 off OR 다른 앱)에서 볼륨키 캡처는 *전역 후크*만 가능 — 더 가벼운 Android API 없음. "화면만 키기"·"백그라운드만"도 같은 후크 필요(샷컷 없음).
+  - **Accessibility** (`FLAG_REQUEST_FILTER_KEY_EVENTS`+`onKeyEvent`): 신뢰성↑·OEM무관, 단 1회 설정 권한 + 삼성 절전이 끄는 재허용 마찰.
+  - **MediaSession 원격볼륨**: 특수권한 0(가벼움), 단 활성 세션 충돌(운전 중 내비·음악)·OEM 변동으로 불안정.
+  - **블루투스 이어피스 버튼**: 운전 중 정석(Zello 방식), Accessibility 불필요·신뢰성↑, 단 하드웨어 의존.
+- **다음 증분(별도 트랙)**: screen-off 송신 복구 — ① dispatchKeyEvent는 foreground 폴백 유지 ② Accessibility Service 추가(과거 `17bcd8b3` 패턴) → PTTManager.start/stopTransmit 연결. 캡처 후엔 *무음 송신*이 운전자에 유리(화면 안 봄)라 "화면 깨우기"는 불필요·열위.
+
 ## Out of scope (별도 트랙)
 - **PTT 양방향 + 역할 분리**(본인 6/2 결정): call_manager **수신** 추가 + pickup_app **송수신** + sendPttWake 매니저·픽업 토큰 팬아웃. 현재는 *일방 브로드캐스트*. 오버톤은 양방향 시 대답 신호로 살아남.
 - functions 1콜 통합 + 토큰 FCM 동봉(수신측 round-trip 제거) / 종료 전용 효과음 리소스 / 시스템 오버레이(앱 밖 배너) / 정산 이월 단순화 / call_detector PTT 연동 / 상태명명 재설계.

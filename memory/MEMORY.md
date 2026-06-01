@@ -289,8 +289,9 @@
 - **UX 모델**(본인 공동설계): 탭→hold-to-talk(떼면 종료, stuck-on 0) / 시작 2비프=연결창(2차 비프=onUserJoined ready, 마이크는 합류 후만 라이브→첫 음절 0) / 종료 1비프=오버톤(양쪽, 무전 관행) / 5초 종료-기준 워밍창(비용 다이얼·상수, 지연은 비프가 가림, 진짜 가치=재-wake 회피 안정성).
 - **★ 함정 3건**: ① **broadcaster role**(LIVE_BROADCASTING audience는 매니저 onUserJoined 미발화→3초 타임아웃, 수신측도 broadcaster+마이크미publish로 해결) ② **getApplication()/applicationContext가 onCreate에서 null**(이 S21+ 단말)→엔진은 발화시점 Activity 컨텍스트로 생성 ③ 콜드 5.5초=함수 콜드스타트×2직렬→minInstances.
 - **Agora**: project DesignatedDriver-PTT, App ID `e5aae3aa…`(공개), Certificate=Secret Manager만. ⚠️ 다수 사무실 실배포 전 rotate 권장.
-- **별도 트랙(미진입)**: 양방향+픽업(call_manager 수신+pickup 송수신+wake 팬아웃) / 함수 1콜 통합+토큰 FCM 동봉 / 정산 단순화 / call_detector 연동 / 상태명명 재설계.
-- **다음 후보**: master PR / 양방향+픽업 설계 / S22 포함 3단말 + 오버톤 청취 재확인 / Certificate rotate.
+- **★ 운영 전제 정정(6/2 본인)**: 매니저는 픽업 병행 = **운전 중 사용** → screen-off 송신 *필수*(거치형 아님). 현재 dispatchKeyEvent foreground 전용은 실사용 미스매치. call_manager 홈페이지 사이드로드라 **Accessibility 권한 자유**(Play Store 정책 무관). 과거 screen-off 송신(Accessibility `17bcd8b3`)은 *성공 자산*, 제거는 수신측 RTM 실패 때문(이번 해결) → **복구 가능**. foreground 밖 볼륨키 캡처는 전역 후크만 가능(샷컷 없음): Accessibility(신뢰↑·재허용 마찰) / MediaSession(권한0·충돌) / BT 이어피스 버튼(운전 정석). 상세 [[ptt_implementation_2026-06-02]].
+- **별도 트랙(미진입)**: **screen-off 송신 복구(Accessibility, 다음 증분 유력)** / 양방향+픽업 / 함수 1콜 통합+토큰 FCM 동봉 / 정산 단순화 / call_detector 연동 / 상태명명 재설계.
+- **다음 후보**: screen-off 송신(Accessibility) / master PR / 양방향+픽업 설계 / S22 포함 3단말 + 오버톤 청취 재확인 / Certificate rotate.
 
 ## 도메인별 진입점
 | 도메인 | 인덱스 | 상태 |
