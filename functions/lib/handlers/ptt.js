@@ -52,7 +52,7 @@ const TOKEN_EXPIRE_SECONDS = 86400; // 24h (상대 시간)
  *  반환: { token, channelName, uid, expiresIn, appId }
  *  (2025-08 검증 템플릿 agoraToken.ts 복구본 — PoC 범위로 진단 로깅·token_logs·refresh 제거)
  */
-exports.generateAgoraToken = (0, https_1.onCall)({ region: REGION, secrets: [AGORA_APP_CERTIFICATE] }, async (request) => {
+exports.generateAgoraToken = (0, https_1.onCall)({ region: REGION, secrets: [AGORA_APP_CERTIFICATE], minInstances: 1 }, async (request) => {
     var _a;
     if (!request.auth) {
         throw new https_1.HttpsError("unauthenticated", "인증되지 않은 사용자입니다.");
@@ -95,7 +95,7 @@ exports.generateAgoraToken = (0, https_1.onCall)({ region: REGION, secrets: [AGO
  *  office designated_drivers 전체 fcmToken 수집(발신자 제외) → data-only high-priority FCM.
  *  수신 클라(driver_app)는 type=ptt_dispatch 분기에서 channelName으로 fast-join.
  */
-exports.sendPttWake = (0, https_1.onCall)({ region: REGION }, async (request) => {
+exports.sendPttWake = (0, https_1.onCall)({ region: REGION, minInstances: 1 }, async (request) => {
     var _a;
     if (!request.auth) {
         throw new https_1.HttpsError("unauthenticated", "인증되지 않은 사용자입니다.");
