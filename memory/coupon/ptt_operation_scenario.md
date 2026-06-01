@@ -19,6 +19,8 @@
 7. PTT 권한: **매니저 + 픽업기사**만 송수신. 일반 기사는 *수신 전용*
 8. **Data Push로 알림 통합** — 현재 콜매니저 알림 폭주 (NEW_CALL/DRIVER_STATUS_UPDATE/CALL_STATUS_UPDATE/STATUS_CHANGE/NEW_SHARED_CALL/DRIVER_APPROVAL_REQUEST 6종+) 해소
 
+> **음성 전달 모델 (2026-06-01 명시)**: PTT 음성도 *상시 채널 join 아님*. 발화 시 high-priority FCM Data Push로 수신측 wake → Agora **Trigger Join** (발화 동안만 접속, Mute + 30s leave). 무전기 동등성(이질감 0)은 wake→fast-join 핸드셰이크 신뢰성으로 확보. always-join은 listener 최소화 철학 위반이라 배제. 상세 [[ptt_volume_button_principle]] §"기술적 본질 + 해결 방향".
+
 ## 9단계: 채팅 블랙박스 (PTT 발화 + 시스템 이벤트 자동 게시)
 
 본 단계는 *Data Push 라우터 위*에 놓임 (시나리오 8번과 같은 그릇, 별도 listener X). 본인 정책 정합 — 콜마당은 listener 최소화 (driver_app carryOverListener 1개만, 그 외 1회 fetch + Data Push).

@@ -275,6 +275,13 @@
 - **commit 5 ✅ `7fdd9314` (push 완료)**: **실납입/환급 개념 폐기** → 기사 정산 "납입금(net=사무실몫−외상, 부호) 한 줄"(실납입 카드/정정/환급·미납 폐기) + `submitDailySettlement` net 기록·settlementDiff=0 + 매니저 #5 net 표시 + SettingsScreen/FCM 라벨. **★단말 검증 발견·수정**: `SettlementDao` `IGNORE→REPLACE`(매니저 callsListener가 기사 정정을 Room 교체 못하던 버그 — 이제 실시간 반영). 방식=Option B(realDeposit/settlementDiff 필드 유지·값 단순화)라 functions·rules·Room 스키마 무변경. 양 앱 빌드+단말(기사 net 추종/매니저 실시간 교체) 검증 ✅. 상세 = ptt §11.5.
 - **commit 1~5 전부 push 완료**: `e7403ded`·`3b3d808b`·`6defedb1`·`f14ab6d6`·`7fdd9314` (rules deploy=commit4 1회). **다음 = 보류 큐**(ptt §11.6 — ★매니저 수동 업무마감 즉시 봉인(isFinalized)·#1 결제 다이얼로그·cosmetic·redesign 문서 정정). **진입 가이드 단일 출처**: ptt §11.4·§11.5·§11.6·§11.2-A·§11.3. plan: `woolly-fluttering-feather.md`.
 
+## 6/1 PTT 진입 준비 세션 (코드 변경 0 — 메모리·plan 정합화만)
+- **볼륨버튼 블랙아웃 정체 확정**: 송신측은 완전 꺼짐+볼륨다운 2회로 PTT 전환 *성공*(자산). 수신측 Doze가 과거 "Not connected"(`23a975b4`)의 진짜 지점. 상세 [[ptt_volume_button_principle]] §"과거 실패의 정확한 정체"
+- **알림 wake 패러다임 확정 (본인 교정)**: 발화 시 high-priority FCM Data Push로 수신측 wake → Agora *Trigger Join*. always-join은 listener 최소화 철학 위반이라 *배제*. 1순위 위험 = wake→fast-join 핸드셰이크 신뢰성. ⚠️ 클코가 상시 join을 메인 권장한 오류 → 본인 적발 → feedback `paradigm_over_analogy` 박음(피드백 12→13개)
+- **함수 개수 점검**: ~68개(CLAUDE.md "41개" outdated). *개수 자체는 비용·할당량 무관*(gen2 호출 기반 과금). 테스트/일회성 4개(testFcmMessage/migratePickupDrivers/migrateExistingOfficesWallet/backfillChatMembers) PTT commit에 *편입 보류*(본인 결정). 명세 = plan `C:\Users\kala1\.claude\plans\unified-sniffing-peacock.md`. 쿠폰앱 분리는 functions 무관(coupon 함수 0개)
+- **PTT 자료 정합화 4/10→8/10**: 마스터 plan `harmonic-sparking-hedgehog.md`에 "★2026-06-01 갱신" 섹션 역병합 + `ptt_operation_scenario` §8 음성 전달 모델 1문장 + `ptt_market_replacement_card` 비용표 각주(620만원=상시 join 가정, Trigger Join 시 하향, Phase 2 재계산). **단일 진입점 = 마스터 plan(6/1 섹션) + [[ptt_volume_button_principle]]**
+- **다음 세션 진입**: Phase 2 Plan agent (8+1 시나리오 → 코드 구현 매핑, **FCM wake→fast-join 핸드셰이크 신뢰성 1순위**). 무거운 설계라 신선한 세션 권장. "Phase 2 진입해줘" 한마디로 시작
+
 ## 도메인별 진입점
 | 도메인 | 인덱스 | 상태 |
 |--------|--------|------|
@@ -320,7 +327,7 @@
 - iOS App Store 무경험, Android 숙련 (`memory/user_profile/user_ios_experience.md`)
 - Apple Team ID `VCJD377MAU` / Bundle `com.designated.driverapp.app` (`memory/user_profile/apple_ios_ids.md`)
 
-## 주요 피드백 (사고 모드, 12개)
+## 주요 피드백 (사고 모드, 13개)
 | 피드백 | 핵심 |
 |--------|------|
 | user_intent_first | 사용자 명시 의도를 추측 우회로 대체 금지 |
@@ -336,6 +343,7 @@
 | app_naming | "기사앱"=driver_app(대리), "픽업앱"=pickup_driver_app. 발화 모호 시 AskUserQuestion (`memory/feedback/feedback_app_naming.md`) |
 | simplify_first_cleanup_later | 큰 간소화 PR 대기 중일 때 작은 정리 PR을 끼워 넣지 말 것. Audit은 스냅샷 보고서로 보존 (`memory/feedback/feedback_simplify_first_cleanup_later.md`) |
 | no_revelation_projection | 사용자가 이미 알고 있던 것을 클코의 첫 인지로 투영해 "드물게 도달한 자리" 식 신비화 금지. 사용자 톤(웃긴건/그냥/재미있게)에 답변 톤 정합. 별 5개 자제 (`memory/feedback/feedback_no_revelation_projection.md`) |
+| paradigm_over_analogy | 신규 기능 설계 시 프로젝트 패러다임(listener_vs_fcm·Data Push·listener 최소화) 먼저 적용. 도메인 비유의 UX 목표 ≠ 구현 아키텍처. 패러다임 위반 옵션을 "본인 결정 자리"로 올리지 말 것 (`memory/feedback/feedback_paradigm_over_analogy_2026-06-01.md`) |
 
 ## 자주 쓰는 단축 정보
 

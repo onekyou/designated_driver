@@ -32,6 +32,7 @@ PTT 시나리오의 *자연 결과*:
 - 콜 카드 작성 폐기 (매니저→기사 위임)
 - 알림 통합 (현재 6종+ 폭주 → Data Push 라우터 1)
 - 매니저 UI 축소
+- **Cloud Functions 위생 정리** (2026-06-01 본인 결정 편입): 테스트/일회성 함수 4개 제거(`testFcmMessage` / `migratePickupDrivers` / `migrateExistingOfficesWallet` / `backfillChatMembers`). 단독 PR ❌ → PTT 함수 추가(agoraToken 등) commit에 *묶음*. 제거 명세 = plan `C:\Users\kala1\.claude\plans\unified-sniffing-peacock.md` (앱 미호출 확인 / `addChatMember`·`removeChatMember`·chat 트리거 4종 보존 / admin 스크립트 대체재 존재). ⚠️ 함수 *개수 자체는 비용·할당량 무관* (gen2 호출 기반 과금, region당 ~1,000개 한도). 쿠폰앱 분리는 functions 무관(coupon 함수 0개).
 
 PTT 코드 진입에 *포함되어 처리*. 별도 트랙 아님.
 
