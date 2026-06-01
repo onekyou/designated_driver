@@ -32,6 +32,9 @@
     <!-- 음성 인식 권한 (음성 입력 기능) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <!-- PTT 오디오 라우팅 (Agora) -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
     <!-- 배터리 최적화 예외 요청 권한 -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     

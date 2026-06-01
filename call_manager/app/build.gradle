@@ -159,6 +159,9 @@ dependencies {
     // QR Code generation (ZXing)
     implementation 'com.google.zxing:core:3.5.3'
 
+    // Agora PTT (음성 전용 RTC, RTM 미사용)
+    implementation 'io.agora.rtc:voice-sdk:4.5.2'
+
     // Testing
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'

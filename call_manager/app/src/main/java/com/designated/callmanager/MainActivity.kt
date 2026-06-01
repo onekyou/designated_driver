@@ -76,7 +76,11 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.view.KeyEvent
+import androidx.compose.foundation.background
 import com.designated.callmanager.service.CallManagerService
+import com.designated.callmanager.service.PTTManager
+import com.designated.callmanager.service.PttState
 import com.designated.callmanager.ui.dashboard.DashboardScreen
 import com.designated.callmanager.ui.dashboard.DashboardViewModel
 import com.designated.callmanager.ui.dashboard.NewCallAssignmentDialog
@@ -156,6 +160,12 @@ class MainActivity : ComponentActivity() {
     private var managerId: String? = null
 
     private var tokenRefreshListener: com.google.firebase.firestore.ListenerRegistration? = null
+
+    // PTT 송신 (탭 후 hold-to-talk). 엔진은 발화 시점 Activity 컨텍스트로 생성(onCreate 컨텍스트 불안정 회피).
+    private val pttManager = PTTManager()
+    private var pttFirstTapUpTime = 0L       // 첫 탭(arm) up 시각
+    private var pttPendingFirstTapDown = false // 첫 탭 down 후 up 대기
+    private var pttHolding = false           // 두 번째 누름 유지(발화) 중
 
     private lateinit var permissionManager: CallManagerPermissionManager
 
@@ -603,6 +613,31 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
+                    // PTT 발화 상태 배너 — 어느 화면에서든 상단 표시
+                    val pttState by pttManager.state.collectAsState()
+                    if (pttState != PttState.IDLE) {
+                        androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
+                            val isTalking = pttState == PttState.TALKING
+                            val bg = if (isTalking) androidx.compose.ui.graphics.Color(0xFFD32F2F)
+                                     else androidx.compose.ui.graphics.Color(0xFFF9A825)
+                            val label = if (isTalking) "🔴 PTT 발화중" else "연결중…"
+                            androidx.compose.foundation.layout.Box(
+                                modifier = Modifier
+                                    .align(androidx.compose.ui.Alignment.TopCenter)
+                                    .fillMaxWidth()
+                                    .background(bg)
+                                    .padding(vertical = 6.dp),
+                                contentAlignment = androidx.compose.ui.Alignment.Center
+                            ) {
+                                Text(
+                                    label,
+                                    color = androidx.compose.ui.graphics.Color.White,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
                     // 배차 팝업 — 어느 화면에서든 표시
                     val newCallInfo by dashboardViewModel.newCallInfo.collectAsState()
                     val drivers by dashboardViewModel.drivers.collectAsState()
@@ -915,8 +950,64 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * 볼륨다운 2회(짧은 간격) → PTT 발화 토글. 시스템 볼륨 변경은 차단(return true).
+     * 과거 검증 패턴(`6ae77f74`) 정합 — 화면 꺼짐 송신(BackgroundPTTService)은 확장 단계.
+     */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+            when (event.action) {
+                KeyEvent.ACTION_DOWN -> {
+                    if (event.repeatCount == 0) {
+                        val now = android.os.SystemClock.elapsedRealtime()
+                        if (now - pttFirstTapUpTime < 500L) {
+                            // 두 번째 누름 = 발화 시작(hold)
+                            val (p, c, o) = getOfficeInfoForPtt()
+                            if (p != null && c != null && o != null) {
+                                pttHolding = true
+                                pttFirstTapUpTime = 0L
+                                pttManager.startTransmit(this, p, c, o)
+                                Log.d("MainActivity", "PTT hold 시작")
+                            } else {
+                                Log.w("MainActivity", "PTT: 사무실 정보 없음 — 발화 불가")
+                            }
+                        } else {
+                            // 첫 탭 후보(down) — up에서 arm
+                            pttPendingFirstTapDown = true
+                        }
+                    }
+                    // repeatCount>0 (hold 중 키반복) 무시
+                }
+                KeyEvent.ACTION_UP -> {
+                    if (pttHolding) {
+                        pttHolding = false
+                        pttManager.stopTransmit()
+                        Log.d("MainActivity", "PTT hold 종료(손 뗌)")
+                    } else if (pttPendingFirstTapDown) {
+                        pttPendingFirstTapDown = false
+                        pttFirstTapUpTime = android.os.SystemClock.elapsedRealtime() // arm 윈도우 시작
+                    }
+                }
+            }
+            return true // 시스템 볼륨 변경 차단 (PTT 전용)
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    /** 사무실 정보 — 로그인 콜백 필드 우선, 없으면 login_prefs fallback(앱 재시작 케이스). */
+    private fun getOfficeInfoForPtt(): Triple<String?, String?, String?> {
+        val prefs = getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
+        val p = provinceId ?: prefs.getString("provinceId", null)
+        val c = cityId ?: prefs.getString("cityId", null)
+        val o = officeId ?: prefs.getString("officeId", null)
+        return Triple(p, c, o)
+    }
+
     override fun onResume() {
         super.onResume()
+
+        // PTT 엔진 워밍업(컨텍스트 안전 시점) — 첫 발화 지연 제거
+        pttManager.prewarm(this)
 
         val filter = IntentFilter("com.designated.callmanager.NEW_CALL_DETECTED")
 
@@ -952,6 +1043,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        // PTT 안전종료 — hold 중 백그라운드 전환/포커스 상실로 ACTION_UP 유실 시 송신 지속 차단
+        if (pttHolding) {
+            pttHolding = false
+            pttManager.stopTransmit()
+            Log.d("MainActivity", "PTT onPause 안전종료")
+        }
         try {
             unregisterReceiver(callDetectedReceiver)
         } catch (e: IllegalArgumentException) {
@@ -1222,6 +1319,7 @@ class MainActivity : ComponentActivity() {
         }
         val serviceIntent = Intent(this, CallManagerService::class.java)
         stopService(serviceIntent)
+        pttManager.release()
     }
 
 
