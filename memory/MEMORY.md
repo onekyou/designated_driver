@@ -290,8 +290,9 @@
 - **★ 함정 3건**: ① **broadcaster role**(LIVE_BROADCASTING audience는 매니저 onUserJoined 미발화→3초 타임아웃, 수신측도 broadcaster+마이크미publish로 해결) ② **getApplication()/applicationContext가 onCreate에서 null**(이 S21+ 단말)→엔진은 발화시점 Activity 컨텍스트로 생성 ③ 콜드 5.5초=함수 콜드스타트×2직렬→minInstances.
 - **Agora**: project DesignatedDriver-PTT, App ID `e5aae3aa…`(공개), Certificate=Secret Manager만. ⚠️ 다수 사무실 실배포 전 rotate 권장.
 - **★ 운영 전제 정정(6/2 본인)**: 매니저는 픽업 병행 = **운전 중 사용** → screen-off 송신 *필수*(거치형 아님). 현재 dispatchKeyEvent foreground 전용은 실사용 미스매치. call_manager 홈페이지 사이드로드라 **Accessibility 권한 자유**(Play Store 정책 무관). 과거 screen-off 송신(Accessibility `17bcd8b3`)은 *성공 자산*, 제거는 수신측 RTM 실패 때문(이번 해결) → **복구 가능**. foreground 밖 볼륨키 캡처는 전역 후크만 가능(샷컷 없음): Accessibility(신뢰↑·재허용 마찰) / MediaSession(권한0·충돌) / BT 이어피스 버튼(운전 정석). 상세 [[ptt_implementation_2026-06-02]].
-- **별도 트랙(미진입)**: **screen-off 송신 복구(Accessibility, 다음 증분 유력)** / 양방향+픽업 / 함수 1콜 통합+토큰 FCM 동봉 / 정산 단순화 / call_detector 연동 / 상태명명 재설계.
-- **다음 후보**: screen-off 송신(Accessibility) / master PR / 양방향+픽업 설계 / S22 포함 3단말 + 오버톤 청취 재확인 / Certificate rotate.
+- **★ screen-off 송신 = 보류(데이터로 판단)** + **콜드스타트 정리**: 상세 [[ptt_screenoff_send_2026-06-02]]. ① 스코프 정정: 일반기사=수신만(화면off 이미 작동·설정0), 송수신=콜매니저+픽업=내부직원 소수(개인폰+내비 운전 중). ② 트리거 전부 흠: Accessibility(확실하나 제한설정+삼성 재비활성 부담, 본인도 헛갈림) / MediaSession(내비 충돌 탈락) / 일반 BT버튼(모호) / 전용 BT PTT버튼(확실·하드웨어 2~3만원). → **강제 Accessibility 안 함**, 현재 빌드(foreground 볼륨키 송신)로 양평 실사용 후 "달리며 송신 정말 막히나" 데이터로 결정. ③ 콜드스타트("잠긴 시간↑→연결↑") = 함수 콜드 아님(minInstances 제거됨), **수신측 Doze**. 레버 = **배터리 최적화 예외 허용**(1탭, 가벼움). 2비프가 이미 가려 *느림 체감이지 실패 아님*.
+- **별도 트랙(미진입)**: 양방향+픽업 / 함수 1콜 통합+토큰 FCM 동봉 / 정산 단순화 / call_detector 연동 / 상태명명 재설계.
+- **다음 후보**: 양평 실사용(달리며 송신 빈도·Doze 콜드 체감 데이터) / master PR / 양방향+픽업 설계 / S22 포함 3단말 + 오버톤 청취 재확인 / Certificate rotate.
 
 ## 도메인별 진입점
 | 도메인 | 인덱스 | 상태 |
