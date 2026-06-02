@@ -415,6 +415,14 @@
 - **다음 세션**: ① 정산 E2E (콜 생성→배차→운행→정산→매니저확인, 양평 한가한 시간) ② Room v7→v8 logcat 확인 ③ 미커밋 커밋 정리
 - 부산물(보안 감사)은 사용자 결정으로 전부 정리됨 (`security_audit/` 폴더 + 토픽파일 + plan 삭제). firestore.rules 미변경이라 코드 흔적 0
 
+## 6/3 ★ PTT 음성 버퍼링 PoC — 게이트 실패·폐기 (워밍창이 진짜 레버)
+- **상세**: `memory/coupon/ptt_buffering_failure_2026-06-03.md`
+- 본인 결정(6/2) 버퍼링 우선 → Step1 차소음/실시간 게이트에서 **구조적 막다른 길** 판명·폐기. 코드는 `ptt-buffering` 브랜치 commit `8c3b4310`(로컬·미푸시) 보존. 메인=`ptt-coldstart`(마지막 푸시) 복귀, S21+ 정상빌드 재설치 완료
+- **실패 본질**: 버퍼 flush = 콜드 연결시간(1.3~4s)을 *영구 재생지연*으로 전환 → 음성녹음급 지연, 실시간 X. + 외부소스라 Agora APM(ANS/AGC) 상실(음질↓) + 마이크 충돌(enableLocalAudio false 필요). 웜은 내장마이크로 이미 실시간이라 개선 0
+- **진짜 레버 = 워밍창 연장**(미시도): 대화 중 채널 살려두면(leave 타이머 리셋, 유휴 30~60s) 대화 턴 웜→교차 실시간, 내장마이크 음질 유지. 단 첫 콜드 1발 지연은 아키텍처(FCM wake) 내재 한계(상시접속만 제거 가능, 본인 거부)
+- **현재 최선 = `ptt-coldstart` 빌드**(콜드=음성메모 hold0 / 웜=라이브 실시간). 양평 실사용 데이터로 판단
+- 기술자산: voice-sdk 4.5.2 커스텀오디오 API 확정 — 버퍼링 아니어도 재사용 가치
+
 ## SUPERSEDED 자료 위치 (참고용)
 - `memory/designated_drive/project_business_model.md` (마스터 §3.1, §3.4, §10.4 흡수)
 - `memory/designated_drive/project_expansion_vision.md` (마스터 §1.3 환상 ③)
