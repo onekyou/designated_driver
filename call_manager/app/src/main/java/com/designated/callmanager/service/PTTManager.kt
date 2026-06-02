@@ -1,6 +1,7 @@
 package com.designated.callmanager.service
 
 import android.content.Context
+import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.net.Uri
 import android.util.Log
@@ -97,6 +98,8 @@ class PTTManager {
             }
             engine = RtcEngine.create(config)
             engine?.setAudioProfile(Constants.AUDIO_PROFILE_SPEECH_STANDARD)
+            // 무전기: 통화 오디오를 이어피스→스피커로 (거치형 폰서 비프·음성 가청). 매니저=송신전용.
+            engine?.setDefaultAudioRoutetoSpeakerphone(true)
             Log.i(TAG, "RtcEngine created")
         } catch (e: Exception) {
             Log.e(TAG, "RtcEngine 생성 실패", e)
@@ -106,12 +109,23 @@ class PTTManager {
     /** 앱 onResume 워밍업(엔진·appCtx 선설정 → 첫 발화 지연 제거). */
     fun prewarm(ctx: Context) = ensureEngine(ctx)
 
-    /** 효과음 1회(시작 1차/2차·종료 오버톤 공용). 채팅음 = R.raw.ptt_start 재사용. */
-    private fun playCue() {
+    /**
+     * 효과음 1회(시작 1차/2차·종료 오버톤 공용). 채팅음 = R.raw.ptt_start 재사용.
+     *  inCall=true(라이브, 통화모드): ring/notification 스트림이 억제되므로 통화 신호음 usage로 가청.
+     *  inCall=false(음성 메모, 통화 없음): 기존 default(억제 없음, 음성메모 비프 정상).
+     */
+    private fun playCue(inCall: Boolean) {
         val ctx = appCtx ?: return
         try {
             val uri = Uri.parse("android.resource://${ctx.packageName}/${R.raw.ptt_start}")
-            RingtoneManager.getRingtone(ctx, uri)?.play()
+            val ringtone = RingtoneManager.getRingtone(ctx, uri) ?: return
+            if (inCall) {
+                ringtone.audioAttributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION_SIGNALLING)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+            }
+            ringtone.play()
         } catch (e: Exception) {
             Log.w(TAG, "playCue 실패", e)
         }
@@ -140,14 +154,14 @@ class PTTManager {
             }
             recordPending = true
             _state.value = PttState.RECORDING
-            playCue() // 1차 비프 = "말하세요"
+            playCue(inCall = false) // 1차 비프 = "말하세요" (음성 메모, 통화 없음)
             Log.i(TAG, "startTransmit: COLD(백그라운드 복귀) → 음성 메모 녹음")
             return
         }
 
         // ===== 포그라운드: 라이브 (warm 재사용 또는 cold 신규 join) =====
         _state.value = PttState.CONNECTING
-        playCue() // 1차 비프
+        playCue(inCall = true) // 1차 비프 (라이브, 통화모드)
         scope.launch {
             try {
                 if (currentChannel != null) {
@@ -194,7 +208,7 @@ class PTTManager {
         readyFired = true
         readyTimeoutJob?.cancel()
         _state.value = PttState.TALKING
-        playCue() // 2차 비프
+        playCue(inCall = true) // 2차 비프 (라이브, 통화모드)
         engine?.muteLocalAudioStream(false) // 마이크 라이브
         Log.i(TAG, "fireReady: TALKING (mic live)")
     }
@@ -223,7 +237,7 @@ class PTTManager {
         if (recordPending) {
             recordPending = false
             val result = pttRecorder.stop()
-            playCue() // 종료 비프
+            playCue(inCall = false) // 종료 비프 (음성 메모, 통화 없음)
             _state.value = PttState.IDLE
             if (result != null && result.durationMs >= PttRecorder.MIN_RECORD_MS) {
                 Log.i(TAG, "stopTransmit: COLD 음성 메모 (${result.durationMs}ms)")
@@ -238,7 +252,7 @@ class PTTManager {
 
         // 웜(라이브) 종료
         val eng = engine ?: run { _state.value = PttState.IDLE; return }
-        playCue() // 종료 오버톤
+        playCue(inCall = true) // 종료 오버톤 (라이브, 통화모드)
         eng.muteLocalAudioStream(true)
         _state.value = PttState.IDLE
         leaveJob?.cancel()

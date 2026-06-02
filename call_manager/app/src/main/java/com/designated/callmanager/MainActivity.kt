@@ -166,9 +166,11 @@ class MainActivity : ComponentActivity() {
     private var pttFirstTapUpTime = 0L       // 첫 탭(arm) up 시각
     private var pttPendingFirstTapDown = false // 첫 탭 down 후 up 대기
     private var pttHolding = false           // 두 번째 누름 유지(발화) 중
-    // 백그라운드/화면오프 복귀 첫 송신 여부 — onStop에서 true, 첫 발화에서 소비.
-    // 기본 true = 앱 실행 직후 첫 송신도 음성 메모(그 시점 채널·라디오 콜드라 안전).
+    // 백그라운드/화면오프 복귀 첫 송신 여부 — 첫 발화에서 소비. 기본 true(앱 실행 직후=콜드).
+    // onStop 즉시 set이 아니라, onStop→onResume 체류시간 >= PTT_BG_COLD_MS일 때만 set
+    // → NFC·알림·통화 같은 짧은 포커스 강탈(blip)에 라이브가 안 깨짐.
     private var pttFromBackground = true
+    private var pttBackgroundedAt = 0L       // onStop 시각(elapsedRealtime), onResume에서 체류 판정
 
     private lateinit var permissionManager: CallManagerPermissionManager
 
@@ -314,6 +316,8 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
+        // PTT: 백그라운드 체류 이 시간 이상이면 콜드(다음 첫 송신=음성 메모). 미만(blip)은 라이브 유지. 튜닝 상수.
+        private const val PTT_BG_COLD_MS = 8_000L
         const val ACTION_SHOW_CALL_POPUP = "ACTION_SHOW_CALL_POPUP"
         const val ACTION_SHOW_SHARED_CALL = "ACTION_SHOW_SHARED_CALL"
         const val ACTION_SHOW_SHARED_CALL_CANCELLED = "ACTION_SHOW_SHARED_CALL_CANCELLED"
@@ -1035,6 +1039,19 @@ class MainActivity : ComponentActivity() {
         // PTT 엔진 워밍업(컨텍스트 안전 시점) — 첫 발화 지연 제거
         pttManager.prewarm(this)
 
+        // 백그라운드 체류시간 판정: 오래 머물렀다 복귀 = 콜드 → 다음 첫 송신 음성 메모.
+        // 짧은 blip(NFC·알림·통화)은 무시 → 포그라운드 라이브 유지.
+        if (pttBackgroundedAt != 0L) {
+            val awayMs = android.os.SystemClock.elapsedRealtime() - pttBackgroundedAt
+            if (awayMs >= PTT_BG_COLD_MS) {
+                pttFromBackground = true
+                Log.d("MainActivity", "PTT onResume — 백그라운드 ${awayMs}ms 체류 → 첫 송신=음성 메모")
+            } else {
+                Log.d("MainActivity", "PTT onResume — 짧은 blip ${awayMs}ms 무시 → 라이브 유지")
+            }
+            pttBackgroundedAt = 0L
+        }
+
         val filter = IntentFilter("com.designated.callmanager.NEW_CALL_DETECTED")
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -1097,9 +1114,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        // 백그라운드/화면오프 진입 — 다음 첫 PTT 송신은 음성 메모(콜드 5초 hold 회피)
-        pttFromBackground = true
-        Log.d("MainActivity", "PTT onStop — 다음 첫 송신=음성 메모 플래그 set")
+        // 백그라운드/화면오프 진입 시각만 기록 — 실제 판정은 onResume에서 체류시간으로.
+        // (NFC·알림·통화 같은 짧은 blip은 곧 onResume 복귀 → 무시 → 라이브 유지)
+        pttBackgroundedAt = android.os.SystemClock.elapsedRealtime()
+        Log.d("MainActivity", "PTT onStop — 백그라운드 진입 시각 기록")
     }
 
     private fun isPopupAlreadyShown(popupId: String): Boolean {
