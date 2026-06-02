@@ -14,6 +14,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.storage.StorageMetadata
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +25,7 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.ByteArrayOutputStream
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.max
@@ -64,6 +66,10 @@ class ChatRepository @Inject constructor(
         private const val IMAGE_MAX_DIM = 640
         private const val IMAGE_JPEG_QUALITY = 60
         private const val IMAGE_UPLOAD_TIMEOUT_MS = 30_000L
+
+        // 음성 메모 (PTT 콜드 발화)
+        private const val AUDIO_UPLOAD_TIMEOUT_MS = 30_000L
+        private const val AUDIO_CONTENT_TYPE = "audio/mp4"
     }
 
     /** 이미지 업로드 결과. */
@@ -72,6 +78,12 @@ class ChatRepository @Inject constructor(
         val path: String,
         val width: Int,
         val height: Int,
+    )
+
+    /** 음성 메모 업로드 결과. */
+    data class AudioUploadResult(
+        val url: String,
+        val path: String,
     )
 
     // ===== Flow 노출 =====
@@ -201,14 +213,18 @@ class ChatRepository @Inject constructor(
                 val imagePath = payload["imagePath"]?.takeIf { it.isNotEmpty() }
                 val imageWidth = payload["imageWidth"]?.toIntOrNull()
                 val imageHeight = payload["imageHeight"]?.toIntOrNull()
+                val audioUrl = payload["audioUrl"]?.takeIf { it.isNotEmpty() }
+                val audioPath = payload["audioPath"]?.takeIf { it.isNotEmpty() }
+                val audioDurationMs = payload["audioDurationMs"]?.toLongOrNull()
+                val audioAutoplay = payload["audioAutoplay"] == "true"
                 val createdAt = payload["createdAt"]?.toLongOrNull() ?: System.currentTimeMillis()
                 val clientCreatedAt = payload["clientCreatedAt"]?.toLongOrNull() ?: createdAt
                 val provinceId = payload["provinceId"] ?: return@launch
                 val cityId = payload["cityId"] ?: return@launch
                 val officeId = payload["officeId"] ?: return@launch
 
-                if (text.isBlank() && imageUrl.isNullOrEmpty()) {
-                    Log.w(TAG, "[onRemoteMessageReceived] text/imageUrl 둘 다 없음 — skip ($messageId)")
+                if (text.isBlank() && imageUrl.isNullOrEmpty() && audioUrl.isNullOrEmpty()) {
+                    Log.w(TAG, "[onRemoteMessageReceived] text/imageUrl/audioUrl 모두 없음 — skip ($messageId)")
                     return@launch
                 }
 
@@ -235,10 +251,14 @@ class ChatRepository @Inject constructor(
                         imagePath = imagePath,
                         imageWidth = imageWidth,
                         imageHeight = imageHeight,
+                        audioUrl = audioUrl,
+                        audioPath = audioPath,
+                        audioDurationMs = audioDurationMs,
+                        audioAutoplay = audioAutoplay,
                     )
                 )
                 Log.d(TAG, "[onRemoteMessageReceived] INSERT: $messageId" +
-                    if (imageUrl != null) " (image)" else "")
+                    when { imageUrl != null -> " (image)"; audioUrl != null -> " (audio)"; else -> "" })
             } catch (e: Exception) {
                 Log.e(TAG, "[onRemoteMessageReceived] 처리 실패", e)
             }
@@ -271,11 +291,15 @@ class ChatRepository @Inject constructor(
                 val imagePath = doc.getString("imagePath")?.takeIf { it.isNotEmpty() }
                 val imageWidth = doc.getLong("imageWidth")?.toInt()
                 val imageHeight = doc.getLong("imageHeight")?.toInt()
+                val audioUrl = doc.getString("audioUrl")?.takeIf { it.isNotEmpty() }
+                val audioPath = doc.getString("audioPath")?.takeIf { it.isNotEmpty() }
+                val audioDurationMs = doc.getLong("audioDurationMs")
+                val audioAutoplay = doc.getBoolean("audioAutoplay") ?: false
                 val createdAt = (doc.get("createdAt") as? Timestamp)?.toDate()?.time
                     ?: doc.getLong("clientCreatedAt") ?: return@mapNotNull null
                 val clientCreatedAt = doc.getLong("clientCreatedAt") ?: createdAt
 
-                if (text.isBlank() && imageUrl.isNullOrEmpty()) return@mapNotNull null
+                if (text.isBlank() && imageUrl.isNullOrEmpty() && audioUrl.isNullOrEmpty()) return@mapNotNull null
 
                 LocalChatMessage(
                     id = doc.id,
@@ -293,6 +317,10 @@ class ChatRepository @Inject constructor(
                     imagePath = imagePath,
                     imageWidth = imageWidth,
                     imageHeight = imageHeight,
+                    audioUrl = audioUrl,
+                    audioPath = audioPath,
+                    audioDurationMs = audioDurationMs,
+                    audioAutoplay = audioAutoplay,
                 )
             }
 
@@ -302,6 +330,121 @@ class ChatRepository @Inject constructor(
             }
         } catch (e: Exception) {
             Log.e(TAG, "[loadInitialMessages] 실패", e)
+        }
+    }
+
+    // ===== 음성 메모 (PTT 콜드 발화) =====
+
+    /**
+     * 음성 메모 파일을 Storage에 업로드. contentType="audio/mp4" 명시(storage rule audio 타입 통과).
+     * path: provinces/.../chat_audio/{messageId}.m4a
+     */
+    suspend fun uploadChatAudio(
+        provinceId: String,
+        cityId: String,
+        officeId: String,
+        messageId: String,
+        file: File,
+    ): AudioUploadResult = withContext(Dispatchers.IO) {
+        val bytes = file.readBytes()
+        val path = "provinces/$provinceId/cities/$cityId/offices/$officeId/chat_audio/$messageId.m4a"
+        val ref = storage.reference.child(path)
+        val metadata = StorageMetadata.Builder().setContentType(AUDIO_CONTENT_TYPE).build()
+        val downloadUrl = withTimeoutOrNull(AUDIO_UPLOAD_TIMEOUT_MS) {
+            ref.putBytes(bytes, metadata).await()
+            ref.downloadUrl.await().toString()
+        } ?: throw IllegalStateException("음성 업로드 30초 초과: $messageId")
+
+        AudioUploadResult(url = downloadUrl, path = path)
+    }
+
+    /**
+     * 음성 메모 메시지 전송 (PTT 콜드 발화). text는 빈 문자열, audioAutoplay 지정.
+     * 흐름은 sendImageMessage 미러: Optimistic INSERT → upload → Firestore set → markAudioSent.
+     * 성공/실패 무관 임시 파일 삭제.
+     */
+    fun sendAudioMessage(
+        provinceId: String,
+        cityId: String,
+        officeId: String,
+        senderId: String,
+        senderName: String,
+        senderRole: String,
+        file: File,
+        durationMs: Long,
+        autoplay: Boolean,
+    ) {
+        scope.launch {
+            val messageRef = firestore
+                .collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
+                .collection("offices").document(officeId)
+                .collection("chatRoom").document("main")
+                .collection("messages").document()
+            val messageId = messageRef.id
+            val nowMs = System.currentTimeMillis()
+
+            // 1) Optimistic INSERT — uploading sentinel UI 즉시 표시
+            val placeholder = LocalChatMessage(
+                id = messageId,
+                provinceId = provinceId,
+                cityId = cityId,
+                officeId = officeId,
+                senderId = senderId,
+                senderName = senderName,
+                senderRole = senderRole,
+                text = "",
+                createdAt = nowMs,
+                clientCreatedAt = nowMs,
+                sendStatus = LocalChatMessage.SEND_STATUS_SENDING,
+                audioUrl = LocalChatMessage.UPLOADING_SENTINEL,
+                audioDurationMs = durationMs,
+                audioAutoplay = autoplay,
+            )
+            chatDao.insert(placeholder)
+
+            // 2) 업로드 + Firestore set
+            try {
+                val uploaded = uploadChatAudio(provinceId, cityId, officeId, messageId, file)
+
+                val firestoreData = mapOf(
+                    "id" to messageId,
+                    "senderId" to senderId,
+                    "senderName" to senderName,
+                    "senderRole" to senderRole,
+                    "audioUrl" to uploaded.url,
+                    "audioPath" to uploaded.path,
+                    "audioDurationMs" to durationMs,
+                    "audioAutoplay" to autoplay,
+                    "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                    "clientCreatedAt" to nowMs,
+                    "status" to "SENT",
+                    // text 필드 omit — audio-only 메시지
+                )
+                messageRef.set(firestoreData).await()
+
+                val serverDoc = messageRef.get().await()
+                val serverCreatedAt = serverDoc.getTimestamp("createdAt")?.toDate()?.time ?: nowMs
+                chatDao.markAudioSent(
+                    id = messageId,
+                    audioUrl = uploaded.url,
+                    audioPath = uploaded.path,
+                    audioDurationMs = durationMs,
+                    createdAt = serverCreatedAt,
+                )
+                Log.d(TAG, "[sendAudioMessage] 발송 성공: $messageId (${durationMs}ms)")
+            } catch (e: Exception) {
+                Log.e(TAG, "[sendAudioMessage] 발송 실패: $messageId", e)
+                // Storage cleanup (best-effort)
+                try {
+                    val path = "provinces/$provinceId/cities/$cityId/offices/$officeId/chat_audio/$messageId.m4a"
+                    storage.reference.child(path).delete().await()
+                } catch (_: Exception) { /* 업로드 자체 실패 시 파일 없음 */ }
+                chatDao.updateSendStatus(messageId, LocalChatMessage.SEND_STATUS_FAILED)
+            } finally {
+                // 성공/실패 무관 임시 녹음 파일 삭제
+                try { if (file.exists()) file.delete() } catch (_: Exception) {}
+            }
         }
     }
 
