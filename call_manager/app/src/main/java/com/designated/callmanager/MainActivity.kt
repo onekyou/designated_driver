@@ -171,6 +171,7 @@ class MainActivity : ComponentActivity() {
     // → NFC·알림·통화 같은 짧은 포커스 강탈(blip)에 라이브가 안 깨짐.
     private var pttFromBackground = true
     private var pttBackgroundedAt = 0L       // onStop 시각(elapsedRealtime), onResume에서 체류 판정
+    private var pttLastActivityAt = 0L       // 마지막 PTT 활동 시각 — 직후 onStop은 PTT 유발이라 무시
 
     private lateinit var permissionManager: CallManagerPermissionManager
 
@@ -318,6 +319,8 @@ class MainActivity : ComponentActivity() {
     companion object {
         // PTT: 백그라운드 체류 이 시간 이상이면 콜드(다음 첫 송신=음성 메모). 미만(blip)은 라이브 유지. 튜닝 상수.
         private const val PTT_BG_COLD_MS = 8_000L
+        // PTT 송신 직후 이 시간 내 onStop은 통화모드가 유발한 것 → 백그라운드로 안 침(라이브 유지).
+        private const val PTT_ONSTOP_IGNORE_MS = 5_000L
         const val ACTION_SHOW_CALL_POPUP = "ACTION_SHOW_CALL_POPUP"
         const val ACTION_SHOW_SHARED_CALL = "ACTION_SHOW_SHARED_CALL"
         const val ACTION_SHOW_SHARED_CALL_CANCELLED = "ACTION_SHOW_SHARED_CALL_CANCELLED"
@@ -996,6 +999,7 @@ class MainActivity : ComponentActivity() {
                                 pttFirstTapUpTime = 0L
                                 val fromBg = pttFromBackground
                                 pttFromBackground = false // 소비
+                                pttLastActivityAt = now
                                 pttManager.startTransmit(this, p, c, o, fromBg)
                                 Log.d("MainActivity", "PTT hold 시작")
                             } else {
@@ -1012,6 +1016,7 @@ class MainActivity : ComponentActivity() {
                     if (pttHolding) {
                         pttHolding = false
                         pttManager.stopTransmit()
+                        pttLastActivityAt = android.os.SystemClock.elapsedRealtime()
                         Log.d("MainActivity", "PTT hold 종료(손 뗌)")
                     } else if (pttPendingFirstTapDown) {
                         pttPendingFirstTapDown = false
@@ -1090,6 +1095,7 @@ class MainActivity : ComponentActivity() {
         if (pttHolding) {
             pttHolding = false
             pttManager.stopTransmit()
+            pttLastActivityAt = android.os.SystemClock.elapsedRealtime() // 직후 onStop은 PTT 유발로 무시
             Log.d("MainActivity", "PTT onPause 안전종료")
         }
         try {
@@ -1114,9 +1120,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        // 백그라운드/화면오프 진입 시각만 기록 — 실제 판정은 onResume에서 체류시간으로.
-        // (NFC·알림·통화 같은 짧은 blip은 곧 onResume 복귀 → 무시 → 라이브 유지)
-        pttBackgroundedAt = android.os.SystemClock.elapsedRealtime()
+        val now = android.os.SystemClock.elapsedRealtime()
+        // 라이브 PTT(통화모드)가 발화 중·직후 유발하는 onStop은 "백그라운드"가 아님 → 무시(라이브 유지).
+        if (pttLastActivityAt != 0L && now - pttLastActivityAt < PTT_ONSTOP_IGNORE_MS) {
+            Log.d("MainActivity", "PTT onStop — PTT 직후(${now - pttLastActivityAt}ms) 유발 → 무시")
+            return
+        }
+        // 진짜 백그라운드/화면오프 진입 시각 기록 — 판정은 onResume에서 체류시간으로.
+        pttBackgroundedAt = now
         Log.d("MainActivity", "PTT onStop — 백그라운드 진입 시각 기록")
     }
 
