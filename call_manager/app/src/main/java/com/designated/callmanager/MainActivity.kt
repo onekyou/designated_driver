@@ -162,7 +162,8 @@ class MainActivity : ComponentActivity() {
     private var tokenRefreshListener: com.google.firebase.firestore.ListenerRegistration? = null
 
     // PTT 송신 (탭 후 hold-to-talk). 엔진은 발화 시점 Activity 컨텍스트로 생성(onCreate 컨텍스트 불안정 회피).
-    private val pttManager = PTTManager()
+    // PTT 송수신 매니저 — Application 단일 인스턴스 공유(PttReceiverService와 동일 엔진). RtcEngine 싱글톤 보장.
+    private val pttManager get() = (application as CallManagerApplication).pttManager
     private var pttFirstTapUpTime = 0L       // 첫 탭(arm) up 시각
     private var pttPendingFirstTapDown = false // 첫 탭 down 후 up 대기
     private var pttHolding = false           // 두 번째 누름 유지(발화) 중
@@ -645,11 +646,16 @@ class MainActivity : ComponentActivity() {
                         androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
                             val isTalking = pttState == PttState.TALKING
                             val isRecording = pttState == PttState.RECORDING
-                            val bg = if (isTalking || isRecording) androidx.compose.ui.graphics.Color(0xFFD32F2F)
-                                     else androidx.compose.ui.graphics.Color(0xFFF9A825)
+                            val isListening = pttState == PttState.LISTENING
+                            val bg = when {
+                                isTalking || isRecording -> androidx.compose.ui.graphics.Color(0xFFD32F2F) // 송신 빨강
+                                isListening -> androidx.compose.ui.graphics.Color(0xFF1565C0)              // 수신 파랑
+                                else -> androidx.compose.ui.graphics.Color(0xFFF9A825)                     // 연결중 주황
+                            }
                             val label = when {
                                 isRecording -> "🔴 녹음중 (말하세요)"
                                 isTalking -> "🔴 PTT 발화중"
+                                isListening -> "🔊 수신중"
                                 else -> "연결중…"
                             }
                             androidx.compose.foundation.layout.Box(
@@ -1381,7 +1387,8 @@ class MainActivity : ComponentActivity() {
         }
         val serviceIntent = Intent(this, CallManagerService::class.java)
         stopService(serviceIntent)
-        pttManager.release()
+        // ★ pttManager.release() 호출 금지 — 엔진은 Application 단일 소유(PttReceiverService 수신과 공유).
+        //   Activity 파괴 시 destroy하면 화면 off 수신 중 엔진이 소실됨. 프로세스 종료 시 OS가 정리.
     }
 
 

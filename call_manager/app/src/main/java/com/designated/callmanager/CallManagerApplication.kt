@@ -9,6 +9,7 @@ import com.designated.callmanager.data.local.AppDatabase
 import com.designated.callmanager.data.repository.CallRepository
 import com.designated.callmanager.data.repository.ChatRepository
 import com.designated.callmanager.data.repository.DriverRepository
+import com.designated.callmanager.service.PTTManager
 import com.designated.callmanager.service.PresenceManager
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
@@ -83,6 +84,13 @@ class CallManagerApplication : Application() {
     val chatRepository: ChatRepository by lazy {
         ChatRepository(applicationContext, database, firestore, applicationScope)
     }
+
+    /**
+     * PTT 송수신 매니저 — 프로세스당 단일 Agora 엔진 보장.
+     *  MainActivity(송신·배너)와 PttReceiverService(수신 join·콜드 재생)가 이 인스턴스를 공유한다.
+     *  RtcEngine.create/destroy는 싱글톤이라 인스턴스가 둘이면 엔진 충돌 → 반드시 여기 1개.
+     */
+    val pttManager = PTTManager()
 
     override fun onCreate() {
         super.onCreate()
