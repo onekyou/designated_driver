@@ -166,6 +166,9 @@ class MainActivity : ComponentActivity() {
     private var pttFirstTapUpTime = 0L       // 첫 탭(arm) up 시각
     private var pttPendingFirstTapDown = false // 첫 탭 down 후 up 대기
     private var pttHolding = false           // 두 번째 누름 유지(발화) 중
+    // 백그라운드/화면오프 복귀 첫 송신 여부 — onStop에서 true, 첫 발화에서 소비.
+    // 기본 true = 앱 실행 직후 첫 송신도 음성 메모(그 시점 채널·라디오 콜드라 안전).
+    private var pttFromBackground = true
 
     private lateinit var permissionManager: CallManagerPermissionManager
 
@@ -987,7 +990,9 @@ class MainActivity : ComponentActivity() {
                             if (p != null && c != null && o != null) {
                                 pttHolding = true
                                 pttFirstTapUpTime = 0L
-                                pttManager.startTransmit(this, p, c, o)
+                                val fromBg = pttFromBackground
+                                pttFromBackground = false // 소비
+                                pttManager.startTransmit(this, p, c, o, fromBg)
                                 Log.d("MainActivity", "PTT hold 시작")
                             } else {
                                 Log.w("MainActivity", "PTT: 사무실 정보 없음 — 발화 불가")
@@ -1088,6 +1093,13 @@ class MainActivity : ComponentActivity() {
         }
         tokenRefreshListener?.remove()
         tokenRefreshListener = null
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // 백그라운드/화면오프 진입 — 다음 첫 PTT 송신은 음성 메모(콜드 5초 hold 회피)
+        pttFromBackground = true
+        Log.d("MainActivity", "PTT onStop — 다음 첫 송신=음성 메모 플래그 set")
     }
 
     private fun isPopupAlreadyShown(popupId: String): Boolean {

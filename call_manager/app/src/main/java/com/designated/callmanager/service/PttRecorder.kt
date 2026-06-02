@@ -18,7 +18,7 @@ import java.util.UUID
  * 포맷: MPEG_4 컨테이너 + AAC, 16kHz mono — MediaPlayer 무가공 재생 + storage rule audio 타입 정합.
  * 출력: cacheDir/ptt_voice/{messageId}.m4a (업로드 후 ChatRepository가 삭제).
  *
- * 마이크 점유: MediaRecorder만 마이크 사용. (콜드 웜업 Agora join은 enableLocalAudio(false)라 미점유 — PTTManager 참조.)
+ * 마이크 점유: 백그라운드 복귀 음성 메모는 Agora 미사용(MediaRecorder만 마이크). 포그라운드 라이브는 Agora가 마이크 사용(별도 경로).
  */
 class PttRecorder {
 
