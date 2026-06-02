@@ -7,9 +7,11 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.designated.pickupdriver.data.Constants
 import com.designated.pickupdriver.data.repository.CallRepository
 import com.designated.pickupdriver.data.repository.ChatRepository
+import com.designated.pickupdriver.service.PttReceiverService
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -78,6 +80,15 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             Constants.MSG_TYPE_NEW_CHAT_MESSAGE -> handleChatMessage(remoteMessage)
             Constants.MSG_TYPE_NEW_CALL -> handleNewCall(remoteMessage)
             Constants.MSG_TYPE_CALL_STATUS_UPDATE -> handleCallStatusUpdate(remoteMessage)
+            "ptt_dispatch" -> {
+                // PTT 라이브 수신 wake — 수신 FGS로 위임(화면 off에서도 join).
+                val channelName = remoteMessage.data["channelName"] ?: ""
+                val senderName = remoteMessage.data["senderName"] ?: "매니저"
+                ContextCompat.startForegroundService(
+                    this, PttReceiverService.newPttDispatchIntent(this, channelName, senderName)
+                )
+            }
+            "ptt_prewake" -> Log.d(TAG, "PTT pre-wake 수신 (no-op)")
             else -> Log.d(TAG, "처리 안 함: $messageType")
         }
     }
@@ -220,9 +231,13 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val senderId = data["senderId"] ?: return
         val senderName = data["senderName"] ?: "알 수 없음"
         val senderRole = data["senderRole"] ?: "MANAGER"
-        val text = data["text"] ?: return
+        val text = data["text"] ?: ""
+        val audioUrl = data["audioUrl"]?.takeIf { it.isNotEmpty() }
+        val audioAutoplay = data["audioAutoplay"] == "true"
+        val displayText = if (audioUrl != null) "[음성]" else text
 
-        Log.d(TAG, "[handleChatMessage] 수신 - id=$messageId, from=$senderName ($senderRole)")
+        Log.d(TAG, "[handleChatMessage] 수신 - id=$messageId, from=$senderName ($senderRole)" +
+            if (audioUrl != null) " (audio)" else "")
 
         // 1) Room INSERT
         chatRepository.onRemoteMessageReceived(data)
@@ -234,10 +249,16 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
 
+        // 2.5) PTT 콜드 음성 메모 자동재생 (운전 중이라 포/백 무관). 자동재생이 곧 알림.
+        if (audioUrl != null && audioAutoplay) {
+            Log.d(TAG, "[handleChatMessage] 음성 메모 자동재생 트리거")
+            PttReceiverService.playVoiceMemo(this, audioUrl)
+        }
+
         // 3) 포그라운드면 시스템 알림 skip, sound만 재생 (BottomSheet UI가 처리)
         if (isAppInForeground()) {
-            Log.d(TAG, "[handleChatMessage] 포그라운드 - 알림 skip, sound 재생")
-            playChatSound()
+            Log.d(TAG, "[handleChatMessage] 포그라운드 - 알림 skip")
+            if (audioUrl == null) playChatSound() // 음성은 자동재생이 알림 역할
             return
         }
 
@@ -267,8 +288,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val notification = NotificationCompat.Builder(this, CHAT_MESSAGE_CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
-            .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentText(displayText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(displayText))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setAutoCancel(true)
