@@ -96,6 +96,10 @@ interface ChatMessageDoc {
   imagePath?: string;
   imageWidth?: number;
   imageHeight?: number;
+  audioUrl?: string;
+  audioPath?: string;
+  audioDurationMs?: number;
+  audioAutoplay?: boolean;
   createdAt?: Timestamp;
   clientCreatedAt?: number;
   status?: string;
@@ -120,8 +124,8 @@ export const onChatMessageCreated = onDocumentCreated(
     }
 
     const msg = event.data.data() as ChatMessageDoc;
-    if (!msg.senderId || (!msg.text && !msg.imageUrl)) {
-      logger.warn(`[onChatMessageCreated:${messageId}] senderId 누락 또는 text/imageUrl 둘 다 누락`);
+    if (!msg.senderId || (!msg.text && !msg.imageUrl && !msg.audioUrl)) {
+      logger.warn(`[onChatMessageCreated:${messageId}] senderId 누락 또는 text/imageUrl/audioUrl 모두 누락`);
       return;
     }
 
@@ -133,6 +137,10 @@ export const onChatMessageCreated = onDocumentCreated(
     const imagePath = msg.imagePath ?? "";
     const imageWidth = msg.imageWidth;
     const imageHeight = msg.imageHeight;
+    const audioUrl = msg.audioUrl ?? "";
+    const audioPath = msg.audioPath ?? "";
+    const audioDurationMs = msg.audioDurationMs;
+    const audioAutoplay = msg.audioAutoplay === true;
     const createdAtMs = msg.createdAt?.toMillis?.() ?? Date.now();
     const clientCreatedAt = msg.clientCreatedAt ?? createdAtMs;
 
@@ -183,11 +191,13 @@ export const onChatMessageCreated = onDocumentCreated(
         return;
       }
 
-      // 알림 미리보기: 이미지면 [사진], 텍스트는 본문 100자 cap
+      // 알림 미리보기: 이미지면 [사진], 음성이면 [음성], 텍스트는 본문 100자 cap
       const titleText = senderName;
       const bodyText = imageUrl
         ? "[사진]"
-        : (text.length > 100 ? text.substring(0, 100) + "…" : text);
+        : audioUrl
+          ? "[음성]"
+          : (text.length > 100 ? text.substring(0, 100) + "…" : text);
 
       const multicast = buildMulticastFcmPayload(
         {
@@ -202,6 +212,10 @@ export const onChatMessageCreated = onDocumentCreated(
             imagePath,
             imageWidth: imageWidth?.toString() ?? "",
             imageHeight: imageHeight?.toString() ?? "",
+            audioUrl,
+            audioPath,
+            audioDurationMs: audioDurationMs?.toString() ?? "",
+            audioAutoplay: audioAutoplay ? "true" : "",
             createdAt: String(createdAtMs),
             clientCreatedAt: String(clientCreatedAt),
             provinceId,
@@ -420,9 +434,12 @@ export const scheduledChatMessageCleanup = onSchedule(
         const chatMessages = snapshot.docs.filter(d => d.ref.path.includes("/chatRoom/main/messages/"));
 
         if (chatMessages.length > 0) {
-          // 1. imagePath 추출 (Storage delete 위해)
-          const imagePaths: string[] = chatMessages
-            .map(d => (d.data() as ChatMessageDoc).imagePath)
+          // 1. imagePath + audioPath 추출 (Storage delete 위해)
+          const storagePaths: string[] = chatMessages
+            .flatMap(d => {
+              const data = d.data() as ChatMessageDoc;
+              return [data.imagePath, data.audioPath];
+            })
             .filter((p): p is string => typeof p === "string" && p.length > 0);
 
           // 2. Firestore delete 먼저 (이게 진짜 cleanup, Storage 실패해도 UI 영향 X)
@@ -432,17 +449,17 @@ export const scheduledChatMessageCleanup = onSchedule(
           totalDeleted += chatMessages.length;
 
           // 3. Storage delete (best-effort, 실패는 logging만)
-          if (imagePaths.length > 0) {
+          if (storagePaths.length > 0) {
             const bucket = admin.storage().bucket();
             const results = await Promise.allSettled(
-              imagePaths.map(path => bucket.file(path).delete()),
+              storagePaths.map(path => bucket.file(path).delete()),
             );
             results.forEach((r, idx) => {
               if (r.status === "fulfilled") {
                 totalStorageDeleted++;
               } else {
                 totalStorageFailed++;
-                logger.warn(`[scheduledChatMessageCleanup] storage delete 실패: ${imagePaths[idx]}`, r.reason);
+                logger.warn(`[scheduledChatMessageCleanup] storage delete 실패: ${storagePaths[idx]}`, r.reason);
               }
             });
           }

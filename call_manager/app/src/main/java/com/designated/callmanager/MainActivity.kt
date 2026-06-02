@@ -181,6 +181,14 @@ class MainActivity : ComponentActivity() {
         permissionManager.onOverlayPermissionResult()
     }
 
+    // PTT 음성 메모용 RECORD_AUDIO 런타임 권한 (콜드 발화 녹음)
+    private val recordAudioPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val msg = if (granted) "녹음 권한 허용됨 — 다시 발화하세요" else "음성 메모를 위해 녹음 권한이 필요합니다"
+        android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show()
+    }
+
     private val _screenState = mutableStateOf(Screen.Login)
     private val _settlementInitialTab = mutableStateOf(0)
     var screenState: Screen
@@ -334,6 +342,14 @@ class MainActivity : ComponentActivity() {
             }
         )
         permissionManager.initialize(permissionLauncher, overlayPermissionLauncher)
+
+        // PTT 콜드 발화 음성 메모 배선: 녹음 종료 → 채팅 음성 첨부 게시 / 권한 미허가 → 요청
+        pttManager.onColdVoiceMemo = { file, durationMs ->
+            chatViewModel.sendPttVoiceMemo(file, durationMs)
+        }
+        pttManager.onRecordUnavailable = {
+            recordAudioPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+        }
 
         // FCM 서비스 초기화를 위한 토큰 요청
         initializeFirebaseMessaging()
@@ -618,9 +634,14 @@ class MainActivity : ComponentActivity() {
                     if (pttState != PttState.IDLE) {
                         androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
                             val isTalking = pttState == PttState.TALKING
-                            val bg = if (isTalking) androidx.compose.ui.graphics.Color(0xFFD32F2F)
+                            val isRecording = pttState == PttState.RECORDING
+                            val bg = if (isTalking || isRecording) androidx.compose.ui.graphics.Color(0xFFD32F2F)
                                      else androidx.compose.ui.graphics.Color(0xFFF9A825)
-                            val label = if (isTalking) "🔴 PTT 발화중" else "연결중…"
+                            val label = when {
+                                isRecording -> "🔴 녹음중 (말하세요)"
+                                isTalking -> "🔴 PTT 발화중"
+                                else -> "연결중…"
+                            }
                             androidx.compose.foundation.layout.Box(
                                 modifier = Modifier
                                     .align(androidx.compose.ui.Alignment.TopCenter)

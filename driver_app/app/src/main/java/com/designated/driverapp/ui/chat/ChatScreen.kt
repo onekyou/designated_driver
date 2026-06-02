@@ -1,7 +1,9 @@
 package com.designated.driverapp.ui.chat
 
+import android.media.MediaPlayer
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -174,6 +176,7 @@ private fun ChatMessageRow(
     val bubbleColor = if (isOwn) Color(0xFFFFF59D) else Color(0xFFEEEEEE)
     val timeText = formatTime(message.createdAt)
     val isImage = !message.imageUrl.isNullOrEmpty()
+    val isAudio = !message.audioUrl.isNullOrEmpty()
 
     Column(
         modifier = Modifier
@@ -210,28 +213,38 @@ private fun ChatMessageRow(
                     sendStatus = message.sendStatus,
                     onRetry = onRetry,
                 )
-                if (isImage) {
-                    ImageBubble(
+                when {
+                    isAudio -> AudioBubble(
+                        audioUrl = message.audioUrl!!,
+                        durationMs = message.audioDurationMs,
+                        sendStatus = message.sendStatus,
+                        color = bubbleColor,
+                    )
+                    isImage -> ImageBubble(
                         imageUrl = message.imageUrl!!,
                         width = message.imageWidth ?: 640,
                         height = message.imageHeight ?: 640,
                         sendStatus = message.sendStatus,
                         onClick = onImageClick,
                     )
-                } else {
-                    MessageBubble(text = message.text, color = bubbleColor)
+                    else -> MessageBubble(text = message.text, color = bubbleColor)
                 }
             } else {
-                if (isImage) {
-                    ImageBubble(
+                when {
+                    isAudio -> AudioBubble(
+                        audioUrl = message.audioUrl!!,
+                        durationMs = message.audioDurationMs,
+                        sendStatus = message.sendStatus,
+                        color = bubbleColor,
+                    )
+                    isImage -> ImageBubble(
                         imageUrl = message.imageUrl!!,
                         width = message.imageWidth ?: 640,
                         height = message.imageHeight ?: 640,
                         sendStatus = message.sendStatus,
                         onClick = onImageClick,
                     )
-                } else {
-                    MessageBubble(text = message.text, color = bubbleColor)
+                    else -> MessageBubble(text = message.text, color = bubbleColor)
                 }
                 if (showTime) {
                     Text(
@@ -324,6 +337,74 @@ private fun ImageBubble(
             error = ColorPainter(Color.Red.copy(alpha = 0.2f)),
         )
     }
+}
+
+/**
+ * 음성 메모 버블 (PTT 콜드 발화 수신). 자동재생과 별개로 ▶ 탭 → 수동 재청취.
+ */
+@Composable
+private fun AudioBubble(
+    audioUrl: String,
+    durationMs: Long?,
+    sendStatus: String,
+    color: Color,
+) {
+    if (audioUrl == LocalChatMessage.UPLOADING_SENTINEL) {
+        Box(
+            modifier = Modifier
+                .size(width = 120.dp, height = 44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.Gray.copy(alpha = 0.3f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (sendStatus == LocalChatMessage.SEND_STATUS_FAILED) {
+                Text(text = "❌ 전송 실패", color = Color.Red, style = MaterialTheme.typography.bodySmall)
+            } else {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp))
+            }
+        }
+    } else {
+        var isPlaying by remember { mutableStateOf(false) }
+        val player = remember { MediaPlayer() }
+        DisposableEffect(Unit) {
+            onDispose { runCatching { player.release() } }
+        }
+        Surface(
+            color = color,
+            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier.widthIn(max = 220.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .clickable {
+                        if (isPlaying) {
+                            runCatching { player.stop(); player.reset() }
+                            isPlaying = false
+                        } else {
+                            runCatching {
+                                player.reset()
+                                player.setDataSource(audioUrl)
+                                player.setOnPreparedListener { it.start(); isPlaying = true }
+                                player.setOnCompletionListener { isPlaying = false; runCatching { it.reset() } }
+                                player.setOnErrorListener { _, _, _ -> isPlaying = false; true }
+                                player.prepareAsync()
+                            }
+                        }
+                    },
+            ) {
+                Text(text = if (isPlaying) "⏹" else "▶", fontSize = 20.sp, color = Color.Black)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(text = "🎙 ${formatAudioDuration(durationMs)}", color = Color.Black)
+            }
+        }
+    }
+}
+
+private fun formatAudioDuration(ms: Long?): String {
+    val totalSec = ((ms ?: 0L) / 1000).toInt()
+    return "%d:%02d".format(totalSec / 60, totalSec % 60)
 }
 
 /**

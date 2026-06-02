@@ -88,6 +88,27 @@ interface ChatMessageDao {
     )
 
     /**
+     * 음성 메모 업로드 완료 시 audioUrl/audioPath/duration + 서버 시간 갱신
+     */
+    @Query(
+        """
+        UPDATE chat_messages
+        SET audioUrl = :audioUrl, audioPath = :audioPath,
+            audioDurationMs = :audioDurationMs,
+            createdAt = :createdAt, sendStatus = :status
+        WHERE id = :id
+        """
+    )
+    suspend fun markAudioSent(
+        id: String,
+        audioUrl: String,
+        audioPath: String,
+        audioDurationMs: Long,
+        createdAt: Long,
+        status: String = LocalChatMessage.SEND_STATUS_SENT,
+    )
+
+    /**
      * Local-first 강화: Room empty 여부 가드용. 0이면 첫 진입 → loadInitialMessages 1회 호출.
      */
     @Query(

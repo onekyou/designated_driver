@@ -43,6 +43,14 @@ data class LocalChatMessage(
     val imagePath: String? = null,     // Storage path (cleanup 안전성)
     val imageWidth: Int? = null,
     val imageHeight: Int? = null,
+
+    // 음성 메모 메시지 (PTT 콜드 발화)
+    val audioUrl: String? = null,
+    val audioPath: String? = null,
+    val audioDurationMs: Long? = null,
+
+    @ColumnInfo(defaultValue = "0")
+    val audioAutoplay: Boolean = false,
 ) {
     companion object {
         const val SEND_STATUS_SENDING = "SENDING"

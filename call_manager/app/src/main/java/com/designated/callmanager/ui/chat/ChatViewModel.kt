@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.io.File
 
 /**
  * 사무실 단톡방 ViewModel (call_manager)
@@ -154,6 +155,23 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         chatRepository.sendImageMessage(provinceId, cityId, officeId, senderId, name, senderRole, uri)
+    }
+
+    /**
+     * PTT 콜드 발화 음성 메모 전송 — 녹음 파일을 audio 첨부 메시지로 게시(autoplay=true).
+     * Repository가 Storage 업로드 + Firestore set + markAudioSent + 임시파일 삭제 처리.
+     */
+    fun sendPttVoiceMemo(file: File, durationMs: Long) {
+        if (!isReady) {
+            Log.w(TAG, "[sendPttVoiceMemo] 필수 정보 부족 - 전송 스킵")
+            runCatching { file.delete() }
+            return
+        }
+        val name = _senderName.value ?: "관리자" // PTT는 name 미로드여도 드롭 안 함(녹음 보존)
+        chatRepository.sendAudioMessage(
+            provinceId, cityId, officeId, senderId, name, senderRole,
+            file = file, durationMs = durationMs, autoplay = true,
+        )
     }
 
     companion object {

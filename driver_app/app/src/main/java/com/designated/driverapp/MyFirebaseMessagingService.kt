@@ -274,22 +274,34 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val senderName = data["senderName"] ?: "알 수 없음"
         val senderRole = data["senderRole"] ?: "MANAGER"
         val text = data["text"] ?: return
+        val audioUrl = data["audioUrl"]?.takeIf { it.isNotEmpty() }
+        val audioAutoplay = data["audioAutoplay"] == "true"
+        val displayText = if (audioUrl != null) "[음성]" else text
 
-        Log.d(TAG, "[handleChatMessage] 수신 - id=$messageId, from=$senderName ($senderRole)")
+        Log.d(TAG, "[handleChatMessage] 수신 - id=$messageId, from=$senderName ($senderRole)" +
+            if (audioUrl != null) " (audio)" else "")
 
         // 1) Room INSERT
         chatRepository.onRemoteMessageReceived(data)
 
-        // 2) 본인 메시지면 알림 skip
+        // 2) 본인 메시지면 알림/재생 skip
         val currentUid = Firebase.auth.currentUser?.uid
         if (currentUid != null && currentUid == senderId) {
-            Log.d(TAG, "[handleChatMessage] 본인 메시지 - 알림 스킵")
+            Log.d(TAG, "[handleChatMessage] 본인 메시지 - skip")
             return
         }
-        // 3) 포그라운드면 BottomSheet UI가 처리 — 시스템 알림 skip, sound만 재생
+
+        // 2.5) PTT 콜드 음성 메모 자동재생 (운전 중이라 포그라운드/백그라운드 무관)
+        if (audioUrl != null && audioAutoplay) {
+            Log.d(TAG, "[handleChatMessage] 음성 메모 자동재생 트리거")
+            DriverForegroundService.playVoiceMemo(this, audioUrl)
+            // 자동재생이 곧 알림 — 포그라운드는 UI 버블로 충분, 백그라운드는 아래 알림으로 시각 기록 남김
+        }
+
+        // 3) 포그라운드면 BottomSheet UI가 처리 — 시스템 알림 skip
         if (isAppInForeground()) {
-            Log.d(TAG, "[handleChatMessage] 포그라운드 - 알림 스킵 (UI가 처리). sound만 재생")
-            playChatSound()
+            Log.d(TAG, "[handleChatMessage] 포그라운드 - 알림 스킵 (UI가 처리)")
+            if (audioUrl == null) playChatSound() // 음성은 자동재생이 알림 역할
             return
         }
 
@@ -319,8 +331,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val notification = NotificationCompat.Builder(this, DriverApplication.CHANNEL_CHAT_MESSAGES)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
-            .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentText(displayText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(displayText))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setAutoCancel(true)

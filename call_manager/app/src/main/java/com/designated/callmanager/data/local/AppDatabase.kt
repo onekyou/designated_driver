@@ -19,7 +19,7 @@ import android.content.Context
         LocalDriverInfo::class,
         LocalChatMessage::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -46,7 +46,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     DATABASE_NAME
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                .addMigrations(MIGRATION_1_2, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                 .fallbackToDestructiveMigration() // 개발 단계에서는 데이터 손실 허용
                 .build()
                 INSTANCE = instance
@@ -174,6 +174,20 @@ abstract class AppDatabase : RoomDatabase() {
         private val MIGRATION_7_8 = object : Migration(7, 8) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE calls ADD COLUMN reservedAt INTEGER")
+            }
+        }
+
+        /**
+         * v8 → v9 마이그레이션: chat_messages에 음성 메모 4 컬럼 추가 (PTT 콜드 발화)
+         * SQLite는 1 ALTER 당 1 컬럼만 지원 → execSQL 4번 분리
+         * audioAutoplay는 NOT NULL DEFAULT 0 (Boolean ↔ INTEGER)
+         */
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE chat_messages ADD COLUMN audioUrl TEXT")
+                database.execSQL("ALTER TABLE chat_messages ADD COLUMN audioPath TEXT")
+                database.execSQL("ALTER TABLE chat_messages ADD COLUMN audioDurationMs INTEGER")
+                database.execSQL("ALTER TABLE chat_messages ADD COLUMN audioAutoplay INTEGER NOT NULL DEFAULT 0")
             }
         }
 

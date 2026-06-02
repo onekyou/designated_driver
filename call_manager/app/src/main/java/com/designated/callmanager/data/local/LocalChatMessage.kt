@@ -45,6 +45,14 @@ data class LocalChatMessage(
     val imagePath: String? = null,     // Storage path (cleanup 안전성, URL 파싱 회피)
     val imageWidth: Int? = null,       // 압축 후 width (px)
     val imageHeight: Int? = null,      // 압축 후 height (px)
+
+    // 음성 메모 메시지 (PTT 콜드 발화) — 그 외 메시지는 모두 null
+    val audioUrl: String? = null,      // Storage downloadUrl ("uploading://" sentinel은 업로드 중)
+    val audioPath: String? = null,     // Storage path (cleanup 안전성)
+    val audioDurationMs: Long? = null, // 녹음 길이 (ms, UI 표시)
+
+    @ColumnInfo(defaultValue = "0")
+    val audioAutoplay: Boolean = false, // 수신측 자동재생 여부 (PTT 콜드=true)
 ) {
     companion object {
         const val SEND_STATUS_SENDING = "SENDING"

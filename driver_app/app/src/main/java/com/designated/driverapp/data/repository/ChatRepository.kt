@@ -195,14 +195,18 @@ class ChatRepository @Inject constructor(
                 val imagePath = payload["imagePath"]?.takeIf { it.isNotEmpty() }
                 val imageWidth = payload["imageWidth"]?.toIntOrNull()
                 val imageHeight = payload["imageHeight"]?.toIntOrNull()
+                val audioUrl = payload["audioUrl"]?.takeIf { it.isNotEmpty() }
+                val audioPath = payload["audioPath"]?.takeIf { it.isNotEmpty() }
+                val audioDurationMs = payload["audioDurationMs"]?.toLongOrNull()
+                val audioAutoplay = payload["audioAutoplay"] == "true"
                 val createdAt = payload["createdAt"]?.toLongOrNull() ?: System.currentTimeMillis()
                 val clientCreatedAt = payload["clientCreatedAt"]?.toLongOrNull() ?: createdAt
                 val provinceId = payload["provinceId"] ?: return@launch
                 val cityId = payload["cityId"] ?: return@launch
                 val officeId = payload["officeId"] ?: return@launch
 
-                if (text.isBlank() && imageUrl.isNullOrEmpty()) {
-                    Log.w(TAG, "[onRemoteMessageReceived] text/imageUrl 둘 다 없음 — skip ($messageId)")
+                if (text.isBlank() && imageUrl.isNullOrEmpty() && audioUrl.isNullOrEmpty()) {
+                    Log.w(TAG, "[onRemoteMessageReceived] text/imageUrl/audioUrl 모두 없음 — skip ($messageId)")
                     return@launch
                 }
 
@@ -229,10 +233,14 @@ class ChatRepository @Inject constructor(
                         imagePath = imagePath,
                         imageWidth = imageWidth,
                         imageHeight = imageHeight,
+                        audioUrl = audioUrl,
+                        audioPath = audioPath,
+                        audioDurationMs = audioDurationMs,
+                        audioAutoplay = audioAutoplay,
                     )
                 )
                 Log.d(TAG, "[onRemoteMessageReceived] INSERT: $messageId" +
-                    if (imageUrl != null) " (image)" else "")
+                    when { imageUrl != null -> " (image)"; audioUrl != null -> " (audio)"; else -> "" })
             } catch (e: Exception) {
                 Log.e(TAG, "[onRemoteMessageReceived] 처리 실패", e)
             }
@@ -263,11 +271,15 @@ class ChatRepository @Inject constructor(
                 val imagePath = doc.getString("imagePath")?.takeIf { it.isNotEmpty() }
                 val imageWidth = doc.getLong("imageWidth")?.toInt()
                 val imageHeight = doc.getLong("imageHeight")?.toInt()
+                val audioUrl = doc.getString("audioUrl")?.takeIf { it.isNotEmpty() }
+                val audioPath = doc.getString("audioPath")?.takeIf { it.isNotEmpty() }
+                val audioDurationMs = doc.getLong("audioDurationMs")
+                val audioAutoplay = doc.getBoolean("audioAutoplay") ?: false
                 val createdAt = (doc.get("createdAt") as? Timestamp)?.toDate()?.time
                     ?: doc.getLong("clientCreatedAt") ?: return@mapNotNull null
                 val clientCreatedAt = doc.getLong("clientCreatedAt") ?: createdAt
 
-                if (text.isBlank() && imageUrl.isNullOrEmpty()) return@mapNotNull null
+                if (text.isBlank() && imageUrl.isNullOrEmpty() && audioUrl.isNullOrEmpty()) return@mapNotNull null
 
                 LocalChatMessage(
                     id = doc.id,
@@ -285,6 +297,10 @@ class ChatRepository @Inject constructor(
                     imagePath = imagePath,
                     imageWidth = imageWidth,
                     imageHeight = imageHeight,
+                    audioUrl = audioUrl,
+                    audioPath = audioPath,
+                    audioDurationMs = audioDurationMs,
+                    audioAutoplay = audioAutoplay,
                 )
             }
 
