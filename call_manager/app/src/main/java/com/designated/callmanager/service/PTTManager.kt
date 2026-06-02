@@ -155,6 +155,8 @@ class PTTManager {
             recordPending = true
             _state.value = PttState.RECORDING
             playCue(inCall = false) // 1차 비프 = "말하세요" (음성 메모, 통화 없음)
+            // 기사 Doze 선행 깨우기 — 녹음+업로드와 병렬화(메시지 도착 때 이미 준비). fire-and-forget.
+            scope.launch { sendPreWake(provinceId, cityId, officeId) }
             Log.i(TAG, "startTransmit: COLD(백그라운드 복귀) → 음성 메모 녹음")
             return
         }
@@ -211,6 +213,17 @@ class PTTManager {
         playCue(inCall = true) // 2차 비프 (라이브, 통화모드)
         engine?.muteLocalAudioStream(false) // 마이크 라이브
         Log.i(TAG, "fireReady: TALKING (mic live)")
+    }
+
+    /** 콜드 녹음 시작 시 기사 Doze 선행 깨우기 (Agora 미사용, 라디오 깨우기 목적). 실패 무해. */
+    private suspend fun sendPreWake(provinceId: String, cityId: String, officeId: String) {
+        try {
+            val data = hashMapOf("provinceId" to provinceId, "cityId" to cityId, "officeId" to officeId)
+            functions.getHttpsCallable("sendPttPreWake").call(data).await()
+            Log.i(TAG, "sendPttPreWake 완료 (기사 Doze 선행 깨우기)")
+        } catch (e: Exception) {
+            Log.w(TAG, "sendPttPreWake 실패(무해)", e)
+        }
     }
 
     private suspend fun sendWake(provinceId: String, cityId: String, officeId: String, channelName: String) {

@@ -250,6 +250,10 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             } else {
                 startService(serviceIntent)
             }
+        } else if (messageType == "ptt_prewake") {
+            // PTT 콜드 음성 메모 녹음 시작 선행 깨우기 — high-priority FCM 도달 자체가 Doze 관통.
+            // 추가 동작/알림 없음(곧 NEW_CHAT_MESSAGE 음성 메모가 옴). 반드시 최종 else 앞에 둘 것.
+            Log.d(TAG, "PTT pre-wake 수신 — Doze 선행 깨우기(no-op)")
         } else if (messageType == "NEW_CHAT_MESSAGE") {
             // 사무실 단톡방 메시지
             handleChatMessage(remoteMessage)
