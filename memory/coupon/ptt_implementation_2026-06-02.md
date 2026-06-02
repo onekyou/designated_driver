@@ -51,5 +51,16 @@
 - **PTT 양방향 + 역할 분리**(본인 6/2 결정): call_manager **수신** 추가 + pickup_app **송수신** + sendPttWake 매니저·픽업 토큰 팬아웃. 현재는 *일방 브로드캐스트*. 오버톤은 양방향 시 대답 신호로 살아남.
 - functions 1콜 통합 + 토큰 FCM 동봉(수신측 round-trip 제거) / 종료 전용 효과음 리소스 / 시스템 오버레이(앱 밖 배너) / 정산 이월 단순화 / call_detector PTT 연동 / 상태명명 재설계.
 
-## 다음 세션 진입 후보
-① master로 PR ② 양방향+픽업 트랙 설계 ③ 정산 단순화 ④ Certificate rotate(실배포 전) ⑤ S22 포함 3단말 E2E + 오버톤 청취 재확인
+## 3단말 E2E 후속 검증 + 마무리 처리 (2026-06-02 낮 세션) — ⑤ 통과 / ④⑤① 종료
+- **단말 재설치**: S22(R5CT41TJZFP) driver_app이 **5/18 구버전**(PTT 수신 코드 없음) 발견 → 최신 install. S21+/Z Flip4도 동일 빌드로 맞춤. gradle up-to-date(소스 무변경) = APK가 HEAD(어제 PTT 커밋) 코드와 동일 확인.
+- ✅ **⑤ 1:1 발화 검증 완료** (S21+ 송신 → Z Flip4 수신, logcat 증거):
+  - 송신측 PTTManager: joinChannel(155ms) → sendPttWake 완료 → `onUserJoined remoteUsers=1` → `fireReady: TALKING (mic live)`. 콜드 press→ready **~1.6초**(어제 ~1.4초 일치), 2회 발화 모두 정상.
+  - 수신측 PttAudioManager(Z Flip4): onWake joinChannel → 수신 join 성공(148ms) → 송신자 입장 → **매니저 발화 시작 감지 → 발화 종료 감지 → 오버톤+5초 재앵커** → 송신자 이탈. **종료 오버톤까지 전 흐름 정상.**
+- ⚠️ **fan-out(remoteUsers=2) 미검증 — 버그 아님**: S22·Z Flip4가 **같은 기사 계정**(본인 확인) → `designated_drivers/{authUid}` 문서 1개 → fcmToken을 나중 단말(Z Flip4)이 덮어씀 → sendPttWake가 1토큰만 wake(`remoteUsers=1`, S22 PttAudioManager 로그 0건). 증거 정합: 송신 onUserJoined uid=2025089136 = Z Flip4 join uid. **실운영은 기사별 다른 계정**이라 각자 fcmToken→각자 wake. 멀티캐스트는 FCM 토큰 배열 동일 경로라 **1:1 검증으로 충분 판단**(본인 "1:1로 충분").
+- **④ Certificate rotate skip**(본인): 노출 Certificate(`d410...`)로 가능한 건 채널명 추측+토큰 위조 무단참여+Agora 사용량 정도 → 양평 파일럿 위험·비용 무시 가능. **"다수 사무실 실배포 전 1회"** 체크리스트로만 남김(지금 안 함). App ID는 공개값, Certificate만 서버 secret → rotate는 functions secret+재배포만(앱 재빌드 불필요).
+- **① master PR 보류**(본인): **master 2025-09-01 방치(9개월), merge-base 2025-07-22**. manager-direct-drive와 **1,970파일 / +367,720 / -5,756** 차이(빌드산출물·APK·functions/lib 포함 추정). 실질 메인 = manager-direct-drive. PTT 3커밋은 **이미 origin push(local↔origin 0/0)로 기록 완료** → ①의 목적(작업 기록 고정) 이미 달성, 유실 0. 9개월 분기 정리는 PTT 마무리와 별개 큰 결정이라 **별도 트랙**으로 분리.
+- → **PTT 코드 트랙 종료. "현재 빌드로 양평 실사용 → 데이터로 판단"**([[ptt_screenoff_send_2026-06-02]] §다음) 단계 진입.
+
+## 다음 세션 진입 후보 (PTT 코드 트랙 종료 후)
+- **양평 실사용 데이터 수집** (ptt_screenoff §다음): 달리며 송신 빈도 / Doze 콜드 체감 / 비프 들쭉 거슬림 → 데이터 보고 트리거·비프모델·버퍼링 재결정.
+- 코드 후보(데이터 후): ② 양방향+픽업 트랙 / ③ 정산 단순화 / master 9개월 분기 정리(별도 세션) / Certificate rotate(다수 사무실 실배포 직전).
