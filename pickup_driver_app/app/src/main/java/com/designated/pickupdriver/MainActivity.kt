@@ -59,18 +59,10 @@ class MainActivity : ComponentActivity() {
     // PTT 송수신 매니저 — Application 단일 인스턴스 공유(PttReceiverService와 동일 엔진).
     private val pttManager get() = PickupDriverApplication.getInstance().pttManager
 
-    // PTT 송신 상태 (call_manager 패턴)
+    // PTT 송신 상태 (call_manager 패턴). 콜드 판정 제거 — 포그라운드 발화는 항상 라이브(2026-06-03 재설계).
     private var pttFirstTapUpTime = 0L
     private var pttPendingFirstTapDown = false
     private var pttHolding = false
-    private var pttFromBackground = true
-    private var pttBackgroundedAt = 0L
-    private var pttLastActivityAt = 0L
-
-    companion object {
-        private const val PTT_BG_COLD_MS = 8_000L       // 8초+ 백그라운드 체류 = 콜드(첫 송신 음성메모)
-        private const val PTT_ONSTOP_IGNORE_MS = 5_000L // 발화 직후 onStop은 PTT 유발 → 무시
-    }
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -189,10 +181,7 @@ class MainActivity : ComponentActivity() {
                             if (p != null && c != null && o != null) {
                                 pttHolding = true
                                 pttFirstTapUpTime = 0L
-                                val fromBg = pttFromBackground
-                                pttFromBackground = false
-                                pttLastActivityAt = now
-                                pttManager.startTransmit(this, p, c, o, fromBg)
+                                pttManager.startTransmit(this, p, c, o)
                                 Log.d("MainActivity", "PTT hold 시작")
                             } else {
                                 Log.w("MainActivity", "PTT: 사무실 정보 없음 — 발화 불가")
@@ -206,7 +195,6 @@ class MainActivity : ComponentActivity() {
                     if (pttHolding) {
                         pttHolding = false
                         pttManager.stopTransmit()
-                        pttLastActivityAt = SystemClock.elapsedRealtime()
                         Log.d("MainActivity", "PTT hold 종료(손 뗌)")
                     } else if (pttPendingFirstTapDown) {
                         pttPendingFirstTapDown = false
@@ -246,11 +234,6 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         pttManager.prewarm(this) // 엔진 워밍업(첫 발화 지연 제거)
-        if (pttBackgroundedAt != 0L) {
-            val awayMs = SystemClock.elapsedRealtime() - pttBackgroundedAt
-            if (awayMs >= PTT_BG_COLD_MS) pttFromBackground = true // 오래 머물렀다 복귀 = 콜드(음성메모)
-            pttBackgroundedAt = 0L
-        }
     }
 
     override fun onPause() {
@@ -259,15 +242,7 @@ class MainActivity : ComponentActivity() {
         if (pttHolding) {
             pttHolding = false
             pttManager.stopTransmit()
-            pttLastActivityAt = SystemClock.elapsedRealtime()
         }
-    }
-
-    override fun onStop() {
-        super.onStop()
-        val now = SystemClock.elapsedRealtime()
-        if (pttLastActivityAt != 0L && now - pttLastActivityAt < PTT_ONSTOP_IGNORE_MS) return // PTT 직후 onStop 무시
-        pttBackgroundedAt = now
     }
 
     private fun requestNotificationPermissionIfNeeded() {
