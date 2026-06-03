@@ -18,6 +18,15 @@
 - 마스터·체크리스트 정리 완료 + 메모리 OS 레이어 재구조화 완료
 - **디버깅 우선순위 1~5 (마스터 §13.3)**: 식당 누름 빈도 측정 → 인큐베이션 사무실 1곳 → 직접 설치 → N=1 영상 → 정부 지원사업
 
+## 6/3~04 ★★★ 콜캐치 권한 우회 = 연락처 확보(녹음 파일명) — 파싱은 확장 레이어 (본인 "획기적 전환", 실측+정책 GREEN)
+- **★ 중심(6/4 본인 정정)**: 알맹이는 *파싱이 아니라* **연락처 정보를 `READ_CALL_LOG` 없이 얻는 것**. 콜캐치 목적 자체가 번호 확보였고 그게 사이드로드 감옥 원인. 삼성 자동녹음 **파일명에 번호 박힘** → `READ_MEDIA_AUDIO`(일반권한)로 읽으면 끝. 미지발신자=raw번호✓(배차 대부분)/저장연락처=이름(번호는 READ_CONTACTS로, 코어엔 불필요)/번호숨김=불가(READ_CALL_LOG도 불가). 코어=**블랙박스(녹음)+번호(파일명)+PTT(음성 직접전달)**, 권한 0·로컬우선.
+- **파싱(STT→AI→14필드)=확장 레이어**: 폭넓은 확장성(자동티켓·사후검색·손님이력) 주지만 라이브 루프엔 불필요. 블랙박스가 정보 유실 0 만들어 파싱이 "캡처"→"사후검색"으로 강등.
+- **배포 차원 해제(진짜 무게)**: 사이드로드 감옥 → **Play 정식 배포**. 정책 실독 GREEN: 통화녹음금지(2022)=녹음행위만, Call Log=READ_CALL_LOG만, 미디어제한=IMAGES/VIDEO만(AUDIO 제외). 회색지대 1=파일명 번호추출(Data Safety 선언). iOS=콜매니저 안드로이드 전용이라 비이슈.
+- **S21+ 실측(Android15/OneUI7)**: `/sdcard/Recordings/Call/*.m4a` + MediaStore 양쪽 인덱싱 + 파일명 번호·시각. 가독✅(SAF 폴백). **STT 데모**: 보람푸드 녹음 1건 faster-whisper(small) 전사 성공 — 지명 후보(센트롤시티·아신길) 추출, 출발/목적·콜종류는 21초 단편이라 추정. 핵심=녹음→STT→AI파싱 실데이터 작동 확인. (HF 대용량모델 throttle로 small까지만, large/클라우드면 더 정확.) 온디바이스 STT 경로=Android13+ EXTRA_AUDIO_SOURCE(파일 입력) or OneUI 내장 전사.
+- **비용/로컬**: 콜당 ~5원(로컬 STT+AI)~45원(클라우드). 폰 내장 STT+온디바이스 소형LLM이면 완전 로컬·0원. 단 S21+/S22는 Gemini Nano 미지원→앱에 모델 번들 필요.
+- **남은 미지수**: ① STT/AI 정확도(large-v3/클라우드 재측정) ② 온디바이스 소형LLM 파싱 정확도(로컬우선 성립?) ③ 실제 Play 심사+Data Safety. **정식 설계 시 코어 vs 확장 분리**.
+- **상세**: `memory/designated_drive/call_recording_ai_parse_2026-06-03.md` / 세션요약: `memory/designated_drive/session_2026-06-04_call_recording_bypass.md` / 클코 학습: `memory/feedback/feedback_rabbithole_scope_2026-06-04.md`
+
 ## 5/4 산재 자료 (검증 후 master 갱신 검토)
 - `memory/inbox/2026-05-04/` — 포인트시스템 설계 + 현장인사이트 (방구석 여포 → 능동 영업 패러다임 전환)
 - `memory/inbox/2026-04-23/` — 개선전략 + 업소용앱 분리 (4/27 master로 흡수됨, 참고용)
