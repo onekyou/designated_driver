@@ -423,6 +423,21 @@
 - **현재 최선 = `ptt-coldstart` 빌드**(콜드=음성메모 hold0 / 웜=라이브 실시간). 양평 실사용 데이터로 판단
 - 기술자산: voice-sdk 4.5.2 커스텀오디오 API 확정 — 버퍼링 아니어도 재사용 가치
 
+## 6/3 ★ 본인 결정 — 실사용 데이터 트랙 *보류* + 양방향 송수신 *우선 진입*
+- **실사용(양평 데이터 수집) 트랙 전체 보류**: 6/2~6/3 "코드 트랙 종료→데이터로 판단"(트리거·비프모델·버퍼링·screen-off) 일괄 보류. 양방향 완성 후 재개. 메모리 반영: `ptt_implementation_2026-06-02.md` §"2026-06-03 본인 결정" + `ptt_screenoff_send_2026-06-02.md` 상태줄
+- **양방향 송수신 우선 진입**: 일방 브로드캐스트 → 양방향+역할분리. 범위 = call_manager **수신** 추가 + pickup_app **송수신** + sendPttWake **매니저·픽업 토큰 팬아웃**. 기점 `ptt-coldstart`.
+- **1단계 완료 (6/3, push+배포+S21 install)**: commit 3개(`96142111` functions 팬아웃 / `d5c889d0` call_manager 단일엔진 송수신 통합 / `4a1a32ad` by lazy 크래시 fix). functions 배포(sendPttWake/PreWake). Agora 싱글톤 제약으로 PTTManager에 수신 흡수(EngineMode TX/RX) + 신규 PttReceiverService(라이브+콜드). 검토로 누락2(콜드 음성메모 수신 재생/서비스 라이브+콜드)·오염1(싱글톤 release) 보강. **E2E 물리검증 대기**(A무결성/B회귀=S21→ZFlip4 / C매니저수신=2단계 pickup과 합쳐 검증). plan `majestic-swinging-gosling.md`. 상세 [[ptt_implementation_2026-06-02]] §"양방향 1단계 구현 완료". **2단계=pickup_app 송수신 fork**(plan 동일 파일에 2단계로 갱신).
+- **2단계 완료 (6/3, push+빌드+install)**: pickup_app PTT 송수신 fork 7커밋(`bfeb6a57`~`35d12e33`). commit 0=call_manager PttReceiverService 권한가드(검토 보강). pickup=Agora/functions 의존성+권한 / service fork(senderName "픽업기사"·prefs키 픽업·by lazy) / Room v3→v4 무손실 migration / audio 송수신 / FCM ptt 분기 / MainActivity 송신배선(콜드=ChatRepository 직접·Hilt 우회). 검토 보강 2: PttReceiverService 권한가드·ChatViewModel dead code 제외. pickup BUILD OK + Z Flip4 install 정상(크래시 0). **E2E 물리검증 대기**(픽업↔매니저 양방향). 상세 [[ptt_implementation_2026-06-02]] §"양방향 2단계 구현 완료".
+- **클코 학습 (6/3)**: 원규씨는 plan 승인 전 항상 "누락 오염 검토" 요구(1·2단계 연속) → ExitPlanMode 전 자체 코드 검증 게이트 의무화. `memory/feedback/feedback_plan_review_gate.md` ([[feedback-plan-review-gate]]).
+
+## 6/3 (저녁) ★ 콜드스타트 "원활통신" 재설계 — 수신 무음 회귀, 롤백 대기 (종료)
+- **2단계 E2E 양방향 1차 통과**(픽업↔매니저 라이브+콜드음성메모, 15:25~26). 이후 콜드스타트 재설계 진입.
+- **재설계**(commit `f0a8d60b`/`b1a1cc2e`/`24504d33`, branch ptt-coldstart): WARM 워밍창 + RX→TX updateChannelMediaOptions 즉시전환 + 콜드녹음 제거 + 워밍창 45s. 본인 지침 "최대한 원활한 통신 우선".
+- 🔴 **회귀(미해결)**: WARM 채널 재사용 시 매니저/픽업 **상호 수신 무음**(콜백은 옴, 오디오 X). driver_app(신규 join)만 정상. → WARM 재사용이 Agora remote 수신을 깸. enableLocalAudio 아님.
+- ★ **다음 세션(롤백)**: WARM/워밍창45s/updateChannelMediaOptions 롤백 → 2단계 검증동작(매 발화 신규 join, 수신 정상) 복원 + **콜드녹음 폐기**. 목표=첫 E2E 양방향 + 콜드녹음 4~6s 제거(cold-live ~1.4s). 상세 [[ptt_implementation_2026-06-02]] §"콜드스타트 재설계".
+- ★★ **콜드 음성녹음은 클코 임의 도입(본인 의도 아님)** — 본인 "최초 콜드스타트 음성녹음은 내가 의도한 게 아닌데 너가 임의로". 무전 본질=실시간, 녹음전달 아님. 음성녹음 트랙 폐기. `memory/feedback/feedback_cold_voicememo_unintended.md` ([[feedback-cold-voicememo-unintended]]).
+- **단말**: S21+/S22/Z Flip4에 수신무음 버그 버전 설치됨 — 롤백 빌드 재설치 필요.
+
 ## SUPERSEDED 자료 위치 (참고용)
 - `memory/designated_drive/project_business_model.md` (마스터 §3.1, §3.4, §10.4 흡수)
 - `memory/designated_drive/project_expansion_vision.md` (마스터 §1.3 환상 ③)
