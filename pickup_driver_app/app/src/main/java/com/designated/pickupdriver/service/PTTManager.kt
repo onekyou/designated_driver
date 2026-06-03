@@ -364,7 +364,8 @@ class PTTManager {
         val eng = engine ?: run { _state.value = PttState.IDLE; mode = EngineMode.NONE; return }
         playCue(inCall = true) // 종료 오버톤
         eng.updateChannelMediaOptions(ChannelMediaOptions().apply { publishMicrophoneTrack = false })
-        eng.enableLocalAudio(false) // WARM 동안 마이크 캡처 중지(배터리). 수신 재생은 영향 없음.
+        // ★ enableLocalAudio(false) 호출 금지 — 토글 시 remote audio playback pause 유발(WARM 수신 무음 회귀).
+        //   mic 발행은 위 publishMicrophoneTrack=false로 충분. enableLocalAudio는 true 유지(수신 재생 정상).
         eng.muteLocalAudioStream(true)
         _state.value = PttState.IDLE
         mode = EngineMode.WARM // 채널 유지(워밍창) — 다음 발화/수신 즉시 라이브
