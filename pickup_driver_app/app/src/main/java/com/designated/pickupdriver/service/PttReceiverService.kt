@@ -137,13 +137,14 @@ class PttReceiverService : Service() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .build()
-        // 수신(Agora 미publish)·콜드 재생(MediaPlayer)은 마이크 미사용 → RECORD_AUDIO 미허가 시
-        // microphone FGS는 SecurityException 크래시. 권한 있을 때만 microphone type, 없으면 type 생략.
-        val hasMic = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && hasMic) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
-        } else {
+        // 수신(Agora 미publish)·콜드 재생(MediaPlayer)은 마이크 미사용 → microphone FGS 타입 금지.
+        //  microphone은 "사용 중(while-in-use)" 권한이라 백그라운드(FCM wake) 시작 시 SecurityException.
+        //  타입 없이 띄우고, 백그라운드 제약(ForegroundServiceStartNotAllowedException)은 크래시 대신 종료.
+        try {
             startForeground(NOTIFICATION_ID, notification)
+        } catch (e: Exception) {
+            Log.w(TAG, "startForeground 차단 — FGS 없이 종료", e)
+            stopSelf()
         }
     }
 
