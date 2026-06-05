@@ -18,6 +18,14 @@
 - 마스터·체크리스트 정리 완료 + 메모리 OS 레이어 재구조화 완료
 - **디버깅 우선순위 1~5 (마스터 §13.3)**: 식당 누름 빈도 측정 → 인큐베이션 사무실 1곳 → 직접 설치 → N=1 영상 → 정부 지원사업
 
+## 6/4 ★ 대리운전 = 쿠폰앱 모듈 흡수 방향 확정 (독립 앱 폐기) — 본 세션 코드 0, 본문은 쿠폰앱 독립 프로젝트로 인계
+- **방향 확정**: 대리운전을 독립 앱으로 키우지 않고 **간소화해 쿠폰앱 모듈로 흡수**. 처음 질문("대리를 쿠폰앱 모듈로") → 6/3 영업 발견 거쳐 확정. [[pivot-2026-05-19]] 흡수 + [[call-broker-bundle-2026-05-25]] 협상카드 재정의의 귀결.
+- **"간소화" 정의**: ① 양평 기존 5앱 = 손대지 않음(동결 보존·영업 카드용) ② 쿠폰앱에 "기사 역할" 한 층을 **얇게 신규로** 신축(driver_app 이식 ❌). 본인 흡수 규율("도장만큼 쉬울 때만") 통과 조건.
+- **6/3 영업 발견**: 모든 업종 공통 니즈=손님. 대리·택시 기사=**움직이는 도장 거점**. 동기=**지명(단골)**, 할인은 미끼. "지금이라도 사용 가능"=현장 수요 신호. 가져올 것=도장+할인발급+지명끈 / 버릴 것=배차·정산·콜디텍터·PTT.
+- **토대 준비됨(쿠폰앱 코드)**: 이벤트에 `participants.driver?` 슬롯 이미 비어있음(토대 안 뜯고 도장 이벤트 기록 가능). 끈(`Bond`)=customerId↔shopId뿐 → **유일한 새 조각=`Bond`에 `targetType:"shop"|"driver"` 한 갈래**. 6/2까지 손님 전 루프 닫힘(카카오OAuth·NFC실측·쿠폰사용재설계 production 라이브).
+- **다음(쿠폰앱 독립 프로젝트)**: 기사 모듈 플랜(역할 진입/Bond 지명갈래/손님 재호출=매니저 안 거치는 가장 가벼운 형태) → **N=1=기사 1명**. 할인 재원은 그다음. 본 designated_driver 5앱 안 엶.
+- **상세/인계**: `memory/coupon/driver_module_pivot_2026-06-04.md`. 본 결론은 **메인 세션(하나의 자리)** 에서 본격 의논 예정(6/4 명시). 본문 상세는 쿠폰앱 독립 프로젝트 메모리에 기록(분기 방지), 그 경로는 본 세션 미확보.
+
 ## 6/3~04 ★★★ 콜캐치 권한 우회 = 연락처 확보(녹음 파일명) — 파싱은 확장 레이어 (본인 "획기적 전환", 실측+정책 GREEN)
 - **★ 중심(6/4 본인 정정)**: 알맹이는 *파싱이 아니라* **연락처 정보를 `READ_CALL_LOG` 없이 얻는 것**. 콜캐치 목적 자체가 번호 확보였고 그게 사이드로드 감옥 원인. 삼성 자동녹음 **파일명에 번호 박힘** → `READ_MEDIA_AUDIO`(일반권한)로 읽으면 끝. 미지발신자=raw번호✓(배차 대부분)/저장연락처=이름(번호는 READ_CONTACTS로, 코어엔 불필요)/번호숨김=불가(READ_CALL_LOG도 불가). 코어=**블랙박스(녹음)+번호(파일명)+PTT(음성 직접전달)**, 권한 0·로컬우선.
 - **파싱(STT→AI→14필드)=확장 레이어**: 폭넓은 확장성(자동티켓·사후검색·손님이력) 주지만 라이브 루프엔 불필요. 블랙박스가 정보 유실 0 만들어 파싱이 "캡처"→"사후검색"으로 강등.
@@ -439,13 +447,22 @@
 - **2단계 완료 (6/3, push+빌드+install)**: pickup_app PTT 송수신 fork 7커밋(`bfeb6a57`~`35d12e33`). commit 0=call_manager PttReceiverService 권한가드(검토 보강). pickup=Agora/functions 의존성+권한 / service fork(senderName "픽업기사"·prefs키 픽업·by lazy) / Room v3→v4 무손실 migration / audio 송수신 / FCM ptt 분기 / MainActivity 송신배선(콜드=ChatRepository 직접·Hilt 우회). 검토 보강 2: PttReceiverService 권한가드·ChatViewModel dead code 제외. pickup BUILD OK + Z Flip4 install 정상(크래시 0). **E2E 물리검증 대기**(픽업↔매니저 양방향). 상세 [[ptt_implementation_2026-06-02]] §"양방향 2단계 구현 완료".
 - **클코 학습 (6/3)**: 원규씨는 plan 승인 전 항상 "누락 오염 검토" 요구(1·2단계 연속) → ExitPlanMode 전 자체 코드 검증 게이트 의무화. `memory/feedback/feedback_plan_review_gate.md` ([[feedback-plan-review-gate]]).
 
-## 6/3 (저녁) ★ 콜드스타트 "원활통신" 재설계 — 수신 무음 회귀, 롤백 대기 (종료)
+## 6/3 (저녁) ★ 콜드스타트 "원활통신" 재설계 — 수신 무음 회귀, 롤백 대기 (종료) — ⚠️ SUPERSEDED (6/6 정정)
 - **2단계 E2E 양방향 1차 통과**(픽업↔매니저 라이브+콜드음성메모, 15:25~26). 이후 콜드스타트 재설계 진입.
 - **재설계**(commit `f0a8d60b`/`b1a1cc2e`/`24504d33`, branch ptt-coldstart): WARM 워밍창 + RX→TX updateChannelMediaOptions 즉시전환 + 콜드녹음 제거 + 워밍창 45s. 본인 지침 "최대한 원활한 통신 우선".
 - 🔴 **회귀(미해결)**: WARM 채널 재사용 시 매니저/픽업 **상호 수신 무음**(콜백은 옴, 오디오 X). driver_app(신규 join)만 정상. → WARM 재사용이 Agora remote 수신을 깸. enableLocalAudio 아님.
 - ★ **다음 세션(롤백)**: WARM/워밍창45s/updateChannelMediaOptions 롤백 → 2단계 검증동작(매 발화 신규 join, 수신 정상) 복원 + **콜드녹음 폐기**. 목표=첫 E2E 양방향 + 콜드녹음 4~6s 제거(cold-live ~1.4s). 상세 [[ptt_implementation_2026-06-02]] §"콜드스타트 재설계".
 - ★★ **콜드 음성녹음은 클코 임의 도입(본인 의도 아님)** — 본인 "최초 콜드스타트 음성녹음은 내가 의도한 게 아닌데 너가 임의로". 무전 본질=실시간, 녹음전달 아님. 음성녹음 트랙 폐기. `memory/feedback/feedback_cold_voicememo_unintended.md` ([[feedback-cold-voicememo-unintended]]).
 - **단말**: S21+/S22/Z Flip4에 수신무음 버그 버전 설치됨 — 롤백 빌드 재설치 필요.
+
+## 6/6 ★★★ "WARM 수신 무음 회귀"는 오진 — 실제 원인 3건 규명·수정·머지 완료 (롤백 안 함)
+- 6/3 "WARM 재사용이 Agora 수신을 깬다" 진단 **틀림**. 3단말 실측+로그 교차로 진짜 원인 3건 분리. **WARM/45s 워밍창 롤백 불필요**. 단말 3대 검증 통과. 상세: [[ptt_implementation_2026-06-02]] §"2026-06-06 정정".
+- **①음량 들쭉(들리다 말다)** = 라우트 미고정(이어피스 플립). `onJoinChannelSuccess`에서 `setEnableSpeakerphone(true)` 1회 강제(driver는 `setDefaultAudioRoutetoSpeakerphone`도 누락). STARTING 분기 재설정은 *재생 중 라우트 리셋=끊김* 유발하므로 금지.
+- **②중간 끊김(진범)** = 3자+ 메시 버그. `onRemoteAudioStateChanged`가 uid 미구분 → 발화 안 하는 다른 broadcaster의 `STOPPED reason=5(REMOTE_MUTED)`를 발화자 종료로 오인. 수정: STARTING에서 **발화자 uid 래칭(speakingUid)**, STOPPED/onUserOffline은 그 uid만 종료. 로그 확정.
+- **③앱 계속 중단됨** = `PttReceiverService`가 microphone 타입 FGS를 백그라운드(FCM wake) 시작 → SecurityException(targetSDK 36, 화면off 수신). 수신은 마이크 미사용 → 타입 제거 + startForeground 가드.
+- **커밋/머지**: `3afea559`(FGS)+`4c7da7aa`(라우트+uid 래칭) ptt-coldstart push → **머지 `e41486a0` ptt-coldstart→manager-direct-drive 단일화**(43파일 +2650, 충돌 0). plan `cozy-jingling-spindle.md`.
+- **잔여(선택)**: keep.audiosessiontype 파라미터 보존(끊김 원인 아님, 효과 미측정) / 2단계 지연(토큰 선발급 캐시+wake fire-and-forget) 미진입 / master 9개월 분기 정리 별도.
+- **클코 학습**: 6/3 "WARM이 수신을 깬다"를 *단정*하고 롤백 plan을 세웠으나, 6/6 게이트형 진단(원인 단정 금지·라우트 락 베이스라인 후 로그 귀속)으로 오진 판명. 2자→3자 환경 차이가 메시 버그를 가렸음. 단정 전 실측·로그 교차 필수.
 
 ## SUPERSEDED 자료 위치 (참고용)
 - `memory/designated_drive/project_business_model.md` (마스터 §3.1, §3.4, §10.4 흡수)

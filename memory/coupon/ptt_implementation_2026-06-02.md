@@ -88,7 +88,7 @@
 - **E2E 물리검증 대기**: 픽업↔매니저 양방향(픽업 발화→매니저/기사 수신 / 매니저 발화→픽업 수신 / 콜드 음성메모 양방향). 단말 S21+(매니저,현 미연결)/Z Flip4(픽업)/S22(매니저 or 기사). 1단계 검증 C(매니저 수신)도 이 단계서 함께.
 - ✅ **2단계 E2E 양방향 1차 통과(6/3 낮)**: 픽업↔매니저 라이브+콜드음성메모 양방향 로그 확인(15:25~26). 단일엔진 RX→TX 전환·prefs 정합 정상.
 
-### 콜드스타트 "원활통신" 재설계 — 수신 무음 회귀로 롤백 필요 (2026-06-03, 종료 체크포인트)
+### 콜드스타트 "원활통신" 재설계 — 수신 무음 회귀로 롤백 필요 (2026-06-03, 종료 체크포인트) — ⚠️ SUPERSEDED (아래 2026-06-06 정정)
 - **plan**: `C:\Users\kala1\.claude\plans\majestic-swinging-gosling.md`(콜드스타트 재설계로 갱신). 브랜치 `ptt-coldstart` 최신 `24504d33`.
 - **본인 지침**: "제일 중요한 건 최대한 원활한 통신, 원칙(listener최소화/비용)은 수단."
 - **재설계 commit** `f0a8d60b`(PTTManager WARM+RX→TX 즉시전환+콜드녹음제거+워밍창45s) + `b1a1cc2e`(MainActivity 콜드판정 제거) + `24504d33`(wip: enableLocalAudio 토글 제거).
@@ -96,6 +96,17 @@
 - ★ **다음 세션 진입(롤백)**: WARM/워밍창연장(45s)/updateChannelMediaOptions 재설계 **롤백** → 2단계 검증 동작(매 발화 신규 join, 수신 항상 정상) 복원 + **콜드녹음(음성메모) 폐기**(본인 의도 아니었음 — [[feedback-cold-voicememo-unintended]]). 결과 목표 = 첫 E2E "잘돼" 양방향 + 콜드녹음 4~6s 지연 제거(cold-live ~1.4s, 2차비프 가림). 워밍창 0초 욕심은 수신을 깨므로 포기.
 - **★ 콜드 음성녹음 = 클코 임의 도입(본인 의도 아님)**: 6/2 콜드 hold 문제를 클코가 음성메모로 임의 해결. 본인은 라이브 무전 원함(녹음 전달 아님). 음성녹음 트랙 폐기 방향. [[feedback-cold-voicememo-unintended]].
 - **단말 상태**: S21+/S22/Z Flip4에 WARM 재설계 빌드 설치됨(수신 무음 버그 버전). 롤백 빌드로 재설치 필요.
+
+## ★★★ 2026-06-06 정정 — "WARM 수신 무음 회귀"는 오진. 실제 원인 3건 규명·수정·머지 완료
+**핵심**: 6/3 "WARM 재사용이 Agora remote 수신을 깬다"는 진단은 **틀렸음**. 3단말 실측·로그 교차분석으로 진짜 원인 3건을 분리·수정. **WARM/45s 워밍창 롤백은 불필요**(롤백 안 함). 단말 3대 검증 통과.
+
+- **진단 방식**: 라우트 락(저위험) 베이스라인 깔고 3단말 메시 재테스트 → 본인 청취 구술 ↔ logcat(WARM/COLD·uid·reason) 1:1 대조. "원인 단정 금지, 게이트로 분리" 접근.
+- **원인①·음량 "들리다 말다/중구난방"** = 오디오 **라우트 미고정**. 세 엔진이 Agora 기본값만, driver는 `setDefaultAudioRoutetoSpeakerphone`조차 누락 → 이어피스 플립. **수정**: `onJoinChannelSuccess`에서 `setEnableSpeakerphone(true)` 1회 강제(조인 시점만 — 상태전이마다 재설정하면 재생 중 라우트 리셋으로 *끊김* 유발하므로 STARTING 분기엔 금지).
+- **원인②·"잘 받다 중간에 끊김"** = **3자+ 메시 버그(진범)**. `onRemoteAudioStateChanged`가 uid를 안 가려, **발화 안 하는 다른 broadcaster**(비-publish 수신자)의 `STOPPED reason=REMOTE_MUTED(5)`를 *발화자 종료*로 오인 → 가짜 종료+오버톤+재시작 = 끊김. (픽업이 1.3초만에 끊긴 게 이것; 기사가 broadcaster로 합류한 직후 터짐.) **수정**: STARTING에서 **발화자 uid 래칭(`speakingUid`)**, STOPPED/onUserOffline은 그 uid일 때만 종료. 로그 확정: 타 단말 STOPPED 전부 무시, 18~24초 발화 끝까지 연속.
+- **원인③·"앱 계속 중단됨"** = `PttReceiverService`(call_manager/pickup)가 **microphone 타입 FGS**를 백그라운드(FCM wake)에서 시작 → microphone=while-in-use 권한이라 `SecurityException`/`ForegroundServiceStartNotAllowedException`(targetSDK 36, 운전 중 화면off 수신 시나리오). 가드 로직이 거꾸로(RECORD_AUDIO 있으면 오히려 microphone 타입). **수정**: 수신은 마이크 미사용 → 타입 완전 제거 + `startForeground` try/catch 가드(차단 시 stopSelf).
+- **왜 6/3엔 무음으로 보였나(추정)**: 6/3 검증이 단말 2대(매니저↔기사)였을 가능성. 메시 uid-오인은 3자+에서만 터지고, "콜백은 옴/오디오 X"가 *가짜 종료로 즉시 끊긴 것*을 무음으로 오인했을 수 있음. enableLocalAudio 토글도 무관(24504d33 "토글 원인 아님"이 맞았음).
+- **커밋(ptt-coldstart push 완료)**: `3afea559`(FGS 크래시) + `4c7da7aa`(라우트 락 + uid 래칭). **머지 `e41486a0`**: ptt-coldstart → manager-direct-drive 단일화(43파일 +2650, 충돌 0).
+- **잔여**: `keep.audiosessiontype` 비공개 파라미터는 엔진 생성 1회 적용한 채 보존(끊김 원인 아니었음 — 효과 격리 미측정). 2단계 지연 최적화(토큰 선발급 캐시 + wake fire-and-forget)는 미진입(선택). plan: `C:\Users\kala1\.claude\plans\cozy-jingling-spindle.md`.
 
 ## 다음 세션 진입 후보 (PTT 코드 트랙 종료 후) — ⚠️ 실사용 데이터 트랙은 위 6/3 결정으로 *보류*
 - ~~양평 실사용 데이터 수집~~ → **보류**(6/3). 양방향 완성 후 재개.
