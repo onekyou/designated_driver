@@ -7,6 +7,10 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
+import android.media.MediaPlayer
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
@@ -97,7 +101,83 @@ class DriverForegroundService : Service() {
                     pttAudioManager.onWake(this, regionId, officeId, channelName)
                 }
             }
+            ACTION_PLAY_VOICE_MEMO -> {
+                val url = intent.getStringExtra(EXTRA_AUDIO_URL)
+                if (url.isNullOrBlank()) {
+                    Log.w(TAG, "음성 메모 재생: URL 없음")
+                } else {
+                    playVoiceMemoInternal(url)
+                }
+            }
         }
+    }
+
+    // ===== PTT 콜드 음성 메모 자동재생 =====
+    private var voiceMemoPlayer: MediaPlayer? = null
+    private var audioFocusRequest: AudioFocusRequest? = null
+
+    private fun playVoiceMemoInternal(url: String) {
+        try {
+            // 직전 재생 정리(직렬화)
+            voiceMemoPlayer?.let { runCatching { it.release() } }
+            voiceMemoPlayer = null
+
+            val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val attrs = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+            requestAudioFocusCompat(am, attrs)
+
+            val mp = MediaPlayer().apply {
+                setAudioAttributes(attrs)
+                setDataSource(url)
+                setOnPreparedListener { it.start() }
+                setOnCompletionListener {
+                    runCatching { it.release() }
+                    voiceMemoPlayer = null
+                    abandonAudioFocusCompat(am)
+                }
+                setOnErrorListener { _, _, _ ->
+                    runCatching { release() }
+                    voiceMemoPlayer = null
+                    abandonAudioFocusCompat(am)
+                    true
+                }
+                prepareAsync()
+            }
+            voiceMemoPlayer = mp
+            Log.i(TAG, "음성 메모 자동재생 시작: $url")
+        } catch (e: Exception) {
+            Log.e(TAG, "음성 메모 재생 실패", e)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun requestAudioFocusCompat(am: AudioManager, attrs: AudioAttributes) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                    .setAudioAttributes(attrs)
+                    .build()
+                audioFocusRequest = req
+                am.requestAudioFocus(req)
+            } else {
+                am.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+            }
+        } catch (_: Exception) {}
+    }
+
+    @Suppress("DEPRECATION")
+    private fun abandonAudioFocusCompat(am: AudioManager) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                audioFocusRequest?.let { am.abandonAudioFocusRequest(it) }
+                audioFocusRequest = null
+            } else {
+                am.abandonAudioFocus(null)
+            }
+        } catch (_: Exception) {}
     }
 
     fun clearAssignedCallState() {
@@ -112,6 +192,8 @@ class DriverForegroundService : Service() {
         super.onDestroy()
         Log.d(TAG, "DriverForegroundService onDestroy")
         pttAudioManager.release()
+        runCatching { voiceMemoPlayer?.release() }
+        voiceMemoPlayer = null
     }
 
     private val binder = LocalBinder()
@@ -184,6 +266,7 @@ class DriverForegroundService : Service() {
         const val ACTION_CLEAR_CALL = "com.designated.driverapp.ACTION_CLEAR_CALL"
         const val ACTION_UPDATE_STATUS = "com.designated.driverapp.ACTION_UPDATE_STATUS"
         const val ACTION_PTT_JOIN_CHANNEL = "com.designated.driverapp.ACTION_PTT_JOIN_CHANNEL"
+        const val ACTION_PLAY_VOICE_MEMO = "com.designated.driverapp.ACTION_PLAY_VOICE_MEMO"
 
         const val EXTRA_CALL_ID = "callId"
         const val EXTRA_TITLE = "title"
@@ -191,6 +274,20 @@ class DriverForegroundService : Service() {
         const val EXTRA_DRIVER_STATUS = "driverStatus"
         const val EXTRA_CHANNEL_NAME = "channelName"
         const val EXTRA_SENDER_NAME = "senderName"
+        const val EXTRA_AUDIO_URL = "audioUrl"
+
+        /** PTT 콜드 음성 메모 자동재생 — FCM 수신 시 서비스로 위임(포그라운드/백그라운드 무관). */
+        fun playVoiceMemo(context: Context, audioUrl: String) {
+            val intent = Intent(context, DriverForegroundService::class.java).apply {
+                action = ACTION_PLAY_VOICE_MEMO
+                putExtra(EXTRA_AUDIO_URL, audioUrl)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
 
         fun newCallAssignedIntent(context: Context, callId: String, title: String, body: String): Intent {
             return Intent(context, DriverForegroundService::class.java).apply {

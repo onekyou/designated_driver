@@ -45,5 +45,17 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*');
       allow update, delete: if false;
     }
+
+    // --- Chat 음성 메모 (PTT 콜드 발화 → 음성 첨부, 사무실 단톡방) ---
+    //  • 인증된 사용자 + 1MB + audio/* (chat_images와 동일 보안 모델)
+    //  • 클라가 putBytes 시 StorageMetadata contentType="audio/mp4" 명시 → 룰 통과
+    //  • update/delete 금지 (CF scheduledChatMessageCleanup만 audioPath 처리)
+    match /provinces/{provinceId}/cities/{cityId}/offices/{officeId}/chat_audio/{fileName} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && request.resource.size < 1 * 1024 * 1024
+        && request.resource.contentType.matches('audio/.*');
+      allow update, delete: if false;
+    }
   }
 }

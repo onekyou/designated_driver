@@ -91,7 +91,11 @@ dependencies {
     implementation libs.firebase.firestore.ktx
     // FCM dependency 유지 — Phase 2 FCM 수신 진입 시 즉시 사용 가능 (MVP에선 서비스 파일 없음)
     implementation libs.firebase.messaging.ktx
-    implementation 'com.google.firebase:firebase-storage-ktx' // chat 이미지 업로드
+    implementation 'com.google.firebase:firebase-storage-ktx' // chat 이미지 업로드 + PTT 콜드 음성메모
+    implementation 'com.google.firebase:firebase-functions-ktx' // PTT generateAgoraToken/sendPttWake 호출
+
+    // PTT 음성 (Agora voice-only RTC, RTM 미사용)
+    implementation 'io.agora.rtc:voice-sdk:4.5.2'
 
     // Image (chat V1 이미지 메시지)
     implementation 'io.coil-kt:coil-compose:2.6.0'

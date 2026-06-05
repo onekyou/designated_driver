@@ -106,15 +106,15 @@ exports.onChatMessageCreated = (0, firestore_1.onDocumentCreated)({
     region: REGION,
     document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/chatRoom/main/messages/{messageId}",
 }, async (event) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
     const { provinceId, cityId, officeId, messageId } = event.params;
     if (!event.data) {
         logger.warn(`[onChatMessageCreated:${messageId}] event.data 없음`);
         return;
     }
     const msg = event.data.data();
-    if (!msg.senderId || (!msg.text && !msg.imageUrl)) {
-        logger.warn(`[onChatMessageCreated:${messageId}] senderId 누락 또는 text/imageUrl 둘 다 누락`);
+    if (!msg.senderId || (!msg.text && !msg.imageUrl && !msg.audioUrl)) {
+        logger.warn(`[onChatMessageCreated:${messageId}] senderId 누락 또는 text/imageUrl/audioUrl 모두 누락`);
         return;
     }
     const senderId = msg.senderId;
@@ -125,8 +125,12 @@ exports.onChatMessageCreated = (0, firestore_1.onDocumentCreated)({
     const imagePath = (_e = msg.imagePath) !== null && _e !== void 0 ? _e : "";
     const imageWidth = msg.imageWidth;
     const imageHeight = msg.imageHeight;
-    const createdAtMs = (_h = (_g = (_f = msg.createdAt) === null || _f === void 0 ? void 0 : _f.toMillis) === null || _g === void 0 ? void 0 : _g.call(_f)) !== null && _h !== void 0 ? _h : Date.now();
-    const clientCreatedAt = (_j = msg.clientCreatedAt) !== null && _j !== void 0 ? _j : createdAtMs;
+    const audioUrl = (_f = msg.audioUrl) !== null && _f !== void 0 ? _f : "";
+    const audioPath = (_g = msg.audioPath) !== null && _g !== void 0 ? _g : "";
+    const audioDurationMs = msg.audioDurationMs;
+    const audioAutoplay = msg.audioAutoplay === true;
+    const createdAtMs = (_k = (_j = (_h = msg.createdAt) === null || _h === void 0 ? void 0 : _h.toMillis) === null || _j === void 0 ? void 0 : _j.call(_h)) !== null && _k !== void 0 ? _k : Date.now();
+    const clientCreatedAt = (_l = msg.clientCreatedAt) !== null && _l !== void 0 ? _l : createdAtMs;
     logger.info(`[onChatMessageCreated:${messageId}] from ${senderRole}/${senderName}/${senderId} @ office=${officeId}`);
     try {
         const officeRef = admin.firestore()
@@ -164,11 +168,13 @@ exports.onChatMessageCreated = (0, firestore_1.onDocumentCreated)({
             logger.info(`[onChatMessageCreated:${messageId}] 발송 대상 토큰 0건. 스킵`);
             return;
         }
-        // 알림 미리보기: 이미지면 [사진], 텍스트는 본문 100자 cap
+        // 알림 미리보기: 이미지면 [사진], 음성이면 [음성], 텍스트는 본문 100자 cap
         const titleText = senderName;
         const bodyText = imageUrl
             ? "[사진]"
-            : (text.length > 100 ? text.substring(0, 100) + "…" : text);
+            : audioUrl
+                ? "[음성]"
+                : (text.length > 100 ? text.substring(0, 100) + "…" : text);
         const multicast = (0, fcmPayload_1.buildMulticastFcmPayload)({
             data: {
                 type: "NEW_CHAT_MESSAGE",
@@ -179,8 +185,12 @@ exports.onChatMessageCreated = (0, firestore_1.onDocumentCreated)({
                 text,
                 imageUrl,
                 imagePath,
-                imageWidth: (_k = imageWidth === null || imageWidth === void 0 ? void 0 : imageWidth.toString()) !== null && _k !== void 0 ? _k : "",
-                imageHeight: (_l = imageHeight === null || imageHeight === void 0 ? void 0 : imageHeight.toString()) !== null && _l !== void 0 ? _l : "",
+                imageWidth: (_m = imageWidth === null || imageWidth === void 0 ? void 0 : imageWidth.toString()) !== null && _m !== void 0 ? _m : "",
+                imageHeight: (_o = imageHeight === null || imageHeight === void 0 ? void 0 : imageHeight.toString()) !== null && _o !== void 0 ? _o : "",
+                audioUrl,
+                audioPath,
+                audioDurationMs: (_p = audioDurationMs === null || audioDurationMs === void 0 ? void 0 : audioDurationMs.toString()) !== null && _p !== void 0 ? _p : "",
+                audioAutoplay: audioAutoplay ? "true" : "",
                 createdAt: String(createdAtMs),
                 clientCreatedAt: String(clientCreatedAt),
                 provinceId,
@@ -364,9 +374,12 @@ exports.scheduledChatMessageCleanup = (0, scheduler_1.onSchedule)({
             // chatRoom 메시지만 필터 (다른 messages 컬렉션 보호)
             const chatMessages = snapshot.docs.filter(d => d.ref.path.includes("/chatRoom/main/messages/"));
             if (chatMessages.length > 0) {
-                // 1. imagePath 추출 (Storage delete 위해)
-                const imagePaths = chatMessages
-                    .map(d => d.data().imagePath)
+                // 1. imagePath + audioPath 추출 (Storage delete 위해)
+                const storagePaths = chatMessages
+                    .flatMap(d => {
+                    const data = d.data();
+                    return [data.imagePath, data.audioPath];
+                })
                     .filter((p) => typeof p === "string" && p.length > 0);
                 // 2. Firestore delete 먼저 (이게 진짜 cleanup, Storage 실패해도 UI 영향 X)
                 const batch = admin.firestore().batch();
@@ -374,16 +387,16 @@ exports.scheduledChatMessageCleanup = (0, scheduler_1.onSchedule)({
                 await batch.commit();
                 totalDeleted += chatMessages.length;
                 // 3. Storage delete (best-effort, 실패는 logging만)
-                if (imagePaths.length > 0) {
+                if (storagePaths.length > 0) {
                     const bucket = admin.storage().bucket();
-                    const results = await Promise.allSettled(imagePaths.map(path => bucket.file(path).delete()));
+                    const results = await Promise.allSettled(storagePaths.map(path => bucket.file(path).delete()));
                     results.forEach((r, idx) => {
                         if (r.status === "fulfilled") {
                             totalStorageDeleted++;
                         }
                         else {
                             totalStorageFailed++;
-                            logger.warn(`[scheduledChatMessageCleanup] storage delete 실패: ${imagePaths[idx]}`, r.reason);
+                            logger.warn(`[scheduledChatMessageCleanup] storage delete 실패: ${storagePaths[idx]}`, r.reason);
                         }
                     });
                 }

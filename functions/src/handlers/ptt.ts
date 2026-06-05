@@ -71,10 +71,50 @@ export const generateAgoraToken = onCall(
 );
 
 /**
- * PTT 발화 시작 시 수신측(사무실 기사) wake.
+ * 사무실 PTT wake 대상 토큰 수집 — 매니저 + 대리기사 + 픽업기사 (발신자 제외).
+ *  onChatMessageCreated 3-컬렉션 패턴 정합. managerTokens는 docId==authUid 규약(d.id !== senderId).
+ *  픽업기사 미배포 사무실은 빈 배열. 반환 counts로 (mgr/des/pck) 분해 로깅.
+ */
+async function collectOfficePttTokens(
+  officeRef: FirebaseFirestore.DocumentReference,
+  senderId: string,
+): Promise<{ tokens: string[]; mgr: number; des: number; pck: number }> {
+  // 1. 매니저 — managerTokens (docId == authUid → d.id !== senderId 로 발신자 제외, 에코 차단)
+  const managerSnapshot = await officeRef.collection("managerTokens").get();
+  const managerTokens = managerSnapshot.docs
+    .filter((d) => d.id !== senderId)
+    .map((d) => d.data().fcmToken)
+    .filter((t): t is string => typeof t === "string" && t.length > 0);
+
+  // 2. 대리기사 — designated_drivers (authUid/docId == sender 제외)
+  const designatedSnapshot = await officeRef.collection("designated_drivers").get();
+  const designatedTokens = designatedSnapshot.docs
+    .filter((d) => {
+      const data = d.data();
+      if (data.authUid === senderId || d.id === senderId) return false;
+      return typeof data.fcmToken === "string" && (data.fcmToken as string).length > 0;
+    })
+    .map((d) => d.data().fcmToken as string);
+
+  // 3. 픽업기사 — pickup_drivers (동일 필터, 미배포 사무실은 빈 배열)
+  const pickupSnapshot = await officeRef.collection("pickup_drivers").get();
+  const pickupTokens = pickupSnapshot.docs
+    .filter((d) => {
+      const data = d.data();
+      if (data.authUid === senderId || d.id === senderId) return false;
+      return typeof data.fcmToken === "string" && (data.fcmToken as string).length > 0;
+    })
+    .map((d) => d.data().fcmToken as string);
+
+  const tokens = Array.from(new Set([...managerTokens, ...designatedTokens, ...pickupTokens]));
+  return { tokens, mgr: managerTokens.length, des: designatedTokens.length, pck: pickupTokens.length };
+}
+
+/**
+ * PTT 발화 시작 시 수신측(매니저 + 대리기사 + 픽업기사) wake.
  *  입력: { provinceId, cityId, officeId, channelName, senderName? }
- *  office designated_drivers 전체 fcmToken 수집(발신자 제외) → data-only high-priority FCM.
- *  수신 클라(driver_app)는 type=ptt_dispatch 분기에서 channelName으로 fast-join.
+ *  office 3-컬렉션 fcmToken 수집(발신자 제외) → data-only high-priority FCM.
+ *  수신 클라(driver_app/call_manager)는 type=ptt_dispatch 분기에서 channelName으로 fast-join.
  */
 export const sendPttWake = onCall(
   { region: REGION, minInstances: 1 },
@@ -92,18 +132,10 @@ export const sendPttWake = onCall(
     const officeRef = admin.firestore()
       .doc(`provinces/${provinceId}/cities/${cityId}/offices/${officeId}`);
 
-    // 대리기사 토큰 수집 — onChatMessageCreated 패턴 정합 (authUid/docId == sender 제외)
-    const designatedSnapshot = await officeRef.collection("designated_drivers").get();
-    const tokens: string[] = designatedSnapshot.docs
-      .filter((d) => {
-        const data = d.data();
-        if (data.authUid === senderId || d.id === senderId) return false;
-        return typeof data.fcmToken === "string" && (data.fcmToken as string).length > 0;
-      })
-      .map((d) => d.data().fcmToken as string);
-    const uniqueTokens = Array.from(new Set(tokens));
+    // 수신 대상 토큰 수집 — 매니저 + 대리기사 + 픽업기사 (발신자 제외). 양방향 팬아웃.
+    const { tokens: uniqueTokens, mgr, des, pck } = await collectOfficePttTokens(officeRef, senderId);
 
-    logger.info(`[sendPttWake] channel=${channelName} 대상 기사 토큰=${uniqueTokens.length}`);
+    logger.info(`[sendPttWake] channel=${channelName} 토큰=${uniqueTokens.length} (mgr=${mgr}, des=${des}, pck=${pck})`);
     if (uniqueTokens.length === 0) {
       return { sent: 0, failed: 0 };
     }
@@ -121,6 +153,53 @@ export const sendPttWake = onCall(
     );
     const response = await admin.messaging().sendEachForMulticast(multicast);
     logger.info(`[sendPttWake] 성공=${response.successCount} 실패=${response.failureCount}`);
+    return { sent: response.successCount, failed: response.failureCount };
+  },
+);
+
+/**
+ * PTT 콜드 음성 메모 녹음 시작 시 수신측(사무실 기사) Doze 선행 깨우기.
+ *  입력: { provinceId, cityId, officeId }  (channelName 불필요 — Agora 미사용, 라디오 깨우기 목적)
+ *  녹음+업로드와 병렬로 기사폰을 깨워, 음성 메시지(onChatMessageCreated) 도착 시 이미 준비되게 함.
+ *  수신 클라(driver_app)는 type=ptt_prewake 분기에서 no-op(FCM 도달 자체가 Doze 관통).
+ */
+// minInstances 미설정(콜드 허용) — pre-wake는 녹음 시작 시 발사라 함수 콜드스타트(~2s)가
+// 녹음 동안 흡수됨. 상시 웜 비용 불필요(메시지 도착은 녹음+업로드 뒤).
+export const sendPttPreWake = onCall(
+  { region: REGION },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "인증되지 않은 사용자입니다.");
+    }
+
+    const { provinceId, cityId, officeId } = request.data ?? {};
+    if (!provinceId || !cityId || !officeId) {
+      throw new HttpsError("invalid-argument", "필수 파라미터 누락: provinceId, cityId, officeId");
+    }
+
+    const senderId = request.auth.uid;
+    const officeRef = admin.firestore()
+      .doc(`provinces/${provinceId}/cities/${cityId}/offices/${officeId}`);
+
+    // 수신 대상 토큰 수집 — 매니저 + 대리기사 + 픽업기사 (발신자 제외). sendPttWake와 동일 팬아웃.
+    const { tokens: uniqueTokens, mgr, des, pck } = await collectOfficePttTokens(officeRef, senderId);
+
+    logger.info(`[sendPttPreWake] office=${officeId} 토큰=${uniqueTokens.length} (mgr=${mgr}, des=${des}, pck=${pck})`);
+    if (uniqueTokens.length === 0) {
+      return { sent: 0, failed: 0 };
+    }
+
+    const multicast = buildMulticastPttWakePayload(
+      {
+        type: "ptt_prewake",
+        provinceId,
+        cityId,
+        officeId,
+      },
+      uniqueTokens,
+    );
+    const response = await admin.messaging().sendEachForMulticast(multicast);
+    logger.info(`[sendPttPreWake] 성공=${response.successCount} 실패=${response.failureCount}`);
     return { sent: response.successCount, failed: response.failureCount };
   },
 );

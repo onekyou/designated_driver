@@ -1,11 +1,11 @@
-package com.designated.callmanager.service
+package com.designated.pickupdriver.service
 
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.net.Uri
 import android.util.Log
-import com.designated.callmanager.R
+import com.designated.pickupdriver.R
 import com.google.firebase.functions.ktx.functions
 import com.google.firebase.ktx.Firebase
 import io.agora.rtc2.ChannelMediaOptions
@@ -29,19 +29,20 @@ import java.io.File
 enum class PttState { IDLE, CONNECTING, TALKING, RECORDING, LISTENING }
 
 /**
- * 매니저 PTT 송수신 매니저 (단일 RtcEngine 통합).
+ * 픽업기사 PTT 송수신 매니저 (단일 RtcEngine 통합).
  *  ★ 원활한 통신 우선 재설계 (2026-06-03): "대화 중엔 항상 warm 라이브, 콜드 녹음 최소화".
  *  - 포그라운드 발화 = 항상 라이브 (콜드 음성메모 트리거 제거; 코드는 screen-off 트랙 대비 보존).
  *  - 수신(RX)/워밍(WARM) 중 응답 = leaveChannel 없이 updateChannelMediaOptions로 즉시 TX 승격(재join 0).
  *  - 워밍창 대화 단위 연장(CONV_WARM_MS): 발화/수신마다 리셋 → 대화 오가는 동안 양쪽 채널 warm.
  *  mode 플래그(NONE/TX/RX/WARM)로 eventHandler 분기. RTM 미사용(FCM+RTC).
- *  인스턴스는 CallManagerApplication 단일 소유(MainActivity·PttReceiverService 공유).
+ *  인스턴스는 PickupDriverApplication 단일 소유(MainActivity·PttReceiverService 공유).
+ *  (call_manager PTTManager fork — senderName "픽업기사")
  */
 class PTTManager {
 
     companion object {
         private const val TAG = "PTTManager"
-        private const val APP_ID = "e5aae3aa18484cd2a1fed0018cfb15bd" // 공개값
+        private const val APP_ID = "e5aae3aa18484cd2a1fed0018cfb15bd" // 공개값 (call_manager와 동일 Agora 프로젝트=같은 채널)
         private const val CONV_WARM_MS = 45_000L       // 대화 워밍창 (발화/수신마다 리셋)
         private const val READY_TIMEOUT_MS = 3_000L    // (cold-live / 상대 부재 warm) 미합류 시 강제 발화
         private const val WAKE_FALLBACK_MS = 10_000L   // 수신 신규 join 후 오디오 미도착 방어
@@ -296,7 +297,6 @@ class PTTManager {
                 if (expectedChannel != null && expectedChannel != channelName) {
                     Log.w(TAG, "채널 불일치 wake=$expectedChannel token=$channelName")
                 }
-                // join 직전 송신 시작됐으면 취소
                 val s2 = _state.value
                 if (s2 == PttState.CONNECTING || s2 == PttState.TALKING) {
                     Log.i(TAG, "onWake: join 직전 송신 시작 — 취소"); return@launch
@@ -342,7 +342,7 @@ class PTTManager {
         try {
             val wakeData = hashMapOf(
                 "provinceId" to provinceId, "cityId" to cityId, "officeId" to officeId,
-                "channelName" to channelName, "senderName" to "매니저",
+                "channelName" to channelName, "senderName" to "픽업기사",
             )
             functions.getHttpsCallable("sendPttWake").call(wakeData).await()
             Log.i(TAG, "sendPttWake 완료 channel=$channelName")

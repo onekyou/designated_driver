@@ -162,10 +162,12 @@ class MainActivity : ComponentActivity() {
     private var tokenRefreshListener: com.google.firebase.firestore.ListenerRegistration? = null
 
     // PTT 송신 (탭 후 hold-to-talk). 엔진은 발화 시점 Activity 컨텍스트로 생성(onCreate 컨텍스트 불안정 회피).
-    private val pttManager = PTTManager()
+    // PTT 송수신 매니저 — Application 단일 인스턴스 공유(PttReceiverService와 동일 엔진). RtcEngine 싱글톤 보장.
+    private val pttManager get() = (application as CallManagerApplication).pttManager
     private var pttFirstTapUpTime = 0L       // 첫 탭(arm) up 시각
     private var pttPendingFirstTapDown = false // 첫 탭 down 후 up 대기
     private var pttHolding = false           // 두 번째 누름 유지(발화) 중
+    // 콜드 판정(pttFromBackground 등) 제거 — 포그라운드 발화는 항상 라이브(2026-06-03 재설계).
 
     private lateinit var permissionManager: CallManagerPermissionManager
 
@@ -179,6 +181,14 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) {
         permissionManager.onOverlayPermissionResult()
+    }
+
+    // PTT 음성 메모용 RECORD_AUDIO 런타임 권한 (콜드 발화 녹음)
+    private val recordAudioPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val msg = if (granted) "녹음 권한 허용됨 — 다시 발화하세요" else "음성 메모를 위해 녹음 권한이 필요합니다"
+        android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show()
     }
 
     private val _screenState = mutableStateOf(Screen.Login)
@@ -334,6 +344,14 @@ class MainActivity : ComponentActivity() {
             }
         )
         permissionManager.initialize(permissionLauncher, overlayPermissionLauncher)
+
+        // PTT 콜드 발화 음성 메모 배선: 녹음 종료 → 채팅 음성 첨부 게시 / 권한 미허가 → 요청
+        pttManager.onColdVoiceMemo = { file, durationMs ->
+            chatViewModel.sendPttVoiceMemo(file, durationMs)
+        }
+        pttManager.onRecordUnavailable = {
+            recordAudioPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+        }
 
         // FCM 서비스 초기화를 위한 토큰 요청
         initializeFirebaseMessaging()
@@ -618,9 +636,19 @@ class MainActivity : ComponentActivity() {
                     if (pttState != PttState.IDLE) {
                         androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
                             val isTalking = pttState == PttState.TALKING
-                            val bg = if (isTalking) androidx.compose.ui.graphics.Color(0xFFD32F2F)
-                                     else androidx.compose.ui.graphics.Color(0xFFF9A825)
-                            val label = if (isTalking) "🔴 PTT 발화중" else "연결중…"
+                            val isRecording = pttState == PttState.RECORDING
+                            val isListening = pttState == PttState.LISTENING
+                            val bg = when {
+                                isTalking || isRecording -> androidx.compose.ui.graphics.Color(0xFFD32F2F) // 송신 빨강
+                                isListening -> androidx.compose.ui.graphics.Color(0xFF1565C0)              // 수신 파랑
+                                else -> androidx.compose.ui.graphics.Color(0xFFF9A825)                     // 연결중 주황
+                            }
+                            val label = when {
+                                isRecording -> "🔴 녹음중 (말하세요)"
+                                isTalking -> "🔴 PTT 발화중"
+                                isListening -> "🔊 수신중"
+                                else -> "연결중…"
+                            }
                             androidx.compose.foundation.layout.Box(
                                 modifier = Modifier
                                     .align(androidx.compose.ui.Alignment.TopCenter)
@@ -1319,7 +1347,8 @@ class MainActivity : ComponentActivity() {
         }
         val serviceIntent = Intent(this, CallManagerService::class.java)
         stopService(serviceIntent)
-        pttManager.release()
+        // ★ pttManager.release() 호출 금지 — 엔진은 Application 단일 소유(PttReceiverService 수신과 공유).
+        //   Activity 파괴 시 destroy하면 화면 off 수신 중 엔진이 소실됨. 프로세스 종료 시 OS가 정리.
     }
 
 

@@ -73,7 +73,9 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             "STATUS_CHANGE",         // 운행 시작/완료 알림은 항상 처리
             "NOTIFICATION_FAILURE",  // 알림 전달 실패 경고는 항상 처리
             "SETTLEMENT_SUBMITTED",  // 기사 업무마감 제출 알림
-            "NEW_CHAT_MESSAGE"       // 사무실 단톡방 메시지 (포그라운드도 Room INSERT 필요)
+            "NEW_CHAT_MESSAGE",      // 사무실 단톡방 메시지 (포그라운드도 Room INSERT 필요)
+            "ptt_dispatch",          // PTT 라이브 수신 wake (포그라운드도 수신 join 필요)
+            "ptt_prewake"            // PTT 콜드 선행 깨우기 (no-op, 필터 통과만)
         )
         val shouldProcessInForeground = alwaysProcessTypes.contains(messageType)
 
@@ -113,6 +115,21 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 isSettlement = true,
                 timeoutAfter = 0
             )
+            return
+        }
+
+        // PTT 라이브 수신 wake — callId 없음. 수신 FGS로 위임(화면 off에서도 join).
+        if (messageType == "ptt_dispatch") {
+            val channelName = remoteMessage.data["channelName"] ?: ""
+            val senderName = remoteMessage.data["senderName"] ?: "매니저"
+            ContextCompat.startForegroundService(
+                this, PttReceiverService.newPttDispatchIntent(this, channelName, senderName)
+            )
+            return
+        }
+        // PTT 콜드 선행 깨우기 — FCM 도달 자체가 Doze 관통. no-op.
+        if (messageType == "ptt_prewake") {
+            Log.d(TAG, "PTT pre-wake 수신 (no-op)")
             return
         }
 
@@ -654,8 +671,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val senderName = data["senderName"] ?: "알 수 없음"
         val senderRole = data["senderRole"] ?: "MANAGER"
         val text = data["text"] ?: return
+        val audioUrl = data["audioUrl"]?.takeIf { it.isNotEmpty() }
+        val audioAutoplay = data["audioAutoplay"] == "true"
+        val displayText = if (audioUrl != null) "[음성]" else text
 
-        Log.d(TAG, "[handleChatMessage] 수신 - id=$messageId, from=$senderName ($senderRole)")
+        Log.d(TAG, "[handleChatMessage] 수신 - id=$messageId, from=$senderName ($senderRole)" +
+            if (audioUrl != null) " (audio)" else "")
 
         // 1) Room INSERT (Repository가 본인 메시지면 자동 skip)
         val app = applicationContext as? com.designated.callmanager.CallManagerApplication
@@ -671,9 +692,14 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             Log.d(TAG, "[handleChatMessage] 본인 메시지 - 알림 스킵")
             return
         }
+        // 2.5) PTT 콜드 음성 메모 자동재생 (운전 중이라 포그라운드/백그라운드 무관). 자동재생이 곧 알림.
+        if (audioUrl != null && audioAutoplay) {
+            Log.d(TAG, "[handleChatMessage] 음성 메모 자동재생 트리거")
+            PttReceiverService.playVoiceMemo(this, audioUrl)
+        }
         if (isAppInForeground()) {
-            Log.d(TAG, "[handleChatMessage] 포그라운드 - 알림 스킵 (UI가 처리). sound만 재생")
-            playChatSound()
+            Log.d(TAG, "[handleChatMessage] 포그라운드 - 알림 스킵 (UI가 처리)")
+            if (audioUrl == null) playChatSound() // 음성은 자동재생이 알림 역할
             return
         }
 
@@ -703,8 +729,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val notification = NotificationCompat.Builder(this, CHAT_MESSAGE_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
-            .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentText(displayText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(displayText))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setAutoCancel(true)
