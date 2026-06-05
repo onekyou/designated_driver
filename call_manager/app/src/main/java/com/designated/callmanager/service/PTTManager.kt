@@ -62,6 +62,7 @@ class PTTManager {
     private var readyTimeoutJob: Job? = null
     private var mode = EngineMode.NONE          // 현재 엔진 용도 — eventHandler 콜백 분기
     private var wasStarted = false              // 수신: 송신자 오디오 STARTED 본 뒤에만 오버톤
+    private var speakingUid = 0                 // 실제 발화 중인 송신자 uid — 메시(3자+) 다른 broadcaster 오인 차단
 
     // 콜드 음성 메모 녹음 (현재 미사용·보존 — screen-off 송신 트랙 부활 대비)
     private val pttRecorder = PttRecorder()
@@ -79,7 +80,8 @@ class PTTManager {
 
     private val eventHandler = object : IRtcEngineEventHandler() {
         override fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {
-            Log.i(TAG, "onJoinChannelSuccess channel=$channel uid=$uid elapsed=$elapsed mode=$mode")
+            engine?.setEnableSpeakerphone(true) // 라우트 강제(스피커) — 이어피스 플립 차단
+            Log.i(TAG, "onJoinChannelSuccess channel=$channel uid=$uid elapsed=$elapsed mode=$mode spk=${engine?.isSpeakerphoneEnabled}")
         }
         override fun onError(err: Int) {
             Log.e(TAG, "Agora onError code=$err")
@@ -92,10 +94,10 @@ class PTTManager {
         }
         override fun onUserOffline(uid: Int, reason: Int) {
             if (remoteUsers > 0) remoteUsers--
-            Log.i(TAG, "onUserOffline uid=$uid remoteUsers=$remoteUsers mode=$mode")
-            // 수신/중립: 상대 이탈. wasStarted면 오버톤. 들을 사람 0이면 워밍창 전환(즉시 leave 대신 — 원활성).
+            Log.i(TAG, "onUserOffline uid=$uid remoteUsers=$remoteUsers mode=$mode speakingUid=$speakingUid")
+            // 수신/중립: 상대 이탈. 발화자 본인 이탈 시에만 오버톤. 들을 사람 0이면 워밍창 전환.
             if (mode == EngineMode.RX || mode == EngineMode.WARM) {
-                if (wasStarted) { wasStarted = false; playOverTone() }
+                if (uid == speakingUid && wasStarted) { wasStarted = false; speakingUid = 0; playOverTone() }
                 if (remoteUsers <= 0) {
                     _state.value = PttState.IDLE
                     mode = EngineMode.WARM
@@ -108,15 +110,21 @@ class PTTManager {
             if (mode != EngineMode.RX && mode != EngineMode.WARM) return // 송신 중 원격오디오 무시(오발/에코 차단)
             when (state) {
                 Constants.REMOTE_AUDIO_STATE_STARTING, Constants.REMOTE_AUDIO_STATE_DECODING -> {
+                    speakingUid = uid              // 실제 발화자 래칭
                     mode = EngineMode.RX            // WARM→RX 승격 (채널 이미 연결 → 즉시 청취)
                     wasStarted = true
                     leaveJob?.cancel()              // 청취 중 이탈 방지
+                    // ★ 스피커 재설정 금지 — 이 콜백은 발화 중 상태전이마다 재발화 → 재생 중 라우트 리셋=끊김.
+                    //   라우트는 onJoinChannelSuccess 1회 강제로 충분(sticky).
                     _state.value = PttState.LISTENING
-                    Log.i(TAG, "수신: 발화 시작 감지")
+                    Log.i(TAG, "수신: 발화 시작 감지 uid=$uid state=$state")
                 }
                 Constants.REMOTE_AUDIO_STATE_STOPPED -> {
-                    if (reason == Constants.REMOTE_AUDIO_REASON_REMOTE_MUTED && wasStarted) {
+                    Log.i(TAG, "수신 STOPPED uid=$uid reason=$reason speakingUid=$speakingUid wasStarted=$wasStarted")
+                    // ★ 발화자 본인의 mute일 때만 종료 — 다른 broadcaster(비발화 수신자) 상태변화 오인 차단
+                    if (uid == speakingUid && reason == Constants.REMOTE_AUDIO_REASON_REMOTE_MUTED && wasStarted) {
                         wasStarted = false
+                        speakingUid = 0
                         Log.i(TAG, "수신: 발화 종료 감지 → 오버톤 + 워밍창 재앵커")
                         playOverTone()
                         _state.value = PttState.IDLE
@@ -141,6 +149,7 @@ class PTTManager {
             engine = RtcEngine.create(config)
             engine?.setAudioProfile(Constants.AUDIO_PROFILE_SPEECH_STANDARD)
             engine?.setDefaultAudioRoutetoSpeakerphone(true)
+            engine?.setParameters("{\"che.audio.keep.audiosessiontype\":true}") // 실험: leave 후 OS 오디오세션 유지(콜드 재조인 지연↓)
             Log.i(TAG, "RtcEngine created")
         } catch (e: Exception) {
             Log.e(TAG, "RtcEngine 생성 실패", e)
@@ -322,6 +331,7 @@ class PTTManager {
             currentChannel = null
             remoteUsers = 0
             wasStarted = false
+            speakingUid = 0
             mode = EngineMode.NONE
             _state.value = PttState.IDLE
             Log.i(TAG, "scheduleLeave: leaveChannel (${delayMs / 1000}s)")

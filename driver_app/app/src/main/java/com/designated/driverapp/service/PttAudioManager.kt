@@ -44,10 +44,12 @@ class PttAudioManager {
     private var currentChannel: String? = null
     private var leaveJob: Job? = null
     private var wasStarted = false // 매니저 오디오 STARTED를 본 뒤에만 오버톤(조기 오발 가드)
+    private var speakingUid = 0    // 실제 발화 중인 송신자 uid — 메시(3자+) 다른 broadcaster 상태변화 오인 차단
 
     private val eventHandler = object : IRtcEngineEventHandler() {
         override fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {
-            Log.i(TAG, "수신 join 성공 channel=$channel uid=$uid elapsed=$elapsed")
+            engine?.setEnableSpeakerphone(true) // 라우트 강제(스피커) — 이어피스 플립 차단
+            Log.i(TAG, "수신 join 성공 channel=$channel uid=$uid elapsed=$elapsed spk=${engine?.isSpeakerphoneEnabled}")
         }
         override fun onError(err: Int) {
             Log.e(TAG, "Agora onError code=$err")
@@ -59,13 +61,19 @@ class PttAudioManager {
         override fun onRemoteAudioStateChanged(uid: Int, state: Int, reason: Int, elapsed: Int) {
             when (state) {
                 Constants.REMOTE_AUDIO_STATE_STARTING, Constants.REMOTE_AUDIO_STATE_DECODING -> {
+                    speakingUid = uid              // 실제 발화자 래칭
                     wasStarted = true
                     leaveJob?.cancel() // 청취 중 이탈 방지
-                    Log.i(TAG, "매니저 발화 시작 감지")
+                    // ★ 스피커 재설정 금지 — 이 콜백은 발화 중 상태전이마다 재발화 → 재생 중 라우트 리셋=끊김.
+                    //   라우트는 onJoinChannelSuccess 1회 강제로 충분(sticky).
+                    Log.i(TAG, "매니저 발화 시작 감지 uid=$uid state=$state")
                 }
                 Constants.REMOTE_AUDIO_STATE_STOPPED -> {
-                    if (reason == Constants.REMOTE_AUDIO_REASON_REMOTE_MUTED && wasStarted) {
+                    Log.i(TAG, "원격 STOPPED uid=$uid reason=$reason speakingUid=$speakingUid wasStarted=$wasStarted")
+                    // ★ 발화자 본인의 mute일 때만 종료 — 다른 broadcaster(비발화 수신자) 상태변화 오인 차단
+                    if (uid == speakingUid && reason == Constants.REMOTE_AUDIO_REASON_REMOTE_MUTED && wasStarted) {
                         wasStarted = false
+                        speakingUid = 0
                         Log.i(TAG, "매니저 발화 종료 감지 → 오버톤 + 5초 재앵커")
                         playOverTone()
                         engine?.let { scheduleLeave(it, LEAVE_DELAY_MS) }
@@ -73,10 +81,12 @@ class PttAudioManager {
                 }
             }
         }
-        // 매니저 채널 이탈 — 오버톤(가드) + 즉시 leave(들을 사람 없음)
+        // 발화 중이던 송신자 이탈 — 오버톤 + 즉시 leave. 비발화 broadcaster 이탈은 무시(재생 유지).
         override fun onUserOffline(uid: Int, reason: Int) {
-            Log.i(TAG, "송신자 이탈 uid=$uid")
+            Log.i(TAG, "송신자 이탈 uid=$uid speakingUid=$speakingUid")
+            if (uid != speakingUid && wasStarted) return // 다른 broadcaster 이탈 — 무시
             if (wasStarted) { wasStarted = false; playOverTone() }
+            speakingUid = 0
             leaveJob?.cancel()
             engine?.leaveChannel()
             currentChannel = null
@@ -94,6 +104,8 @@ class PttAudioManager {
             }
             engine = RtcEngine.create(config)
             engine?.setAudioProfile(Constants.AUDIO_PROFILE_SPEECH_STANDARD)
+            engine?.setDefaultAudioRoutetoSpeakerphone(true) // 기본 라우트 스피커(현재 누락 보완)
+            engine?.setParameters("{\"che.audio.keep.audiosessiontype\":true}") // 실험: leave 후 OS 오디오세션 유지
             Log.i(TAG, "RtcEngine created (수신)")
         } catch (e: Exception) {
             Log.e(TAG, "RtcEngine 생성 실패", e)
