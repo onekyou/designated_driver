@@ -35,6 +35,10 @@
 - **남은 미지수**: ① STT/AI 정확도(large-v3/클라우드 재측정) ② 온디바이스 소형LLM 파싱 정확도(로컬우선 성립?) ③ 실제 Play 심사+Data Safety. **정식 설계 시 코어 vs 확장 분리**.
 - **상세**: `memory/designated_drive/call_recording_ai_parse_2026-06-03.md` / 세션요약: `memory/designated_drive/session_2026-06-04_call_recording_bypass.md` / 클코 학습: `memory/feedback/feedback_rabbithole_scope_2026-06-04.md`
 
+## 6/7 통화녹음→예약 입력엔진 검증 슬라이스 플랜 (콜매니저 검증→쿠폰앱 salon_booking 이식)
+- 6/3 권한우회의 다음 단계 = "전화로 오는 모든 아날로그 예약(미용·대리·택시)" 공통 입력엔진. 통화녹음→**싼STT(W)** vs **오디오직접(C)** 2경로를 Gemini로 채점해 "W가 C천장에 근접하나" 측정. ★첫발=**측정엔진(Gemini W/C 함수) 먼저**, 온폰STT는 "W충분" 확인 후(EXTRA_AUDIO_SOURCE 불확실·MLkit GenAI는 S21/S22불가·온폰Whisper 무거움 — STT출처=production최적화지 측정게이트 아님). 로마 계약(salon_booking·booking.request·SalonBookingPayload)=coupon_app/app/lib/types.ts **반영완료**. 역할: 코딩=콜매니저폴더, 클코=설계조언+기록. 🚩선결=타깃살롱 안드로이드+자동녹음 비율 현장실사.
+- **상세**: `memory/designated_drive/reservation_engine_plan_2026-06-07.md`
+
 ## 5/4 산재 자료 (검증 후 master 갱신 검토)
 - `memory/inbox/2026-05-04/` — 포인트시스템 설계 + 현장인사이트 (방구석 여포 → 능동 영업 패러다임 전환)
 - `memory/inbox/2026-04-23/` — 개선전략 + 업소용앱 분리 (4/27 master로 흡수됨, 참고용)
