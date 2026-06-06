@@ -33,6 +33,11 @@
     <!-- 음성 인식 권한 (음성 입력 기능) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <!-- 삼성 통화 자동녹음 파일 읽기 (예약 입력엔진 검증) -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
     <!-- PTT 오디오 라우팅 (Agora) -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 

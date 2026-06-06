@@ -16,6 +16,7 @@
   },
   "main": "lib/index.js",
   "dependencies": {
+    "@google/genai": "^2.8.0",
     "agora-token": "^2.0.5",
     "express": "^4.21.2",
     "express-basic-auth": "^1.2.1",

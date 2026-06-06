@@ -57,5 +57,14 @@ service firebase.storage {
         && request.resource.contentType.matches('audio/.*');
       allow update, delete: if false;
     }
+
+    // --- 예약 입력엔진 검증 (통화녹음 업로드 → parseReservation CF가 admin SDK로 읽고 즉시 삭제, 24h lifecycle) ---
+    //  • 본인(uid) 경로에만 write. read 불필요(클라는 결과 JSON만 받음). audio/* + 30MB.
+    match /reservation_test/{uid}/{fileName} {
+      allow read: if false;
+      allow write: if isAuthenticated() && request.auth.uid == uid
+        && request.resource.size < 30 * 1024 * 1024
+        && request.resource.contentType.matches('audio/.*');
+    }
   }
 }

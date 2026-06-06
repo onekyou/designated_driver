@@ -49,6 +49,7 @@ fun SettingsScreen(
     onNavigateToExcludeNumber: () -> Unit = {},
     onNavigateToCustomerManagement: (provinceId: String, cityId: String, officeId: String) -> Unit = { _, _, _ -> },
     onNavigateToAttributionManagement: (provinceId: String, cityId: String, officeId: String) -> Unit = { _, _, _ -> },
+    onNavigateToReservationTest: () -> Unit = {},
 ) {
     val settlementViewModel: SettlementViewModel = viewModel()
     val context = LocalContext.current
@@ -267,6 +268,13 @@ fun SettingsScreen(
                             onNavigateToAttributionManagement(provinceId!!, cityId!!, officeId!!)
                         }
                     }
+                )
+
+                SettingsNavigationItem(
+                    title = "녹음 파싱 검증 (beta)",
+                    description = "통화녹음 → 예약 자동추출 측정",
+                    icon = Icons.Filled.Info,
+                    onClick = onNavigateToReservationTest
                 )
             }
 
