@@ -37,7 +37,8 @@
 
 ## 6/7 통화녹음→예약 입력엔진 검증 슬라이스 플랜 (콜매니저 검증→쿠폰앱 salon_booking 이식)
 - 6/3 권한우회의 다음 단계 = "전화로 오는 모든 아날로그 예약(미용·대리·택시)" 공통 입력엔진. 통화녹음→**싼STT(W)** vs **오디오직접(C)** 2경로를 Gemini로 채점해 "W가 C천장에 근접하나" 측정. ★첫발=**측정엔진(Gemini W/C 함수) 먼저**, 온폰STT는 "W충분" 확인 후(EXTRA_AUDIO_SOURCE 불확실·MLkit GenAI는 S21/S22불가·온폰Whisper 무거움 — STT출처=production최적화지 측정게이트 아님). 로마 계약(salon_booking·booking.request·SalonBookingPayload)=coupon_app/app/lib/types.ts **반영완료**. 역할: 코딩=콜매니저폴더, 클코=설계조언+기록. 🚩선결=타깃살롱 안드로이드+자동녹음 비율 현장실사.
-- **상세**: `memory/designated_drive/reservation_engine_plan_2026-06-07.md`
+- **★ 전략(거인과의 싸움, 6/7 사적대화)**: 도장+통화예약 둘다 **사용자행동0** = 거인(KT통화비서·네이버)이 규모→표준화→사용자행동요구 구조라 *양립불가*한 단 하나의 비대칭=돌팔매. 해자는 LLM(KT-MS GPT-4o 보유)·"수수료0"(거인 미끼우회)·"귀속"(상인 언어 아님)이 아니라 **행동0 + 이익언어(단골재방문/노동0/수수료0) + 정면 안붙고 선점**. 명중조건 3=통화예약정확도(헛예약0)·도장 NFC체감0·거인 오기전 선점속도. KT AI통화비서=봇응대(손님행동↑·단순화한정), 우리=사람통화유지+사후파싱(관계보존). 3년 5앱=헛발질 아닌 부품창고+"행동0" 도달의 토대. 최초질문답=무조건❌ 통한다✅(변수는 "완성"=정확도·체감0·속도 셋, 다 실행에 달림).
+- **상세**: `memory/designated_drive/reservation_engine_plan_2026-06-07.md` / 전략: `memory/designated_drive/reservation_engine_strategy_2026-06-07.md`
 
 ## 5/4 산재 자료 (검증 후 master 갱신 검토)
 - `memory/inbox/2026-05-04/` — 포인트시스템 설계 + 현장인사이트 (방구석 여포 → 능동 영업 패러다임 전환)
