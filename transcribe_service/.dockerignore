@@ -2,5 +2,4 @@ __pycache__/
 *.pyc
 .venv/
 *.m4a
-*.txt
 README.md
