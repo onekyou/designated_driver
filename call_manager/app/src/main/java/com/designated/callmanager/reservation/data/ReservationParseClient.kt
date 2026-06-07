@@ -30,13 +30,15 @@ class ReservationParseClient {
     private val storage = Firebase.storage
 
     /**
-     * @param transcript 온폰 STT 텍스트(있으면 W경로 동시 채점). null/blank 면 C경로(천장)만.
+     * @param transcript 온폰 STT 텍스트(있으면 W경로 채점). null/blank 면 서버 STT(mode="W") 또는 C(레거시).
+     * @param mode "W"=파일럿(서버 faster-whisper 전사→W, C 안 함). null=레거시(측정 하니스: gcsUri→C).
      * @throws ReservationParseException 표시용 메시지 포함.
      */
     suspend fun parse(
         audioBytes: ByteArray,
         recordedAt: String,
         transcript: String? = null,
+        mode: String? = null,
     ): ParseResult {
         val uid = auth.currentUser?.uid
             ?: throw ReservationParseException("로그인이 필요합니다.")
@@ -56,6 +58,7 @@ class ReservationParseClient {
             put("gcsUri", gsUri)
             put("recordedAt", recordedAt)
             if (!transcript.isNullOrBlank()) put("transcript", transcript)
+            if (!mode.isNullOrBlank()) put("mode", mode)
         }
         try {
             val result = functions.getHttpsCallable("parseReservation").call(payload).await()
