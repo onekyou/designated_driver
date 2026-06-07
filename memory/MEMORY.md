@@ -45,7 +45,14 @@
 - **UX 확정**: 통화끝 → **자동 "분석중" 배너(탭0)** → 써머리 자동출현 → **[확인] 한 탭** → 예약등록(수정가능). 파싱→바로스케줄 ❌(헛예약 치명, 확인=정확도 안전장치+신뢰부트스트랩, "확인"은 검토라 행동0 수렴). "분석할까요?"팝업은 빼고(매통화 묻기=행동↑) 프라이버시 스위치로만. 비예약은 써머리에 안 띄움. 신뢰 쌓이면 점진 자동화(확신95%+ 자동등록).
 - **코드자산(functions/scripts/, 미커밋)**: 신규 `transcribe-whisper.py`(폴더일괄·폴백사다리), 신규 `score-batch.mjs`(폴더 W채점·파일명→recordedAt), 수정 `test-reservation-standalone.mjs`(W·C나란히·토큰단가). 대본+정답=`OneDrive/Desktop/통화측정_대본_2026-06-07.md`. 녹음=`call_manager/recordings/`.
 - **⚠️환경**: 로컬PC Vertex호출 node = `dangerouslyDisableSandbox:true` 필수(아니면 HEADERS_TIMEOUT). C경로(오디오업로드)는 로컬PC 헤더타임아웃(884KB→us-central1/global 둘다 실패)=로컬한정(production GCP내부망 무관). W경로(텍스트)는 정상 1.5초. 속도: PC CPU turbo 29초통화→전사66초(실서비스엔 클라우드/GPU/작은모델로 5~30초, 백그라운드라 체감0).
-- **상세/인계**: `memory/designated_drive/reservation_engine_measurement_2026-06-07.md` (다음단계: 현장거친샘플→GO바실측 / production STT경로결정 / 써머리UX구현 / C천장비교 / parseReservation deploy)
+- **상세/인계**: `memory/designated_drive/reservation_engine_measurement_2026-06-07.md` (다음단계는 6/8 재조정으로 갱신 — 아래 6/8 항목 참조)
+
+## 6/8 ★ 다음 할일 재조정 + 비전 정정 (CLAUDE.md 최상위 박음, 두 repo 푸시)
+- **★ 다음 할일 = 콜매니저(대리)에 통화예약 엔진 붙이기 = 첫 실전 파일럿** (플랜모드 설계부터). **W경로 확정**(C vs W 끝 — C후퇴 금지), STT=**서버STT**(앱 가벼움, 온폰 STT통합은 나중). 단계: parseReservation deploy(+Vertex IAM)→콜매니저 reservation 골격(현 미작동) 실연결→써머리확인UX(통화끝→자동배너→[확인]한탭→콜입력)→기존 콜워크플로(NewCallInputDialog) 접점→**양평 대리통화 현장검증**(거친샘플·GO바 여기서 확보). 거친현장은 PC자가샘플 아닌 실파일럿에서만 나옴.
+- **세 트랙 = 엔진 하나 + 세 표면**: 대리(현장 성숙)→택시(같은 출발·도착·요금, 공짜)→미용(화면만, 도장·손님거점 나중). 분산 = "엔진 세 번 만드는 중복"만 막으면 됨.
+- **★ 비전 정정**: 최종 = 손님·상인 둘 다 **앱**. 웹앱 = **완충지대**(NFC→웹 마찰0 진입→앱 정착). **행동0 ≠ 앱 회피**(앱 최종이되 그 안 노동0). 클코가 "비-앱"으로 거꾸로 읽은 것 정정 + coupon_app 기록공백("웹앱"까지만 명시) 메움. 🟡미정=웹앱→앱 전환 트리거.
+- **궁극 위계**: 로컬마루(coupon_app)=최상위 OS / designated_driver=검증장+부품창고 / 통화예약=사장측 행동0 축(도장=손님측 짝). 두 폴더 오갈 때 "콜매니저 최상위" 착각 금지. → designated_driver/CLAUDE.md 최상위 + coupon_app/CLAUDE.md "제품형태" 박음.
+- **커밋/푸시**: designated_driver `8db987c5`(CLAUDE.md)+`e61f0a0d`(측정코드3+measurement메모리) / coupon_app `bab976f`(CLAUDE.md, feature/reservation-contract).
 
 ## 5/4 산재 자료 (검증 후 master 갱신 검토)
 - `memory/inbox/2026-05-04/` — 포인트시스템 설계 + 현장인사이트 (방구석 여포 → 능동 영업 패러다임 전환)
