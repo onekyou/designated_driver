@@ -6,6 +6,8 @@
 > - **도메인 폴더 안 생성 원칙**: 새 토픽 파일은 해당 도메인 폴더 안에 (예: `memory/designated_drive/`, `memory/restaurant/`)
 > - 이 MEMORY.md 편집 후 B로도 동일 내용 복사: `cp B/MEMORY.md A/MEMORY.md`
 
+> ★ **결정은 먼저 결정 대장 확인**: `memory/_decisions.md`(전역) + `memory/<도메인>/_decisions.md`. `[확정]`은 변경시 입증 필요 — 서사에 묻힌 결정을 재해석/뒤집기 금지. (SessionStart hook이 자동주입하나, hook 없는 환경 대비 포인터.) 정책 = CLAUDE.md §결정 기록 정책.
+
 ## 한 줄 요약
 콜마당 = 양평 동네 생활 OS. 대리는 첫 사용 케이스. 식당 = 4중 노드 (호출/포인트/거점/쿠폰).
 

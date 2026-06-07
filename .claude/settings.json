@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -Command \"[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Output '=== 결정 대장 (작업 전 먼저 읽을 것 — [확정]은 변경시 입증 필요) ==='; Get-Content 'C:\\Users\\kala1\\designated_driver\\memory\\_decisions.md' -Encoding UTF8 -ErrorAction SilentlyContinue; Write-Output ''; Get-Content 'C:\\Users\\kala1\\designated_driver\\memory\\designated_drive\\_decisions.md' -Encoding UTF8 -ErrorAction SilentlyContinue\""
+            "command": "powershell.exe -NoProfile -Command \"[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Output '=== 결정 대장 (작업 전 먼저 읽을 것 — [확정]은 변경시 입증 필요) ==='; Get-ChildItem -Path 'C:\\Users\\kala1\\designated_driver\\memory' -Recurse -Filter '_decisions.md' -ErrorAction SilentlyContinue | Sort-Object FullName | ForEach-Object { Write-Output ''; Write-Output ('--- ' + $_.FullName + ' ---'); Get-Content $_.FullName -Encoding UTF8 }\""
           }
         ]
       }
