@@ -135,7 +135,8 @@ enum class Screen {
     Wallet,
     DepositGuide,
     WithdrawalRequest,
-    ReservationTest
+    ReservationTest,
+    ReservationInbox
 }
 
 sealed class NavigationParams {
@@ -440,7 +441,7 @@ class MainActivity : ComponentActivity() {
                             Screen.DepositGuide, Screen.WithdrawalRequest -> {
                                 screenState = Screen.Wallet
                             }
-                            Screen.ReservationTest -> {
+                            Screen.ReservationTest, Screen.ReservationInbox -> {
                                 screenState = Screen.Settings
                             }
                         }
@@ -530,11 +531,17 @@ class MainActivity : ComponentActivity() {
                                     navigationParams = NavigationParams.AttributionManagement(provinceId, cityId, officeId)
                                     screenState = Screen.AttributionManagement
                                 },
-                                onNavigateToReservationTest = { screenState = Screen.ReservationTest }
+                                onNavigateToReservationTest = { screenState = Screen.ReservationTest },
+                                onNavigateToReservationInbox = { screenState = Screen.ReservationInbox }
                             )
                         }
                         Screen.ReservationTest -> {
                             com.designated.callmanager.reservation.ui.ReservationTestScreen(
+                                onNavigateBack = { screenState = Screen.Settings }
+                            )
+                        }
+                        Screen.ReservationInbox -> {
+                            com.designated.callmanager.reservation.ui.ReservationInboxScreen(
                                 onNavigateBack = { screenState = Screen.Settings }
                             )
                         }

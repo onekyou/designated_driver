@@ -50,6 +50,7 @@ fun SettingsScreen(
     onNavigateToCustomerManagement: (provinceId: String, cityId: String, officeId: String) -> Unit = { _, _, _ -> },
     onNavigateToAttributionManagement: (provinceId: String, cityId: String, officeId: String) -> Unit = { _, _, _ -> },
     onNavigateToReservationTest: () -> Unit = {},
+    onNavigateToReservationInbox: () -> Unit = {},
 ) {
     val settlementViewModel: SettlementViewModel = viewModel()
     val context = LocalContext.current
@@ -268,6 +269,13 @@ fun SettingsScreen(
                             onNavigateToAttributionManagement(provinceId!!, cityId!!, officeId!!)
                         }
                     }
+                )
+
+                SettingsNavigationItem(
+                    title = "통화로 예약 입력",
+                    description = "통화녹음 → AI 분석 → 확인 → 콜 등록",
+                    icon = Icons.Filled.PhoneAndroid,
+                    onClick = onNavigateToReservationInbox
                 )
 
                 SettingsNavigationItem(
