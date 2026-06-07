@@ -54,6 +54,13 @@
 - **궁극 위계**: 로컬마루(coupon_app)=최상위 OS / designated_driver=검증장+부품창고 / 통화예약=사장측 행동0 축(도장=손님측 짝). 두 폴더 오갈 때 "콜매니저 최상위" 착각 금지. → designated_driver/CLAUDE.md 최상위 + coupon_app/CLAUDE.md "제품형태" 박음.
 - **커밋/푸시**: designated_driver `8db987c5`(CLAUDE.md)+`e61f0a0d`(측정코드3+measurement메모리) / coupon_app `bab976f`(CLAUDE.md, feature/reservation-contract).
 
+## 6/8 (밤) ★ 파일럿 코드+배포 완료 — 작동 게이트=원규씨 IAM 2개 + 폰 검증 (다음 세션 픽업)
+- 위 "다음 할일"을 플랜모드 설계→구현→production 배포까지 완료. 플랜 `~/.claude/plans/jolly-meandering-firefly.md`, 브랜치 `feature/reservation-engine-poc` push(`39c056b0`, 6커밋).
+- **W경로+서버STT 구현**: 서버STT=**faster-whisper(검증자산) Cloud Run**(`transcribe-service-60275310305.asia-northeast3.run.app`). Google STT는 .m4a미지원·한국어미검증이라 안 씀(통념회귀 교훈). `stt.ts`=교체지점, `reservation.ts` mode="W" 분기(레거시 보존). 콜매니저 `ReservationToCall`(매퍼, trip_summary/isSummaryConfirmed 안 건드림=정산오염방지)+`ReservationConfirmDialog`([확인]=콜생성)+`ReservationInbox`+설정진입.
+- **배포 완료**: Cloud Run ✅ / functions `.env`+parseReservation ✅ / 콜매니저 APK S21+ install ✅.
+- **⛳ 미완(작동 게이트)**: ① 🚩원규씨 IAM 2개(run.invoker+aiplatform.user — 클코는 가드레일로 IAM 자가확대 불가) ② 폰 검증(설정→통화로예약입력→탭→써머리확인→콜생성, rawTranscript·헛예약0·GO바) ③ 선결: 양평 매니저폰 실손님 자동녹음 쌓이는지(6/7 10건=자가녹음 천장편향).
+- **상세/인계**: `memory/designated_drive/reservation_engine_pilot_deploy_2026-06-08.md`. 클코 학습 2건: `feedback_overask_confirm_2026-06-08`(과잉질문 금지)·`feedback_convention_over_verified_2026-06-08`(검증자산>통념).
+
 ## 5/4 산재 자료 (검증 후 master 갱신 검토)
 - `memory/inbox/2026-05-04/` — 포인트시스템 설계 + 현장인사이트 (방구석 여포 → 능동 영업 패러다임 전환)
 - `memory/inbox/2026-04-23/` — 개선전략 + 업소용앱 분리 (4/27 master로 흡수됨, 참고용)
