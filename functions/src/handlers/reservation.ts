@@ -2,6 +2,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
 import { GoogleGenAI, Type } from "@google/genai";
+import { transcribeAudio } from "./stt";
 
 /**
  * 통화녹음 → 범용 예약 입력엔진 (검증 슬라이스).
@@ -123,10 +124,11 @@ export const parseReservation = onCall(
       throw new HttpsError("unauthenticated", "인증되지 않은 사용자입니다.");
     }
 
-    const { gcsUri, transcript, recordedAt } = (request.data ?? {}) as {
+    const { gcsUri, transcript, recordedAt, mode } = (request.data ?? {}) as {
       gcsUri?: string;
       transcript?: string;
       recordedAt?: string;
+      mode?: "W" | "C"; // 미지정=레거시(측정 하니스: transcript→W, gcsUri→C). "W"=파일럿(서버STT→W). "C"=천장만.
     };
 
     if (!gcsUri && !transcript) {
@@ -138,12 +140,22 @@ export const parseReservation = onCall(
     let W: GeminiRun | null = null;
     let C: GeminiRun | null = null;
     try {
-      // W경로(목표): 싼 STT 텍스트 → Gemini 텍스트
-      if (transcript) {
-        W = await runGemini([{ text: `${prompt}\n\n[통화 녹취 텍스트]\n${transcript}` }]);
+      // W경로(목표): 싼 STT 텍스트 → Gemini 텍스트.
+      //  - transcript 직접 주면 그대로(레거시·측정).
+      //  - mode="W" 인데 transcript 없으면 서버 STT(faster-whisper Cloud Run)로 gcsUri 전사.
+      let wTranscript = transcript;
+      if (mode === "W" && !wTranscript && gcsUri) {
+        wTranscript = await transcribeAudio(gcsUri);
       }
-      // C경로(천장): 오디오 → Gemini 멀티모달
-      if (gcsUri) {
+      if (wTranscript) {
+        W = await runGemini([{ text: `${prompt}\n\n[통화 녹취 텍스트]\n${wTranscript}` }]);
+        // 현장에서 STT 품질을 눈으로 확인할 수 있게 rawTranscript 채워 반환(GO바 근거).
+        if (W?.reservation && typeof W.reservation === "object" && !(W.reservation as Record<string, unknown>).rawTranscript) {
+          (W.reservation as Record<string, unknown>).rawTranscript = wTranscript;
+        }
+      }
+      // C경로(천장): 오디오 → Gemini 멀티모달. mode="W"(파일럿)이면 C 안 함(비용·헛예약 안전).
+      if (mode !== "W" && gcsUri) {
         C = await runGemini([
           { text: `${prompt}\n\n[통화 녹음 오디오를 직접 듣고 분석하라]` },
           { fileData: { fileUri: gcsUri, mimeType: "audio/mp4" } },
