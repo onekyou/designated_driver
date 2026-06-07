@@ -40,6 +40,13 @@
 - **★ 전략(거인과의 싸움, 6/7 사적대화)**: 도장+통화예약 둘다 **사용자행동0** = 거인(KT통화비서·네이버)이 규모→표준화→사용자행동요구 구조라 *양립불가*한 단 하나의 비대칭=돌팔매. 해자는 LLM(KT-MS GPT-4o 보유)·"수수료0"(거인 미끼우회)·"귀속"(상인 언어 아님)이 아니라 **행동0 + 이익언어(단골재방문/노동0/수수료0) + 정면 안붙고 선점**. 명중조건 3=통화예약정확도(헛예약0)·도장 NFC체감0·거인 오기전 선점속도. KT AI통화비서=봇응대(손님행동↑·단순화한정), 우리=사람통화유지+사후파싱(관계보존). 3년 5앱=헛발질 아닌 부품창고+"행동0" 도달의 토대. 최초질문답=무조건❌ 통한다✅(변수는 "완성"=정확도·체감0·속도 셋, 다 실행에 달림).
 - **상세**: `memory/designated_drive/reservation_engine_plan_2026-06-07.md` / 전략: `memory/designated_drive/reservation_engine_strategy_2026-06-07.md`
 
+## 6/7 (저녁) ★★ W경로 측정 실행 = 통한다(강하게) + 써머리확인 UX 확정 — 코드 3개 미커밋
+- **측정 결과**: faster-whisper(large-v3-turbo) 전사 → Gemini(2.5-flash) 텍스트채점, **10건 양역할 녹음 10/10 정확 · intent 10/10 · 거짓양성(헛예약) 0건(최중요) · 시각정규화 정확 · 업종자동판별 정확 · 콜당 ~1원**. ★**가설 실증**: 07번 STT "옥천명"(오전사) → Gemini가 맥락으로 "옥천면" 복원 = "STT 좀 틀려도 AI가 극복"(싼길 근거). 단 본인 양역할=매끈=천장편향 → 점수는 상한해석, 다음=현장 거친샘플.
+- **UX 확정**: 통화끝 → **자동 "분석중" 배너(탭0)** → 써머리 자동출현 → **[확인] 한 탭** → 예약등록(수정가능). 파싱→바로스케줄 ❌(헛예약 치명, 확인=정확도 안전장치+신뢰부트스트랩, "확인"은 검토라 행동0 수렴). "분석할까요?"팝업은 빼고(매통화 묻기=행동↑) 프라이버시 스위치로만. 비예약은 써머리에 안 띄움. 신뢰 쌓이면 점진 자동화(확신95%+ 자동등록).
+- **코드자산(functions/scripts/, 미커밋)**: 신규 `transcribe-whisper.py`(폴더일괄·폴백사다리), 신규 `score-batch.mjs`(폴더 W채점·파일명→recordedAt), 수정 `test-reservation-standalone.mjs`(W·C나란히·토큰단가). 대본+정답=`OneDrive/Desktop/통화측정_대본_2026-06-07.md`. 녹음=`call_manager/recordings/`.
+- **⚠️환경**: 로컬PC Vertex호출 node = `dangerouslyDisableSandbox:true` 필수(아니면 HEADERS_TIMEOUT). C경로(오디오업로드)는 로컬PC 헤더타임아웃(884KB→us-central1/global 둘다 실패)=로컬한정(production GCP내부망 무관). W경로(텍스트)는 정상 1.5초. 속도: PC CPU turbo 29초통화→전사66초(실서비스엔 클라우드/GPU/작은모델로 5~30초, 백그라운드라 체감0).
+- **상세/인계**: `memory/designated_drive/reservation_engine_measurement_2026-06-07.md` (다음단계: 현장거친샘플→GO바실측 / production STT경로결정 / 써머리UX구현 / C천장비교 / parseReservation deploy)
+
 ## 5/4 산재 자료 (검증 후 master 갱신 검토)
 - `memory/inbox/2026-05-04/` — 포인트시스템 설계 + 현장인사이트 (방구석 여포 → 능동 영업 패러다임 전환)
 - `memory/inbox/2026-04-23/` — 개선전략 + 업소용앱 분리 (4/27 master로 흡수됨, 참고용)
