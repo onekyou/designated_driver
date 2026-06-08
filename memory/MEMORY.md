@@ -63,6 +63,24 @@
 - **⛳ 미완(작동 게이트)**: ① 🚩원규씨 IAM 2개(run.invoker+aiplatform.user — 클코는 가드레일로 IAM 자가확대 불가) ② 폰 검증(설정→통화로예약입력→탭→써머리확인→콜생성, rawTranscript·헛예약0·GO바) ③ 선결: 양평 매니저폰 실손님 자동녹음 쌓이는지(6/7 10건=자가녹음 천장편향).
 - **상세/인계**: `memory/designated_drive/reservation_engine_pilot_deploy_2026-06-08.md`. 클코 학습 2건: `feedback_overask_confirm_2026-06-08`(과잉질문 금지)·`feedback_convention_over_verified_2026-06-08`(검증자산>통념).
 
+## 6/9 ★ 폰 검증 통과(파싱 정확) + 단골=저장연락처 정정 → READ_CONTACTS 폐기, 번호출처=업소DB
+- **작동 게이트 클리어**: IAM `aiplatform.user` 부여(run.invoker는 프로젝트레벨 기보유) + **"녹음 업로드 실패"=storage.rules 미배포**(6/8 functions만 배포) → `firebase deploy --only storage`로 해결. W경로 end-to-end 실작동.
+- **폰 실연 결과**: 출발·목적지·시각·업종 **다 정확 + STT p=1.00 + 헛예약0**. 미충족=전화번호뿐. **속도**: 웜 18초녹음→~30초(CPU 전사가 병목, 콜드스타트 아님). production GPU면 ~5초+백그라운드라 체감0 → 검증 결론에 무관.
+- **★ 전화번호 = 6/3 전제 뒤집힘**: 번호는 STT 아닌 **파일명**에서 나오는데, 삼성은 저장연락처면 '이름'·미지발신자면 'raw번호'를 박음. **원규씨 정정 "대부분 단골(저장된 이들)이 콜"** → 6/3 "미지발신자 다수" 틀림 → 다수 콜은 파일명에 이름만.
+- **READ_CONTACTS 폐기**(사실확인): Play 2026.4 Contact정책 — Contact Picker(매번 탭)가 기본 대안, 자동 백그라운드 조회(우리 용도)=가장 거절나기 쉬운 칸. **행동0이 곧 승인의 적**. 6/3 "권한0" 본능이 (다른 이유로) 옳았음. → 대체 = **업소 고객DB(귀속) 이름매칭 + 첫통화 1회 보정 시드**(폰 연락처 아님, 귀속 해자 강화). 구현은 GO 후.
+- **남은 진짜 GO바**: 양평 매니저폰 **실손님 거친 통화**(6/7~9는 자가녹음 천장편향). 파일럿은 현 상태 검증 계속(번호는 사장 [확인] 보정). **← 최우선(field).**
+- **★ 온폰STT 검증을 *지금* 병렬 측정으로 승격**(6/7~8 "온폰=나중/최적화" 갱신): 천장 확인 → 다음은 실제 골격(PII-안전·행동0). 베팅("STT틀려도 Gemini복원")을 더 나쁜 온폰STT로 돌려 진짜 입증. 엔진=**whisper.cpp(ggml)**=faster-whisper와 **같은 모델 weights·다른 런타임**(구글류 모델교체 아님=[확정] 위반 아님). S21+(Exynos2100) 측정 프로브. ⚠️병렬 측정이지 실손님 GO바 대체 아님(rabbithole 경계).
+- **상세**: `memory/designated_drive/reservation_engine_pilot_verify_2026-06-09.md` · 결정대장 `_decisions.md`([열림] STT위치 = 온폰 지금승격 + 번호/식별 4건) · 온폰 프로브 플랜 `~/.claude/plans/prancy-discovering-spark.md` · 클코 학습 `feedback_verify_before_asserting_2026-06-09`.
+
+## 6/9 (밤) ★ 온폰STT 프로브 실측 완료 + 전략 재정리(온폰 속도≠보편답) — 내일 이어서
+- **프로브 실행**(앱 NDK 통합 없이 whisper.cpp CLI를 NDK로 크로스컴파일→`adb shell`로 S21+/Exynos2100 직접 측정 + 6/7 10샘플을 기존 `score-batch.mjs`로 Gemini 채점). 결과: ✅실현성(한국어 전사 OK) / **온폰 turbo=서버 정확도(런타임 등가, "옥천면·토요일" 정확)지만 RTF 4.1×(느림)** / **small RTF 1.24×(빠름)이나 핵심필드 파괴**(옥천면→"5천명", 토요일→"툴", 번호 끝자리 — 단 헛예약0·intent 안전속성은 유지). → "STT틀려도 Gemini복원"은 *복원가능 오류엔 통하나 정보파괴엔 깨짐*.
+- **★ 전략 재정리(원규씨 지적)**: "내 폰 빠르게"는 **보편 답 못 됨** — 온폰 속도=기기별, GPU/NPU 가속은 칩마다 별개 백엔드(Mali/Adreno/Exynos/Snapdragon)라 이식 안 됨. 사장폰 제각각+저사양 → 불일치 치명. **보편 STT 바닥 = 클라우드**(faster-whisper 지금/카카오 보류). **온폰 = 미래 베팅(NPU 표준화) or 하이브리드(능력폰=온폰, 약한폰=클라우드 폴백), 보편 베이스라인 아님.** 기기별 속도튜닝 ⏸중단.
+- **카카오 STT**: 클라우드 STT 존재(카카오i Cloud General/Custom STT, 파일업로드 지원). 단 클라우드라 PII는 서버와 동일 범주 = 온폰 대안 아니라 faster-whisper와 경쟁. 엔진교체라 [확정] 위반 — 측정 후 판단(보류).
+- **내일 최우선 = 🚩양평 실손님 자동녹음(field GO바)**. 파일럿은 서버STT 검증 계속. (선택) 카카오 vs faster-whisper 측정.
+- **상세**: `memory/designated_drive/reservation_engine_onphone_probe_2026-06-09.md`. 프로브 자산 `C:\Users\kala1\onphone_stt_probe\` + 폰 `/data/local/tmp/wprobe/`(내일 재사용).
+- **클코 학습**: `feedback_generalizability_before_optimizing_2026-06-09`(한 기기 최적화≠보편답, 최적화 전 이식성부터 물어라).
+- **누락/오염 점검 반영(세션 말미)**: ① verify메모 "다음"·결정대장 [열림] = 아침"온폰 승격/종착" → 저녁"온폰≠보편"으로 정밀화 명시(재해석 차단) ② 결정대장에 카카오 보류 라인 추가([잠정], 엔진교체라 측정 후 판단) ③ 위 클코 학습 기록.
+
 ## 5/4 산재 자료 (검증 후 master 갱신 검토)
 - `memory/inbox/2026-05-04/` — 포인트시스템 설계 + 현장인사이트 (방구석 여포 → 능동 영업 패러다임 전환)
 - `memory/inbox/2026-04-23/` — 개선전략 + 업소용앱 분리 (4/27 master로 흡수됨, 참고용)
