@@ -96,10 +96,11 @@
 - 화면 꺼진 채 볼륨키 전역 캡처(Accessibility)는 **안 씀**(삼성 절전 재허용 마찰 = 행동0 적).
 - 통화없는 화면오프 능동발화의 입력 수단은 미결(블루투스 등 후속). 주력 = 통화-trigger prewarm(아래).
 
-### [잠정] 콜드스타트 5초 단축 = 토큰 캐시 + wake fire-and-forget (★비용 무관)
+### [확정·2026-06-09 구현·측정통과] 콜드스타트 단축 = 토큰 캐시 + wake fire-and-forget (★비용 무관)
 - **진단(코드 직접 확인 2026-06-09)**: `generateAgoraToken`·`sendPttWake` 둘 다 이미 `minInstances:1`(ptt.ts L24·L120 — 함수 콜드 주범 아님). 5초 = ① 송신측 직렬 왕복(토큰 await→join→wake await) + ② **READY_TIMEOUT 3초**(`PTTManager` L46) — 수신측이 `onWake`에서 또 `generateAgoraToken` 호출(PTTManager L288)해 join 느림 → `remoteUsers>0` 지연.
 - **대안**: Agora 토큰 24h 캐시(송·수신 양쪽 함수 왕복 제거 → **수신측 join 가속 → READY_TIMEOUT 병목까지 완화**) + wake fire-and-forget(응답 안 기다리고 join; fireReady는 onUserJoined/타임아웃이 결정 L209·244). → 5초 → ~1~1.5초(수신측 FCM Doze 도달만, 비프 흡수).
 - **비용 무관 확정**: Agora는 채널 접속시간 과금 / 이 대안은 접속시간 불변(토큰발급 비과금, 함수 호출 오히려 감소). 비용 레버는 통화prewarm·워밍창(CONV_WARM_MS 45s)·minInstances쪽(별개).
+- **실측(2026-06-09, `b66d0fdf`, S21+→Z Flip4)**: 토큰캐시 히트(송·수신 SharedPreferences `ptt_token_cache`)·join 146/143ms·**콜드 5초→2.85초·WARM 0.44초**. 잔여 ~0.6초 = 수신측 FCM Doze wake(통화prewarm 없이는 본질 하한, 비프 흡수). 3앱 빌드+install+회귀 통과. 🟡사소(별트랙): 첫 발화 시 `ensureToken` 2회 호출(dispatch+prewake 추정, 무해).
 
 ### [잠정] 통화-trigger prewarm (통화 OFFHOOK → PTT 예열)
 - 통화 캐치 시 PTT 채널 예열 + 수신측 미리 깨움 → **통화 직후 발화 콜드 0** + 통화화면 켜진 상태라 **screen-off 우회**. 매니저 발화는 거의 통화 직후라 적중률 높음.
