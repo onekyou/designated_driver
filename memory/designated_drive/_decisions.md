@@ -45,8 +45,9 @@
 
 ### [잠정] 엔진 / 표면 분해 + 통화 자동입력까지 coupon_app 안에
 - **엔진**(통화캡처+STT+파싱) = designated_driver 검증 부품(여기). **표면**(예약 스케줄러·손님 카드) = coupon_app 웹(BondCard 패턴, React). ※여기서 코틀린/Flutter로 표면 만들면 React 재작성 이식이라 낭비 → 표면은 종착지에 직접.
-- **통화 자동입력까지 coupon_app 안에**(원규씨 결정) = coupon_app에 **안드로이드 네이티브(Capacitor 하이브리드)** 도입. 통화캡처 코틀린 → Capacitor 플러그인 변환. STT는 W경로(Cloud Run+Gemini) local-maru 재배포.
-- 검증 단계 = 엔진 부품을 coupon_app으로 복사해 통합, GO 후 Capacitor 단일 앱.
+- **통화 자동입력까지 coupon_app 안에**(원규씨 결정) = **사장용 네이티브 안드로이드 앱(코틀린)**. 통화캡처·확인 팝업·예약 스케줄러·알림을 사장 앱 안에. `android_ref/` 코틀린(통화캡처 + ReservationInbox UI 이미 보유)을 **직접 완성** — Capacitor 등 웹 래핑 아님(통화캡처=안드로이드 네이티브 필수 + 코틀린 자산 직접 활용이 빠름). **손님 표면**(예약 카드)만 웹(`/me`, BondCard). STT는 W경로(Cloud Run+Gemini) local-maru 재배포.
+- 검증 단계 = 엔진 부품을 coupon_app으로 복사해 통합, GO 후 사장 네이티브 앱.
+- **(2026-06-09 정정)**: 기존 "Capacitor 하이브리드 단일앱"에서 → **사장=네이티브 코틀린 / 손님=웹** 분리로. android_ref 자산 직접 완성이 웹 래핑보다 빠름. (reservation_engine/README.md 정합.)
 
 ### [확정] 미용실 파일럿 현장 확보 = GO바 대상
 - 원규씨 2026-06-09: 미용실 1곳 "하겠다" + 선물로 만들어주기로 약속 → 거친 실손님 통화 = 거기서 확보(6/7~9 자가녹음 천장편향 벗어나는 진짜 field GO바).

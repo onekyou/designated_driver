@@ -84,7 +84,7 @@
 ## 6/9 (밤2) ★★ 방향 전환 — 콜매니저(대리) → coupon_app 미용실 모듈 (통화 자동입력까지 coupon_app 안에)
 - **콜매니저 막힘**: 통화종료(IDLE)에서 콜매니저가 **이미 대리 콜을 자동생성**(CallReceiver→CallDetectorService) → 예약엔진 콜과 충돌·중복 + 양평 운영(동결) 깰 위험. + 수동 트리거(매통화 골라 분석)=행동0 위배·매니저가 안 씀. → 6/8 "콜매니저(대리) 첫 파일럿" **폐기**(결정대장 도장).
 - **★ 전환**: 통화예약 엔진 = **coupon_app(로컬마루) 미용실 모듈**로 직행. 근거 ① 대리 충돌 회피(미용=백지) ② **미용실 현장 확보**(원규씨가 사장께 선물 약속 = 거친 통화 **GO바 해결**, 양평 실손님 대체) ③ 종착지 직접=이식 단계 생략. [[reservation_engine_measurement_2026-06-07]] L77 "엔진은 로컬마루 앱 모듈로 이식" 이미 박혀 [확정] 위계 위반 아님(앞당김).
-- **엔진/표면 분해**: 엔진(통화캡처+STT+파싱)=designated_driver 검증 부품 / 표면(예약 스케줄러·손님 카드)=coupon_app 웹 BondCard 패턴(코틀린/Flutter로 만들면 React 재작성 낭비). **통화 자동입력까지 coupon_app 안에**(원규씨 결정)=coupon_app에 **안드로이드 네이티브 Capacitor 하이브리드** 도입, 통화캡처 코틀린→Capacitor 플러그인. STT=W경로 local-maru 재배포. GO 후 단일 앱 통합.
+- **엔진/표면 분해**: 엔진(통화캡처+STT+파싱)=designated_driver 검증 부품. **손님 표면**(예약 카드)=coupon_app 웹(`/me` BondCard). **사장 표면**(통화캡처·확인·스케줄러·알림)=**사장용 네이티브 코틀린 앱**(`android_ref/` 직접 완성, 웹 래핑 아님 — 통화캡처 네이티브 필수 + 코틀린 자산 보유). STT=W경로 local-maru 재배포. (2026-06-09 정정: 'Capacitor 하이브리드'→사장 네이티브 코틀린/손님 웹 분리.)
 - **플랫폼 사실**: coupon_app=`local-maru`(별도 Firebase, designated_driver=`calldetector-5d61e`와 다름→STT 재배포 필요) Next.js 웹+PWA, Capacitor 미도입. salon_booking 계약(`types.ts` SalonBookingPayload)·`/me`·`/shop`·BondCard 토대 있음. BUILD_PLAN §9.3 "미용 통화 예약 비서=안드로이드 전용" 이미 메모.
 - **자산 복사**: designated_driver 엔진 부품(STT 백엔드·통화캡처 코틀린 참조·검증기록 6·측정샘플) → `coupon_app/reservation_engine/` 복사해 거기서 통합(크로스 Firestore보다 단순). 원본 보존(designated_driver=부품창고).
 - **6/8·6/9 "콜매니저 첫 파일럿/양평 실손님 GO바" 항목 = 역사 보존, 본 항목이 supersede.** 결정대장 갱신 완료. 플랜 `~/.claude/plans/cheerful-pondering-harbor.md`.
