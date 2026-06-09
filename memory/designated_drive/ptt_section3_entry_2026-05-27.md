@@ -455,6 +455,26 @@ P1 진입 → CreditFirestoreRepository.kt 신규 + firestore.rules + Settlement
 
 ---
 
+## 11.7 실태 확인 스탬프 (2026-06-10 코드 실측) — "P5~P8 미구현" 오인 교정
+
+다음 세션 "정산 단순화 P5~P8" 진입 시도 → 코드 실측으로 **단순화 본체는 이미 적용됨** 확정. 6/9 밤5 메모의 "P5~P8 미구현·4상태+carryOver 잔존"은 **오인**.
+
+**적용 확인 (master + `feature/reservation-engine-poc` 둘 다, 심볼 실측)**:
+- status 4→2: `TRANSFERRED`/`SETTLED` **0건**, `PENDING_CONFIRM↔CONFIRMED`만. (commit 2 `8426984f` 내용)
+- carryOver: 앱(call_manager/driver_app) **0건**. `functions/index.ts:5299`는 **stale 주석 1줄**(기능 아님).
+- 실납입/환급/외상명단: 폐기 적용(commit 3·5).
+- 영업일 6→10: functions `settlement.ts:63` + 앱 `SettlementViewModel.kt:290·895`·`DriverViewModel.kt:1514` 모두 `< 10`.
+- ⚠️ 밤5 오인 원인 = functions의 `PENDING_CONFIRM` 핸들러(`index.ts:4915·5364~5381`) 잔존 + functions 미deploy를 "4상태 미적용"으로 오판.
+
+**미구현 확정 (commit 1~5는 carryOver/외상/실납입 폐기였고, P7 게이트는 미진입)**:
+- **P7 EnforcementGate** — `EnforcementGate`/`LogoutGuard`/`DailyCloseGate`/`ManagerCloseGate` 클래스 **코드 0건**(설계 docs에만). 행위 점검 = `DriverAppUtils.logoutUserAndExitApp()`는 존재하나 **미정산 콜 차단 가드 없음**. §3.3 4 게이트(미정산 logout/앱종료 차단 · 앱시작 어제마감 게이트 · 매니저 마감화면 강제 · 미확인 기사 모달) 전부 미신축.
+- **functions deploy 유보** (영업일 10시 cron 등 코드는 있으나 production 미배포; 양평 정산 실사용 X).
+- **§11.6 #1** 매니저 수동 [업무마감] 즉시 봉인 (보류).
+
+→ **"P5~P8 재구현" 금지** (중복·회귀). 정산 트랙 잔여 = 위 3건. 결정대장 `_decisions.md` "정산 단순화" 섹션에 [확정]/[열림]으로 박음.
+
+---
+
 ## 6. 관련 메모
 
 - [[ptt-plan-entry-decision-2026-05-25]] — PTT 진입 결정 본문

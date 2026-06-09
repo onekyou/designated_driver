@@ -107,7 +107,7 @@
 ## 6/9 (밤5) ★ 인수인계 — PTT 비프 간격 고정(0.5s 잠정) + 통화trigger 선결 해소 + 정산 P5~P8 미구현 확인
 - **PTT 비프 간격 고정(커밋 `3e9e5361`, push 대기)**: 1차(누름)→2차(말해도 됨) 비프 **최소 0.5초 보장**(`MIN_CUE_GAP_MS`). WARM 겹침·들쭉날쭉 해소. 실측 WARM gap=408·392ms(누름+500ms 고정)·COLD 0(자연 1.8s). call_manager 빌드+install(S21+). **0.5s=잠정, 사용 후 조정**(원규씨 "일단 사용해보고 조정"). 🟡미결: **픽업앱(동일 PTTManager 포크) 적용**(양방향이라 픽업 발화도 같은 증상).
 - **통화-trigger prewarm 🚩선결 해소**: 원규씨 "콜매니저·콜디텍터 두 앱서 전화 받음" + 코드확인 — 콜매니저 `CallReceiver`가 RINGING/OFFHOOK/IDLE 감지 → **매니저폰(PTT 송신폰)이 통화 직접 받으니 로컬 예열 가능**(폰간 전달 불필요). 후크 = CallReceiver RINGING/OFFHOOK 분기에 기존 `prewarm()/prewarmToken()`+`sendPttPreWake` 호출. 단 콜드 2.85초라 체감이득 작음→우선순위 낮음.
-- **정산 단순화 = P5~P8 미구현 확인**(원규씨 "이미 하지 않았나?"에 답): P1~P4(설계문서+코드 `cf7226ac`)는 됐으나 **deploy 유보**, **P5~P8 미진입**(코드에 4상태 `PENDING_CONFIRM/TRANSFERRED`+`carryOver` 잔존 확인 = 단순화 본체 미적용). 설계 매트릭스=`ptt_section3_entry_2026-05-27.md` §8.2. 선결=영업일 시간(6시 vs 10시).
+- **정산 단순화 = ✅ 본체 적용 완료 (6/10 코드 실측 정정 — 밤5 "미구현"은 오인)**: status 4→2(`TRANSFERRED`/`SETTLED` 0건)·carryOver/실납입/외상명단 폐기·영업일 10시 모두 **master+현재 브랜치 코드 적용됨**. 밤5가 functions `PENDING_CONFIRM` 핸들러 잔존+functions 미deploy를 "4상태 미적용"으로 오판. **진짜 잔여 3건 = ① P7 EnforcementGate(미정산 logout가드/앱시작 마감게이트/매니저 마감강제/미확인기사 모달 — 가드 4종 미신축) ② functions deploy 유보 ③ 보류큐 매니저 수동마감 즉시 봉인.** 상세=`ptt_section3_entry_2026-05-27.md` §11.7 + 결정대장 "정산 단순화".
 - **남은 PTT 갭(우선순위)**: ① **screen-off 송신**(운전중 핸즈프리, 본질) ② 통화-trigger prewarm(선결 풀림·폴리시) ③ 정산 P5~P8(별 트랙) ④ 블랙박스 9-B(콜상태→채팅). ※발화↔콜은 밤4 [폐기·과설계].
 - **이번 세션 커밋(feature/reservation-engine-poc)**: `b65be0c9`(배차알림 Option A)·`d3fc0d3e`(docs)=**push됨** / `3e9e5361`(비프)·`190f54df`(docs)=**push 대기**. 3단말 중 S21+·Z Flip4 최신 빌드, S22 미연결(연결 시 install 필요).
 - **🔴→✅ 콜매니저 parity 점검 완료(6/10)**: 콜매니저 driver식 심각 마스킹 **없음**(`isLooping`/`setLooping(true)` 0건). 밤5 "반복루프 `DashboardViewModel:1871`"=**오인**(=`startSharedCallTicker` 60초 UI 티커, 오디오 아님). `setFullScreenIntent` 4곳 중 라이브·소리 동반 2(`MyFirebaseMessagingService:1237`·`:1381`)·데드1(`CallOverlayActivity:139` 미호출)·무음1(`CallDetectorService:555` 통화종료 자동전환). 픽업앱 알림=깨끗(`setFullScreenIntent` 0건)✓. 잔여=잠금화면 새콜 full-screen+단발음↔PTT 겹침 좁은 케이스 → full-screen=매니저 핵심 배차 UX라 **수정 보류, 현장검증 후 판단**(원규씨 6/10). 비프 fix 픽업 포크 적용=진행중(plan `elegant-cooking-sutherland`).
@@ -118,7 +118,8 @@
 - **픽업앱 비프 fix ✅**: call_manager `3e9e5361` 포팅(PTTManager 4지점), 3단말 빌드+install. **타이밍 검증 통과**(S22 WARM gap=402~419ms=콜매니저 동일, COLD 0). 두 PTTManager 전체 diff=음원·오디오설정 포함 기능 100% 동일.
 - **[열림] 픽업 2차 비프 볼륨이 1차보다 작음**(콜매니저는 일정) — 코드 동일이라 **S22 기기 audio ducking 의심**. 확정=콜매니저 S22 설치 동일폰 비교. 원규씨 "디테일은 나중에" → 보류.
 - **테스트 함정 기록**: ① PTT 앱은 **폰당 1개**(한 폰에 콜매니저+픽업+driver 동시=같은 무전망 충돌·오버톤 섞임) ② 송수신은 **같은 office 채널**(`gyeonggi_<officeId>_ptt`) 로그인 필수.
-- 상세: 결정대장 `designated_drive/_decisions.md`("PTT 간단모드" + [열림] 볼륨). plan `~/.claude/plans/elegant-cooking-sutherland.md`.
+- **정산 단순화 실태 점검(코드 실측)**: "P5~P8" 진입 → 밤5 "미구현"은 **오인** 확정. 단순화 본체(2상태·carryOver/실납입/외상 폐기·영업일 10시) 이미 master+브랜치 적용됨. 진짜 잔여=P7 EnforcementGate(가드 4종)+deploy 유보+수동마감 봉인. 재구현 금지. (밤5 정산 줄·결정대장·`ptt_section3 §11.7` 정정.)
+- 상세: 결정대장 `designated_drive/_decisions.md`("PTT 간단모드" + [열림] 볼륨 + "정산 단순화"). plan `~/.claude/plans/elegant-cooking-sutherland.md`.
 
 ## 5/4 산재 자료 (검증 후 master 갱신 검토)
 - `memory/inbox/2026-05-04/` — 포인트시스템 설계 + 현장인사이트 (방구석 여포 → 능동 영업 패러다임 전환)

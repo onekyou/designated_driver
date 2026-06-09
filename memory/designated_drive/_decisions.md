@@ -136,3 +136,17 @@
 - **✅ parity 점검 완료(2026-06-10) — 콜매니저 driver식 심각 마스킹 *없음*, 수정 보류**: 수정은 `driver_app`만이나, 코드 대조 결과 콜매니저엔 driver 마스킹 주범(LockScreenActivity 3초 반복벨)이 **없음**(`isLooping=true`/`setLooping(true)` **0건**). ⚠️ 밤5의 "반복루프 `DashboardViewModel:1871`"는 **오인** — 그 줄 = `startSharedCallTicker`의 **60초 UI 티커**(공유콜 목록 새로고침), 오디오 아님. `setFullScreenIntent`는 4곳이나 라이브·소리 동반은 2곳뿐: `MyFirebaseMessagingService:1237`(NEW_CALL/공유콜·단발음)·`:1381`(커스텀 공유콜·DEFAULT_ALL). 나머지 = `CallOverlayActivity:139`=**데드코드**(`startOverlay` 미호출) + `CallDetectorService:555`=**무음**(`setSound(null,null)`, 통화종료 자동전환=화면만). 픽업앱=`setFullScreenIntent` 0건(깨끗)✓.
   - **잔여 위험 = 잠금화면에서 새콜 full-screen+단발음(2곳)이 PTT 수신과 겹치는 좁은 케이스뿐**(driver식 반복벨 마스킹은 코드상 불성립). 콜매니저 full-screen 새콜 팝업 = **매니저 핵심 배차 UX**(driver의 순수 콜놓침방지와 다름) → **수정 보류, 현장검증(매니저가 픽업 발화 받을 때 실제 덮나) 후 판단**(원규씨 2026-06-10). 덮는 게 확인되면 PTT 수신중 한정 ducking 등 surgical 적용 검토(driver식 full-screen 일괄 제거는 배차 UX 리스크).
 - 바꾸려면: 단일 알림음으로 기사가 실제 콜을 놓치는 현장 데이터가 나오면(그땐 PTT 의무화 or 중간 강도 재도입).
+
+## 정산 단순화 (PTT §3 트랙)
+
+### [확정·2026-06-10 코드 실측] 정산 단순화 *본체* = 적용 완료 (master + 현재 브랜치 둘 다)
+- 적용된 것: status **4→2**(`PENDING_CONFIRM↔CONFIRMED`, `TRANSFERRED`/`SETTLED` 0건) · **carryOver(이월금) 폐기** · 실납입/환급/미납 개념 폐기(납입금 net 한 줄) · 매니저 외상명단 처리 폐기 · 영업일 **6시→10시**(functions `settlement.ts:63` + 앱 `SettlementViewModel.kt:290·895`·`DriverViewModel.kt:1514` 모두 `< 10`). = `manager-direct-drive` commit 1~5 내용, master·`feature/reservation-engine-poc` 둘 다 포함(심볼 실측).
+- `functions/index.ts`의 carryOver = `:5299` **stale 주석 1줄뿐**(기능 아님).
+- ⚠️ **밤5(6/9) 메모 "P5~P8 미구현·4상태+carryOver 잔존" = 오인**(정정 2026-06-10). functions의 `PENDING_CONFIRM` 핸들러 잔존 + functions 미deploy를 "4상태 미적용"으로 오판한 것. 실제 단순화 본체는 코드에 다 들어가 있음. **다음 세션이 "P5~P8 재구현"으로 헛발질 금지** — 재구현 시 중복·회귀.
+- 근거: [[ptt-section3-entry-2026-05-27]] §11.7(실측 스탬프).
+
+### [열림·2026-06-10] 정산 잔여 = 3건 (P7 + deploy + 보류큐)
+- **① P7 EnforcementGate (강제 게이트) — 미신축**: `EnforcementGate/LogoutGuard/DailyCloseGate` 클래스 코드 0건(설계만 `settlement_redesign §9.3`). 행위 점검 = `logoutUserAndExitApp()`는 있으나 **미정산 콜 시 차단 가드 없음**. 4 게이트(미정산 시 logout/앱종료 차단 · 앱시작 어제마감 게이트 · 매니저 마감화면 강제 · 미확인 기사 모달) 전부 미구현. = "줄이는 단순화는 끝, 막는 게이트가 남음."
+- **② functions deploy 유보**: 영업일 10시 cron 등 코드는 master/branch에 있으나 production 미배포. 양평 정산 실사용 X라 즉시 임팩트 낮음.
+- **③ 보류 큐 §11.6 #1** 매니저 수동 [업무마감] 즉시 봉인: 지금은 새벽 cron(`autoFinalizeSettlementSessions`)만 `isFinalized` 봉인. 본인 5/30 "수동 마감 시 그 자리에서 봉인" 제기 → `clearAllTrips`에 `settlementSessions/{today}.metadata.isFinalized=true` merge set 1자리(소규모, deploy 불필요).
+- 우선순위: 양평 정산 실사용 X + 단순화 본체 완료 → 정산 트랙 전체 우선순위 낮음(상위 트랙 = 미용 통화예약·PTel 운영). 위 3건은 착수 시 이 [열림]에서 픽업.
