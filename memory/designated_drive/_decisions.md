@@ -113,7 +113,15 @@
 - 문제: WARM 빠른 연결에서 1차(누름)·2차(말해도 됨) 비프가 ~0.04초로 붙어 **겹침 + 간격 들쭉날쭉**. (삐 1번이면 사람들이 1차에 바로 말해버려 안 됨 — 2차 후 발화 습관이라 비프 2개는 유지.)
 - 해결: `PTTManager.fireReady`가 1차 후 **최소 `MIN_CUE_GAP_MS`(500ms) 보장** 뒤 2차 비프+마이크 라이브. 느린 연결(COLD)은 자연 소요시간대로(추가 대기 0). 커밋 `3e9e5361`.
 - 실측(S21+): WARM gap=408·392ms(누름+500ms 고정), COLD gap=0(자연 1.8s). ✅ 빠를 때 항상 같은 텀.
-- **잠정인 이유**: 0.5초 = 잠정값, **사용해보고 조정**(원규씨). 미세조정 = `MIN_CUE_GAP_MS` 한 줄. + **픽업기사 앱(동일 PTTManager 포크) 적용 미결** — 적용하면 양 앱 PTT 발화 동작 일치.
+- **잠정인 이유**: 0.5초 = 잠정값, **사용해보고 조정**(원규씨). 미세조정 = `MIN_CUE_GAP_MS` 한 줄.
+- **✅ 픽업기사 앱 적용 완료(2026-06-10)**: 동일 PTTManager 포크에 비프 fix 포팅(`MIN_CUE_GAP_MS`+`cuePressTime`+`startTransmit` 기록+`fireReady` 비동기 delay). 두 `PTTManager.kt` 전체 diff = **기능 코드·음원(`ptt_start.m4a` MD5 동일·1.185s)·오디오설정 100% 동일**(패키지명·senderName "매니저"↔"픽업기사"만 차이). 3단말 빌드+install. **타이밍 검증 통과(S22)**: WARM gap=402·409·413·419ms(콜매니저 408·392ms와 동일), COLD gap=0. 간격 fix 정상.
+- ⚠️ **테스트 함정(2026-06-10 기록)**: ① PTT 앱은 **폰당 1개**여야 함 — 한 폰에 콜매니저+픽업+driver 동시 실행 시 같은 Agora 무전망에서 서로 수신·오버톤 울려 "충돌"로 들림(실배치는 폰 분리). ② 송수신 전달은 **같은 office(채널 `gyeonggi_<officeId>_ptt`)** 로그인 필수 — 다른 office면 채널명 달라 안 닿음.
+
+### [열림·2026-06-10·디테일 나중·기기 의심] 픽업 2차 비프 볼륨이 1차보다 작음 (콜매니저는 일정)
+- 증상: 픽업(S22) WARM 발화 시 2차 비프(말해도 됨)가 1차(누름)보다 작게 들림 → "비프 일정하지 않음". 콜매니저(S21+)는 일정.
+- 코드·음원·오디오설정 = 콜매니저와 **검증상 동일** → 가장 유력 = **S22 기기가 통화중(Agora 통신모드 active) 신호음(USAGE_VOICE_COMMUNICATION_SIGNALLING)을 더 죽임**(1차는 채널 hot 전, 2차는 hot 후라 ducking 차이). 콜매니저 "일정"은 다른 기기(S21+) 관찰 = 기기 변수 미통제.
+- **확정 미완(다음)**: 콜매니저를 **S22에 깔아 같은 폰 비교** → 콜매니저도 S22서 2차 작으면 기기 확정(픽업 코드 정상, 무수정). 일정하면 픽업 차이 재조사. ⚠️ 공유 `playCue` 수정은 잘 도는 콜매니저까지 영향 → 기기 판정 후에만.
+- 원규씨 2026-06-10: "디테일은 나중에" → 보류.
 
 ### [폐기·과설계·2026-06-09 밤4·원규씨 기각] 발화↔콜 = 음성명령 STT·기사명 매칭·빈카드 자동생성
 - 폐기 사유: 원규씨 명시 — *"배차팝업에서 기사 지정 + PTT로 어디 가라 음성지시면 됨. 너무 어렵게 생각하는거 아닌가?"* → 발화에서 기사명 파싱(SpeechRecognizer/CallMemoParser)·자동 빈카드 생성·음성배차 = **과설계**.
@@ -125,5 +133,6 @@
 - **근본원인(logcat 확정, S21+→Z Flip4)**: 배차 시 기사폰 `LockScreenActivity`가 벨 **3초 반복**(`startAlertSound`)+진동 루프+풀스크린 점유 → [확인] 누르기 전까지 **매니저 PTT 수신 음성을 마스킹** = "기사폰서 발화 안 들림"의 정체. PTT 경로 자체는 송·수신 정상(`b66d0fdf` 측정과 정합).
 - **결정**: PTT 없던 시절 "콜 놓침 방지"용 과잉 알림 → PTT 도입으로 불필요 + PTT 차단 주범 → **반복·풀스크린 제거, 단일 알림음 1회는 유지**(양평 LIVE라 청각 단서 보존, PTT 안 한 콜 놓침 방지). 화면 강제기상 포기 = 원규씨 승인 트레이드오프(긴급성은 PTT 보강).
 - 구현: `MyFirebaseMessagingService.showNotification()`에서 `setFullScreenIntent` 제거(=LockScreenActivity 미기동). 수락 흐름은 알림 탭→MainActivity(callId)로 보존(LockScreen [확인]과 동일 경로). 상세 = 플랜 `~/.claude/plans/compressed-strolling-lamport.md`.
-- **⚠️ parity 미완(2026-06-09 밤5 점검)**: 수정은 **`driver_app`만**. 픽업앱=깨끗(알림 없음)✓ / **콜매니저=풀스크린 알림(`setFullScreenIntent`×4)+반복루프(`DashboardViewModel:1871`) 존재** → 매니저도 PTT 수신(양방향)이라 동일 마스킹 잠재 → **다음 점검**(덮으면 콜매니저도 동일 적용).
+- **✅ parity 점검 완료(2026-06-10) — 콜매니저 driver식 심각 마스킹 *없음*, 수정 보류**: 수정은 `driver_app`만이나, 코드 대조 결과 콜매니저엔 driver 마스킹 주범(LockScreenActivity 3초 반복벨)이 **없음**(`isLooping=true`/`setLooping(true)` **0건**). ⚠️ 밤5의 "반복루프 `DashboardViewModel:1871`"는 **오인** — 그 줄 = `startSharedCallTicker`의 **60초 UI 티커**(공유콜 목록 새로고침), 오디오 아님. `setFullScreenIntent`는 4곳이나 라이브·소리 동반은 2곳뿐: `MyFirebaseMessagingService:1237`(NEW_CALL/공유콜·단발음)·`:1381`(커스텀 공유콜·DEFAULT_ALL). 나머지 = `CallOverlayActivity:139`=**데드코드**(`startOverlay` 미호출) + `CallDetectorService:555`=**무음**(`setSound(null,null)`, 통화종료 자동전환=화면만). 픽업앱=`setFullScreenIntent` 0건(깨끗)✓.
+  - **잔여 위험 = 잠금화면에서 새콜 full-screen+단발음(2곳)이 PTT 수신과 겹치는 좁은 케이스뿐**(driver식 반복벨 마스킹은 코드상 불성립). 콜매니저 full-screen 새콜 팝업 = **매니저 핵심 배차 UX**(driver의 순수 콜놓침방지와 다름) → **수정 보류, 현장검증(매니저가 픽업 발화 받을 때 실제 덮나) 후 판단**(원규씨 2026-06-10). 덮는 게 확인되면 PTT 수신중 한정 ducking 등 surgical 적용 검토(driver식 full-screen 일괄 제거는 배차 UX 리스크).
 - 바꾸려면: 단일 알림음으로 기사가 실제 콜을 놓치는 현장 데이터가 나오면(그땐 PTT 의무화 or 중간 강도 재도입).
