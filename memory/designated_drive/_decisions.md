@@ -145,10 +145,12 @@
 - ⚠️ **밤5(6/9) 메모 "P5~P8 미구현·4상태+carryOver 잔존" = 오인**(정정 2026-06-10). functions의 `PENDING_CONFIRM` 핸들러 잔존 + functions 미deploy를 "4상태 미적용"으로 오판한 것. 실제 단순화 본체는 코드에 다 들어가 있음. **다음 세션이 "P5~P8 재구현"으로 헛발질 금지** — 재구현 시 중복·회귀.
 - 근거: [[ptt-section3-entry-2026-05-27]] §11.7(실측 스탬프).
 
-### [잠정·보류·2026-06-10 처분 확정] 정산 잔여 3건 = 전부 보류 (트리거 명시) — 정산 트랙 파킹
-양평 정산 **실사용 X** + 단순화 본체 완료 → 정산 트랙 우선순위 낮음(상위 = 미용 통화예약·PTT 운영). 잔여 3건 모두 *지금 착수 안 함*, 아래 트리거 충족 시 재진입:
+### [잠정·2026-06-10 처분 정정] 정산 잔여 3건 = 보급 재개 준비 작업 (파킹 아님)
+**★ 2026-06-10 정정**: 앞서 "정산 실사용 X → 우선순위 낮음·파킹"으로 처분했으나 **틀림**(원규씨 지적). ① "혼자 쓰니 강제 게이트 의미 없음"은 오류 — **1사무실도 기사 여럿**이라 게이트는 기사·매니저에 적용돼 유효. ② "미용/식당 정산 쓰면" 트리거는 카테고리 오류 — 미용/식당은 통화예약(coupon_app) **별 모듈, 대리 정산 무관**. ③ "실사용 X"는 destiny 아닌 출발점 — **단순화(완료)+PTT 간소화+테스트 사무실 보급 재개 = 적극 사용으로 가는 경로**(원규씨 "정리되는대로 다시 보급할 거야"). 안 쓰는 이유를 없애려 단순화한 건데 "안 쓰니 보류"는 자기모순.
+→ **공통 트리거 = "정리되는대로 보급 재개"** 그 단계. 잔여는 *파킹*이 아니라 *보급 준비 작업*:
 
-- **① P7 EnforcementGate (강제 게이트) — [보류]**: `EnforcementGate/LogoutGuard/DailyCloseGate` 클래스 코드 0건(설계만 `settlement_redesign §9.3`). 행위 점검 = `logoutUserAndExitApp()`는 있으나 **미정산 콜 차단 가드 없음**. 4 게이트(미정산 시 logout/앱종료 차단 · 앱시작 어제마감 게이트 · 매니저 마감화면 강제 · 미확인 기사 모달) 전부 미신축. **재진입 트리거 = 정산 실사용 시작(미용/식당 or 다수 사무실 보급)** — 그 전엔 "막는 게이트" 불필요(혼자 쓰는 1사무실엔 강제 의미 적음). 착수 시 별 모듈 `EnforcementGate.kt`(정산 읽기만, §3.4).
-- **② functions deploy 유보 — [보류]**: 영업일 10시 cron 등 코드는 master/branch에 있으나 production 미배포. **재진입 트리거 = 다음 functions 변경 묶음 deploy 시 함께**(단독 deploy 가치 X, 양평 정산 실사용 X). 묶을 때 `firebase deploy --only functions` 1회.
-- **③ 매니저 수동 [업무마감] 즉시 봉인 (§11.6 #1) — [보류·단 빠른 착수 가능]**: 지금은 새벽 cron(`autoFinalizeSettlementSessions`)만 `isFinalized` 봉인. 본인 5/30 "수동 마감 시 그 자리에서 봉인" 제기 → `clearAllTrips`에 `settlementSessions/{today}.metadata.isFinalized=true` merge set **1자리(소규모, deploy 불필요)**. 셋 중 유일하게 즉시 가능한 quick-win. **재진입 트리거 = 본인 "수동마감 봉인 해줘" 한마디** — 정산 트랙 재가동 없이도 단독 착수 가능.
+- **① P7 EnforcementGate (강제 게이트) — [보급 준비]**: `EnforcementGate/LogoutGuard/DailyCloseGate` 클래스 코드 0건(설계만 `settlement_redesign §9.3`). 행위 점검 = `logoutUserAndExitApp()`는 있으나 **미정산 콜 차단 가드 없음**. 4 게이트(미정산 시 logout/앱종료 차단 · 앱시작 어제마감 게이트 · 매니저 마감화면 강제 · 미확인 기사 모달) 전부 미신축. 기사 여럿이 쓰는 다사무실 운영을 **견고**하게 만드는 보강 → **보급 재개 준비의 일부.** 착수 시 별 모듈 `EnforcementGate.kt`(정산 읽기만, §3.4). 타이밍 = 보급 재개 임박(=현 정리 마무리) 시점 착수 후보.
+- **② functions deploy 유보 — [보급 직전]**: 영업일 10시 cron 등 코드는 master/branch에 있으나 production 미배포. **트리거 = 보급 재개 직전(또는 다음 functions 변경 묶음) 1회 배포** `firebase deploy --only functions`.
+- **③ 매니저 수동 [업무마감] 즉시 봉인 (§11.6 #1) — [quick-win·언제든]**: 지금은 새벽 cron(`autoFinalizeSettlementSessions`)만 `isFinalized` 봉인. 본인 5/30 "수동 마감 시 그 자리에서 봉인" 제기 → `clearAllTrips`에 `settlementSessions/{today}.metadata.isFinalized=true` merge set **1자리(소규모, deploy 불필요)**. 셋 중 유일하게 즉시 가능 → **트리거 = 본인 "수동마감 봉인 해줘" 한마디**(보급 재가동 없이 단독 착수).
 - ⚠️ 셋 다 "정산 단순화 본체"가 아니라 *그 위 강제/배포/봉인 보강*. 본체는 [확정] 완료 — 재구현 금지.
+- ⚠️ **전제 = 보급 재개 = 양평 다른 사무실/타지역 보급**. 메모리엔 5/19~5/27 "보급 정지"(쿠폰 우선)로 기록 → 본 [잠정]은 그 정지가 "정리되는대로" 풀린다는 원규씨 2026-06-10 방향에 의존. 정지가 길어지면 타이밍만 밀림(처분 framing은 유효).
