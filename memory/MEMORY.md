@@ -97,7 +97,12 @@
 - **다음 작업 진입(이 세션 말)**: PTT 본체 = ① **콜드 5초 단축**(토큰 24h 캐시 + wake fire-and-forget, **비용무관**·minInstances 이미 켜짐·진단=READY_TIMEOUT 3초+수신측 토큰호출) ② **통화-trigger prewarm**(통화 OFFHOOK→PTT 예열, 콜드0+screen-off 우회) ③ **전역후크 배제**(원규씨 명시, Accessibility 볼륨키 안 씀). 상세 = 결정대장 `designated_drive/_decisions.md` "PTT 간단모드" 섹션. → 콜드 단축부터 구현.
 - **6/3 "PTT 버림" 충돌 해소**: 6/3 "버릴 것=…PTT"는 *대리를 쿠폰앱 손님모듈로 흡수*할 때 안 가져온다는 맥락(**손님 측 앱**). 지금 PTT 복귀는 *매니저·기사 운영 도구*(**사장·기사 측**) — 층이 달라 충돌 아님(손님앱 흡수 ≠ 운영도구 폐기). + 통화예약 "세 표면(미용·택시·대리)" 프레이밍도 폐기 → 통화예약=미용·식당 / 대리·택시=PTT(결정대장 정합).
 - **★ PTT 콜드 단축 구현·측정 완료(`b66d0fdf`)**: 토큰 24h 캐시(송·수신 SharedPreferences)+wake fire-and-forget+prewarm. 실측 **콜드 5초→2.85초·WARM 0.44초**·캐시히트·join 146ms, 잔여 ~0.6초=수신측 FCM Doze(본질). 3앱 빌드+install+회귀 통과. 비용무관·functions 무변경. 결정대장 [확정] 승격.
-- **다음 세션 = PTT 본체 남은 갭**: ★발화↔콜 연결(빈카드 자동생성/음성명령 "○○기사 가") · screen-off 송신(전역후크 배제) · **통화-trigger prewarm**(🚩선결: 어느 폰이 통화 받나) · 정산 단순화 P5~P8 · 블랙박스 9-B(콜상태→채팅). + 미push 3커밋(c9168004·ac526bc3·b66d0fdf, feature/reservation-engine-poc).
+- **다음 세션 = PTT 본체 남은 갭**: ~~★발화↔콜 연결(빈카드/음성명령)~~ → **6/9밤4 [폐기·과설계]**(아래) · screen-off 송신(전역후크 배제) · **통화-trigger prewarm**(🚩선결: 어느 폰이 통화 받나) · 정산 단순화 P5~P8 · 블랙박스 9-B(콜상태→채팅).
+
+## 6/9 (밤4) ★ 발화↔콜 음성명령 walk-back(과설계) + 배차 알림 Option A [확정] + PTT 마스킹 버그 수정
+- **발화↔콜 = [폐기·과설계]**: 원규씨 기각 — *"배차팝업서 기사지정 + PTT로 어디 가라 음성지시면 됨, 너무 어렵게 생각마라"*. 발화 기사명파싱·빈카드 자동생성·음성배차 불필요 — 배차팝업(`assignCallToDriver`, 출발/목적/요금 nullable=무타이핑 배차)+PTT 음성방송 **둘 다 이미 구현** → 행동0 충족. 목표 유지·구현수단만 보류. 결정대장 도장 + [[feedback_overengineering_before_simplify_2026-06-09]].
+- **버그 "기사폰서 매니저 발화 안 들림" 근본원인(logcat 확정)**: 배차 시 기사폰 `LockScreenActivity` 벨 **3초 반복**+풀스크린 점유가 PTT 수신 음성 **마스킹**([확인] 전까지). PTT 경로 자체는 송·수신 정상(`b66d0fdf` 측정 정합).
+- **배차 알림 Option A [확정·원규씨 승인]**: PTT 없던 시절 과잉 "콜 놓침 방지" = 이제 불필요+PTT 차단 주범 → **반복·풀스크린 제거, 단일 알림음 1회 유지**(양평 LIVE라 청각단서 보존). 구현 = `MyFirebaseMessagingService.showNotification`서 `setFullScreenIntent` 제거(수락은 알림탭→MainActivity(callId)로 보존). 플랜 `~/.claude/plans/compressed-strolling-lamport.md`. 결정대장 `designated_drive/_decisions.md` "PTT 간단모드" 섹션.
 
 ## 5/4 산재 자료 (검증 후 master 갱신 검토)
 - `memory/inbox/2026-05-04/` — 포인트시스템 설계 + 현장인사이트 (방구석 여포 → 능동 영업 패러다임 전환)
