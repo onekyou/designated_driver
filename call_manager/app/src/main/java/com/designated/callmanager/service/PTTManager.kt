@@ -44,6 +44,7 @@ class PTTManager {
         private const val APP_ID = "e5aae3aa18484cd2a1fed0018cfb15bd" // 공개값
         private const val CONV_WARM_MS = 45_000L       // 대화 워밍창 (발화/수신마다 리셋)
         private const val READY_TIMEOUT_MS = 3_000L    // (cold-live / 상대 부재 warm) 미합류 시 강제 발화
+        private const val MIN_CUE_GAP_MS = 500L        // 1차 비프 → 2차 비프 최소 간격(빠를 때 겹침/들쭉날쭉 방지)
         private const val WAKE_FALLBACK_MS = 10_000L   // 수신 신규 join 후 오디오 미도착 방어
         private const val TOKEN_PREFS = "ptt_token_cache"
         private const val TOKEN_VALID_MS = 86_400_000L         // 24h (발급 시각 기준)
@@ -63,6 +64,7 @@ class PTTManager {
     private var readyFired = false
     private var leaveJob: Job? = null
     private var readyTimeoutJob: Job? = null
+    private var cuePressTime = 0L               // 1차 비프(누름) 시각 — 2차 비프 최소 간격 기준
     private var mode = EngineMode.NONE          // 현재 엔진 용도 — eventHandler 콜백 분기
     private var wasStarted = false              // 수신: 송신자 오디오 STARTED 본 뒤에만 오버톤
     private var speakingUid = 0                 // 실제 발화 중인 송신자 uid — 메시(3자+) 다른 broadcaster 오인 차단
@@ -240,6 +242,7 @@ class PTTManager {
         leaveJob?.cancel()
         readyTimeoutJob?.cancel()
         readyFired = false
+        cuePressTime = System.currentTimeMillis() // 1차 비프 기준(2차와 최소 간격 보장)
 
         if (currentChannel != null) {
             // ===== WARM/RX warm 재사용 — 마이크 토글로 즉시 TX 승격 =====
@@ -293,15 +296,25 @@ class PTTManager {
         }
     }
 
-    /** 연결 완료 → 2차 비프 + 마이크 라이브. 중복 1회. */
+    /**
+     * 연결 완료 신호 → **1차 비프와 최소 간격(MIN_CUE_GAP_MS) 보장 후** 2차 비프 + 마이크 라이브.
+     *  빠른 연결(WARM)에서 1차·2차가 겹치거나 텀이 들쭉날쭉하던 것 교정 — 빠르든 느리든 최소 0.5초 텀.
+     *  느린 연결은 실제 소요시간(≥간격)대로. 다중 호출 안전(즉시 래치). 버튼 뗌 시 stopTransmit이
+     *  readyTimeoutJob을 취소 → 대기 중 2차 비프·언뮤트 무효화(상태 가드 이중 방어).
+     */
     private fun fireReady() {
         if (readyFired) return
-        readyFired = true
+        readyFired = true // 즉시 래치(중복 진입·재스케줄 차단)
         readyTimeoutJob?.cancel()
-        _state.value = PttState.TALKING
-        playCue(inCall = true) // 2차 비프
-        engine?.muteLocalAudioStream(false) // 마이크 라이브
-        Log.i(TAG, "fireReady: TALKING (mic live)")
+        val wait = (MIN_CUE_GAP_MS - (System.currentTimeMillis() - cuePressTime)).coerceAtLeast(0L)
+        readyTimeoutJob = scope.launch {
+            if (wait > 0) delay(wait) // 빠를 때: 1차와 최소 간격까지 대기 → 두 비프 항상 같은 텀
+            if (_state.value != PttState.CONNECTING) return@launch // 버튼 뗌/해제됨 → 2차 비프·언뮤트 안 함
+            _state.value = PttState.TALKING
+            playCue(inCall = true) // 2차 비프
+            engine?.muteLocalAudioStream(false) // 마이크 라이브
+            Log.i(TAG, "fireReady: TALKING (mic live), gap=${wait}ms")
+        }
     }
 
     /**
