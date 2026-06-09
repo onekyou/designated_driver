@@ -57,6 +57,14 @@ class DriverForegroundService : Service() {
         // 기본 포그라운드 알림 시작
         val notification = createStatusNotification()
         startForeground(NOTIFICATION_ID, notification)
+
+        // PTT 토큰 prewarm — office 있으면 미리 발급(첫 수신 join 가속, READY_TIMEOUT 완화)
+        val prefs = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+        val regionId = prefs.getString(Constants.PREF_KEY_PROVINCE_ID, null)
+        val officeId = prefs.getString(Constants.PREF_KEY_OFFICE_ID, null)
+        if (!regionId.isNullOrBlank() && !officeId.isNullOrBlank()) {
+            pttAudioManager.prewarmToken(this, regionId, officeId)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

@@ -34,6 +34,9 @@ class PttAudioManager {
         private const val APP_ID = "e5aae3aa18484cd2a1fed0018cfb15bd" // 공개값
         private const val LEAVE_DELAY_MS = 5_000L      // 발화 종료 기준 워밍창
         private const val WAKE_FALLBACK_MS = 10_000L   // wake 후 오디오 안 오는 비정상 케이스 fallback
+        private const val TOKEN_PREFS = "ptt_token_cache"
+        private const val TOKEN_VALID_MS = 86_400_000L         // 24h (발급 시각 기준)
+        private const val TOKEN_REFRESH_MARGIN_MS = 3_600_000L // 만료 1h 전 갱신
     }
 
     private val functions = Firebase.functions("asia-northeast3")
@@ -112,6 +115,49 @@ class PttAudioManager {
         }
     }
 
+    /** 토큰 prewarm — DriverForegroundService 진입점에서 미리 발급해 캐시(수신 join 가속). */
+    fun prewarmToken(ctx: Context, regionId: String, officeId: String) {
+        ensureEngine(ctx)
+        scope.launch { ensureToken(regionId, officeId) }
+    }
+
+    /**
+     * Agora 토큰 캐시 — office별 24h 토큰. 만료 1h 전까지 캐시 재사용(함수 호출 0), 임박/미스 시 발급.
+     *  수신측 가속 = READY_TIMEOUT 완화 핵심. lazy 갱신(prewarm + onWake 직전 폴백), 주기 타이머 없음.
+     */
+    private suspend fun ensureToken(regionId: String, officeId: String): Pair<String, String>? {
+        val ctx = appCtx ?: return null
+        val key = "${regionId}_${officeId}"
+        val prefs = ctx.getSharedPreferences(TOKEN_PREFS, Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val cachedToken = prefs.getString("token_$key", null)
+        val cachedChannel = prefs.getString("channel_$key", null)
+        val expireMs = prefs.getLong("expire_$key", 0L)
+        if (cachedToken != null && cachedChannel != null && now < expireMs - TOKEN_REFRESH_MARGIN_MS) {
+            return cachedToken to cachedChannel
+        }
+        return try {
+            val tokenData = hashMapOf("regionId" to regionId, "officeId" to officeId, "uid" to 0)
+            val result = functions.getHttpsCallable("generateAgoraToken").call(tokenData).await()
+            @Suppress("UNCHECKED_CAST")
+            val map = result.getData() as? Map<String, Any?> ?: emptyMap()
+            val token = map["token"] as? String
+            val channelName = map["channelName"] as? String
+            if (token.isNullOrBlank() || channelName.isNullOrBlank()) {
+                Log.e(TAG, "ensureToken: 토큰/채널 누락"); return null
+            }
+            prefs.edit()
+                .putString("token_$key", token)
+                .putString("channel_$key", channelName)
+                .putLong("expire_$key", now + TOKEN_VALID_MS)
+                .apply()
+            Log.i(TAG, "ensureToken: 신규 발급+캐시 ($channelName)")
+            token to channelName
+        } catch (e: Exception) {
+            Log.e(TAG, "ensureToken 실패", e); null
+        }
+    }
+
     /** 종료 오버톤(매니저 발화 끝) — 채팅음 R.raw.ptt_start 로컬 재생. */
     private fun playOverTone() {
         val ctx = appCtx ?: return
@@ -139,15 +185,9 @@ class PttAudioManager {
 
         scope.launch {
             try {
-                val tokenData = hashMapOf("regionId" to regionId, "officeId" to officeId, "uid" to 0)
-                val result = functions.getHttpsCallable("generateAgoraToken").call(tokenData).await()
-                @Suppress("UNCHECKED_CAST")
-                val map = result.getData() as? Map<String, Any?> ?: emptyMap()
-                val token = map["token"] as? String
-                val channelName = map["channelName"] as? String
-                if (token.isNullOrBlank() || channelName.isNullOrBlank()) {
-                    Log.e(TAG, "onWake: 토큰/채널 누락"); return@launch
-                }
+                val tc = ensureToken(regionId, officeId)  // 캐시 우선 → 수신 join 가속(READY_TIMEOUT 완화 핵심)
+                if (tc == null) { Log.e(TAG, "onWake: 토큰 확보 실패"); return@launch }
+                val (token, channelName) = tc
                 if (expectedChannel != null && expectedChannel != channelName) {
                     Log.w(TAG, "채널 불일치 wake=$expectedChannel token=$channelName (사무실 설정 확인)")
                 }

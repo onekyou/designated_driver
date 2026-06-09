@@ -45,6 +45,9 @@ class PTTManager {
         private const val CONV_WARM_MS = 45_000L       // 대화 워밍창 (발화/수신마다 리셋)
         private const val READY_TIMEOUT_MS = 3_000L    // (cold-live / 상대 부재 warm) 미합류 시 강제 발화
         private const val WAKE_FALLBACK_MS = 10_000L   // 수신 신규 join 후 오디오 미도착 방어
+        private const val TOKEN_PREFS = "ptt_token_cache"
+        private const val TOKEN_VALID_MS = 86_400_000L         // 24h (발급 시각 기준)
+        private const val TOKEN_REFRESH_MARGIN_MS = 3_600_000L // 만료 1h 전 갱신
     }
 
     /** 단일 엔진 용도 — TX(송신)/RX(청취)/WARM(채널 유지·중립). join 직전/종료 시 설정. */
@@ -159,6 +162,49 @@ class PTTManager {
     /** 앱 onResume 워밍업(엔진·appCtx 선설정 → 첫 발화 지연 제거). 채널 pre-join은 안 함. */
     fun prewarm(ctx: Context) = ensureEngine(ctx)
 
+    /** 토큰 prewarm — office 확정(로그인)·onResume에서 미리 발급해 캐시(첫 발화 시 함수 호출 0). */
+    fun prewarmToken(ctx: Context, provinceId: String, officeId: String) {
+        ensureEngine(ctx)
+        scope.launch { ensureToken(provinceId, officeId) }
+    }
+
+    /**
+     * Agora 토큰 캐시 — office별 24h 토큰. 만료 1h 전까지 캐시 재사용(함수 호출 0), 임박/미스 시 발급.
+     *  lazy 갱신: prewarm(로그인·onResume) + 발화/수신 직전 폴백. 주기 타이머 없음.
+     */
+    private suspend fun ensureToken(provinceId: String, officeId: String): Pair<String, String>? {
+        val ctx = appCtx ?: return null
+        val key = "${provinceId}_${officeId}"
+        val prefs = ctx.getSharedPreferences(TOKEN_PREFS, Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val cachedToken = prefs.getString("token_$key", null)
+        val cachedChannel = prefs.getString("channel_$key", null)
+        val expireMs = prefs.getLong("expire_$key", 0L)
+        if (cachedToken != null && cachedChannel != null && now < expireMs - TOKEN_REFRESH_MARGIN_MS) {
+            return cachedToken to cachedChannel
+        }
+        return try {
+            val tokenData = hashMapOf("regionId" to provinceId, "officeId" to officeId, "uid" to 0)
+            val result = functions.getHttpsCallable("generateAgoraToken").call(tokenData).await()
+            @Suppress("UNCHECKED_CAST")
+            val map = result.getData() as? Map<String, Any?> ?: emptyMap()
+            val token = map["token"] as? String
+            val channelName = map["channelName"] as? String
+            if (token.isNullOrBlank() || channelName.isNullOrBlank()) {
+                Log.e(TAG, "ensureToken: 토큰/채널 누락"); return null
+            }
+            prefs.edit()
+                .putString("token_$key", token)
+                .putString("channel_$key", channelName)
+                .putLong("expire_$key", now + TOKEN_VALID_MS)
+                .apply()
+            Log.i(TAG, "ensureToken: 신규 발급+캐시 ($channelName)")
+            token to channelName
+        } catch (e: Exception) {
+            Log.e(TAG, "ensureToken 실패", e); null
+        }
+    }
+
     /**
      * 효과음 1회(시작 1차/2차·종료 오버톤 공용). 채팅음 = R.raw.ptt_start.
      *  inCall=true(통화모드): ring/notification 억제되므로 통화 신호음 usage로 가청.
@@ -205,7 +251,7 @@ class PTTManager {
             eng.muteLocalAudioStream(true) // fireReady까지 무음(첫 음절 유실 방지)
             Log.i(TAG, "startTransmit: WARM 채널 재사용 ($currentChannel) — 즉시 TX 승격")
             scope.launch {
-                sendWake(provinceId, cityId, officeId, currentChannel!!)
+                scope.launch { sendWake(provinceId, cityId, officeId, currentChannel!!) } // fire-and-forget
                 if (_state.value == PttState.CONNECTING && !readyFired) {
                     if (remoteUsers > 0) fireReady()
                     else readyTimeoutJob = scope.launch { delay(READY_TIMEOUT_MS); if (!readyFired) fireReady() }
@@ -220,15 +266,11 @@ class PTTManager {
         playCue(inCall = true) // 1차 비프
         scope.launch {
             try {
-                val tokenData = hashMapOf("regionId" to provinceId, "officeId" to officeId, "uid" to 0)
-                val result = functions.getHttpsCallable("generateAgoraToken").call(tokenData).await()
-                @Suppress("UNCHECKED_CAST")
-                val map = result.getData() as? Map<String, Any?> ?: emptyMap()
-                val token = map["token"] as? String
-                val channelName = map["channelName"] as? String
-                if (token.isNullOrBlank() || channelName.isNullOrBlank()) {
-                    Log.e(TAG, "startTransmit: 토큰/채널 누락"); _state.value = PttState.IDLE; mode = EngineMode.NONE; return@launch
+                val tc = ensureToken(provinceId, officeId)  // 캐시 우선(함수 호출 0), 미스 시 폴백 발급
+                if (tc == null) {
+                    Log.e(TAG, "startTransmit: 토큰 확보 실패"); _state.value = PttState.IDLE; mode = EngineMode.NONE; return@launch
                 }
+                val (token, channelName) = tc
                 val options = ChannelMediaOptions().apply {
                     channelProfile = Constants.CHANNEL_PROFILE_LIVE_BROADCASTING
                     clientRoleType = Constants.CLIENT_ROLE_BROADCASTER
@@ -240,7 +282,7 @@ class PTTManager {
                 eng.muteLocalAudioStream(true) // 합류 전까지 무음
                 currentChannel = channelName
                 Log.i(TAG, "startTransmit: COLD-LIVE joinChannel $channelName")
-                sendWake(provinceId, cityId, officeId, channelName)
+                scope.launch { sendWake(provinceId, cityId, officeId, channelName) } // fire-and-forget
                 if (_state.value == PttState.CONNECTING && !readyFired) {
                     if (remoteUsers > 0) fireReady()
                     else readyTimeoutJob = scope.launch { delay(READY_TIMEOUT_MS); if (!readyFired) fireReady() }
@@ -284,15 +326,9 @@ class PTTManager {
 
         scope.launch {
             try {
-                val tokenData = hashMapOf("regionId" to regionId, "officeId" to officeId, "uid" to 0)
-                val result = functions.getHttpsCallable("generateAgoraToken").call(tokenData).await()
-                @Suppress("UNCHECKED_CAST")
-                val map = result.getData() as? Map<String, Any?> ?: emptyMap()
-                val token = map["token"] as? String
-                val channelName = map["channelName"] as? String
-                if (token.isNullOrBlank() || channelName.isNullOrBlank()) {
-                    Log.e(TAG, "onWake: 토큰/채널 누락"); return@launch
-                }
+                val tc = ensureToken(regionId, officeId)  // 캐시 우선 → 수신 join 가속(READY_TIMEOUT 완화 핵심)
+                if (tc == null) { Log.e(TAG, "onWake: 토큰 확보 실패"); return@launch }
+                val (token, channelName) = tc
                 if (expectedChannel != null && expectedChannel != channelName) {
                     Log.w(TAG, "채널 불일치 wake=$expectedChannel token=$channelName")
                 }

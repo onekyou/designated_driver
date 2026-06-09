@@ -1053,6 +1053,10 @@ class MainActivity : ComponentActivity() {
 
         // PTT 엔진 워밍업(컨텍스트 안전 시점) — 첫 발화 지연 제거
         pttManager.prewarm(this)
+        // 토큰 prewarm — office 확정 시 미리 발급(첫 발화 시 generateAgoraToken 호출 0)
+        getOfficeInfoForPtt().let { (p, _, o) ->
+            if (!p.isNullOrBlank() && !o.isNullOrBlank()) pttManager.prewarmToken(this, p, o)
+        }
 
         val filter = IntentFilter("com.designated.callmanager.NEW_CALL_DETECTED")
 

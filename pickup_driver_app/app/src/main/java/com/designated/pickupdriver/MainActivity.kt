@@ -234,6 +234,10 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         pttManager.prewarm(this) // 엔진 워밍업(첫 발화 지연 제거)
+        // 토큰 prewarm — office 확정 시 미리 발급(첫 발화 시 generateAgoraToken 호출 0)
+        getOfficeInfoForPtt().let { (p, _, o) ->
+            if (!p.isNullOrBlank() && !o.isNullOrBlank()) pttManager.prewarmToken(this, p, o)
+        }
     }
 
     override fun onPause() {
