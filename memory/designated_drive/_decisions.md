@@ -125,4 +125,5 @@
 - **근본원인(logcat 확정, S21+→Z Flip4)**: 배차 시 기사폰 `LockScreenActivity`가 벨 **3초 반복**(`startAlertSound`)+진동 루프+풀스크린 점유 → [확인] 누르기 전까지 **매니저 PTT 수신 음성을 마스킹** = "기사폰서 발화 안 들림"의 정체. PTT 경로 자체는 송·수신 정상(`b66d0fdf` 측정과 정합).
 - **결정**: PTT 없던 시절 "콜 놓침 방지"용 과잉 알림 → PTT 도입으로 불필요 + PTT 차단 주범 → **반복·풀스크린 제거, 단일 알림음 1회는 유지**(양평 LIVE라 청각 단서 보존, PTT 안 한 콜 놓침 방지). 화면 강제기상 포기 = 원규씨 승인 트레이드오프(긴급성은 PTT 보강).
 - 구현: `MyFirebaseMessagingService.showNotification()`에서 `setFullScreenIntent` 제거(=LockScreenActivity 미기동). 수락 흐름은 알림 탭→MainActivity(callId)로 보존(LockScreen [확인]과 동일 경로). 상세 = 플랜 `~/.claude/plans/compressed-strolling-lamport.md`.
+- **⚠️ parity 미완(2026-06-09 밤5 점검)**: 수정은 **`driver_app`만**. 픽업앱=깨끗(알림 없음)✓ / **콜매니저=풀스크린 알림(`setFullScreenIntent`×4)+반복루프(`DashboardViewModel:1871`) 존재** → 매니저도 PTT 수신(양방향)이라 동일 마스킹 잠재 → **다음 점검**(덮으면 콜매니저도 동일 적용).
 - 바꾸려면: 단일 알림음으로 기사가 실제 콜을 놓치는 현장 데이터가 나오면(그땐 PTT 의무화 or 중간 강도 재도입).

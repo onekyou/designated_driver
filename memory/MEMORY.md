@@ -109,7 +109,9 @@
 - **통화-trigger prewarm 🚩선결 해소**: 원규씨 "콜매니저·콜디텍터 두 앱서 전화 받음" + 코드확인 — 콜매니저 `CallReceiver`가 RINGING/OFFHOOK/IDLE 감지 → **매니저폰(PTT 송신폰)이 통화 직접 받으니 로컬 예열 가능**(폰간 전달 불필요). 후크 = CallReceiver RINGING/OFFHOOK 분기에 기존 `prewarm()/prewarmToken()`+`sendPttPreWake` 호출. 단 콜드 2.85초라 체감이득 작음→우선순위 낮음.
 - **정산 단순화 = P5~P8 미구현 확인**(원규씨 "이미 하지 않았나?"에 답): P1~P4(설계문서+코드 `cf7226ac`)는 됐으나 **deploy 유보**, **P5~P8 미진입**(코드에 4상태 `PENDING_CONFIRM/TRANSFERRED`+`carryOver` 잔존 확인 = 단순화 본체 미적용). 설계 매트릭스=`ptt_section3_entry_2026-05-27.md` §8.2. 선결=영업일 시간(6시 vs 10시).
 - **남은 PTT 갭(우선순위)**: ① **screen-off 송신**(운전중 핸즈프리, 본질) ② 통화-trigger prewarm(선결 풀림·폴리시) ③ 정산 P5~P8(별 트랙) ④ 블랙박스 9-B(콜상태→채팅). ※발화↔콜은 밤4 [폐기·과설계].
-- **이번 세션 커밋(feature/reservation-engine-poc)**: `b65be0c9`(배차알림 Option A)·`d3fc0d3e`(docs)=**push됨** / `3e9e5361`(비프)=**push 대기**. 3단말 중 S21+·Z Flip4 최신 빌드, S22 미연결(연결 시 install 필요).
+- **이번 세션 커밋(feature/reservation-engine-poc)**: `b65be0c9`(배차알림 Option A)·`d3fc0d3e`(docs)=**push됨** / `3e9e5361`(비프)·`190f54df`(docs)=**push 대기**. 3단말 중 S21+·Z Flip4 최신 빌드, S22 미연결(연결 시 install 필요).
+- **🔴 누락 점검(푸시 전 발견) = Option A 알림 마스킹 수정이 `driver_app`만**: parity 코드점검 — 픽업앱=깨끗(알림 없음)✓ / **콜매니저=풀스크린 알림(`setFullScreenIntent`×4)+반복루프(`DashboardViewModel:1871`) 존재 → 매니저도 PTT 수신(양방향)이라 동일 마스킹 잠재, 미수정·미검증.** ★다음 점검: 매니저가 픽업 발화 받을 때 콜 알림이 덮나(덮으면 콜매니저도 동일 Option A 적용). 비프 fix도 픽업앱(동일 PTTManager 포크) 미적용 동반.
+- **🟡 경미 오염**: ① 날짜 — 작업이 6/9밤~6/10새벽 걸침, 기록·커밋·파일명 `2026-06-09`로 통일(연속세션). ② 통화-trigger 선결 [해소]는 원규씨 진술+코드 기반·**런타임 미검증**(prewarm 구현 시 매니저폰 CallReceiver 실발화 확인). ✅정합: 대리=PTT/미용=통화예약 [확정] 유지 · 콜드단축 [확정] 비회귀(비프 COLD gap=0).
 
 ## 5/4 산재 자료 (검증 후 master 갱신 검토)
 - `memory/inbox/2026-05-04/` — 포인트시스템 설계 + 현장인사이트 (방구석 여포 → 능동 영업 패러다임 전환)
