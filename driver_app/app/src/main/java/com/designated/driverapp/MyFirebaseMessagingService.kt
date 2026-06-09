@@ -422,35 +422,23 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // Full-screen intent용: LockScreenActivity (잠금화면 위 전체화면 표시)
-        val lockScreenIntent = Intent(this, LockScreenActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra(LockScreenActivity.EXTRA_CALL_ID, callId ?: "")
-            putExtra(LockScreenActivity.EXTRA_TITLE, title)
-            putExtra(LockScreenActivity.EXTRA_BODY, body)
-            putExtra(LockScreenActivity.EXTRA_NOTIFICATION_ID, notificationId)
-        }
-
-        val fullScreenIntent = PendingIntent.getActivity(
-            this,
-            notificationId + 1,
-            lockScreenIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
+        // [2026-06-09 · 결정대장 Option A] 풀스크린(LockScreenActivity) 제거.
+        //  사유: 배차 시 LockScreenActivity의 벨 3초 반복 + 화면 강제점유가 매니저 PTT 수신 음성을
+        //  마스킹("기사폰서 발화 안 들림", logcat 확정). PTT 도입으로 과잉 콜놓침방지 불필요 →
+        //  배차 알림 = heads-up + 단일 알림음 1회(채널 setSound). 수락 흐름은 알림 탭
+        //  (contentIntent → MainActivity callId, 기존 LockScreen [확인]과 동일 경로)으로 보존.
         val builder = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(body)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
-            .setPriority(NotificationCompat.PRIORITY_MAX)  // MAX로 상향
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setVibrate(longArrayOf(0, 500, 200, 500))
-            .setSound(defaultSoundUri)  // 소리 설정 추가
-            .setDefaults(NotificationCompat.DEFAULT_LIGHTS)  // 기본 LED
-            .setFullScreenIntent(fullScreenIntent, true) // 백그라운드에서 화면 띄우기
+            .setVibrate(longArrayOf(0, 500, 200, 500))  // 단일 진동 1회(반복 아님)
+            .setSound(defaultSoundUri)                   // 단일 알림음 1회
+            .setDefaults(NotificationCompat.DEFAULT_LIGHTS)
 
         notificationManager.notify(notificationId, builder.build())
         Log.d(TAG, "알림 표시 완료: notificationId=$notificationId, channelId=$channelId")

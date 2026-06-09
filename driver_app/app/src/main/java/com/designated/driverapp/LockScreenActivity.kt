@@ -45,6 +45,10 @@ import com.designated.driverapp.ui.theme.DriverAppTheme
  * - 화면이 꺼진 상태에서 FCM 수신 시 자동으로 표시
  * - 수락 버튼 클릭 시 MainActivity로 이동
  * - 거절 버튼 클릭 시 Activity 종료
+ *
+ * ⚠️ [2026-06-09 · 결정대장 Option A] **현재 미사용** — `MyFirebaseMessagingService.showNotification`의
+ *  `setFullScreenIntent` 제거로 더 이상 기동되지 않음(유일 런처였음). 벨 3초 반복+화면 점유가 PTT 수신
+ *  음성을 마스킹해서 배차 알림을 heads-up+단일음으로 축소함. 클래스·매니페스트 등록은 롤백 대비 보존.
  */
 class LockScreenActivity : ComponentActivity() {
 
