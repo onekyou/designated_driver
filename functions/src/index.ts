@@ -889,6 +889,13 @@ export const sendNewCallNotification = onDocumentCreated(
       }
     }
 
+    // 블랙박스 9-B: 신규 콜(WAITING) 들어옴을 단톡방에 무음 기록 (중복콜 삭제 가드 통과 후, best-effort).
+    // 직접운행 콜은 제외 (onCallStatusChanged:2144 동일 정책).
+    if (callData.handledByManager !== true) {
+      const who = callData.customerName || callData.phoneNumber || "";
+      await postSystemMessage(provinceId, cityId, officeId, who ? `콜 들어옴 — ${who}` : "콜 들어옴");
+    }
+
     logger.info(`[new-call:${callId}] 새 콜 알림 전송 시작`);
     logger.info(`[new-call:${callId}] 고객: ${callData.customerName || callData.phoneNumber}, 위치: ${callData.customerAddress}`);
 
@@ -1018,6 +1025,9 @@ export const onSharedCallCreated = onDocumentCreated(
 
     logger.info(`[shared-created:${callId}] 새로운 공유콜 생성됨. 대상 지역 관리자들에게 알림 전송 시작.`);
     logger.info(`[shared-created:${callId}] 공유콜 데이터: sourceProvinceId=${sharedCallData.sourceProvinceId}, sourceCityId=${sharedCallData.sourceCityId}, sourceOfficeId=${sharedCallData.sourceOfficeId}, targetProvinceId=${sharedCallData.targetProvinceId}, targetCityId=${sharedCallData.targetCityId}`);
+
+    // 블랙박스 9-B: 출처 사무실 단톡방에 공유콜 등록 무음 기록
+    await postSystemMessage(sharedCallData.sourceProvinceId, sharedCallData.sourceCityId, sharedCallData.sourceOfficeId, "공유콜 등록");
 
     try {
       // 대상 지역의 모든 관리자 FCM 토큰 조회 (원본 사무실 제외)
@@ -1331,6 +1341,9 @@ export const onSharedCallClaimed = onDocumentUpdated(
     if (beforeData.status === "OPEN" && afterData.status === "CLAIMED") {
       logger.info(`[shared:${callId}] 공유 콜이 CLAIMED 되었습니다. 대상사무실로 복사 시작.`);
       logger.info(`[shared:${callId}] afterData.claimedDriverId=${afterData.claimedDriverId}`);
+
+      // 블랙박스 9-B: 출처 사무실 단톡방에 공유콜 수임(타 사무실) 무음 기록
+      await postSystemMessage(afterData.sourceProvinceId, afterData.sourceCityId, afterData.sourceOfficeId, "공유콜 수임 — 타 사무실");
 
       logger.info(`[shared:${callId}] assignedDriverId=${afterData.claimedDriverId}`);
 
@@ -2055,6 +2068,9 @@ export const oncallreserved = onDocumentUpdated(
 
     logger.info(`[oncallreserved:${callId}] RESERVED 진입 감지 (before=${beforeData?.status} → after=RESERVED), driver=${driverId}`);
 
+    // 블랙박스 9-B: 예약 콜 등록 무음 기록 (RESERVED 진입 단일 지점 — 중복 없음)
+    await postSystemMessage(provinceId, cityId, officeId, `예약 콜 등록 — ${(afterData as any).assignedDriverName || "기사"}`);
+
     try {
       const driverRef = admin.firestore()
         .collection("provinces").doc(provinceId)
@@ -2170,8 +2186,9 @@ export const onCallStatusChanged = onDocumentUpdated(
         case "ASSIGNED": sysText = `${driverName} 배차됨`; break;
         case "ACCEPTED": sysText = `${driverName} 수락`; break;
         case "IN_PROGRESS": sysText = `운행 시작${route}`; break;
-        case "AWAITING_SETTLEMENT": sysText = "운행 완료 — 정산 대기"; break;
-        case "COMPLETED": sysText = `운행 완료${route}`; break;
+        // AWAITING_SETTLEMENT = 실제 운행완료(기사 [운행완료]), COMPLETED = 정산완료(정산 세션 추가). 둘은 다른 사건 → 텍스트 분리(double "운행 완료" 제거).
+        case "AWAITING_SETTLEMENT": sysText = `운행 완료${route}`; break;
+        case "COMPLETED": sysText = "정산 완료"; break;
         case "CANCELED": sysText = "콜 취소 (관리자)"; break;
         case "CANCELLED_BY_DRIVER": sysText = `${driverName} 운행 취소`; break;
         case "CANCELLED_BY_CUSTOMER": sysText = "고객 취소"; break;
@@ -4899,6 +4916,14 @@ export const onDriverStatusChange = onDocumentUpdated(
 
     logger.info(`[기사상태] ${driverId} (${driverName}): ${oldStatus} -> ${newStatus}`);
 
+    // 블랙박스 9-B: 기사 출퇴근만 무음 기록 (ASSIGNED/DRIVING 등 잦은 전이는 콜 트리거가 이미 기록 → 제외).
+    {
+      let dutyText = "";
+      if (newStatus === "OFFLINE") dutyText = `${driverName} 퇴근`;
+      else if ((oldStatus === "OFFLINE" || oldStatus === "UNKNOWN") && (newStatus === "ONLINE" || newStatus === "WAITING")) dutyText = `${driverName} 출근`;
+      if (dutyText) await postSystemMessage(provinceId, cityId, officeId, dutyText);
+    }
+
     try {
       // 관리자 토큰 가져오기
       const managerTokensSnapshot = await admin.firestore()
@@ -5416,6 +5441,9 @@ export const onDriverSettlementSubmitted = onDocumentUpdated(
     const realDeposit = afterData.dailySettlement?.realDeposit || 0;
 
     logger.info(`[onDriverSettlementSubmitted] ${driverName}(${driverId}) 업무마감 제출 - ${tripCount}건, 실납입: ${realDeposit}원`);
+
+    // 블랙박스 9-B: 업무마감 제출 무음 기록 (매니저 토큰 유무와 무관하게 항상 기록 → try 앞)
+    await postSystemMessage(provinceId, cityId, officeId, `${driverName} 업무마감 제출 — ${tripCount}건`);
 
     try {
       // 매니저 토큰 조회

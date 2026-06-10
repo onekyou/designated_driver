@@ -694,6 +694,12 @@ exports.sendNewCallNotification = (0, firestore_1.onDocumentCreated)({
             return;
         }
     }
+    // 블랙박스 9-B: 신규 콜(WAITING) 들어옴을 단톡방에 무음 기록 (중복콜 삭제 가드 통과 후, best-effort).
+    // 직접운행 콜은 제외 (onCallStatusChanged:2144 동일 정책).
+    if (callData.handledByManager !== true) {
+        const who = callData.customerName || callData.phoneNumber || "";
+        await (0, chat_2.postSystemMessage)(provinceId, cityId, officeId, who ? `콜 들어옴 — ${who}` : "콜 들어옴");
+    }
     logger.info(`[new-call:${callId}] 새 콜 알림 전송 시작`);
     logger.info(`[new-call:${callId}] 고객: ${callData.customerName || callData.phoneNumber}, 위치: ${callData.customerAddress}`);
     try {
@@ -805,6 +811,8 @@ exports.onSharedCallCreated = (0, firestore_1.onDocumentCreated)({
     }
     logger.info(`[shared-created:${callId}] 새로운 공유콜 생성됨. 대상 지역 관리자들에게 알림 전송 시작.`);
     logger.info(`[shared-created:${callId}] 공유콜 데이터: sourceProvinceId=${sharedCallData.sourceProvinceId}, sourceCityId=${sharedCallData.sourceCityId}, sourceOfficeId=${sharedCallData.sourceOfficeId}, targetProvinceId=${sharedCallData.targetProvinceId}, targetCityId=${sharedCallData.targetCityId}`);
+    // 블랙박스 9-B: 출처 사무실 단톡방에 공유콜 등록 무음 기록
+    await (0, chat_2.postSystemMessage)(sharedCallData.sourceProvinceId, sharedCallData.sourceCityId, sharedCallData.sourceOfficeId, "공유콜 등록");
     try {
         // 대상 지역의 모든 관리자 FCM 토큰 조회 (원본 사무실 제외)
         const adminQuery = await admin
@@ -1078,6 +1086,8 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
     if (beforeData.status === "OPEN" && afterData.status === "CLAIMED") {
         logger.info(`[shared:${callId}] 공유 콜이 CLAIMED 되었습니다. 대상사무실로 복사 시작.`);
         logger.info(`[shared:${callId}] afterData.claimedDriverId=${afterData.claimedDriverId}`);
+        // 블랙박스 9-B: 출처 사무실 단톡방에 공유콜 수임(타 사무실) 무음 기록
+        await (0, chat_2.postSystemMessage)(afterData.sourceProvinceId, afterData.sourceCityId, afterData.sourceOfficeId, "공유콜 수임 — 타 사무실");
         logger.info(`[shared:${callId}] assignedDriverId=${afterData.claimedDriverId}`);
         // PR 1 — 결정 #11: claim 시점 wallet 잔액 ≥ 5,000 검증 (잔액 부족 사무실은 revert + 매니저 충전 안내)
         // 식당앱 콜(sourceRestaurantId 존재)에만 적용. 기존 사무실간 zero-sum 콜은 면제 (마이그레이션 윈도우 안전 + 의미 정합)
@@ -1695,6 +1705,8 @@ exports.oncallreserved = (0, firestore_1.onDocumentUpdated)({
         return;
     }
     logger.info(`[oncallreserved:${callId}] RESERVED 진입 감지 (before=${beforeData === null || beforeData === void 0 ? void 0 : beforeData.status} → after=RESERVED), driver=${driverId}`);
+    // 블랙박스 9-B: 예약 콜 등록 무음 기록 (RESERVED 진입 단일 지점 — 중복 없음)
+    await (0, chat_2.postSystemMessage)(provinceId, cityId, officeId, `예약 콜 등록 — ${afterData.assignedDriverName || "기사"}`);
     try {
         const driverRef = admin.firestore()
             .collection("provinces").doc(provinceId)
@@ -1797,11 +1809,12 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
             case "IN_PROGRESS":
                 sysText = `운행 시작${route}`;
                 break;
+            // AWAITING_SETTLEMENT = 실제 운행완료(기사 [운행완료]), COMPLETED = 정산완료(정산 세션 추가). 둘은 다른 사건 → 텍스트 분리(double "운행 완료" 제거).
             case "AWAITING_SETTLEMENT":
-                sysText = "운행 완료 — 정산 대기";
+                sysText = `운행 완료${route}`;
                 break;
             case "COMPLETED":
-                sysText = `운행 완료${route}`;
+                sysText = "정산 완료";
                 break;
             case "CANCELED":
                 sysText = "콜 취소 (관리자)";
@@ -4067,6 +4080,16 @@ exports.onDriverStatusChange = (0, firestore_1.onDocumentUpdated)({
     const driverName = (afterData === null || afterData === void 0 ? void 0 : afterData.name) || "기사";
     const authUid = (afterData === null || afterData === void 0 ? void 0 : afterData.authUid) || driverId; // authUid 추가 (없으면 driverId 사용)
     logger.info(`[기사상태] ${driverId} (${driverName}): ${oldStatus} -> ${newStatus}`);
+    // 블랙박스 9-B: 기사 출퇴근만 무음 기록 (ASSIGNED/DRIVING 등 잦은 전이는 콜 트리거가 이미 기록 → 제외).
+    {
+        let dutyText = "";
+        if (newStatus === "OFFLINE")
+            dutyText = `${driverName} 퇴근`;
+        else if ((oldStatus === "OFFLINE" || oldStatus === "UNKNOWN") && (newStatus === "ONLINE" || newStatus === "WAITING"))
+            dutyText = `${driverName} 출근`;
+        if (dutyText)
+            await (0, chat_2.postSystemMessage)(provinceId, cityId, officeId, dutyText);
+    }
     try {
         // 관리자 토큰 가져오기
         const managerTokensSnapshot = await admin.firestore()
@@ -4478,6 +4501,8 @@ exports.onDriverSettlementSubmitted = (0, firestore_1.onDocumentUpdated)({
     const tripCount = ((_g = afterData.dailySettlement) === null || _g === void 0 ? void 0 : _g.tripCount) || 0;
     const realDeposit = ((_h = afterData.dailySettlement) === null || _h === void 0 ? void 0 : _h.realDeposit) || 0;
     logger.info(`[onDriverSettlementSubmitted] ${driverName}(${driverId}) 업무마감 제출 - ${tripCount}건, 실납입: ${realDeposit}원`);
+    // 블랙박스 9-B: 업무마감 제출 무음 기록 (매니저 토큰 유무와 무관하게 항상 기록 → try 앞)
+    await (0, chat_2.postSystemMessage)(provinceId, cityId, officeId, `${driverName} 업무마감 제출 — ${tripCount}건`);
     try {
         // 매니저 토큰 조회
         const managerTokensSnap = await admin.firestore()

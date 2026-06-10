@@ -390,7 +390,10 @@ service cloud.firestore {
                                  && request.resource.data.audioPath is string
                                  && request.resource.data.audioPath.size() >= 1
                                  && request.resource.data.audioPath.size() <= 500)
-                           );
+                           )
+                        // 9-B: 클라가 시스템 메시지(type/senderRole=SYSTEM) 위조 차단. CF(Admin SDK)는 rules 우회.
+                        && request.resource.data.get('type', '') != 'system'
+                        && request.resource.data.get('senderRole', '') != 'SYSTEM';
           // V1: 메시지 수정/삭제 금지 (V2 검토)
           allow update, delete: if false;
         }
