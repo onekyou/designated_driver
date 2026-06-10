@@ -74,6 +74,9 @@ class PTTManager {
     private var recordPending = false
 
     // ── [STT 스파이크] 라이브 발화 오디오를 WAV로 캡처 (Agora startAudioRecording = 채널 tap, 전송 비파괴) ──
+    //   ⚠️ default OFF — Step1 스파이크 검증 완료(2026-06-11). Step2(전사+채팅메시지) 배선 시 true로.
+    //   OFF면 LIVE 기기에서 실음성 WAV가 cache에 안 쌓임.
+    private val sttSpikeEnabled = false
     private var sttCapturing = false
     private var sttCapturePath: String? = null
 
@@ -440,6 +443,7 @@ class PTTManager {
 
     /** [STT 스파이크] 발화 오디오를 WAV로 녹음 시작 — Agora 채널 오디오 tap. 전송(publish)은 안 건드림(비파괴). */
     private fun startSttCapture() {
+        if (!sttSpikeEnabled) return // 게이트 OFF — 캡처 안 함(stopSttCapture도 no-op)
         val eng = engine ?: return
         if (sttCapturing) return
         try {
