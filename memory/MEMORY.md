@@ -137,6 +137,15 @@
 - **이번 세션 전체 미푸시** — `feature/reservation-engine-poc`에 로컬 커밋 다수(`aa0dfe13`~`265dc016`). push는 다음 세션 or 원규씨 지시 시.
 - **클코 학습**: `feedback_folder_scope_before_proposing_2026-06-10`(폴더·우선순위 월권) + 죽은 경로 위 빌드 금지(누락·오염 검토가 잡음).
 
+## 6/11 ★ 블랙박스 9-B Commit 2 구현·배포·푸시 완료 (functions 전용, 앱 재빌드 없음)
+- **Commit 2 = rules-first + 잔여 3건 + 트리거 4종** (`9da961c1`+`57623574`, push됨). 플랜 `~/.claude/plans/linear-percolating-wren.md`.
+  - **A. firestore.rules 스푸핑 차단**(유일 LIVE 노출): 메시지 create에 `get('type','')!='system'`+`get('senderRole','')!='SYSTEM'` — 클라 위조 차단(CF=Admin SDK 우회). 컴파일·released. 일반 채팅 무영향.
+  - **B 잔여 3건**: ① 신규콜 "콜 들어옴"(`sendNewCallNotification`:825, handledByManager 제외) — onCallStatusChanged가 onDocumentUpdated라 create 못 잡던 갭. ② **double 운행완료 정정**: AWAITING_SETTLEMENT="운행 완료"(실제 운행완료, 테스트 확증)·COMPLETED="정산 완료". 직전 플랜의 "AWAITING 버리고 COMPLETED 유지"는 의미 거꾸로라 폐기. ③ handledByManager=2144 이미 적용+신규콜 후크 연계.
+  - **C. 트리거 4종**(원규씨 범위결정): 기사 출퇴근(OFFLINE↔ONLINE/WAITING만)·예약(oncallreserved)·**공유콜 등록·수임만**(출처 사무실, 나머지 3 트리거 범위밖)·**정산 제출만**(토큰 무관 try 앞).
+  - **검토(오염) 정정 2**: 정산 후크 early-return 앞으로 + **공유콜 수임을 wallet revert 뒤로**(`57623574`, 거짓 수임 방지).
+- **⛳ 남은(다음 세션)**: ① **9-B Commit 2 E2E 실콜 검증**(신규콜·double완료·출퇴근 — 밤시간 가짜콜 회피해 미실측, 자연콜 로그로) ② Commit 3(가독성 UI 필터/collapse + SSOT `chat-shared-spec.md` §13) ③ 공유콜 나머지 3트리거 ④ PTT→텍스트 Step 2(`sttSpikeEnabled=true` 켜고 온폰 STT 엔진 결정). 상세=결정대장 `designated_drive/_decisions.md` 9-B 항목.
+- **배포**: rules + functions 7개(surgical, `calldetector-5d61e`). 후크 전부 best-effort라 콜 운영 비파괴.
+
 ## 5/4 산재 자료 (검증 후 master 갱신 검토)
 - `memory/inbox/2026-05-04/` — 포인트시스템 설계 + 현장인사이트 (방구석 여포 → 능동 영업 패러다임 전환)
 - `memory/inbox/2026-04-23/` — 개선전략 + 업소용앱 분리 (4/27 master로 흡수됨, 참고용)
