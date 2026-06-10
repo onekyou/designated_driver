@@ -284,7 +284,7 @@ private fun SystemMessageBubble(text: String, timeText: String) {
             Text(
                 text = if (timeText.isNotEmpty()) "$text · $timeText" else text,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Color(0xFF555555), // 고정 짙은 회색 — 밝은 회색 버블에서 다크테마 무관 가독
                 fontSize = 11.sp,
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
             )
