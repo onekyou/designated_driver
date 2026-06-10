@@ -83,11 +83,53 @@ export async function removeChatMember(
 }
 
 // ============================================================
+//  블랙박스 9-B: 시스템 이벤트 → 채팅 무음 자동 게시
+// ============================================================
+
+/**
+ * 시스템 이벤트(콜 상태 전이·배차·취소·기사 상태 등)를 사무실 단톡방에 무음 게시.
+ *  type:"system" 메시지를 Firestore에 add → onChatMessageCreated 가 자동 팬아웃
+ *  (클라는 chatType="system" 보고 Room INSERT만, 소리/알림/peek 부풀음 skip = 블랙박스).
+ *  best-effort: 실패해도 호출한 트리거(콜 상태 변경 등) 본 흐름을 막지 않는다.
+ */
+export async function postSystemMessage(
+  provinceId: string,
+  cityId: string,
+  officeId: string,
+  text: string,
+): Promise<void> {
+  if (!provinceId || !cityId || !officeId || !text) {
+    logger.warn("[postSystemMessage] 필수 매개변수 누락", { provinceId, cityId, officeId, hasText: !!text });
+    return;
+  }
+  try {
+    const messagesRef = admin.firestore()
+      .collection(`provinces/${provinceId}/cities/${cityId}/offices/${officeId}/chatRoom/main/messages`);
+    const docRef = messagesRef.doc();
+    await docRef.set({
+      id: docRef.id,
+      type: "system",
+      senderId: "SYSTEM",
+      senderName: "시스템",
+      senderRole: "SYSTEM",
+      text,
+      createdAt: FieldValue.serverTimestamp(),
+      clientCreatedAt: Date.now(),
+      status: "SENT",
+    });
+    logger.info(`[postSystemMessage] @ ${officeId}: ${text}`);
+  } catch (e) {
+    logger.error("[postSystemMessage] 실패", e);
+  }
+}
+
+// ============================================================
 //  트리거: 새 메시지 → FCM multicast 발송
 // ============================================================
 
 interface ChatMessageDoc {
   id?: string;
+  type?: string; // "system" = 블랙박스 9-B 시스템 이벤트(무음). 없음/"user" = 일반 메시지
   senderId?: string;
   senderName?: string;
   senderRole?: string;
@@ -203,6 +245,7 @@ export const onChatMessageCreated = onDocumentCreated(
         {
           data: {
             type: "NEW_CHAT_MESSAGE",
+            chatType: msg.type ?? "", // "system" = 블랙박스 무음. 클라가 소리/알림 skip 판단
             messageId,
             senderId,
             senderName,

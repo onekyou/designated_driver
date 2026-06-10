@@ -217,6 +217,7 @@ class ChatRepository @Inject constructor(
                 val audioPath = payload["audioPath"]?.takeIf { it.isNotEmpty() }
                 val audioDurationMs = payload["audioDurationMs"]?.toLongOrNull()
                 val audioAutoplay = payload["audioAutoplay"] == "true"
+                val type = payload["chatType"] ?: "" // 블랙박스 9-B: "system" = 시스템 이벤트(무음)
                 val createdAt = payload["createdAt"]?.toLongOrNull() ?: System.currentTimeMillis()
                 val clientCreatedAt = payload["clientCreatedAt"]?.toLongOrNull() ?: createdAt
                 val provinceId = payload["provinceId"] ?: return@launch
@@ -255,6 +256,7 @@ class ChatRepository @Inject constructor(
                         audioPath = audioPath,
                         audioDurationMs = audioDurationMs,
                         audioAutoplay = audioAutoplay,
+                        type = type,
                     )
                 )
                 Log.d(TAG, "[onRemoteMessageReceived] INSERT: $messageId" +
@@ -295,6 +297,7 @@ class ChatRepository @Inject constructor(
                 val audioPath = doc.getString("audioPath")?.takeIf { it.isNotEmpty() }
                 val audioDurationMs = doc.getLong("audioDurationMs")
                 val audioAutoplay = doc.getBoolean("audioAutoplay") ?: false
+                val type = doc.getString("type") ?: "" // 블랙박스 9-B: "system" = 시스템 이벤트
                 val createdAt = (doc.get("createdAt") as? Timestamp)?.toDate()?.time
                     ?: doc.getLong("clientCreatedAt") ?: return@mapNotNull null
                 val clientCreatedAt = doc.getLong("clientCreatedAt") ?: createdAt
@@ -321,6 +324,7 @@ class ChatRepository @Inject constructor(
                     audioPath = audioPath,
                     audioDurationMs = audioDurationMs,
                     audioAutoplay = audioAutoplay,
+                    type = type,
                 )
             }
 

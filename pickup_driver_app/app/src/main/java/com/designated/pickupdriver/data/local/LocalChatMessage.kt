@@ -52,6 +52,10 @@ data class LocalChatMessage(
     val audioDurationMs: Long? = null,
     @ColumnInfo(defaultValue = "0")
     val audioAutoplay: Boolean = false,
+
+    // 블랙박스 9-B: 시스템 이벤트 메시지 ("system") — 일반 메시지는 "" (무음 렌더 분기)
+    @ColumnInfo(defaultValue = "")
+    val type: String = "",
 ) {
     companion object {
         const val SEND_STATUS_SENDING = "SENDING"

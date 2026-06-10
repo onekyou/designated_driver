@@ -172,6 +172,12 @@ private fun ChatMessageRow(
     onRetry: () -> Unit,
     onImageClick: (String) -> Unit = {},
 ) {
+    // 블랙박스 9-B: 시스템 이벤트 메시지는 중앙 회색 작은 글씨 (발신자/정렬/시간 그룹 무시)
+    if (message.type == "system") {
+        SystemMessageBubble(text = message.text, timeText = formatTime(message.createdAt))
+        return
+    }
+
     val alignment = if (isOwn) Alignment.End else Alignment.Start
     val bubbleColor = if (isOwn) Color(0xFFFFF59D) else Color(0xFFEEEEEE)
     val timeText = formatTime(message.createdAt)
@@ -245,6 +251,32 @@ private fun ChatMessageRow(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * 블랙박스 9-B: 시스템 이벤트 말풍선 — 중앙 정렬, 회색, 작은 글씨.
+ */
+@Composable
+private fun SystemMessageBubble(text: String, timeText: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Surface(
+            color = Color(0xFFE0E0E0),
+            shape = RoundedCornerShape(10.dp),
+        ) {
+            Text(
+                text = if (timeText.isNotEmpty()) "$text · $timeText" else text,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            )
         }
     }
 }

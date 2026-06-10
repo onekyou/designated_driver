@@ -15,7 +15,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  */
 @Database(
     entities = [LocalChatMessage::class],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class ChatAppDatabase : RoomDatabase() {
@@ -41,6 +41,16 @@ abstract class ChatAppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v3 → v4: 블랙박스 9-B 시스템 이벤트 메시지 type 컬럼 추가.
+         * type NOT NULL DEFAULT '' ("system" = 시스템 이벤트, "" = 일반 메시지)
+         */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE chat_messages ADD COLUMN type TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun getDatabase(context: Context): ChatAppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -48,7 +58,7 @@ abstract class ChatAppDatabase : RoomDatabase() {
                     ChatAppDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_2_3)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

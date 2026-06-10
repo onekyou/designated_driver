@@ -19,7 +19,7 @@ import android.content.Context
         LocalDriverInfo::class,
         LocalChatMessage::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -46,7 +46,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     DATABASE_NAME
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                .addMigrations(MIGRATION_1_2, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                 .fallbackToDestructiveMigration() // 개발 단계에서는 데이터 손실 허용
                 .build()
                 INSTANCE = instance
@@ -188,6 +188,16 @@ abstract class AppDatabase : RoomDatabase() {
                 database.execSQL("ALTER TABLE chat_messages ADD COLUMN audioPath TEXT")
                 database.execSQL("ALTER TABLE chat_messages ADD COLUMN audioDurationMs INTEGER")
                 database.execSQL("ALTER TABLE chat_messages ADD COLUMN audioAutoplay INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        /**
+         * v9 → v10 마이그레이션: 블랙박스 9-B 시스템 이벤트 메시지 type 컬럼 추가.
+         * type은 NOT NULL DEFAULT '' ("system" = 시스템 이벤트, "" = 일반 메시지)
+         */
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE chat_messages ADD COLUMN type TEXT NOT NULL DEFAULT ''")
             }
         }
 

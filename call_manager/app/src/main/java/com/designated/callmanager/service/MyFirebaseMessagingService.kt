@@ -686,6 +686,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         }
         app.chatRepository.onRemoteMessageReceived(data)
 
+        // 블랙박스 9-B: 시스템 이벤트는 무음 — Room INSERT만 하고 소리·알림·자동재생 없이 종료
+        if ((data["chatType"] ?: "") == "system") {
+            Log.d(TAG, "[handleChatMessage] 시스템 이벤트 - 무음 INSERT (id=$messageId)")
+            return
+        }
+
         // 2) 알림 표시 조건 — 본인 메시지면 skip + 포그라운드면 skip
         val currentUid = FirebaseAuth.getInstance().currentUser?.uid
         if (currentUid != null && currentUid == senderId) {

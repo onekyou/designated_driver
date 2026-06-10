@@ -50,7 +50,7 @@ export {
 export { generateAgoraToken, sendPttWake, sendPttPreWake } from "./handlers/ptt";
 export { parseReservation } from "./handlers/reservation";
 export { migrateExistingOfficesWallet } from "./scripts/migrateExistingOfficesWallet";
-import { addChatMember } from "./handlers/chat";
+import { addChatMember, postSystemMessage } from "./handlers/chat";
 import express from "express";
 import basicAuth from "express-basic-auth";
 import * as nodePath from "node:path";
@@ -2155,6 +2155,36 @@ export const onCallStatusChanged = onDocumentUpdated(
     }
 
     logger.info(`[onCallStatusChanged:${callId}] Status changed: ${beforeData.status} → ${afterData.status}`);
+
+    // 블랙박스 9-B: 콜 상태 전이를 단톡방에 무음 시스템 메시지로 자동 기록 (best-effort, 본 흐름 막지 않음)
+    try {
+      const driverName = afterData.assignedDriverName || "기사";
+      const dep = afterData.departure_set || afterData.departure || "";
+      const dest = afterData.destination_set || afterData.destination || "";
+      const fareNum = Number(afterData.fare_set ?? afterData.fare ?? 0);
+      const route = (dep && dest)
+        ? ` (${dep} → ${dest}${fareNum > 0 ? `, ${fareNum.toLocaleString()}원` : ""})`
+        : "";
+      let sysText = "";
+      switch (afterData.status) {
+        case "ASSIGNED": sysText = `${driverName} 배차됨`; break;
+        case "ACCEPTED": sysText = `${driverName} 수락`; break;
+        case "IN_PROGRESS": sysText = `운행 시작${route}`; break;
+        case "AWAITING_SETTLEMENT": sysText = "운행 완료 — 정산 대기"; break;
+        case "COMPLETED": sysText = `운행 완료${route}`; break;
+        case "CANCELED": sysText = "콜 취소 (관리자)"; break;
+        case "CANCELLED_BY_DRIVER": sysText = `${driverName} 운행 취소`; break;
+        case "CANCELLED_BY_CUSTOMER": sysText = "고객 취소"; break;
+        case "HOLD": sysText = "콜 보류"; break;
+        default: sysText = "";
+      }
+      if (sysText) {
+        await postSystemMessage(provinceId, cityId, officeId, sysText);
+      }
+    } catch (sysErr) {
+      logger.error(`[onCallStatusChanged:${callId}] 블랙박스 시스템 메시지 게시 실패`, sysErr);
+    }
+
     // ✅ 콜매니저 + 픽업기사에 상태 변경 알림 전송
     try {
       const managerTokensSnapshot = await admin.firestore()
