@@ -1086,8 +1086,6 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
     if (beforeData.status === "OPEN" && afterData.status === "CLAIMED") {
         logger.info(`[shared:${callId}] 공유 콜이 CLAIMED 되었습니다. 대상사무실로 복사 시작.`);
         logger.info(`[shared:${callId}] afterData.claimedDriverId=${afterData.claimedDriverId}`);
-        // 블랙박스 9-B: 출처 사무실 단톡방에 공유콜 수임(타 사무실) 무음 기록
-        await (0, chat_2.postSystemMessage)(afterData.sourceProvinceId, afterData.sourceCityId, afterData.sourceOfficeId, "공유콜 수임 — 타 사무실");
         logger.info(`[shared:${callId}] assignedDriverId=${afterData.claimedDriverId}`);
         // PR 1 — 결정 #11: claim 시점 wallet 잔액 ≥ 5,000 검증 (잔액 부족 사무실은 revert + 매니저 충전 안내)
         // 식당앱 콜(sourceRestaurantId 존재)에만 적용. 기존 사무실간 zero-sum 콜은 면제 (마이그레이션 윈도우 안전 + 의미 정합)
@@ -1137,6 +1135,8 @@ exports.onSharedCallClaimed = (0, firestore_1.onDocumentUpdated)({
                 return;
             }
         }
+        // 블랙박스 9-B: 공유콜 수임(타 사무실) 무음 기록 — wallet revert(잔액부족 식당앱콜, 1397 return) 통과 후라야 실제 수임만 기록
+        await (0, chat_2.postSystemMessage)(afterData.sourceProvinceId, afterData.sourceCityId, afterData.sourceOfficeId, "공유콜 수임 — 타 사무실");
         // 트랜잭션 외부에서 변수 선언
         let assignedDriverId = null;
         let assignedDriverName = null;
