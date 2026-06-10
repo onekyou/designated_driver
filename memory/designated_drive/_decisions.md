@@ -164,3 +164,22 @@
 - **③ 매니저 수동 [업무마감] 즉시 봉인 (§11.6 #1) — [quick-win·언제든]**: 지금은 새벽 cron(`autoFinalizeSettlementSessions`)만 `isFinalized` 봉인. 본인 5/30 "수동 마감 시 그 자리에서 봉인" 제기 → `clearAllTrips`에 `settlementSessions/{today}.metadata.isFinalized=true` merge set **1자리(소규모, deploy 불필요)**. 셋 중 유일하게 즉시 가능 → **트리거 = 본인 "수동마감 봉인 해줘" 한마디**(보급 재가동 없이 단독 착수).
 - ⚠️ 셋 다 "정산 단순화 본체"가 아니라 *그 위 강제/배포/봉인 보강*. 본체는 [확정] 완료 — 재구현 금지.
 - ⚠️ **전제 = 보급 재개 = 양평 다른 사무실/타지역 보급**. 메모리엔 5/19~5/27 "보급 정지"(쿠폰 우선)로 기록 → 본 [잠정]은 그 정지가 "정리되는대로" 풀린다는 원규씨 2026-06-10 방향에 의존. 정지가 길어지면 타이밍만 밀림(처분 framing은 유효).
+
+## 모든 PTT → 텍스트 블랙박스 (9-A 완성, 채팅 블랙박스 트랙)
+
+### [확정·2026-06-10/11 원규씨] PTT 발화를 텍스트로 = 모든 PTT 라이브 캡처, 온폰 STT, 부정확 허용
+- **전제(원규씨)**: 음성=정확 원본(이미 라이브로 들음), **텍스트=맥락파악·사후검색용 → 부정확 허용**. ∴ 비싼 서버 과잉, **비용0·PII 온폰**(음성이 구글로 안 감=거인 회피 정합)이 정답.
+- **★ 전제 정정(누락·오염 검토에서 발견)**: PTT는 현재 **라이브(Agora·transient)라 기록을 안 남김** — 콜드 음성메모 경로는 `PTTManager.kt`의 `recordPending`/`onColdVoiceMemo`가 **"도달 불가(보존)" = dormant**(2026-06-03 "포그라운드 항상 라이브" 재설계). 채팅 ▶ 음성들 = **legacy**. → **"음성 메모만 전사" [폐기]**(죽은 경로) → **모든 PTT 라이브 캡처**로 전환(원규씨 선택).
+- 범위 = 모든 PTT(라이브 warm 포함). 음성 첨부는 선택, **텍스트가 목적**. 송신앱만 캡처=**call_manager**(+pickup). driver=수신·렌더만(PTT 송신無).
+
+### [확정·2026-06-11 스파이크 실증] 캡처 = Agora `startAudioRecording(MIC)` → WAV (프레임 옵저버보다 단순)
+- **Step 1 스파이크 성공(S21+, `265dc016`)**: `fireReady`(mic live)서 `startAudioRecording(AudioRecordingConfiguration{fileRecordOption=AUDIO_FILE_RECORDING_MIC(1), 16kHz})` → cache WAV, `stopTransmit`서 정지. **전송 비파괴**(PTT 정상 WARM 전환). 실발화 "수연이 나와 가지고 군청 앞에 있는 그 저기 집…" faster-whisper **정확 전사** → 라이브PTT→텍스트 체인 성립.
+- ⚠️ **MIXED(3) 금지**: 비프·플레이백 섞여 STT 횡설수설("둘 다운아"). **MIC(1)=마이크 원본**이라야 깨끗.
+- API 사실: `io.agora.rtc2.internal.AudioRecordingConfiguration`(no-arg+필드 `filePath/sampleRate/codec/fileRecordOption/quality/recordingChannel`), `Constants.AUDIO_FILE_RECORDING_MIC=1`. SDK=`voice-sdk:4.5.2`(classes.jar 빈 wrapper, 실클래스=`voice-rtc-basic` `agora-rtc-sdk.jar`). `registerAudioFrameObserver`/`setRecordingAudioFrameParameters`도 존재(라이브 STT 시 대안).
+- **★ 설계 간소화**: 플랜의 "프레임 옵저버"보다 `startAudioRecording`이 **WAV 직접 출력** → 파일 기반 STT에 그대로 투입. 캡처 방식 이걸로 확정.
+
+### [잠정·미착수] Step 2/3 (다음 세션)
+- **Step 2 (송신앱 배선)**: 캡처 WAV → **온폰 전사**(엔진 결정 필요: ① whisper.cpp ggml 온폰=PII완전·기기독립·검증됨[6/9]·통합 무거움 NDK/모델 / ② Android on-device recognizer=가벼움·기기 모델 의존·클라우드폴백 시 PII위반 / ③ 서버 faster-whisper 폴백 `stt.ts` minInstances=0) → **무음 PTT-텍스트 채팅 메시지**(9-B `type` 무음 인프라 재사용).
+- **Step 3 (전 앱 렌더)**: `ChatScreen.kt`에 PTT-텍스트 메시지(발신자+텍스트, 일반 말풍선·무음).
+- ⚠️ **현재 스파이크 코드가 S21+에서 매 PTT마다 WAV를 cache에 기록(미사용)** → Step 2서 소비·삭제하거나, 미진행 시 무한 누적(무해하나 정리 필요).
+- 플랜: `~/.claude/plans/abundant-wondering-minsky.md`(모든 PTT 라이브 캡처 버전).

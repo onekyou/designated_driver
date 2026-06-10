@@ -123,13 +123,19 @@
 - **정산 단순화 실태 점검(코드 실측) + 잔여=보급 준비**: "P5~P8" 진입 → 밤5 "미구현"은 **오인** 확정. 단순화 본체(2상태·carryOver/실납입/외상 폐기·영업일 10시) 이미 master+브랜치 적용됨(재구현 금지). 진짜 잔여 3건 = P7 EnforcementGate(가드 4종)·deploy 유보·수동마감 봉인 → **보급 재개 준비 작업**(파킹 아님). ⚠️앞서 "혼자라 게이트 의미없음"·"미용/식당 트리거"·"우선순위 낮음 파킹"으로 처분했다가 **원규씨 지적으로 정정**: 1사무실도 기사 여럿이라 게이트 유효 + 미용/식당은 별 모듈(통화예약) 무관 + "단순화+PTT+보급 재개=적극 사용 경로"(원규씨 "정리되는대로 다시 보급"). 공통 트리거=**보급 재개 임박(현 정리 마무리)**. ③수동마감=quick-win(본인 한마디면 언제든). (밤5 정산 줄·결정대장 "정산 단순화"·`ptt_section3 §11.7` 정정.)
 - 상세: 결정대장 `designated_drive/_decisions.md`("PTT 간단모드" + [열림] 볼륨 + "정산 단순화"). plan `~/.claude/plans/elegant-cooking-sutherland.md`.
 
-## 6/10 (오후) ★ 폴더 규율 박음 + 블랙박스 9-B [확정]·조사·플랜 (구현 미착수)
+## 6/10~11 ★★ 폴더 규율 + 블랙박스 9-B 구현·배포·검증·버그픽스 완료 + PTT→텍스트 스파이크 성공
 - **🟥 폴더 작업 규율 박음**(원규씨 명시): **이 폴더(designated_driver) 활성 작업 = 대리운전(PTT·정산·콜 운영) 전용.** 본류(통화예약 미용실)는 **다른 폴더(coupon_app)에서 진행 중**. "오늘 할일?"에 미용실/본류 끌어오지 말 것. → CLAUDE.md 궁극방향 L4 + 이 MEMORY.md 상단 + `feedback_folder_scope_before_proposing_2026-06-10`(① 폴더필터 ② 선결필터 ③ 우선순위=원규씨 종결권, 클코 임의강등 월권) 3중 박음. 계기 = 클코가 designated_driver 세션에서 미용실을 "오늘 할일"로 끌어온 오류 + 블랙박스를 "nice-to-have"로 강등한 월권 → 둘 다 정정.
 - **★ 채팅 블랙박스 9-B = [확정·반드시 해야 함]**(원규씨 종결, 결정대장 도장): 시스템 이벤트(콜 들어옴→배차→수락→시작→완료·취소·예약/공유·기사 출퇴근·정산) → 채팅에 `type:"system"` **무음 자동 게시**(블랙박스=평소 안 봄, 분쟁·놓침 시만). 설계원본 = [[ptt_operation_scenario]] §9-B + SSOT `docs/chat-shared-spec.md` §13.
 - **조사 완료(Explore 2)·"한 줄" 정정**: `type` 필드가 전 계층 부재 → 5/25 "트리거에 한 줄" 오해, 실제=type 필드 full-stack 배선(functions write+무음 FCM / 클라 3앱 LocalChatMessage·ChatRepository·ChatScreen·SystemMessageBubble). 트리거 5종 보유(`onCallStatusChanged` 등). 상세=결정대장 "채팅 블랙박스 9-B" 항목.
 - **플랜 승인**: `~/.claude/plans/abundant-wondering-minsky.md`(Commit 3단: E2E 슬라이스→이벤트 확장→가독성 UI).
-- **✅ Commit 1 완료·배포·E2E검증(`67a3c779`)**: 콜 상태 전이(배차/수락/시작/완료/취소) 무음 시스템 메시지. functions(`chat.ts` type+`postSystemMessage`+FCM `chatType` / `index.ts onCallStatusChanged` 게시)+3앱(Room type 컬럼·마이그레이션 v9→10/v3→4/v4→5·ChatRepository·`SystemMessageBubble`·FCM 무음). 배포=`onChatMessageCreated`·`onCallStatusChanged` production. **검증**: 양평 채팅에 test 시스템메시지 write→S21+·ZFlip4 둘다 무음 INSERT(헛알림0)+Room INSERT 후 삭제, 마이그레이션 무크래시. ⚠️실콜 트리거 미실측(가짜콜 회피, 다음 실콜에 발화).
-- **⛳ 남은(다음 세션)**: Commit 2(기사상태·예약/공유·정산 트리거 + firestore.rules 스푸핑 차단) · Commit 3(가독성 UI 필터/collapse + SSOT 갱신). S22 미연결.
+- **✅ 9-B Commit 1 구현·배포·검증(`67a3c779`·`f6b777f8`)**: 콜 상태 전이(배차/수락/시작/완료/취소) 무음 시스템 메시지. functions(`chat.ts` type+`postSystemMessage`+FCM `chatType` / `onCallStatusChanged` 게시)+3앱(Room type 컬럼·마이그레이션 v9→10/v3→4/v4→5·ChatRepository·`SystemMessageBubble`·FCM 무음). production 배포(`onChatMessageCreated`·`onCallStatusChanged`)+S21+/ZFlip4 install. **검증=실콜로 닫힘**: 22:40 실제 양평 콜 흐름에 "1004 배차됨"·"1004 수락" 무음 INSERT(헛알림0) 로그 확인 → 실콜 트리거까지 실증.
+- **✅ 9-B 렌더 버그 발견·수정(`561b7091`)**: `SystemMessageBubble` 글자색=`onSurfaceVariant`(다크테마=밝은색)라 밝은회색 버블서 **글자 안 보임**("정보 없음"의 정체, 원규씨 발견). `Color(0xFF555555)` 고정으로 3앱 수정, S21+ 화면 확인. (픽업은 미설치라 다음 install 시 적용.)
+- **★ PTT→텍스트(9-A 완성) 트랙 — 스파이크 성공(`265dc016`)**: 원규씨 "PTT를 텍스트로". **전제 정정(누락·오염 검토)**: PTT는 라이브(transient)라 기록 안 남김(콜드 메모 dormant "도달불가"), ▶는 legacy → "음성메모만" 폐기 → **모든 PTT 라이브 캡처**로 전환. **Step1 스파이크 실증**: Agora `startAudioRecording(MIC)`로 라이브 발화 WAV 캡처(전송 비파괴) → faster-whisper 정확 전사("수연이 나와 가지고 군청 앞에…"). ⚠️MIXED(3)=비프섞여 횡설수설, MIC(1)이라야 깨끗. **설계 간소화**: 프레임옵저버보다 startAudioRecording이 WAV 직접 출력. 상세=결정대장 "모든 PTT→텍스트" + 플랜 `~/.claude/plans/abundant-wondering-minsky.md`.
+- **⛳ 남은(다음 세션)**:
+  - **9-B**: Commit 2(기사상태·예약/공유·정산 트리거 + firestore.rules 스푸핑 차단) · Commit 3(가독성 UI 필터/collapse + SSOT 갱신). S22 미연결(연결 시 install).
+  - **PTT→텍스트 Step 2/3**: 캡처 WAV→온폰 전사(엔진 결정: whisper.cpp 온폰 vs 서버폴백)→무음 PTT-텍스트 메시지(9-B 재사용)→렌더. ⚠️스파이크 코드가 S21+서 매 PTT마다 WAV cache 기록(미사용·누적, Step2서 소비·삭제).
+- **이번 세션 전체 미푸시** — `feature/reservation-engine-poc`에 로컬 커밋 다수(`aa0dfe13`~`265dc016`). push는 다음 세션 or 원규씨 지시 시.
+- **클코 학습**: `feedback_folder_scope_before_proposing_2026-06-10`(폴더·우선순위 월권) + 죽은 경로 위 빌드 금지(누락·오염 검토가 잡음).
 
 ## 5/4 산재 자료 (검증 후 master 갱신 검토)
 - `memory/inbox/2026-05-04/` — 포인트시스템 설계 + 현장인사이트 (방구석 여포 → 능동 영업 패러다임 전환)
