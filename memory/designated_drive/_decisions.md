@@ -93,6 +93,14 @@
 - 본체 시나리오: 통화 중 매니저 무전 1마디 → ① 기사 음성 수신 ② 빈 콜카드 자동생성+음성첨부 → 기사 자율입력 → 매니저 문제만 검토. 매니저 수기 14필드→0.
 - 갭(2026-06-09 밤4 갱신): ~~★발화↔콜 음성명령/빈카드 자동생성~~ → **[폐기·과설계] 아래 블록 참조** + screen-off 송신 + (콜드 단축 ✅완료 `b66d0fdf`) + 정산 단순화 P5~P8 + 블랙박스 9-B(콜상태→채팅 자동기록).
 
+### [확정·반드시 해야 함·2026-06-10 원규씨 명시] 채팅 블랙박스 9-B = 시스템 이벤트 자동 채팅 게시
+- **결정**: 채팅 블랙박스 9-B(배차·기사상태·콜 상태 전이 → 채팅에 `type:"system"` 자동 게시)는 **반드시 해야 하는 작업**. 원규씨 종결 — "블랙박스는 (클코가) 판정하는 게 아니야, 반드시 해야 하는 거야." ⚠️ 클코가 이를 "인지 보험이라 nice-to-have"로 강등한 판정 **기각**(우선순위 판정 = 원규씨 종결권, [[feedback-folder-scope-before-proposing-2026-06-10]] ③).
+- **상태**: 9-A(음성 PTT 발화 → 채팅 자동기록+기사 자동재생) = ✅완성. **9-B(시스템 이벤트) = 미완 = 이 작업.**
+- **차별화 근거(메모리)**: "외부 PTT 앱이 못 하는 자리 — 콜마당 자체 인프라라서 가능"([[ptt-operation-scenario]] 시나리오 9-B). 양방향 인지 보험 + 사후 추적.
+- **설계 원본(스펙 이미 확정)**: [[ptt-operation-scenario]] §9-B + SSOT `docs/chat-shared-spec.md` §13("시스템 메시지 V2" 예고). 대상=콜 전단계(들어옴→배차→수락→시작→완료)+취소+예약/공유+기사 출퇴근+정산 **전부**(원규씨 "맞아" 확인, 트리밍 X). 알림=Data Push **무음**(Room INSERT만, 소리·배너 0 — 평소 안 보고 분쟁·놓침 시만 봄). UI=중앙 회색 작은글씨+필터토글+collapse.
+- **★조사 완료(2026-06-10, Explore 2)·"한 줄" 오해 정정**: ① 채팅 저장=`chatRoom/main/messages` ② **`type` 필드가 전 계층 부재**(Firestore·FCM·Room·렌더) → 5/25 "한 줄"은 채팅 구현 전 가정, 실제=type 필드 full-stack 배선 ③ functions는 채팅 직접 write 안 함(클라가 씀)→시스템 메시지는 functions 신규 write+무음 FCM ④ 트리거 5종 보유(`onCallStatusChanged` index.ts:2109·`oncallassigned`:522·`onCallCancelledByDriver`:3292·`onDriverStatusChange`:4841·`oncallreserved`:2029) ⑤ 클라 3앱 채팅 구조 동일(앱당 ~3파일: LocalChatMessage+ChatRepository+ChatScreen, 픽업은 audio 미지원).
+- **플랜 작성됨(승인)**: `~/.claude/plans/abundant-wondering-minsky.md` — Commit 3단(E2E 슬라이스→이벤트 확장→가독성 UI). **⛳미착수**(구현은 다음 세션). ⚠️게이트=functions deploy 유보 해제(정산 잔여 ②와 묶음 후보).
+
 ### [확정·2026-06-09·원규씨 명시] 화면오프 발화 입력 = 전역후크(Accessibility 볼륨키 캡처) 배제
 - 화면 꺼진 채 볼륨키 전역 캡처(Accessibility)는 **안 씀**(삼성 절전 재허용 마찰 = 행동0 적).
 - 통화없는 화면오프 능동발화의 입력 수단은 미결(블루투스 등 후속). 주력 = 통화-trigger prewarm(아래).

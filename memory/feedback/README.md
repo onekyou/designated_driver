@@ -16,6 +16,7 @@
 | `feedback_user_intent_first.md` | 사용자 명시 의도를 추측 우회로 대체 금지 — 데이터 출처 미확보 시 그 사실 보고 |
 | `feedback_listener_vs_fcm.md` | 신규 기능 설계 시 리스너 vs FCM+로컬 트리거 자동 비교 — 기본값은 FCM 방식 (비용 최적화) |
 | `feedback_self_monitoring_limit.md` | 코드·기능·변수를 트랙/시스템/원인에 귀속하거나 line·컴파일 상태를 사실 보고하기 전 코드/데이터/diff 1건 검증 — "추정" 떠오르는 순간이 트리거, 본인 짚음 없이 자발 (2026-05-29 승격, #7 근본 줄기) |
+| `feedback_folder_scope_before_proposing_2026-06-10.md` | "다음 할일" 제시 전 2필터 강제 — ① 폴더(실행 자리가 현재 폴더인가, 다른 폴더면 분리 명시) ② 선결(GO바 미충족이면 "오늘" 제시 금지). 현저성(최근 강조)≠실행가능성 (2026-06-10 미용실 폴더혼동) |
 
 > ⚠️ 위 표는 핵심 일부만. 폴더에는 그 외에도 `feedback_app_naming` / `feedback_no_guess_gui_fix` / `feedback_no_revelation_projection` / `feedback_park_wansoo_evaluation` / `feedback_scope_exact` / `feedback_settlement_definitive_first` / `feedback_simplify_first_cleanup_later` / `feedback_user_command_overrides_system_rule` / `session_start_role_first` 등 다수 존재. 표 전수 갱신은 별도.
 

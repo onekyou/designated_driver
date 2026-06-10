@@ -8,6 +8,8 @@
 
 > ★ **결정은 먼저 결정 대장 확인**: `memory/_decisions.md`(전역) + `memory/<도메인>/_decisions.md`. `[확정]`은 변경시 입증 필요 — 서사에 묻힌 결정을 재해석/뒤집기 금지. (SessionStart hook이 자동주입하나, hook 없는 환경 대비 포인터.) 정책 = CLAUDE.md §결정 기록 정책.
 
+> 🟥 **폴더 작업 규율 (2026-06-10 원규씨 명시·반드시)**: **이 폴더(designated_driver) 활성 작업 = 대리운전(PTT·정산·콜 운영) 전용.** 본류(통화예약·미용·식당)는 **다른 폴더(coupon_app)에서 진행 중**. "오늘 할일?"에 미용실/본류를 끌어오지 말 것 — 여기 제시 후보 = 대리운전 항목만. 통화예약 엔진 자산은 부품창고로 보존만. (CLAUDE.md 궁극방향 L4 + `feedback_folder_scope_before_proposing_2026-06-10`.)
+
 ## 한 줄 요약
 콜마당 = 양평 동네 생활 OS. 대리는 첫 사용 케이스. 식당 = 4중 노드 (호출/포인트/거점/쿠폰).
 
@@ -120,6 +122,12 @@
 - **테스트 함정 기록**: ① PTT 앱은 **폰당 1개**(한 폰에 콜매니저+픽업+driver 동시=같은 무전망 충돌·오버톤 섞임) ② 송수신은 **같은 office 채널**(`gyeonggi_<officeId>_ptt`) 로그인 필수.
 - **정산 단순화 실태 점검(코드 실측) + 잔여=보급 준비**: "P5~P8" 진입 → 밤5 "미구현"은 **오인** 확정. 단순화 본체(2상태·carryOver/실납입/외상 폐기·영업일 10시) 이미 master+브랜치 적용됨(재구현 금지). 진짜 잔여 3건 = P7 EnforcementGate(가드 4종)·deploy 유보·수동마감 봉인 → **보급 재개 준비 작업**(파킹 아님). ⚠️앞서 "혼자라 게이트 의미없음"·"미용/식당 트리거"·"우선순위 낮음 파킹"으로 처분했다가 **원규씨 지적으로 정정**: 1사무실도 기사 여럿이라 게이트 유효 + 미용/식당은 별 모듈(통화예약) 무관 + "단순화+PTT+보급 재개=적극 사용 경로"(원규씨 "정리되는대로 다시 보급"). 공통 트리거=**보급 재개 임박(현 정리 마무리)**. ③수동마감=quick-win(본인 한마디면 언제든). (밤5 정산 줄·결정대장 "정산 단순화"·`ptt_section3 §11.7` 정정.)
 - 상세: 결정대장 `designated_drive/_decisions.md`("PTT 간단모드" + [열림] 볼륨 + "정산 단순화"). plan `~/.claude/plans/elegant-cooking-sutherland.md`.
+
+## 6/10 (오후) ★ 폴더 규율 박음 + 블랙박스 9-B [확정]·조사·플랜 (구현 미착수)
+- **🟥 폴더 작업 규율 박음**(원규씨 명시): **이 폴더(designated_driver) 활성 작업 = 대리운전(PTT·정산·콜 운영) 전용.** 본류(통화예약 미용실)는 **다른 폴더(coupon_app)에서 진행 중**. "오늘 할일?"에 미용실/본류 끌어오지 말 것. → CLAUDE.md 궁극방향 L4 + 이 MEMORY.md 상단 + `feedback_folder_scope_before_proposing_2026-06-10`(① 폴더필터 ② 선결필터 ③ 우선순위=원규씨 종결권, 클코 임의강등 월권) 3중 박음. 계기 = 클코가 designated_driver 세션에서 미용실을 "오늘 할일"로 끌어온 오류 + 블랙박스를 "nice-to-have"로 강등한 월권 → 둘 다 정정.
+- **★ 채팅 블랙박스 9-B = [확정·반드시 해야 함]**(원규씨 종결, 결정대장 도장): 시스템 이벤트(콜 들어옴→배차→수락→시작→완료·취소·예약/공유·기사 출퇴근·정산) → 채팅에 `type:"system"` **무음 자동 게시**(블랙박스=평소 안 봄, 분쟁·놓침 시만). 설계원본 = [[ptt_operation_scenario]] §9-B + SSOT `docs/chat-shared-spec.md` §13.
+- **조사 완료(Explore 2)·"한 줄" 정정**: `type` 필드가 전 계층 부재 → 5/25 "트리거에 한 줄" 오해, 실제=type 필드 full-stack 배선(functions write+무음 FCM / 클라 3앱 LocalChatMessage·ChatRepository·ChatScreen·SystemMessageBubble). 트리거 5종 보유(`onCallStatusChanged` 등). 상세=결정대장 "채팅 블랙박스 9-B" 항목.
+- **플랜 작성·승인**: `~/.claude/plans/abundant-wondering-minsky.md`(Commit 3단: E2E 슬라이스→이벤트 확장→가독성 UI). **⛳미착수 — 구현은 다음 세션.** 게이트=functions deploy 유보 해제.
 
 ## 5/4 산재 자료 (검증 후 master 갱신 검토)
 - `memory/inbox/2026-05-04/` — 포인트시스템 설계 + 현장인사이트 (방구석 여포 → 능동 영업 패러다임 전환)
