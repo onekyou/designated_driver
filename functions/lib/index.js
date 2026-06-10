@@ -44,8 +44,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.archiveOldCalls = exports.scheduledDataCleanup = exports.onCallDetectorCrash = exports.onCustomerCountChange = exports.onDriverCountChange = exports.onNewCustomerRegistered = exports.onCallCancelledByDriver = exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.oncallreserved = exports.notifyCustomerOnComplete = exports.notifyCustomerOnPhoneCall = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.notifyCustomerOnOfficeClosed = exports.onSharedCallCreated = exports.sendNewCallNotification = exports.oncallassigned = exports.handleFailedNotifications = exports.retryPendingNotifications = exports.acknowledgeNotification = exports.recoverCustomerAccount = exports.checkPhoneNumberDuplicate = exports.migrateExistingOfficesWallet = exports.sendPttPreWake = exports.sendPttWake = exports.generateAgoraToken = exports.processWithdrawal = exports.processDeposit = exports.submitWithdrawalRequest = exports.notifyRestaurantOnNoResponse = exports.createSharedCallFromRestaurant = exports.redeemRestaurantInviteCode = exports.generateRestaurantInviteCode = exports.onChatSyncAdminRemoval = exports.onChatSyncPickupDriver = exports.onChatSyncDesignatedDriver = exports.backfillChatMembers = exports.scheduledChatMessageCleanup = exports.onChatMessageCreated = exports.aggregateMonthlyStats = exports.checkSingleCallAssignedTimeout = void 0;
-exports.homepageGate = exports.getApkDownloadUrl = exports.rejectOfficeApplication = exports.registerOwner = exports.redeemDownloadToken = exports.approveOfficeApplication = exports.submitOfficeApplication = exports.onDriverSettlementSubmitted = exports.sendDriverNotification = exports.finalizeSettlementAndNotifyDrivers = exports.notifyDriverCancellation = exports.notifyDriverAssignment = exports.manualCheckSettlementDiscrepancy = exports.autoFinalizeSettlements = exports.onCallCompletedUpdateSettlement = exports.onDriverStatusChange = exports.getOfficeReport = exports.searchArchivedCalls = exports.getArchivedStats = void 0;
+exports.scheduledDataCleanup = exports.onCallDetectorCrash = exports.onCustomerCountChange = exports.onDriverCountChange = exports.onNewCustomerRegistered = exports.onCallCancelledByDriver = exports.claimToken = exports.matchByToken = exports.saveManualAttribution = exports.matchAttribution = exports.testFcmMessage = exports.migratePickupDrivers = exports.onSharedCallCompleted = exports.onSharedCallStatusSync = exports.onDriverSignupRequest = exports.onCallStatusChanged = exports.oncallreserved = exports.notifyCustomerOnComplete = exports.notifyCustomerOnPhoneCall = exports.onSharedCallCancelledByDriver = exports.onSharedCallClaimed = exports.notifyCustomerOnOfficeClosed = exports.onSharedCallCreated = exports.sendNewCallNotification = exports.oncallassigned = exports.handleFailedNotifications = exports.retryPendingNotifications = exports.acknowledgeNotification = exports.recoverCustomerAccount = exports.checkPhoneNumberDuplicate = exports.migrateExistingOfficesWallet = exports.parseReservation = exports.sendPttPreWake = exports.sendPttWake = exports.generateAgoraToken = exports.processWithdrawal = exports.processDeposit = exports.submitWithdrawalRequest = exports.notifyRestaurantOnNoResponse = exports.createSharedCallFromRestaurant = exports.redeemRestaurantInviteCode = exports.generateRestaurantInviteCode = exports.onChatSyncAdminRemoval = exports.onChatSyncPickupDriver = exports.onChatSyncDesignatedDriver = exports.backfillChatMembers = exports.scheduledChatMessageCleanup = exports.onChatMessageCreated = exports.aggregateMonthlyStats = exports.checkSingleCallAssignedTimeout = void 0;
+exports.homepageGate = exports.getApkDownloadUrl = exports.rejectOfficeApplication = exports.registerOwner = exports.redeemDownloadToken = exports.approveOfficeApplication = exports.submitOfficeApplication = exports.onDriverSettlementSubmitted = exports.sendDriverNotification = exports.finalizeSettlementAndNotifyDrivers = exports.notifyDriverCancellation = exports.notifyDriverAssignment = exports.manualCheckSettlementDiscrepancy = exports.autoFinalizeSettlements = exports.onCallCompletedUpdateSettlement = exports.onDriverStatusChange = exports.getOfficeReport = exports.searchArchivedCalls = exports.getArchivedStats = exports.archiveOldCalls = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -85,6 +85,8 @@ var ptt_1 = require("./handlers/ptt");
 Object.defineProperty(exports, "generateAgoraToken", { enumerable: true, get: function () { return ptt_1.generateAgoraToken; } });
 Object.defineProperty(exports, "sendPttWake", { enumerable: true, get: function () { return ptt_1.sendPttWake; } });
 Object.defineProperty(exports, "sendPttPreWake", { enumerable: true, get: function () { return ptt_1.sendPttPreWake; } });
+var reservation_1 = require("./handlers/reservation");
+Object.defineProperty(exports, "parseReservation", { enumerable: true, get: function () { return reservation_1.parseReservation; } });
 var migrateExistingOfficesWallet_1 = require("./scripts/migrateExistingOfficesWallet");
 Object.defineProperty(exports, "migrateExistingOfficesWallet", { enumerable: true, get: function () { return migrateExistingOfficesWallet_1.migrateExistingOfficesWallet; } });
 const chat_2 = require("./handlers/chat");
@@ -1739,7 +1741,7 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
     region: "asia-northeast3",
     document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/calls/{callId}",
 }, async (event) => {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     const { provinceId, cityId, officeId, callId } = event.params;
     if (!event.data) {
         logger.warn(`[onCallStatusChanged:${callId}] No event data.`);
@@ -1775,6 +1777,53 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
         return;
     }
     logger.info(`[onCallStatusChanged:${callId}] Status changed: ${beforeData.status} → ${afterData.status}`);
+    // 블랙박스 9-B: 콜 상태 전이를 단톡방에 무음 시스템 메시지로 자동 기록 (best-effort, 본 흐름 막지 않음)
+    try {
+        const driverName = afterData.assignedDriverName || "기사";
+        const dep = afterData.departure_set || afterData.departure || "";
+        const dest = afterData.destination_set || afterData.destination || "";
+        const fareNum = Number((_d = (_c = afterData.fare_set) !== null && _c !== void 0 ? _c : afterData.fare) !== null && _d !== void 0 ? _d : 0);
+        const route = (dep && dest)
+            ? ` (${dep} → ${dest}${fareNum > 0 ? `, ${fareNum.toLocaleString()}원` : ""})`
+            : "";
+        let sysText = "";
+        switch (afterData.status) {
+            case "ASSIGNED":
+                sysText = `${driverName} 배차됨`;
+                break;
+            case "ACCEPTED":
+                sysText = `${driverName} 수락`;
+                break;
+            case "IN_PROGRESS":
+                sysText = `운행 시작${route}`;
+                break;
+            case "AWAITING_SETTLEMENT":
+                sysText = "운행 완료 — 정산 대기";
+                break;
+            case "COMPLETED":
+                sysText = `운행 완료${route}`;
+                break;
+            case "CANCELED":
+                sysText = "콜 취소 (관리자)";
+                break;
+            case "CANCELLED_BY_DRIVER":
+                sysText = `${driverName} 운행 취소`;
+                break;
+            case "CANCELLED_BY_CUSTOMER":
+                sysText = "고객 취소";
+                break;
+            case "HOLD":
+                sysText = "콜 보류";
+                break;
+            default: sysText = "";
+        }
+        if (sysText) {
+            await (0, chat_2.postSystemMessage)(provinceId, cityId, officeId, sysText);
+        }
+    }
+    catch (sysErr) {
+        logger.error(`[onCallStatusChanged:${callId}] 블랙박스 시스템 메시지 게시 실패`, sysErr);
+    }
     // ✅ 콜매니저 + 픽업기사에 상태 변경 알림 전송
     try {
         const managerTokensSnapshot = await admin.firestore()
@@ -1822,7 +1871,7 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
                     departure: afterData.departure_set || afterData.departure || "",
                     destination: afterData.destination_set || afterData.destination || "",
                     waypoints: afterData.waypoints_set || "",
-                    fare: ((_d = (_c = afterData.fare_set) !== null && _c !== void 0 ? _c : afterData.fare) !== null && _d !== void 0 ? _d : 0).toString(),
+                    fare: ((_f = (_e = afterData.fare_set) !== null && _e !== void 0 ? _e : afterData.fare) !== null && _f !== void 0 ? _f : 0).toString(),
                     timestamp: String(tsMs),
                     provinceId: provinceId,
                     cityId: cityId,
@@ -1887,7 +1936,7 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
                 .collection("customerInfo")
                 .doc(afterData.phoneNumber)
                 .get();
-            const fcmToken = (_e = customerDoc.data()) === null || _e === void 0 ? void 0 : _e.fcmToken;
+            const fcmToken = (_g = customerDoc.data()) === null || _g === void 0 ? void 0 : _g.fcmToken;
             if (fcmToken) {
                 const statusMessages = {
                     "ACCEPTED": "기사가 콜을 수락했습니다. 곧 도착합니다.",
@@ -1940,7 +1989,7 @@ exports.onCallStatusChanged = (0, firestore_1.onDocumentUpdated)({
     try {
         const beforeStatus = beforeData.status;
         const afterStatus = afterData.status;
-        const assignedAt = (_f = beforeData.assignedTimestamp) !== null && _f !== void 0 ? _f : firestore_2.Timestamp.now();
+        const assignedAt = (_h = beforeData.assignedTimestamp) !== null && _h !== void 0 ? _h : firestore_2.Timestamp.now();
         if (beforeStatus === "ASSIGNED" && afterStatus === "ACCEPTED" && afterData.assignedDriverId) {
             await (0, acceptanceEvents_1.recordAcceptanceEvent)({
                 callId,

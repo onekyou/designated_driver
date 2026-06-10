@@ -128,3 +128,4 @@ firestore-export-json/
 
 # --- Local cache for external data extraction (Phase B Kiwi etc.) ---
 functions/scripts/.kiwi-cache/
+functions/lib/public/

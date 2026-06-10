@@ -49,6 +49,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.backfillChatMembers = exports.scheduledChatMessageCleanup = exports.onChatSyncAdminRemoval = exports.onChatSyncPickupDriver = exports.onChatSyncDesignatedDriver = exports.onChatMessageCreated = void 0;
 exports.addChatMember = addChatMember;
 exports.removeChatMember = removeChatMember;
+exports.postSystemMessage = postSystemMessage;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const https_1 = require("firebase-functions/v2/https");
@@ -97,6 +98,41 @@ async function removeChatMember(provinceId, cityId, officeId, userId) {
         logger.error("[removeChatMember] 실패", e);
     }
 }
+// ============================================================
+//  블랙박스 9-B: 시스템 이벤트 → 채팅 무음 자동 게시
+// ============================================================
+/**
+ * 시스템 이벤트(콜 상태 전이·배차·취소·기사 상태 등)를 사무실 단톡방에 무음 게시.
+ *  type:"system" 메시지를 Firestore에 add → onChatMessageCreated 가 자동 팬아웃
+ *  (클라는 chatType="system" 보고 Room INSERT만, 소리/알림/peek 부풀음 skip = 블랙박스).
+ *  best-effort: 실패해도 호출한 트리거(콜 상태 변경 등) 본 흐름을 막지 않는다.
+ */
+async function postSystemMessage(provinceId, cityId, officeId, text) {
+    if (!provinceId || !cityId || !officeId || !text) {
+        logger.warn("[postSystemMessage] 필수 매개변수 누락", { provinceId, cityId, officeId, hasText: !!text });
+        return;
+    }
+    try {
+        const messagesRef = admin.firestore()
+            .collection(`provinces/${provinceId}/cities/${cityId}/offices/${officeId}/chatRoom/main/messages`);
+        const docRef = messagesRef.doc();
+        await docRef.set({
+            id: docRef.id,
+            type: "system",
+            senderId: "SYSTEM",
+            senderName: "시스템",
+            senderRole: "SYSTEM",
+            text,
+            createdAt: firestore_2.FieldValue.serverTimestamp(),
+            clientCreatedAt: Date.now(),
+            status: "SENT",
+        });
+        logger.info(`[postSystemMessage] @ ${officeId}: ${text}`);
+    }
+    catch (e) {
+        logger.error("[postSystemMessage] 실패", e);
+    }
+}
 /**
  * 채팅방 메시지 생성 트리거.
  *  사무실 모든 멤버 토큰 수집 → 발신자 본인 제외 → FCM multicast 발송.
@@ -106,7 +142,7 @@ exports.onChatMessageCreated = (0, firestore_1.onDocumentCreated)({
     region: REGION,
     document: "provinces/{provinceId}/cities/{cityId}/offices/{officeId}/chatRoom/main/messages/{messageId}",
 }, async (event) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
     const { provinceId, cityId, officeId, messageId } = event.params;
     if (!event.data) {
         logger.warn(`[onChatMessageCreated:${messageId}] event.data 없음`);
@@ -178,6 +214,7 @@ exports.onChatMessageCreated = (0, firestore_1.onDocumentCreated)({
         const multicast = (0, fcmPayload_1.buildMulticastFcmPayload)({
             data: {
                 type: "NEW_CHAT_MESSAGE",
+                chatType: (_m = msg.type) !== null && _m !== void 0 ? _m : "", // "system" = 블랙박스 무음. 클라가 소리/알림 skip 판단
                 messageId,
                 senderId,
                 senderName,
@@ -185,11 +222,11 @@ exports.onChatMessageCreated = (0, firestore_1.onDocumentCreated)({
                 text,
                 imageUrl,
                 imagePath,
-                imageWidth: (_m = imageWidth === null || imageWidth === void 0 ? void 0 : imageWidth.toString()) !== null && _m !== void 0 ? _m : "",
-                imageHeight: (_o = imageHeight === null || imageHeight === void 0 ? void 0 : imageHeight.toString()) !== null && _o !== void 0 ? _o : "",
+                imageWidth: (_o = imageWidth === null || imageWidth === void 0 ? void 0 : imageWidth.toString()) !== null && _o !== void 0 ? _o : "",
+                imageHeight: (_p = imageHeight === null || imageHeight === void 0 ? void 0 : imageHeight.toString()) !== null && _p !== void 0 ? _p : "",
                 audioUrl,
                 audioPath,
-                audioDurationMs: (_p = audioDurationMs === null || audioDurationMs === void 0 ? void 0 : audioDurationMs.toString()) !== null && _p !== void 0 ? _p : "",
+                audioDurationMs: (_q = audioDurationMs === null || audioDurationMs === void 0 ? void 0 : audioDurationMs.toString()) !== null && _q !== void 0 ? _q : "",
                 audioAutoplay: audioAutoplay ? "true" : "",
                 createdAt: String(createdAtMs),
                 clientCreatedAt: String(clientCreatedAt),
