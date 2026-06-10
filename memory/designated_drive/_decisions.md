@@ -99,7 +99,9 @@
 - **차별화 근거(메모리)**: "외부 PTT 앱이 못 하는 자리 — 콜마당 자체 인프라라서 가능"([[ptt-operation-scenario]] 시나리오 9-B). 양방향 인지 보험 + 사후 추적.
 - **설계 원본(스펙 이미 확정)**: [[ptt-operation-scenario]] §9-B + SSOT `docs/chat-shared-spec.md` §13("시스템 메시지 V2" 예고). 대상=콜 전단계(들어옴→배차→수락→시작→완료)+취소+예약/공유+기사 출퇴근+정산 **전부**(원규씨 "맞아" 확인, 트리밍 X). 알림=Data Push **무음**(Room INSERT만, 소리·배너 0 — 평소 안 보고 분쟁·놓침 시만 봄). UI=중앙 회색 작은글씨+필터토글+collapse.
 - **★조사 완료(2026-06-10, Explore 2)·"한 줄" 오해 정정**: ① 채팅 저장=`chatRoom/main/messages` ② **`type` 필드가 전 계층 부재**(Firestore·FCM·Room·렌더) → 5/25 "한 줄"은 채팅 구현 전 가정, 실제=type 필드 full-stack 배선 ③ functions는 채팅 직접 write 안 함(클라가 씀)→시스템 메시지는 functions 신규 write+무음 FCM ④ 트리거 5종 보유(`onCallStatusChanged` index.ts:2109·`oncallassigned`:522·`onCallCancelledByDriver`:3292·`onDriverStatusChange`:4841·`oncallreserved`:2029) ⑤ 클라 3앱 채팅 구조 동일(앱당 ~3파일: LocalChatMessage+ChatRepository+ChatScreen, 픽업은 audio 미지원).
-- **플랜 작성됨(승인)**: `~/.claude/plans/abundant-wondering-minsky.md` — Commit 3단(E2E 슬라이스→이벤트 확장→가독성 UI). **⛳미착수**(구현은 다음 세션). ⚠️게이트=functions deploy 유보 해제(정산 잔여 ②와 묶음 후보).
+- **플랜(승인)**: `~/.claude/plans/abundant-wondering-minsky.md` — Commit 3단(E2E 슬라이스→이벤트 확장→가독성 UI).
+- **✅ Commit 1 완료·배포·E2E검증(2026-06-10, `67a3c779`)**: 콜 상태 전이(배차/수락/시작/완료/취소)를 무음 시스템 메시지로. **구현**: functions `chat.ts`(type 필드+`postSystemMessage` 헬퍼+FCM `chatType` 키)+`index.ts` `onCallStatusChanged` 게시 / 3앱 동일 패턴(Room type 컬럼+마이그레이션 call_mgr v9→10·driver v3→4·pickup v4→5 / ChatRepository read / ChatScreen `SystemMessageBubble` 중앙회색 / FCM 무음 분기). **배포**: `onChatMessageCreated`·`onCallStatusChanged` production. **검증**: 양평 사무실 채팅에 test 시스템 메시지 직접 write→S21+(call_mgr)·ZFlip4(driver) 둘 다 `무음 INSERT`(playChatSound 미호출=헛알림0)+Room INSERT 확인 후 삭제. Room 마이그레이션 무크래시. ⚠️ `onCallStatusChanged`→`postSystemMessage` *실콜 트리거*는 미실측(밤시간 LIVE라 가짜콜 회피)—다음 실콜에 발화, 코드는 read 검증.
+- **⛳ 남은 작업(다음 세션)**: Commit 2(기사 상태·예약/공유·정산 트리거 + `firestore.rules` 클라 type:"system" 스푸핑 차단) · Commit 3(가독성 UI=필터 토글·자동 collapse + SSOT `chat-shared-spec.md` 갱신). S22 미연결(연결 시 driver_app install 필요).
 
 ### [확정·2026-06-09·원규씨 명시] 화면오프 발화 입력 = 전역후크(Accessibility 볼륨키 캡처) 배제
 - 화면 꺼진 채 볼륨키 전역 캡처(Accessibility)는 **안 씀**(삼성 절전 재허용 마찰 = 행동0 적).

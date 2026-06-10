@@ -127,7 +127,9 @@
 - **🟥 폴더 작업 규율 박음**(원규씨 명시): **이 폴더(designated_driver) 활성 작업 = 대리운전(PTT·정산·콜 운영) 전용.** 본류(통화예약 미용실)는 **다른 폴더(coupon_app)에서 진행 중**. "오늘 할일?"에 미용실/본류 끌어오지 말 것. → CLAUDE.md 궁극방향 L4 + 이 MEMORY.md 상단 + `feedback_folder_scope_before_proposing_2026-06-10`(① 폴더필터 ② 선결필터 ③ 우선순위=원규씨 종결권, 클코 임의강등 월권) 3중 박음. 계기 = 클코가 designated_driver 세션에서 미용실을 "오늘 할일"로 끌어온 오류 + 블랙박스를 "nice-to-have"로 강등한 월권 → 둘 다 정정.
 - **★ 채팅 블랙박스 9-B = [확정·반드시 해야 함]**(원규씨 종결, 결정대장 도장): 시스템 이벤트(콜 들어옴→배차→수락→시작→완료·취소·예약/공유·기사 출퇴근·정산) → 채팅에 `type:"system"` **무음 자동 게시**(블랙박스=평소 안 봄, 분쟁·놓침 시만). 설계원본 = [[ptt_operation_scenario]] §9-B + SSOT `docs/chat-shared-spec.md` §13.
 - **조사 완료(Explore 2)·"한 줄" 정정**: `type` 필드가 전 계층 부재 → 5/25 "트리거에 한 줄" 오해, 실제=type 필드 full-stack 배선(functions write+무음 FCM / 클라 3앱 LocalChatMessage·ChatRepository·ChatScreen·SystemMessageBubble). 트리거 5종 보유(`onCallStatusChanged` 등). 상세=결정대장 "채팅 블랙박스 9-B" 항목.
-- **플랜 작성·승인**: `~/.claude/plans/abundant-wondering-minsky.md`(Commit 3단: E2E 슬라이스→이벤트 확장→가독성 UI). **⛳미착수 — 구현은 다음 세션.** 게이트=functions deploy 유보 해제.
+- **플랜 승인**: `~/.claude/plans/abundant-wondering-minsky.md`(Commit 3단: E2E 슬라이스→이벤트 확장→가독성 UI).
+- **✅ Commit 1 완료·배포·E2E검증(`67a3c779`)**: 콜 상태 전이(배차/수락/시작/완료/취소) 무음 시스템 메시지. functions(`chat.ts` type+`postSystemMessage`+FCM `chatType` / `index.ts onCallStatusChanged` 게시)+3앱(Room type 컬럼·마이그레이션 v9→10/v3→4/v4→5·ChatRepository·`SystemMessageBubble`·FCM 무음). 배포=`onChatMessageCreated`·`onCallStatusChanged` production. **검증**: 양평 채팅에 test 시스템메시지 write→S21+·ZFlip4 둘다 무음 INSERT(헛알림0)+Room INSERT 후 삭제, 마이그레이션 무크래시. ⚠️실콜 트리거 미실측(가짜콜 회피, 다음 실콜에 발화).
+- **⛳ 남은(다음 세션)**: Commit 2(기사상태·예약/공유·정산 트리거 + firestore.rules 스푸핑 차단) · Commit 3(가독성 UI 필터/collapse + SSOT 갱신). S22 미연결.
 
 ## 5/4 산재 자료 (검증 후 master 갱신 검토)
 - `memory/inbox/2026-05-04/` — 포인트시스템 설계 + 현장인사이트 (방구석 여포 → 능동 영업 패러다임 전환)
