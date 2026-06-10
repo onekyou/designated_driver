@@ -181,5 +181,5 @@
 ### [잠정·미착수] Step 2/3 (다음 세션)
 - **Step 2 (송신앱 배선)**: 캡처 WAV → **온폰 전사**(엔진 결정 필요: ① whisper.cpp ggml 온폰=PII완전·기기독립·검증됨[6/9]·통합 무거움 NDK/모델 / ② Android on-device recognizer=가벼움·기기 모델 의존·클라우드폴백 시 PII위반 / ③ 서버 faster-whisper 폴백 `stt.ts` minInstances=0) → **무음 PTT-텍스트 채팅 메시지**(9-B `type` 무음 인프라 재사용).
 - **Step 3 (전 앱 렌더)**: `ChatScreen.kt`에 PTT-텍스트 메시지(발신자+텍스트, 일반 말풍선·무음).
-- ⚠️ **현재 스파이크 코드가 S21+에서 매 PTT마다 WAV를 cache에 기록(미사용)** → Step 2서 소비·삭제하거나, 미진행 시 무한 누적(무해하나 정리 필요).
+- **스파이크 캡처 = default-OFF 게이트**(`PTTManager.sttSpikeEnabled=false`, `ba399de0`) — 검증 끝나 LIVE 기기에 실음성 WAV 안 쌓이게 OFF. **Step 2 착수 시 `true`로 켜고** 전사·메시지 배선. (S21+ 기존 cache WAV 삭제 완료.)
 - 플랜: `~/.claude/plans/abundant-wondering-minsky.md`(모든 PTT 라이브 캡처 버전).

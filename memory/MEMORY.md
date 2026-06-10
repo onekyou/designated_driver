@@ -133,7 +133,7 @@
 - **★ PTT→텍스트(9-A 완성) 트랙 — 스파이크 성공(`265dc016`)**: 원규씨 "PTT를 텍스트로". **전제 정정(누락·오염 검토)**: PTT는 라이브(transient)라 기록 안 남김(콜드 메모 dormant "도달불가"), ▶는 legacy → "음성메모만" 폐기 → **모든 PTT 라이브 캡처**로 전환. **Step1 스파이크 실증**: Agora `startAudioRecording(MIC)`로 라이브 발화 WAV 캡처(전송 비파괴) → faster-whisper 정확 전사("수연이 나와 가지고 군청 앞에…"). ⚠️MIXED(3)=비프섞여 횡설수설, MIC(1)이라야 깨끗. **설계 간소화**: 프레임옵저버보다 startAudioRecording이 WAV 직접 출력. 상세=결정대장 "모든 PTT→텍스트" + 플랜 `~/.claude/plans/abundant-wondering-minsky.md`.
 - **⛳ 남은(다음 세션)**:
   - **9-B**: Commit 2(기사상태·예약/공유·정산 트리거 + firestore.rules 스푸핑 차단) · Commit 3(가독성 UI 필터/collapse + SSOT 갱신). S22 미연결(연결 시 install).
-  - **PTT→텍스트 Step 2/3**: 캡처 WAV→온폰 전사(엔진 결정: whisper.cpp 온폰 vs 서버폴백)→무음 PTT-텍스트 메시지(9-B 재사용)→렌더. ⚠️스파이크 코드가 S21+서 매 PTT마다 WAV cache 기록(미사용·누적, Step2서 소비·삭제).
+  - **PTT→텍스트 Step 2/3**: 캡처 WAV→온폰 전사(엔진 결정: whisper.cpp 온폰 vs 서버폴백)→무음 PTT-텍스트 메시지(9-B 재사용)→렌더. **착수 시 `PTTManager.sttSpikeEnabled=true`로 켤 것**(현재 default-OFF=캡처 안 함, LIVE 기기 보호).
 - **이번 세션 전체 미푸시** — `feature/reservation-engine-poc`에 로컬 커밋 다수(`aa0dfe13`~`265dc016`). push는 다음 세션 or 원규씨 지시 시.
 - **클코 학습**: `feedback_folder_scope_before_proposing_2026-06-10`(폴더·우선순위 월권) + 죽은 경로 위 빌드 금지(누락·오염 검토가 잡음).
 
