@@ -345,7 +345,8 @@ data class DriverDailySettlement(
     val totalFare: Long = 0,               // 총 운행료
     val totalCredit: Long = 0,             // 총 외상
     val tripCount: Int = 0,                // 운행 횟수
-    val submittedAt: Timestamp? = null     // 기사 마감 시간
+    val submittedAt: Timestamp? = null,    // 기사 마감 시간
+    val confirmedAt: Timestamp? = null     // 매니저 정산확인 시간 (P7 게이트 #4 — 도장. 삭제는 영업마감만)
 ) {
     companion object {
         fun fromMap(map: Map<String, Any?>?): DriverDailySettlement {
@@ -358,7 +359,8 @@ data class DriverDailySettlement(
                 totalFare = (map["totalFare"] as? Long) ?: 0,
                 totalCredit = (map["totalCredit"] as? Long) ?: 0,
                 tripCount = (map["tripCount"] as? Long)?.toInt() ?: 0,
-                submittedAt = map["submittedAt"] as? Timestamp
+                submittedAt = map["submittedAt"] as? Timestamp,
+                confirmedAt = map["confirmedAt"] as? Timestamp
             )
         }
     }
@@ -371,7 +373,8 @@ data class DriverDailySettlement(
         "totalFare" to totalFare,
         "totalCredit" to totalCredit,
         "tripCount" to tripCount,
-        "submittedAt" to submittedAt
+        "submittedAt" to submittedAt,
+        "confirmedAt" to confirmedAt
     )
 }
 
@@ -386,4 +389,8 @@ data class DriverDailySettlementSummary(
     /** 업무마감(제출)했는지 — dailySettlement 문서 존재로 판정 */
     val hasSubmitted: Boolean
         get() = dailySettlement?.submittedAt != null
+
+    /** 매니저가 [정산확인] 도장 찍었는지 (P7 게이트 #4). 데이터는 영업마감까지 보존. */
+    val isConfirmed: Boolean
+        get() = dailySettlement?.confirmedAt != null
 }

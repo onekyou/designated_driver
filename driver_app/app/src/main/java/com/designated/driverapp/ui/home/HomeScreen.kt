@@ -18,6 +18,8 @@ import androidx.navigation.NavController
 import com.designated.driverapp.model.CallInfo
 import com.designated.driverapp.model.CallStatus
 import com.designated.driverapp.model.DriverStatus
+import com.designated.driverapp.enforcement.EnforcementGate
+import com.designated.driverapp.enforcement.LogoutBlockedDialog
 import com.designated.driverapp.ui.screens.home.InProgressScreen
 import com.designated.driverapp.ui.screens.home.NewCallPopup
 import com.designated.driverapp.ui.screens.home.TripPreparationScreen
@@ -64,6 +66,7 @@ fun HomeScreen(
     onCloseSheet: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val todaySettlement by viewModel.todaySettlement.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -73,6 +76,8 @@ fun HomeScreen(
     // 로그아웃 확인 다이얼로그 상태
     var showLogoutDialog by remember { mutableStateOf(false) }
     var unsavedTripCount by remember { mutableStateOf(0) }
+    // P7 게이트 #1/#2 — 미정산 상태에서 종료 차단 안내
+    var showLogoutBlocked by remember { mutableStateOf(false) }
 
     // 업무 마감 다이얼로그 상태
     var showSettlementFinalizedDialog by remember { mutableStateOf(false) }
@@ -165,11 +170,16 @@ fun HomeScreen(
                 ) {
                     IconButton(
                         onClick = {
-                            // 미저장 운행 내역 확인
-                            if (hasUnsavedTripHistory(context)) {
-                                unsavedTripCount = getUnsavedTripCount(context)
+                            // P7 게이트 #1/#2 — 미정산(완료 운행 있는데 업무마감 전)이면 종료 차단
+                            if (EnforcementGate.isDriverUnsettled(uiState.driverStatus, todaySettlement.tripCount)) {
+                                showLogoutBlocked = true
+                            } else {
+                                // 미저장 운행 내역 확인
+                                if (hasUnsavedTripHistory(context)) {
+                                    unsavedTripCount = getUnsavedTripCount(context)
+                                }
+                                showLogoutDialog = true
                             }
-                            showLogoutDialog = true
                         },
                         modifier = Modifier.size(48.dp)
                     ) {
@@ -397,6 +407,11 @@ fun HomeScreen(
 
         }
         } // Column
+    }
+
+    // P7 게이트 #1/#2 — 미정산 종료 차단 안내
+    if (showLogoutBlocked) {
+        LogoutBlockedDialog(onDismiss = { showLogoutBlocked = false })
     }
 
     // 로그아웃 확인 다이얼로그 (미저장 정산 데이터 있을 때)

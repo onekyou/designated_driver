@@ -167,7 +167,19 @@
 **★ 2026-06-10 정정**: 앞서 "정산 실사용 X → 우선순위 낮음·파킹"으로 처분했으나 **틀림**(원규씨 지적). ① "혼자 쓰니 강제 게이트 의미 없음"은 오류 — **1사무실도 기사 여럿**이라 게이트는 기사·매니저에 적용돼 유효. ② "미용/식당 정산 쓰면" 트리거는 카테고리 오류 — 미용/식당은 통화예약(coupon_app) **별 모듈, 대리 정산 무관**. ③ "실사용 X"는 destiny 아닌 출발점 — **단순화(완료)+PTT 간소화+테스트 사무실 보급 재개 = 적극 사용으로 가는 경로**(원규씨 "정리되는대로 다시 보급할 거야"). 안 쓰는 이유를 없애려 단순화한 건데 "안 쓰니 보류"는 자기모순.
 → **공통 트리거 = "정리되는대로 보급 재개"** 그 단계. **★ 2026-06-11 원규씨 지시: "보급 준비로 가야 해(디테일 다듬으며)" → 이 잔여 3건이 지금 착수 방향.** 잔여는 *파킹*이 아니라 *보급 준비 작업*:
 
-- **① P7 EnforcementGate (강제 게이트) — [보급 준비]**: `EnforcementGate/LogoutGuard/DailyCloseGate` 클래스 코드 0건(설계만 `settlement_redesign §9.3`). 행위 점검 = `logoutUserAndExitApp()`는 있으나 **미정산 콜 차단 가드 없음**. 4 게이트(미정산 시 logout/앱종료 차단 · 앱시작 어제마감 게이트 · 매니저 마감화면 강제 · 미확인 기사 모달) 전부 미신축. 기사 여럿이 쓰는 다사무실 운영을 **견고**하게 만드는 보강 → **보급 재개 준비의 일부.** 착수 시 별 모듈 `EnforcementGate.kt`(정산 읽기만, §3.4). 타이밍 = 보급 재개 임박(=현 정리 마무리) 시점 착수 후보.
+- **① P7 EnforcementGate (강제 게이트) — [구현 완료·기기 미검증·2026-06-11]**: 별 모듈 `enforcement/`로 4종 중 **3종 구현 + 1종 폐기**. 플랜 `~/.claude/plans/woolly-bouncing-hippo.md`. 정산 로직 불변(읽기 전용), 유일 신규 쓰기 = 매니저 confirm 1개.
+  - **#1/#2 LogoutGuard (driver)**: HomeScreen 로그아웃 버튼 가드 — 미정산(`tripCount>0 && status≠PENDING_CONFIRM`)이면 차단 안내. 퇴근하기(PENDING_CONFIRM) 정상 종료 보존. (HistorySettlement 로그아웃 다이얼로그=오프너 없는 죽은 코드라 가드 불요.)
+  - **#3 DailyCloseGate (driver)**: `DriverViewModel.needsDailyClose`(읽기 전용 — **이전 영업일 10시 경계 이전 미정산 잔존**만 true. 단순 tripCount>0이면 근무 중 오발동→운영 파괴라 교정) + AppNavigation `DailyCloseRedirect`로 정산화면 1회 강제.
+  - **#4 ManagerUnconfirmedModal (call_manager)**: 미확인 기사 닫기 불가 Dialog(기사별 [정산확인]/[개별 검토], [전체 확인] 없음). 모달 = `hasSubmitted && !isConfirmed`만. MainActivity 모달 오버레이(VM init이 login_prefs로 목록 자동 로드). **로그 검증(2026-06-12)**: 기사 1004 업무마감(PENDING_CONFIRM)→퇴근(OFFLINE) 후에도 매니저 `dailySettlements:1` 로드 = "확인 전 증발" 수정 실증.
+  - **★ confirm = 삭제 아니라 도장 (원규씨 지적으로 2차 수정)**: 1차 구현이 `confirmDriverDailySettlement`에서 dailySettlement **삭제** → [정산확인] 시 기사별 내역 증발(업무마감도 안 했는데). 원규씨 "정산확인하니 내역 사라지네" → 설계(§9.2 "도장이지 삭제 아님")로 교정 = `dailySettlement.confirmedAt` 도장만(중첩 필드 update) + **PENDING_CONFIRM일 때만 WAITING 해제**(퇴근 OFFLINE 기사 안 되살림). 모델에 `confirmedAt`+`isConfirmed`, 기사별 탭 `✅정산확인 완료` 표식. **실 삭제는 영업마감(clearDailySettlement)만**. 데이터 보존.
+  - **★ 부수 수정(원규씨 승인)**: 기사 `clearSettlement`(퇴근하기)가 `dailySettlement`을 조기 삭제 → 매니저 확인 전 증발(게이트 #4 토대 붕괴)하던 **잠재 결함 수정** = 퇴근하기에서 삭제 제거(삭제는 매니저 confirm/영업마감만). 원규씨 발견("콜매니저서 확인도 없이 사라지네").
+  - **요구 확정(원규씨)**: ① 미확인분은 다음 세션까지 남아야 + 로그인 시 확인 안 하면 업무 진행 0(닫기 불가 모달 = 의도대로) ② 데이터 삭제는 영업마감만.
+  - 빌드·assembleDebug 성공, driver→ZFlip4 / call_manager→S21+ install. **미커밋**. **남은 검증(다음)**: 새 사이클로 [정산확인]→기사별 내역+`✅확인` 보존, 영업마감 때만 삭제 확인(1004 이전분은 구버전 삭제코드로 이미 증발=테스트 흔적).
+
+### [폐기·2026-06-11·원규씨 결정·cron 대체 + 최소개입 + 단순화] P7 게이트 #5 ManagerCloseGate (10시 매니저 마감 강제 잠금)
+- **폐기 사유**: ① **auto-finalize cron(10:10)이 어제 세션 `isFinalized` 봉인을 서버에서 자동 처리** (`functions/.../handlers/settlement.ts` `autoFinalizeSettlementSessions` — *봉인만*, 기사 dailySettlement는 안 건드림 → 게이트 #4 무력화 안 함). ② 기사별 정산확인 강제는 **게이트 #4가 독립 담당**. ③ 원규씨: "매니저가 마감 습관적으로 건너뛰는 건 우리 책임 아님 + 최대한 개입 줄이고 로직 단순화." ④ 10시 이후 `clearAllTrips`가 *오늘 키* 봉인하는 날짜 불일치 데드락도 회피.
+- 소프트 리마인더(배너)도 **안 함**(그것도 개입). #5 코드 아예 안 지음(`ManagerCloseGate.kt`/call_manager `EnforcementGate.kt` 미생성).
+- 바꾸려면: cron이 못 미더운(서버 장애 빈발) 데이터 or 매니저 수동마감 housekeeping(Room 정리·office lastCleared)이 실제 운영 깨는 근거. ⚠️ housekeeping ②③은 매니저가 *평소처럼* 마감하면 됨 — 폐기는 "마감 행위"가 아니라 "10시 강제 타이밍"만 없앤 것.
 - **② functions deploy — ✅[완료·2026-06-11]**: `firebase deploy --only functions --force`(minInstances 과금=기존 PTT 콜드단축, 신규 증가 0). `calldetector-5d61e` LIVE 전 함수 정합 — 9-B 트리거 4종·정산(autoFinalizeSettlements·10시)·parseReservation 포함 "Deploy complete!". 서버를 현재 앱(정산 단순화 10시)과 정합시킴.
 - **③ 매니저 수동 [업무마감] 즉시 봉인 (§11.6 #1) — ✅[완료·2026-06-11·`472e16fa`]**: `clearAllTrips`(SettlementViewModel.kt:650 Firestore 쓰기 블록)에 `settlementSessions/{calculateWorkDate(closingTime)}.metadata.isFinalized=true` merge set 추가. 영업일 키=functions calculateWorkDate(10시)와 동일, merge라 기존 세션 보존. 빌드·S21+ install·push. ⚠️ 실 봉인 동작 E2E(업무마감→isFinalized 확인)는 정산 세션 필요라 자연 사용 시 확인.
 - ⚠️ 셋 다 "정산 단순화 본체"가 아니라 *그 위 강제/배포/봉인 보강*. 본체는 [확정] 완료 — 재구현 금지.

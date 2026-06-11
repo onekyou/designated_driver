@@ -107,6 +107,11 @@ class DriverViewModel @Inject constructor(
     private val _todaySettlement = MutableStateFlow(TodaySettlement())
     val todaySettlement: StateFlow<TodaySettlement> = _todaySettlement.asStateFlow()
 
+    // P7 게이트 #3 — 이전 영업일(오전 10시 경계 이전)의 미정산 운행이 남아 있는지 (읽기 전용)
+    // 근무 중 누적된 오늘 운행은 제외 → 어제 미마감 상태만 표면화. 정산 데이터 수정 없음.
+    private val _needsDailyClose = MutableStateFlow(false)
+    val needsDailyClose: StateFlow<Boolean> = _needsDailyClose.asStateFlow()
+
     // 운행내역 카드용 개별 콜 목록 (Firestore 기반)
     data class TripHistoryItem(
         val callId: String = "",
@@ -1691,6 +1696,23 @@ class DriverViewModel @Inject constructor(
 
             Log.d(TAG, "Today settlement calculated: fare=$totalFare, share=$driverShare, cash=$totalCashReceived, deposit=$realDeposit, trips=$tripCount, credit=$totalCredit, historyItems=${reNumberedItems.size}")
 
+            // P7 게이트 #3 — 이전 영업일 미마감 감지.
+            // 현재 영업일 시작(오전 10시 경계, submitDailySettlement L1513 동일 규칙) 이전에
+            // 완료됐는데 아직 정산(clear) 안 된 운행이 하나라도 있으면 = 어제 미마감.
+            // (오늘 근무 중 누적분은 workdayStart 이후라 제외 → 정상 근무를 막지 않음.)
+            val workdayStartCal = java.util.Calendar.getInstance().apply {
+                set(java.util.Calendar.HOUR_OF_DAY, 10)
+                set(java.util.Calendar.MINUTE, 0)
+                set(java.util.Calendar.SECOND, 0)
+                set(java.util.Calendar.MILLISECOND, 0)
+                if (System.currentTimeMillis() < timeInMillis) {
+                    add(java.util.Calendar.DAY_OF_MONTH, -1)
+                }
+            }
+            val workdayStartMillis = workdayStartCal.timeInMillis
+            _needsDailyClose.value = tripItems.any { it.timestamp < workdayStartMillis }
+            Log.d(TAG, "needsDailyClose=${_needsDailyClose.value} (workdayStart=$workdayStartMillis)")
+
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load today settlement", e)
         }
@@ -1738,11 +1760,13 @@ class DriverViewModel @Inject constructor(
                     .collection(Constants.COLLECTION_DRIVERS).document(driverId)
 
                 // settlementLastCleared 업데이트 + 기사 상태를 OFFLINE으로 변경
+                // ⚠️ P7: dailySettlement(기사 제출 요약)는 여기서 지우지 않는다 —
+                //   퇴근(귀가) 후에도 매니저가 콜매니저에서 [정산확인]할 수 있어야 하기 때문.
+                //   삭제는 매니저 측(확인 시 confirmDriverDailySettlement / 영업마감 clearDailySettlement)에서만.
                 driverRef.update(
                     mapOf(
                         "settlementLastCleared" to nowTimestamp,
-                        Constants.FIELD_STATUS to DriverStatus.OFFLINE.value,
-                        "dailySettlement" to com.google.firebase.firestore.FieldValue.delete()
+                        Constants.FIELD_STATUS to DriverStatus.OFFLINE.value
                     )
                 ).await()
 

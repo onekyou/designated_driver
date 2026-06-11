@@ -336,6 +336,18 @@
 - **작업 범위**: 5~7주 (단일 개발자 풀타임) — 본인 결정 후 진입
 - **다음 세션 진입 시**: ① 본인 plan 재검토 (내일) ② 본인 명시적 결정 후 Phase 1 추가 Explore (콜디텍터 자동 배차 / 콜매니저 알림 매핑 / 콜 카드 작성 흐름 / 권한 분리 / 정산 코드 자리) ③ Phase 2 Plan agent ④ 코드 구현 진입
 
+## 6/11~12 ★ P7 정산 강제 게이트(EnforcementGate) 구현 — 게이트 #1~4 + 부수수정, #5 폐기 (미커밋·기기검증 일부)
+- **보급 준비 1순위** P7 = 정산 미마감/미확인 운영 실수 차단. 별 모듈 `enforcement/`(정산 읽기 전용·SRP). 플랜 `~/.claude/plans/woolly-bouncing-hippo.md`. 설계원본 [[settlement_redesign_2026-05-27]] §4·5·9·10.
+- **#1/#2 LogoutGuard(driver)**: HomeScreen 로그아웃 버튼 — 미정산(`tripCount>0 && status≠PENDING_CONFIRM`)이면 차단. 퇴근하기(PENDING_CONFIRM) 종료 보존. (HistorySettlement 로그아웃=죽은코드라 불요.)
+- **#3 DailyCloseGate(driver)**: VM `needsDailyClose`=**이전 영업일(10시 경계 이전) 미정산 잔존**만 true(단순 tripCount>0이면 근무중 오발동→교정) + AppNavigation 정산화면 1회 강제. **로그검증 통과**(오늘 운행 trips=1→needsDailyClose=false).
+- **#4 ManagerUnconfirmedModal(call_manager)**: 미확인 기사 닫기 불가 Dialog(기사별 [정산확인]/[개별검토], [전체확인] 없음). 모달=`hasSubmitted && !isConfirmed`. **confirm=삭제 아니라 `dailySettlement.confirmedAt` 도장**(원규씨 "확인하니 내역 사라지네" 지적으로 1차 삭제구현 교정, 설계 §9.2 복귀) + PENDING_CONFIRM일 때만 WAITING 해제. 실삭제=영업마감만. 기사별 탭 `✅정산확인 완료` 표식.
+- **★ 부수수정**: 기사 `clearSettlement`(퇴근하기)의 `dailySettlement` **조기삭제 제거**(원규씨 "콜매니저서 확인도 없이 사라지네") → 퇴근 후에도 매니저 확인 가능. **로그검증**: 1004 업무마감→퇴근(OFFLINE) 후 매니저 `dailySettlements:1` 유지.
+- **#5 ManagerCloseGate(10시 마감잠금) = [폐기·원규씨]**: auto-finalize cron(10:10)이 `isFinalized` 서버봉인 자동처리(기사 dailySettlement 안 건드림→#4 무관) + #4가 확인강제 + "매니저 마감누락은 우리 책임 아님·최소개입·단순화"(원규씨) + 10시후 clearAllTrips 날짜불일치 데드락 회피. 소프트리마인더도 안 함.
+- **요구확정(원규씨)**: 미확인분 다음세션까지 남고 로그인시 확인 안 하면 업무진행0(닫기불가 모달=의도) / 데이터삭제는 영업마감만.
+- **상태**: 두 앱 빌드성공, driver→ZFlip4·call_manager→S21+ install. **미커밋**(`feature/reservation-engine-poc`).
+- **검증 실태(누락·오염 검토로 정밀화)**: ✅crash0(양앱) · ✅#3 *조건*(trips=1→needsDailyClose=false 오발동없음) · ✅퇴근 후 요약보존(dailySettlements:1) · ✅#4 모달 표시(원규씨 화면확인). **❌미검증**: #1/#2 로그아웃 *차단*(로그에 차단시도 없음) · #3 *리다이렉트*(이전영업일 시나리오 미발생) · #4 confirm *도장*(구버전 삭제코드로 눌러봐 새코드 미검증) · 영업마감 삭제.
+- **다음 최우선 검증**: 새 사이클로 ① #1/#2 미정산 로그아웃 차단 ② #4 [정산확인]→기사별 내역+`✅확인` 보존(삭제 안 됨) ③ 영업마감 때만 삭제. (1004 이전분은 구버전 삭제코드로 증발=흔적.) 상세=결정대장 [[_decisions]] "P7 EnforcementGate" + "#5 폐기".
+
 ## 6/1~6/2 ★ PTT 구현 완료 + 3단말 E2E 검증 → 양평 실사용 데이터 수집 단계 (코드 트랙 종료)
 - **상세**: [[ptt_implementation_2026-06-02]] + [[ptt_screenoff_send_2026-06-02]] (코드 3 commit + docs, branch manager-direct-drive push 완료)
 - ✅ **일방 브로드캐스트 완성** (매니저→일반기사): FCM wake + Agora RTC Trigger Join (RTM 폐기). `0bf9ebe4`(functions Agora토큰+sendPttWake+minInstances:1) / `20c02fc2`(call_manager 송신 hold-to-talk+2비프+발화배너) / `0fb15cd2`(driver_app 수신+종료오버톤).

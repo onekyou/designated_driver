@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import com.designated.callmanager.data.Constants
+import com.designated.callmanager.data.DriverStatus
 import com.designated.callmanager.data.SettlementData
 import com.designated.callmanager.data.SessionInfo
 import com.designated.callmanager.data.SettlementBackup
@@ -1280,6 +1281,59 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                 Log.d("SettlementViewModel", "DailySettlement cleared for driver $driverId")
             }.addOnFailureListener { e ->
                 Log.e("SettlementViewModel", "Failed to clear dailySettlement", e)
+            }
+        }
+    }
+
+    /**
+     * P7 게이트 #4 — 매니저가 기사 일일정산 [정산확인].
+     * - dailySettlement.confirmedAt 도장만 찍음 = 확인 완료. **삭제 아님** — 기사별 내역은
+     *   영업마감(clearDailySettlement)까지 보존. (모달은 "제출했고 미확인"만 띄움.)
+     * - 기사가 아직 대기 중(PENDING_CONFIRM)일 때만 배차 잠금 해제(status→WAITING).
+     *   이미 퇴근(OFFLINE)한 기사는 status 그대로 둠 — 되살려 배차 가능 상태로 만들지 않기 위함.
+     * ⚠️ settlementSession(콜 단위 금액/데이터)은 건드리지 않음 — 콜 단위 확인은 confirmSettlement 담당.
+     */
+    fun confirmDriverDailySettlement(driverId: String, onResult: (Boolean, String) -> Unit) {
+        val provinceId = currentProvinceId
+        val cityId = currentCityId
+        val officeId = currentOfficeId
+
+        if (provinceId == null || cityId == null || officeId == null) {
+            onResult(false, "사무실 정보가 설정되지 않았습니다")
+            return
+        }
+
+        val driverRef = firestore.collection("provinces").document(provinceId)
+            .collection("cities").document(cityId)
+            .collection("offices").document(officeId)
+            .collection("designated_drivers").document(driverId)
+
+        viewModelScope.launch {
+            firestore.runTransaction { transaction ->
+                val snap = transaction.get(driverRef)
+                val status = snap.getString("status")
+                val updates = hashMapOf<String, Any>(
+                    // 삭제가 아니라 확인 도장 — 데이터는 영업마감까지 보존(중첩 필드 경로 업데이트)
+                    "dailySettlement.confirmedAt" to Timestamp.now()
+                )
+                if (status == DriverStatus.PENDING_CONFIRM.value) {
+                    updates["status"] = DriverStatus.WAITING.value
+                }
+                transaction.update(driverRef, updates)
+                null
+            }.addOnSuccessListener {
+                // 낙관적 갱신 — 모달(미확인 필터)에서만 빠지고, 기사별 탭엔 '확인됨'으로 남음
+                val now = Timestamp.now()
+                _dailySettlementList.value = _dailySettlementList.value.map { s ->
+                    if (s.driverId == driverId && s.dailySettlement != null)
+                        s.copy(dailySettlement = s.dailySettlement.copy(confirmedAt = now))
+                    else s
+                }
+                Log.d("SettlementViewModel", "Driver dailySettlement confirmed (stamped): $driverId")
+                onResult(true, "확인 완료")
+            }.addOnFailureListener { e ->
+                Log.e("SettlementViewModel", "Failed to confirm driver settlement $driverId", e)
+                onResult(false, e.message ?: "확인 실패")
             }
         }
     }

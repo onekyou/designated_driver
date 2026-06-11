@@ -8,6 +8,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.navArgument
 import com.designated.driverapp.ui.login.LoginScreen
@@ -17,6 +18,8 @@ import com.designated.driverapp.ui.chat.ChatViewModel
 import com.designated.driverapp.ui.chat.HomeScreenWithChatSheet
 import com.designated.driverapp.ui.login.SignUpScreen
 import com.designated.driverapp.viewmodel.DriverViewModel
+import com.designated.driverapp.model.DriverStatus
+import com.designated.driverapp.enforcement.DailyCloseRedirect
 import com.designated.driverapp.ui.home.HistorySettlementScreen
 import com.designated.driverapp.ui.home.SettingsScreen
 import com.designated.driverapp.ui.details.CallDetailsScreen
@@ -66,6 +69,17 @@ fun AppNavigation(
             driverViewModel.onNavigateToHistorySettlementHandled()
         }
     }
+
+    // P7 게이트 #3 DailyCloseGate — 이전 영업일 미마감이 남아 있으면 정산화면으로 강제 이동.
+    // needsDailyClose(이전 영업일 잔존, VM 계산) + 아직 제출 전(PENDING_CONFIRM 아님)일 때만.
+    val needsDailyClose by driverViewModel.needsDailyClose.collectAsState()
+    val currentBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = currentBackStackEntry?.destination?.route
+    DailyCloseRedirect(
+        needsDailyClose = needsDailyClose && uiState.driverStatus != DriverStatus.PENDING_CONFIRM,
+        isOnSettlementRoute = currentRoute == AppDestinations.HISTORY_SETTLEMENT_ROUTE,
+        onRedirect = { driverViewModel.requestNavigateToSettlement() }
+    )
 
     NavHost(navController = navController, startDestination = startDestination) {
         composable(AppDestinations.LOGIN_ROUTE) {

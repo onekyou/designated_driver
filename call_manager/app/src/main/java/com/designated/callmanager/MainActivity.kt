@@ -98,6 +98,8 @@ import com.designated.callmanager.ui.login.LoginViewModel
 import com.designated.callmanager.ui.pendingdrivers.PendingDriversScreen
 import com.designated.callmanager.ui.settings.SettingsScreen
 import com.designated.callmanager.ui.settlement.SettlementTabHost
+import com.designated.callmanager.ui.settlement.SettlementViewModel
+import com.designated.callmanager.enforcement.ManagerUnconfirmedModal
 import com.designated.callmanager.ui.excludenumber.ExcludeNumberScreen
 import com.designated.callmanager.ui.signup.SignUpScreen
 import com.designated.callmanager.ui.theme.CallManagerTheme
@@ -398,6 +400,10 @@ class MainActivity : ComponentActivity() {
                     val callIdToShow by pendingCallDialogId.collectAsState()
                     val showNewCallPopup by dashboardViewModel.showNewCallPopup.collectAsState()
 
+                    // P7 게이트 #4 — 정산 VM(Activity 스코프, SettlementTabHost와 동일 인스턴스).
+                    // init에서 login_prefs 기반으로 dailySettlementList 자동 로드.
+                    val settlementViewModel: SettlementViewModel = viewModel()
+
                     LaunchedEffect(currentScreenState, callIdToShow) {
                         if (currentScreenState == Screen.Dashboard && callIdToShow != null) {
                             val callId = callIdToShow!!
@@ -512,6 +518,33 @@ class MainActivity : ComponentActivity() {
                                 onNavigateToWallet = { screenState = Screen.Wallet },
                                 onNavigateToSettlement = { screenState = Screen.Settlement }
                             )
+
+                            // P7 게이트 #4 — 미확인 정산 기사 닫기 불가 모달.
+                            // 대시보드 재진입 시 최신 제출 반영(login_prefs 기반, VM init과 동일 소스).
+                            LaunchedEffect(Unit) {
+                                val lp = getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
+                                val p = lp.getString("provinceId", null)
+                                val c = lp.getString("cityId", null)
+                                val o = lp.getString("officeId", null)
+                                if (!p.isNullOrBlank() && !c.isNullOrBlank() && !o.isNullOrBlank()) {
+                                    settlementViewModel.loadSettlementData(p, c, o)
+                                }
+                            }
+                            val dailyList by settlementViewModel.dailySettlementList.collectAsState()
+                            // 제출했고 아직 [정산확인] 안 된 기사만 (확인 도장 찍힌 건 기사별 탭에 남고 모달엔 안 뜸)
+                            val unconfirmed = dailyList.filter { it.hasSubmitted && !it.isConfirmed }
+                            if (unconfirmed.isNotEmpty()) {
+                                ManagerUnconfirmedModal(
+                                    drivers = unconfirmed,
+                                    onConfirm = { driverId ->
+                                        settlementViewModel.confirmDriverDailySettlement(driverId) { _, _ -> }
+                                    },
+                                    onReview = {
+                                        _settlementInitialTab.value = 1  // 기사별 탭
+                                        screenState = Screen.Settlement
+                                    }
+                                )
+                            }
                         }
                         Screen.Settings -> {
                             SettingsScreen(

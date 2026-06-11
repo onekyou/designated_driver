@@ -117,6 +117,10 @@ private fun DriverDetailCard(
                     val t = SimpleDateFormat("HH:mm", Locale.getDefault()).format(it.toDate())
                     Text("마감 시간: $t", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
                 }
+                // P7 게이트 #4 — 매니저 정산확인 도장 (영업마감까지 내역 보존)
+                if (dailySettlement.isConfirmed) {
+                    Text("✅ 정산확인 완료", color = Color(0xFF66FF66), style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
     }
