@@ -187,7 +187,7 @@ peek 미리보기 텍스트 형식: `💬 [발신자]: [메시지 1줄]` (카운
 - 메시지 답장/인용 (V2)
 - 메시지 삭제/신고 (V2)
 - 본인 미읽음 카운트 (V1.5 운영 학습 후)
-- 시스템 메시지 (입퇴장 안내 등) (V2)
+- ~~시스템 메시지 (입퇴장 안내 등) (V2)~~ → **구현됨 (블랙박스 9-B, §15 참조)**
 - 콜 카드 임베드 (V2 차별 가치, `chat_v2_call_embed_idea_2026-04-28.md`)
 - 외부 게스트 임시 초대 (V2)
 - 운행 중 음성 자동 읽기 (V1.5 안전 보강)
@@ -208,7 +208,28 @@ peek 미리보기 텍스트 형식: `💬 [발신자]: [메시지 1줄]` (카운
 - [ ] 본인 senderId 메시지는 FCM 받아도 로컬 INSERT skip (이미 Optimistic INSERT 됨)
 - [ ] 로그아웃 시 fcmToken 삭제
 
-## 15. 참고
+## 15. 시스템 메시지 (블랙박스 9-B)
+
+콜 흐름·기사 상태·정산 이벤트를 단톡방에 **무음 자동 기록**(블랙박스 = 평소 안 봄, 분쟁·놓침 시만 봄).
+
+### 16.1 데이터
+- 메시지 문서에 `type` 필드 추가: 일반 메시지 = 미설정(또는 `"user"`), 시스템 메시지 = `"system"`, `senderRole = "SYSTEM"`.
+- **작성 주체 = Cloud Functions(Admin SDK)만.** 클라는 절대 `type:"system"` write 못함 — `firestore.rules`가 메시지 create 시 `type != "system"` && `senderRole != "SYSTEM"` 강제(스푸핑 차단). CF는 rules 우회.
+- 헬퍼 = `functions/src/handlers/chat.ts` `postSystemMessage(provinceId, cityId, officeId, text)`. best-effort(try/catch) — 콜 운영 비파괴.
+
+### 16.2 트리거 (CF)
+- 콜 상태 전이: `onCallStatusChanged`(배차/수락/운행시작/**운행완료(AWAITING_SETTLEMENT)**/**정산완료(COMPLETED)**/취소/보류). `handledByManager`(직접운행) 제외.
+- 신규콜: `sendNewCallNotification`("콜 들어옴", handledByManager 제외).
+- 기사 출퇴근: `onDriverStatusChange`(OFFLINE↔ONLINE/WAITING만).
+- 예약: `oncallreserved`(RESERVED 진입). 공유콜: 등록(`onSharedCallCreated`)·수임(`onSharedCallClaimed`, wallet revert 통과 후). 정산 제출: `onDriverSettlementSubmitted`.
+
+### 16.3 알림 / 렌더
+- **무음**: 시스템 메시지 FCM은 `chatType` 키로 분기 → 클라가 소리·배너 없이 Room INSERT만(`playChatSound` 미호출).
+- 렌더: `ChatMessageRow`에서 `type=="system"` → `SystemMessageBubble`(중앙 정렬·회색 버블·고정 짙은 회색 글씨 `0xFF555555`, 발신자/정렬/시간그룹 무시).
+- **필터 토글(Commit 3)**: `ChatBottomSheetContent`(실 render site) expanded 상단 헤더에 표시/숨김 토글(`rememberSaveable`, **기본 ON**·비영속). OFF면 `messages.filter { type != "system" }`로 사람 대화만. 3앱 동일.
+- 적용 앱: call_manager · driver_app · pickup_driver_app 3앱. (풀스크린 `ChatScreen`은 미사용 죽은 코드 — `ChatBottomSheetContent`만 실사용.)
+
+## 16. 참고
 
 - 플랜 본문: `memory/designated_drive/chat_feature_plan_2026-04-28.md`
 - 양평 단톡방 실측 데이터: `memory/designated_drive/yangpyeong_chat_data_2026-04-28.md`

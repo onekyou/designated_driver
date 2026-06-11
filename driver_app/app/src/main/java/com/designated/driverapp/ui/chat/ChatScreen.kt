@@ -38,6 +38,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -55,6 +57,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -555,6 +558,9 @@ fun ChatBottomSheetContent(
     val inputText by viewModel.inputText.collectAsState()
     var fullScreenUrl by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
+    // 블랙박스 9-B Commit 3: 시스템 메시지 표시/숨김 토글 (기본 ON·비영속). OFF면 사람 대화만.
+    var showSystem by rememberSaveable { mutableStateOf(true) }
+    val shown = if (showSystem) messages else messages.filter { it.type != "system" }
 
     // LazyColumn 잔여 스크롤이 BottomSheet drag로 자동 위임되는 것 차단
     // (이전 대화 보다가 의도치 않게 sheet 닫히는 문제 해결, 의도적 swipe는 sheet 자체에서 유지)
@@ -594,6 +600,26 @@ fun ChatBottomSheetContent(
             ChatPeekPreviewBar(latestMessage = latestMessage, currentUserId = currentUserId)
             Spacer(modifier = Modifier.weight(1f))
         } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = if (showSystem) "시스템 기록 표시중" else "시스템 기록 숨김",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                IconButton(onClick = { showSystem = !showSystem }) {
+                    Icon(
+                        imageVector = if (showSystem) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                        contentDescription = if (showSystem) "시스템 기록 숨기기" else "시스템 기록 보기",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -603,14 +629,14 @@ fun ChatBottomSheetContent(
                     .nestedScroll(nestedScrollConnection)
                     .onGloballyPositioned { coords ->
                         val pos = coords.positionInRoot()
-                        Log.d("ChatLayout", "LazyColumn pos=(${pos.x.toInt()}, ${pos.y.toInt()}) size=${coords.size.width}x${coords.size.height} msgCount=${messages.size}")
+                        Log.d("ChatLayout", "LazyColumn pos=(${pos.x.toInt()}, ${pos.y.toInt()}) size=${coords.size.width}x${coords.size.height} msgCount=${shown.size}")
                     },
                 reverseLayout = true,
                 verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.Bottom),
             ) {
-                itemsIndexed(items = messages, key = { _, msg -> msg.id }) { index, msg ->
-                    val prevMsg = messages.getOrNull(index + 1)
-                    val nextMsg = messages.getOrNull(index - 1)
+                itemsIndexed(items = shown, key = { _, msg -> msg.id }) { index, msg ->
+                    val prevMsg = shown.getOrNull(index + 1)
+                    val nextMsg = shown.getOrNull(index - 1)
                     val showName = prevMsg == null ||
                         prevMsg.senderId != msg.senderId ||
                         (msg.createdAt - prevMsg.createdAt) > GROUP_THRESHOLD_MS
