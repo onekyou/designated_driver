@@ -109,7 +109,7 @@
   - 후크 전부 best-effort(`postSystemMessage` 자체 try/catch) → 콜 운영 비파괴. 배포=rules + functions 7개(surgical).
   - ⚠️ **E2E 실콜 검증 미완(다음)**: 신규콜 "콜 들어옴"·double완료 1건·출퇴근 등 = 밤시간 LIVE 가짜콜 회피 → 자연 발생 콜 로그로 확인(Commit 1과 동일). 코드/컴파일/배포는 검증됨.
 - **✅ Commit 3 완료·빌드·시각검증(2026-06-11, `91b1c49a`, 앱 전용)**: 시스템 메시지 **필터 토글**(자동 collapse는 과설계라 폐기 — 토글 OFF가 도배를 더 단순히 해결, 원규씨). `ChatBottomSheetContent`(실 render site) expanded 상단 헤더에 눈 아이콘 토글(`rememberSaveable`·기본 ON·비영속), OFF면 `messages.filter{type!="system"}`로 사람 대화만(그룹화도 shown 기준). 3앱 동일. **★누락·오염 검토 성과**: 풀스크린 `fun ChatScreen(`은 3앱 모두 호출처 0 = **죽은 코드** → 원안(TopAppBar에 토글)은 안 보이는 곳에 다는 설계였음, BottomSheet만 실사용으로 정정 + VM 변경 불필요(로컬 state)로 단순화. SSOT `chat-shared-spec.md` §15 시스템 메시지 절 신규(§13 V2미포함서 이동). 3앱 빌드 통과 + S21+/ZFlip4 install + **S21+ 콜매니저 토글 ON/OFF 시각 확인**(테스트 시스템 메시지 3건 주입→확인→clean). pickup=기기 미연결 install 보류.
-- **⛳ 남은 작업(다음 세션)**: ① 9-B Commit 2 **E2E 실콜 검증**(자연 콜 logcat — 신규콜/double완료/출퇴근) ② 공유콜 나머지 3트리거(취소/동기/완료 — 교차사무실 게시 정책 정한 뒤) ③ PTT→텍스트 Step 2(`sttSpikeEnabled=true`). S22·pickup 기기 미연결(연결 시 install). ⚠️ 임시 `functions/scripts/test-system-message.js`(테스트 메시지 주입/삭제) — 검증 끝나면 clean 실행 + 스크립트 정리.
+- **⛳ 남은 작업(다음 세션)**: ① 9-B Commit 2 **E2E 실콜 검증**(자연 콜 logcat — 신규콜/double완료/출퇴근) ② 공유콜 나머지 3트리거(취소/동기/완료 — 교차사무실 게시 정책 정한 뒤) ③ PTT→텍스트 Step 2(`sttSpikeEnabled=true`). S22·pickup 기기 미연결(연결 시 install). 임시 `functions/scripts/test-system-message.js`(테스트 메시지 add/clean) 보존. 주입한 테스트 메시지 3건은 **의도적 잔존**(원규씨 "그냥 두어도 돼" — 1004 테스트 사무실 무해, clean 불요).
 
 ### [확정·2026-06-09·원규씨 명시] 화면오프 발화 입력 = 전역후크(Accessibility 볼륨키 캡처) 배제
 - 화면 꺼진 채 볼륨키 전역 캡처(Accessibility)는 **안 씀**(삼성 절전 재허용 마찰 = 행동0 적).
