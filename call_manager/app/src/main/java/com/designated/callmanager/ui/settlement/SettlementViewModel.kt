@@ -655,6 +655,23 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
                     .addOnFailureListener { e ->
                         Log.e("SettlementViewModel", "office settlementLastCleared 갱신 실패", e)
                     }
+
+                // [정산 단순화 §11.6 #1] 매니저 수동 [업무마감] 즉시 봉인 —
+                //   새벽 cron(autoFinalize)을 기다리지 않고 그 자리에서 settlementSessions 봉인.
+                //   이후 들어오는 콜이 이미 마감된 세션에 합산되는 것 차단(functions가 metadata.isFinalized로 skip).
+                //   영업일 키는 functions calculateWorkDate(10시 기준)와 동일. merge set이라 기존 세션 데이터 보존.
+                val sealWorkDate = calculateWorkDate(closingTime)
+                firestore.collection("provinces").document(p)
+                    .collection("cities").document(c)
+                    .collection("offices").document(o)
+                    .collection("settlementSessions").document(sealWorkDate)
+                    .set(
+                        mapOf("metadata" to mapOf("isFinalized" to true)),
+                        com.google.firebase.firestore.SetOptions.merge()
+                    )
+                    .addOnFailureListener { e ->
+                        Log.e("SettlementViewModel", "수동 마감 봉인(isFinalized) 실패 date=$sealWorkDate", e)
+                    }
             }
 
             // ✅ dailySettlement 초기화 (다음 세션을 위해)
