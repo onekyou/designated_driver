@@ -168,8 +168,8 @@
 → **공통 트리거 = "정리되는대로 보급 재개"** 그 단계. **★ 2026-06-11 원규씨 지시: "보급 준비로 가야 해(디테일 다듬으며)" → 이 잔여 3건이 지금 착수 방향.** 잔여는 *파킹*이 아니라 *보급 준비 작업*:
 
 - **① P7 EnforcementGate (강제 게이트) — [보급 준비]**: `EnforcementGate/LogoutGuard/DailyCloseGate` 클래스 코드 0건(설계만 `settlement_redesign §9.3`). 행위 점검 = `logoutUserAndExitApp()`는 있으나 **미정산 콜 차단 가드 없음**. 4 게이트(미정산 시 logout/앱종료 차단 · 앱시작 어제마감 게이트 · 매니저 마감화면 강제 · 미확인 기사 모달) 전부 미신축. 기사 여럿이 쓰는 다사무실 운영을 **견고**하게 만드는 보강 → **보급 재개 준비의 일부.** 착수 시 별 모듈 `EnforcementGate.kt`(정산 읽기만, §3.4). 타이밍 = 보급 재개 임박(=현 정리 마무리) 시점 착수 후보.
-- **② functions deploy 유보 — [보급 직전]**: 영업일 10시 cron 등 코드는 master/branch에 있으나 production 미배포. **트리거 = 보급 재개 직전(또는 다음 functions 변경 묶음) 1회 배포** `firebase deploy --only functions`.
-- **③ 매니저 수동 [업무마감] 즉시 봉인 (§11.6 #1) — [quick-win·언제든]**: 지금은 새벽 cron(`autoFinalizeSettlementSessions`)만 `isFinalized` 봉인. 본인 5/30 "수동 마감 시 그 자리에서 봉인" 제기 → `clearAllTrips`에 `settlementSessions/{today}.metadata.isFinalized=true` merge set **1자리(소규모, deploy 불필요)**. 셋 중 유일하게 즉시 가능 → **트리거 = 본인 "수동마감 봉인 해줘" 한마디**(보급 재가동 없이 단독 착수).
+- **② functions deploy — ✅[완료·2026-06-11]**: `firebase deploy --only functions --force`(minInstances 과금=기존 PTT 콜드단축, 신규 증가 0). `calldetector-5d61e` LIVE 전 함수 정합 — 9-B 트리거 4종·정산(autoFinalizeSettlements·10시)·parseReservation 포함 "Deploy complete!". 서버를 현재 앱(정산 단순화 10시)과 정합시킴.
+- **③ 매니저 수동 [업무마감] 즉시 봉인 (§11.6 #1) — ✅[완료·2026-06-11·`472e16fa`]**: `clearAllTrips`(SettlementViewModel.kt:650 Firestore 쓰기 블록)에 `settlementSessions/{calculateWorkDate(closingTime)}.metadata.isFinalized=true` merge set 추가. 영업일 키=functions calculateWorkDate(10시)와 동일, merge라 기존 세션 보존. 빌드·S21+ install·push. ⚠️ 실 봉인 동작 E2E(업무마감→isFinalized 확인)는 정산 세션 필요라 자연 사용 시 확인.
 - ⚠️ 셋 다 "정산 단순화 본체"가 아니라 *그 위 강제/배포/봉인 보강*. 본체는 [확정] 완료 — 재구현 금지.
 - ⚠️ **전제 = 보급 재개 = 양평 다른 사무실/타지역 보급**. 메모리엔 5/19~5/27 "보급 정지"(쿠폰 우선)로 기록 → 본 [잠정]은 그 정지가 "정리되는대로" 풀린다는 원규씨 2026-06-10 방향에 의존. 정지가 길어지면 타이밍만 밀림(처분 framing은 유효).
 
