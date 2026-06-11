@@ -146,6 +146,12 @@
 - **⛳ 남은(다음 세션)**: ① **9-B Commit 2 E2E 실콜 검증**(신규콜·double완료·출퇴근 — 밤시간 가짜콜 회피해 미실측, 자연콜 로그로) ② Commit 3(가독성 UI 필터/collapse + SSOT `chat-shared-spec.md` §13) ③ 공유콜 나머지 3트리거 ④ PTT→텍스트 Step 2(`sttSpikeEnabled=true` 켜고 온폰 STT 엔진 결정). 상세=결정대장 `designated_drive/_decisions.md` 9-B 항목.
 - **배포**: rules + functions 7개(surgical, `calldetector-5d61e`). 후크 전부 best-effort라 콜 운영 비파괴.
 
+## 6/11 ★ 블랙박스 9-B Commit 3 완료 — 시스템 메시지 필터 토글 (앱 전용·빌드+시각검증)
+- **Commit 3 = 필터 토글** (`91b1c49a`, 3앱 ChatScreen + SSOT). `ChatBottomSheetContent`(실 render site) expanded 상단 헤더에 눈 아이콘 토글(`rememberSaveable`·**기본 ON**·비영속), OFF면 `messages.filter{type!="system"}`로 사람 대화만(그룹화도 shown 기준). **자동접기(collapse)는 폐기**(과설계 — 토글 OFF가 도배 더 단순히 해결, 원규씨 "그게 더 복잡한거 아닌가").
+- **★ 누락·오염 검토 성과(ExitPlanMode 전 원규씨 지시)**: ① 풀스크린 `fun ChatScreen(`은 3앱 모두 **호출처 0 = 죽은 코드** → 원안(TopAppBar에 토글)은 **안 보이는 곳에 다는 설계**였음 → BottomSheet(`ChatBottomSheetContent`)만 실사용으로 정정 ② "call_manager 1곳" 오판 정정(3앱 모두 BottomSheet 1곳) ③ 실 render site 1곳이라 **ChatViewModel 변경 불필요**(로컬 state)로 단순화. → 빌드 전 헛작업 차단. (호출처: call_mgr `MainActivity:1622`/driver `HomeScreenWithChatSheet:66`/pickup `DashboardWithChatSheet:58`.)
+- **검증**: 3앱 빌드 통과 + **S21+ 콜매니저(office `RUbeBEvGGYP5wMhJHhMF`=1004 테스트) install + 토글 ON/OFF 시각 확인**(테스트 시스템 메시지 3건). driver=ZFlip4 install. pickup=기기 미연결 보류. ⚠️ production Firestore 쓰기는 harness 분류기가 클코 실행 차단 → **원규씨가 `! node functions/scripts/test-system-message.js add` 직접 실행**(PowerShell 5.1 `&&` 불가, cd 없이 절대경로). **검증 끝 → `clean` 실행 + 임시 스크립트 정리 필요(미완)**.
+- **⛳ 남은(다음)**: ① 9-B Commit 2 E2E 실콜 검증(자연 콜 logcat) ② 공유콜 나머지 3트리거 ③ PTT→텍스트 Step 2(`sttSpikeEnabled=true`). S22·pickup 미연결. 상세=결정대장 9-B Commit 3 항목. 미푸시(`91b1c49a` 등 `feature/reservation-engine-poc` 로컬).
+
 ## 5/4 산재 자료 (검증 후 master 갱신 검토)
 - `memory/inbox/2026-05-04/` — 포인트시스템 설계 + 현장인사이트 (방구석 여포 → 능동 영업 패러다임 전환)
 - `memory/inbox/2026-04-23/` — 개선전략 + 업소용앱 분리 (4/27 master로 흡수됨, 참고용)
