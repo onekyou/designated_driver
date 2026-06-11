@@ -164,6 +164,82 @@ class ChatRepository(
     }
 
     /**
+     * [STT] PTT 라이브 발화 전사 텍스트 → 무음 PTT-텍스트 메시지(type="ptt").
+     *  - sendMessage 와 동일하되 type="ptt" 를 Room INSERT + Firestore set 에 포함.
+     *  - 렌더: type!="system" 이라 발신자 있는 일반 말풍선(SystemMessageBubble 아님), 필터 토글 통과.
+     *  - 무음: onChatMessageCreated 가 chatType="ptt" 전파 → 3앱 FCM 핸들러가 무음 INSERT.
+     *  - rules: text(1~2000) + type!="system" + senderRole!="SYSTEM" → 통과(클라 write 허용).
+     */
+    fun sendPttText(
+        provinceId: String,
+        cityId: String,
+        officeId: String,
+        senderId: String,
+        senderName: String,
+        senderRole: String,
+        text: String,
+    ) {
+        val cleanText = text.trim()
+        if (cleanText.isEmpty() || cleanText.length > 2000) {
+            Log.w(TAG, "[sendPttText] 텍스트 길이 검증 실패: ${cleanText.length}")
+            return
+        }
+
+        scope.launch {
+            val messageRef = firestore
+                .collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
+                .collection("offices").document(officeId)
+                .collection("chatRoom").document("main")
+                .collection("messages").document()
+            val messageId = messageRef.id
+            val nowMs = System.currentTimeMillis()
+
+            val local = LocalChatMessage(
+                id = messageId,
+                provinceId = provinceId,
+                cityId = cityId,
+                officeId = officeId,
+                senderId = senderId,
+                senderName = senderName,
+                senderRole = senderRole,
+                text = cleanText,
+                createdAt = nowMs,
+                clientCreatedAt = nowMs,
+                sendStatus = LocalChatMessage.SEND_STATUS_SENDING,
+                type = "ptt",
+            )
+
+            // 1) Optimistic INSERT
+            chatDao.insert(local)
+
+            // 2) Firestore set (type="ptt")
+            try {
+                val firestoreData = mapOf(
+                    "id" to messageId,
+                    "senderId" to senderId,
+                    "senderName" to senderName,
+                    "senderRole" to senderRole,
+                    "text" to cleanText,
+                    "type" to "ptt",
+                    "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                    "clientCreatedAt" to nowMs,
+                    "status" to "SENT",
+                )
+                messageRef.set(firestoreData).await()
+
+                val serverDoc = messageRef.get().await()
+                val serverCreatedAt = serverDoc.getTimestamp("createdAt")?.toDate()?.time ?: nowMs
+                chatDao.markSent(messageId, serverCreatedAt)
+                Log.d(TAG, "[sendPttText] 발송 성공: $messageId")
+            } catch (e: Exception) {
+                Log.e(TAG, "[sendPttText] 발송 실패: $messageId", e)
+                chatDao.updateSendStatus(messageId, LocalChatMessage.SEND_STATUS_FAILED)
+            }
+        }
+    }
+
+    /**
      * 실패 메시지 재시도. ViewModel은 LocalChatMessage 객체를 직접 전달.
      * Phase 1: 이미지 메시지 retry 미지원 — 사용자가 갤러리 다시 선택해서 새 메시지 생성.
      */

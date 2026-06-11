@@ -351,6 +351,10 @@ class MainActivity : ComponentActivity() {
         pttManager.onColdVoiceMemo = { file, durationMs ->
             chatViewModel.sendPttVoiceMemo(file, durationMs)
         }
+        // [STT] PTT 라이브 발화 전사 텍스트 → 무음 PTT-텍스트 메시지(type="ptt")
+        pttManager.onPttTranscript = { text ->
+            chatViewModel.sendPttText(text)
+        }
         pttManager.onRecordUnavailable = {
             recordAudioPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
         }

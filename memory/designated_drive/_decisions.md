@@ -186,8 +186,19 @@
 - API 사실: `io.agora.rtc2.internal.AudioRecordingConfiguration`(no-arg+필드 `filePath/sampleRate/codec/fileRecordOption/quality/recordingChannel`), `Constants.AUDIO_FILE_RECORDING_MIC=1`. SDK=`voice-sdk:4.5.2`(classes.jar 빈 wrapper, 실클래스=`voice-rtc-basic` `agora-rtc-sdk.jar`). `registerAudioFrameObserver`/`setRecordingAudioFrameParameters`도 존재(라이브 STT 시 대안).
 - **★ 설계 간소화**: 플랜의 "프레임 옵저버"보다 `startAudioRecording`이 **WAV 직접 출력** → 파일 기반 STT에 그대로 투입. 캡처 방식 이걸로 확정.
 
-### [잠정·미착수] Step 2/3 (다음 세션)
-- **Step 2 (송신앱 배선)**: 캡처 WAV → **온폰 전사**(엔진 결정 필요: ① whisper.cpp ggml 온폰=PII완전·기기독립·검증됨[6/9]·통합 무거움 NDK/모델 / ② Android on-device recognizer=가벼움·기기 모델 의존·클라우드폴백 시 PII위반 / ③ 서버 faster-whisper 폴백 `stt.ts` minInstances=0) → **무음 PTT-텍스트 채팅 메시지**(9-B `type` 무음 인프라 재사용).
-- **Step 3 (전 앱 렌더)**: `ChatScreen.kt`에 PTT-텍스트 메시지(발신자+텍스트, 일반 말풍선·무음).
-- **스파이크 캡처 = default-OFF 게이트**(`PTTManager.sttSpikeEnabled=false`, `ba399de0`) — 검증 끝나 LIVE 기기에 실음성 WAV 안 쌓이게 OFF. **Step 2 착수 시 `true`로 켜고** 전사·메시지 배선. (S21+ 기존 cache WAV 삭제 완료.)
-- 플랜: `~/.claude/plans/abundant-wondering-minsky.md`(모든 PTT 라이브 캡처 버전).
+### [확정·2026-06-11 구현·E2E검증] Step 2/3 = 온폰 whisper.cpp(tiny) → type="ptt" 무음 메시지 (완료)
+- **엔진 = ① 온폰 whisper.cpp ggml 확정** (②③ 폐기 — ②Android recognizer=한국어/PII 불확실, ③서버=PII 서버행·온폰[확정] 위반). PII 온폰·비용0·기기독립.
+- **모델 = small(ggml-small-q5_1, 190MB) [잠정·실측 비교]**(2026-06-11 폰 3종 비교): tiny(32MB)·base(57MB)는 **한국어가 꼬임** — 불명확 구간을 `[뚜껑 닫는 중]`·`[라이브]` 같은 **비음성 헛태그**나 횡설수설("왜 가끔 엉뚱한 말을")로 메꿈(약한 음향모델=언어모델 prior 폭주). **small에서 헛것 거의 사라지고 "실제 한 말"이 안정 복원**("군청으로 가주세요"). → **small = 온폰 한국어 실용 최소선**(그 아래는 꼬임=용량↔정확도 실제 바닥). turbo(574MB)=천장(불요).
+  - ⚠️ 원규씨 초기 "tiny로 충분(소리나는 대로)" → 실측 후 정정: **whisper는 음소 받아쓰기가 아니라 LM 기반 "해석/보정"이 작동원리(끌 수 없음)**. 약한 모델=틀린 보정(지어냄), 강한 모델=맞는 보정(실제 한 말 복원). "보정 없는 순수 발음"은 음소인식기인데 "ㄱㅜㄴㅊㅓㅇ"식이라 비실용 → 아무도 안 씀. ∴ "부정확 허용"이어도 tiny의 *지어내기*는 블랙박스로 무용 → small 필요.
+  - 용량 우려(원규씨 "너무 크지 않나"): **프로덕션=첫 실행 1회 다운로드라 APK 자체엔 미포함**(설치본 경량 유지). 190MB는 폰에 1회 받는 파일. 모델은 `filesDir`의 `ggml-*.bin` 자동탐색(가장 큰 것) → 스왑=파일만 교체(코드 0).
+  - 잠정인 이유: small 확정은 원규씨 최종 OK 대기(190MB 수용 여부). 거부 시 대안 = base(꼬임 감수) or 구글 on-device recognizer(가벼움·단 PII 클라우드 폴백 + 역시 해석).
+- **[확정·2026-06-11 구현·검증] ① 온폰 보정 스택 (small에 얹음, 전부 온폰·$0)**: Fable 자문 채택. jni.c에 ⓐ `suppress_nst=true`(`[뚜껑 닫는 중]` 비음성 헛태그 제거) ⓑ **VAD(Silero v5.1.2, 885KB) — 무음을 whisper에 먹이기 전 차단** ⓒ 신뢰 게이팅용 accessor(`no_speech_prob`·avg token p) 추가 후 재빌드. Kotlin=`transcribeWithMeta`(신뢰지표 동반)·`WhisperTranscriber` 게이팅(신뢰 낮으면 "(전사 불명확)" 마커). VAD 모델도 filesDir 자동탐색(`ggml-silero-*`, whisper 모델 후보서 제외).
+  - **★ 실측 핵심 교훈**: **whisper는 무음에서 "확신에 차서" 지어냄** — 완전 무음 PTT가 "MBC 뉴스 김지경입니다"를 nsp=0.00·avgP=**0.90**(진짜 발화 0.74보다 높음)로 출력 → **no_speech_prob·avgP 신뢰 게이팅으로는 절대 못 잡음**. **VAD가 유일한 차단책**(무음→0 세그먼트→빈 텍스트→메시지 미게시). 실측 검증: 무음 PTT→`raw=''`→메시지 0, 발화→정상 전사. (⚠️ 클코 1차 오판=원규씨가 *역사책 낭독*한 걸 "환각"으로 단정 → 정정. 진짜 무음 환각은 그 다음 실측으로 확증.)
+  - suppress_nst·게이팅은 보조, **VAD가 주력**. 비프 트림·자모 가제티어 스냅·숫자 정규화는 미적용(후속, 양평 지명·기사명 사전 확보 후).
+- **무음+발신자 = 새 `type="ptt"`**(9-B `type="system"`=중앙회색·발신자없음과 구분): 렌더는 기존 일반 말풍선이 그대로 처리(Step 3 추가코드 ~0), 필터(`!="system"`) 통과해 항상 보임, rules(text+type!=system+role!=SYSTEM) 통과해 클라 write 허용, `onChatMessageCreated`가 `chatType=msg.type` 전파(functions 무변경), 3앱 FCM 무음 분기에 `||=="ptt"` 한 줄.
+- **구현(call_manager)**: jniLibs `com/whispercpp/whisper`(vendored LibWhisper.kt=항상 generic `whisper` 로드 패치·WhisperCpuConfig·decodeWaveFile) + `PttTranscriber`/`WhisperTranscriber`(싱글톤·graceful) + PTTManager(`sttSpikeEnabled=true`·stopSttCapture 전사콜백·**WAV 즉시삭제**) + ChatRepository.sendPttText + ViewModel + MainActivity onPttTranscript. driver/pickup=FCM 무음 1줄.
+- **.so 재빌드 사실(누락·오염 검토로 잡음)**: ① jni.c `params.language="en"→"ko"` 후 android lib CMakeLists(`examples/whisper.android/lib`, WHISPER_LIB_DIR=7단계위 whisper.cpp루트)를 NDK 25.1·arm64-v8a로 재빌드(빌드된 build-android .so는 JNI 없음=순수 whisper) ② **`GGML_OPENMP=OFF` 필수** — ON이면 libggml-cpu.so가 `libomp.so` DT_NEEDED→런타임 UnsatisfiedLinkError(1차 실패 원인) ③ generic `libwhisper.so`만 포함→LibWhisper.kt를 v8fp16 변종 분기 제거·항상 `whisper` 로드(미포함 변종 크래시 회피) ④ strip 후 4 .so ~2.5MB.
+- **E2E 검증(office 1004, S21+→ZFlip4)**: 캡처 ret=0 → tiny 로드(4스레드) → 전사(거침: 군청→"군총") → sendPttText 발송성공 → 수신 ZFlip4 `chatType=ptt` **무음 INSERT**(playChatSound 0). 전 경로 작동. 정확도는 tiny라 거칠지만 채택(위 근거).
+- 빌드자산: `onphone_stt_probe/whisper.cpp/build-jni-ko/`(재빌드 .so), 모델 `onphone_stt_probe/models_dl/ggml-tiny-q5_1.bin`, 폰 `filesDir`에 adb push(프로덕션=첫실행 다운로드는 후속).
+- 플랜: `~/.claude/plans/idempotent-launching-pony.md`(누락·오염 교정판). **미푸시(로컬 커밋 대기).**
+- **⛳ 남은(후속·별 커밋)**: pickup 캡처 재이식(현 캡처=call_manager만, pickup은 코드 제거됨) · 프로덕션 모델 다운로드(첫 실행) · 🎙 전사 표식(선택) · WAV 헤더가 비표준이면 decodeWaveFile 보정(현 작동=표준 가정 통과).

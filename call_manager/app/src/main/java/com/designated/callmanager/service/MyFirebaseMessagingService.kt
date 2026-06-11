@@ -686,9 +686,10 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         }
         app.chatRepository.onRemoteMessageReceived(data)
 
-        // 블랙박스 9-B: 시스템 이벤트는 무음 — Room INSERT만 하고 소리·알림·자동재생 없이 종료
-        if ((data["chatType"] ?: "") == "system") {
-            Log.d(TAG, "[handleChatMessage] 시스템 이벤트 - 무음 INSERT (id=$messageId)")
+        // 블랙박스 9-B: 시스템 이벤트("system") + PTT 라이브 발화 전사("ptt")는 무음 —
+        // Room INSERT만 하고 소리·알림·자동재생 없이 종료(PTT 텍스트는 이미 라이브로 들음).
+        if ((data["chatType"] ?: "").let { it == "system" || it == "ptt" }) {
+            Log.d(TAG, "[handleChatMessage] 시스템/PTT-텍스트 - 무음 INSERT (id=$messageId, chatType=${data["chatType"]})")
             return
         }
 

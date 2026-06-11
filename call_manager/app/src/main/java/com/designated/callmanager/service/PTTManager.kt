@@ -76,12 +76,15 @@ class PTTManager {
     // ── [STT 스파이크] 라이브 발화 오디오를 WAV로 캡처 (Agora startAudioRecording = 채널 tap, 전송 비파괴) ──
     //   ⚠️ default OFF — Step1 스파이크 검증 완료(2026-06-11). Step2(전사+채팅메시지) 배선 시 true로.
     //   OFF면 LIVE 기기에서 실음성 WAV가 cache에 안 쌓임.
-    private val sttSpikeEnabled = false
+    //   2026-06-11 Step2: ON — 캡처 WAV → 온폰 전사 → 무음 PTT-텍스트 메시지. 전사 후 WAV 즉시 삭제.
+    private val sttSpikeEnabled = true
     private var sttCapturing = false
     private var sttCapturePath: String? = null
 
     /** (보존) 콜드 발화 종료 시 콜백. 현재 startTransmit이 호출 안 함. */
     var onColdVoiceMemo: ((File, Long) -> Unit)? = null
+    /** [STT] 라이브 발화 전사 텍스트 → 무음 PTT-텍스트 채팅 메시지(MainActivity에서 배선). */
+    var onPttTranscript: ((String) -> Unit)? = null
     /** RECORD_AUDIO 미허가 시 → 호출측 권한 요청 (보존). */
     var onRecordUnavailable: (() -> Unit)? = null
 
@@ -471,11 +474,33 @@ class PTTManager {
     private fun stopSttCapture() {
         if (!sttCapturing) return
         sttCapturing = false
+        val path = sttCapturePath
+        sttCapturePath = null
         try {
             engine?.stopAudioRecording()
-            Log.i(TAG, "[STT] stopAudioRecording saved=$sttCapturePath")
+            Log.i(TAG, "[STT] stopAudioRecording saved=$path")
         } catch (e: Exception) {
             Log.e(TAG, "[STT] stopSttCapture 실패", e)
+            return
+        }
+        if (path == null) return
+        val wav = java.io.File(path)
+        appCtx?.let { WhisperTranscriber.attachContext(it) }
+        // 전사 + 무음 PTT-텍스트 메시지 + WAV 삭제. 백그라운드라 PTT 라이프사이클(비프·전송) 비파괴.
+        scope.launch(Dispatchers.IO) {
+            try {
+                val text = WhisperTranscriber.transcribe(wav)
+                if (!text.isNullOrBlank()) {
+                    Log.i(TAG, "[STT] 전사: $text")
+                    onPttTranscript?.invoke(text)
+                } else {
+                    Log.i(TAG, "[STT] 전사 결과 없음(빈/실패) — 메시지 생략")
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "[STT] 전사 처리 실패", e)
+            } finally {
+                try { if (wav.exists()) wav.delete() } catch (_: Throwable) {}
+            }
         }
     }
 

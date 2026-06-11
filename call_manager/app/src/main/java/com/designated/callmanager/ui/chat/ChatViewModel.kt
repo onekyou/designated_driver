@@ -174,6 +174,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    /**
+     * [STT] PTT 라이브 발화 전사 텍스트 → 무음 PTT-텍스트 메시지(type="ptt").
+     * 이미 라이브로 들은 내용의 텍스트 기록이라 무음(발신자 있는 일반 말풍선, 소리·알림 0).
+     */
+    fun sendPttText(text: String) {
+        if (!isReady) {
+            Log.w(TAG, "[sendPttText] 필수 정보 부족 - 전송 스킵")
+            return
+        }
+        val name = _senderName.value ?: "관리자" // PTT는 name 미로드여도 드롭 안 함
+        chatRepository.sendPttText(provinceId, cityId, officeId, senderId, name, senderRole, text)
+    }
+
     companion object {
         private const val TAG = "ChatViewModel"
     }
