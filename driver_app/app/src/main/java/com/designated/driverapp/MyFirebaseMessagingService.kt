@@ -316,7 +316,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
 
-        // 4) 백그라운드 알림 (chat_messages_ptt 채널)
+        // 4) 백그라운드 알림 (chat_messages_v2 채널 = 기본 알림음)
         val roleKorean = when (senderRole) {
             "MANAGER" -> "매니저"
             "DESIGNATED_DRIVER" -> "대리기사"

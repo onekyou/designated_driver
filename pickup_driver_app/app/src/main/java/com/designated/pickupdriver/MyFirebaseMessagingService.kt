@@ -38,7 +38,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
     companion object {
         private const val TAG = "PickupApp_FCM"
-        const val CHAT_MESSAGE_CHANNEL_ID = "chat_messages_ptt"
+        const val CHAT_MESSAGE_CHANNEL_ID = "chat_messages_default_v1"  // 기본 알림음 (2026-06-12 알림정리, Application과 동기화)
     }
 
     /**
@@ -219,7 +219,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
      * 사무실 단톡방 메시지 처리
      * 1) Room INSERT — Repository에서 본인 senderId면 자동 skip
      * 2) 본인 메시지면 알림 skip
-     * 3) 포그라운드면 시스템 알림 skip + ptt_start 사운드만 재생 (BottomSheet UI가 처리)
+     * 3) 포그라운드면 시스템 알림 skip + 기본 알림음만 재생 (BottomSheet UI가 처리)
      * 4) 백그라운드면 시스템 알림 표시 (chat_messages_ptt 채널)
      */
     private fun handleChatMessage(remoteMessage: RemoteMessage) {
@@ -326,7 +326,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
     private fun playChatSound() {
         try {
-            val uri = android.net.Uri.parse("android.resource://$packageName/${R.raw.ptt_start}")
+            // 기본 알림음 (ptt음은 PTT 전용, 2026-06-12 알림정리)
+            val uri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
             val ringtone = android.media.RingtoneManager.getRingtone(this, uri)
             // 채널 sound와 동일 stream/처리로 통일 — 콜 알림과 같은 음감
             ringtone?.audioAttributes = android.media.AudioAttributes.Builder()
@@ -335,7 +336,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 .build()
             ringtone?.play()
         } catch (e: Exception) {
-            Log.w(TAG, "[playChatSound] ptt_start 재생 실패", e)
+            Log.w(TAG, "[playChatSound] 기본 알림음 재생 실패", e)
         }
     }
 }

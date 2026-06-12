@@ -4,7 +4,7 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.media.AudioAttributes
-import android.net.Uri
+import android.media.RingtoneManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.designated.pickupdriver.service.PTTManager
@@ -27,10 +27,12 @@ class PickupDriverApplication : Application() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(NotificationManager::class.java) ?: return
 
-            // 이전 콜 알림 채널(IMPORTANCE_DEFAULT/시스템 기본 사운드) 정리 — 무전기음 통일
-            try { nm.deleteNotificationChannel(CHANNEL_CALL_CHANGES_LEGACY) } catch (_: Exception) {}
+            // 구 채널 정리 — ptt음 채널은 기본 알림음 채널(_default_v1)로 교체 (2026-06-12 알림정리, ptt음은 PTT 전용)
+            listOf(CHANNEL_CALL_CHANGES_LEGACY, "pickup_call_changes_ptt", "chat_messages_ptt").forEach { oldId ->
+                try { nm.deleteNotificationChannel(oldId) } catch (_: Exception) {}
+            }
 
-            // 콜 상태 변경 채널 — HIGH/ptt_start 효과음 (무전기 운영체계 통일)
+            // 콜 상태 변경 채널 — HIGH/기본 알림음 (2026-06-12 알림정리)
             if (nm.getNotificationChannel(CHANNEL_CALL_CHANGES) == null) {
                 val callChannel = NotificationChannel(
                     CHANNEL_CALL_CHANGES,
@@ -43,7 +45,7 @@ class PickupDriverApplication : Application() {
                     setShowBadge(true)
                     lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
                     setSound(
-                        Uri.parse("android.resource://$packageName/${R.raw.ptt_start}"),
+                        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
                         AudioAttributes.Builder()
                             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                             .setUsage(AudioAttributes.USAGE_NOTIFICATION)
@@ -53,7 +55,7 @@ class PickupDriverApplication : Application() {
                 nm.createNotificationChannel(callChannel)
             }
 
-            // 사무실 단톡방 채널 (스펙 §10) — HIGH/ptt_start 효과음/DND 우회 X
+            // 사무실 단톡방 채널 (스펙 §10) — HIGH/기본 알림음/DND 우회 X (2026-06-12 알림정리)
             if (nm.getNotificationChannel(CHANNEL_CHAT_MESSAGES) == null) {
                 val chatChannel = NotificationChannel(
                     CHANNEL_CHAT_MESSAGES,
@@ -67,7 +69,7 @@ class PickupDriverApplication : Application() {
                     lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
                     setBypassDnd(false)
                     setSound(
-                        Uri.parse("android.resource://$packageName/${R.raw.ptt_start}"),
+                        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
                         AudioAttributes.Builder()
                             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                             .setUsage(AudioAttributes.USAGE_NOTIFICATION)
@@ -80,9 +82,9 @@ class PickupDriverApplication : Application() {
     }
 
     companion object {
-        const val CHANNEL_CALL_CHANGES = "pickup_call_changes_ptt"
+        const val CHANNEL_CALL_CHANGES = "pickup_call_changes_default_v1"  // 기본 알림음 (2026-06-12 알림정리)
         private const val CHANNEL_CALL_CHANGES_LEGACY = "pickup_call_changes"
-        const val CHANNEL_CHAT_MESSAGES = "chat_messages_ptt"
+        const val CHANNEL_CHAT_MESSAGES = "chat_messages_default_v1"  // 기본 알림음 (2026-06-12 알림정리)
 
         @Volatile
         private var INSTANCE: PickupDriverApplication? = null

@@ -65,6 +65,10 @@ class DriverApplication : Application() {
     private fun registerChatNotificationChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val nm = getSystemService(NotificationManager::class.java) ?: return
+
+        // 옛 ptt음 단톡방 채널(죽은 채널) 정리 — 현재는 chat_messages_v2(기본음) 사용 (2026-06-12 알림정리)
+        try { nm.deleteNotificationChannel("chat_messages_ptt") } catch (_: Exception) {}
+
         if (nm.getNotificationChannel(CHANNEL_CHAT_MESSAGES) != null) return
 
         val channel = NotificationChannel(
