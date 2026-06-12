@@ -33,10 +33,10 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         private const val TAG = "CallManager_FCM"
 
         private const val NEW_CALL_CHANNEL_ID = "new_call_fcm_channel_v2"
-        private const val STATUS_CHANGE_CHANNEL_ID = "status_change_fcm_channel_v2"
-        private const val DRIVER_UPDATE_CHANNEL_ID = "driver_update_fcm_channel_v3"
-        private const val SHARED_CALL_CHANNEL_ID = "shared_call_fcm_channel_v3"  // v3로 변경하여 새 채널 생성
-        private const val CHAT_MESSAGE_CHANNEL_ID = "chat_messages_ptt"  // 사무실 단톡방 (스펙 §10) — ptt 효과음 적용 (v2 ID)
+        private const val STATUS_CHANGE_CHANNEL_ID = "status_change_fcm_channel_v3"  // v3: 사운드 기본알림음으로 변경 (2026-06-12 알림정리)
+        private const val DRIVER_UPDATE_CHANNEL_ID = "driver_update_fcm_channel_v4"  // v4: 사운드 기본알림음으로 변경 (2026-06-12 알림정리)
+        private const val SHARED_CALL_CHANNEL_ID = "shared_call_fcm_channel_v3"  // v3로 변경하여 새 채널 생성 (공유콜=알람음 그대로)
+        private const val CHAT_MESSAGE_CHANNEL_ID = "chat_messages_default_v1"  // 사무실 단톡방 (스펙 §10) — ptt음→기본알림음 (2026-06-12 알림정리)
     }
 
     override fun onCreate() {
@@ -440,7 +440,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
             // 구 채널 삭제 (사운드 변경을 위해 채널 ID 버전업 시 필요)
-            listOf("new_call_fcm_channel", "status_change_fcm_channel", "driver_update_fcm_channel", "driver_update_fcm_channel_v2").forEach { oldId ->
+            listOf("new_call_fcm_channel", "status_change_fcm_channel", "driver_update_fcm_channel", "driver_update_fcm_channel_v2",
+                   "status_change_fcm_channel_v2", "driver_update_fcm_channel_v3", "chat_messages_ptt").forEach { oldId ->
                 try {
                     notificationManager.getNotificationChannel(oldId)?.let {
                         notificationManager.deleteNotificationChannel(oldId)
@@ -471,7 +472,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             }
 
             if (notificationManager.getNotificationChannel(STATUS_CHANGE_CHANNEL_ID) == null) {
-                val customSoundUri = Uri.parse("android.resource://${packageName}/${R.raw.status_alert}")
+                val customSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)  // 기본 알림음 (2026-06-12 알림정리)
                 val statusChangeChannel = NotificationChannel(
                     STATUS_CHANGE_CHANNEL_ID,
                     "운행 상태 변경 알림",
@@ -492,7 +493,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             }
 
             if (notificationManager.getNotificationChannel(DRIVER_UPDATE_CHANNEL_ID) == null) {
-                val customSoundUri2 = Uri.parse("android.resource://${packageName}/${R.raw.status_alert}")
+                val customSoundUri2 = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)  // 기본 알림음 (2026-06-12 알림정리)
                 val driverUpdateChannel = NotificationChannel(
                     DRIVER_UPDATE_CHANNEL_ID,
                     "기사 응답 알림",
@@ -576,7 +577,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
                     setBypassDnd(false)  // 콜과 차별 (콜은 true)
                     setSound(
-                        android.net.Uri.parse("android.resource://$packageName/${com.designated.callmanager.R.raw.ptt_start}"),
+                        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),  // 기본 알림음 (ptt음은 PTT 전용, 2026-06-12 알림정리)
                         AudioAttributes.Builder()
                             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                             .setUsage(AudioAttributes.USAGE_NOTIFICATION)
@@ -584,7 +585,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     )
                 }
                 notificationManager.createNotificationChannel(chatChannel)
-                Log.d(TAG, "🔧✅ [CHANNEL] CHAT_MESSAGE_CHANNEL 생성 완료 (ptt_start)")
+                Log.d(TAG, "🔧✅ [CHANNEL] CHAT_MESSAGE_CHANNEL 생성 완료 (기본 알림음)")
             }
 
         }
@@ -757,13 +758,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
      */
     private fun playChatSound() {
         try {
-            val uri = android.net.Uri.parse(
-                "android.resource://$packageName/${R.raw.ptt_start}"
-            )
+            // 기본 알림음 (ptt음은 PTT 전용, 2026-06-12 알림정리)
+            val uri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
             val ringtone = android.media.RingtoneManager.getRingtone(this, uri)
             ringtone?.play()
         } catch (e: Exception) {
-            Log.w(TAG, "[playChatSound] ptt_start 재생 실패", e)
+            Log.w(TAG, "[playChatSound] 기본 알림음 재생 실패", e)
         }
     }
 
@@ -818,31 +818,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             }
         }
 
-        // 앱이 포그라운드일 때는 알림 생성하지 않음 (UI가 실시간 업데이트됨)
-        // 콜디텍터에서 온 콜은 이미 콜디텍터에서 배차하므로 알림 불필요
-        // 콜매니저에서 생성한 콜도 이미 포그라운드이므로 알림 불필요
-        if (!isAppInForeground() && fromCallDetector != true && fromCallManager != true) {
-            showNotification(
-                channelId = NEW_CALL_CHANNEL_ID,
-                notificationId = "new_call_$callId".hashCode(),
-                title = "🚨 새로운 콜!",
-                content = "$customerName ($customerPhone)",
-                bigText = "고객: $customerName\n전화: $customerPhone\n위치: $pickupLocation",
-                callId = callId,
-                color = ContextCompat.getColor(this, android.R.color.holo_red_dark),
-                autoCancel = true,
-                isNewCall = true,
-                timeoutAfter = 60000
-            )
-        } else {
-            val reason = when {
-                isAppInForeground() -> "앱 포그라운드"
-                fromCallDetector == true -> "콜디텍터에서 온 콜"
-                fromCallManager == true -> "콜매니저에서 생성한 콜"
-                else -> "기타"
-            }
-            Log.d(TAG, "[handleNewCall] 알림 생략 - $reason")
-        }
+        // 새 콜 = 데이터만 처리, 알림 0 (2026-06-12 알림정리). DB 저장은 위에서 완료.
+        Log.d(TAG, "[handleNewCall] 알림 생략(데이터만) - callId=$callId")
     }
 
     private fun handleNewSharedCall(remoteMessage: RemoteMessage, sharedCallId: String) {
@@ -1053,17 +1030,22 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             append("상태: $statusText")
         }
 
-        showNotification(
-            channelId = STATUS_CHANGE_CHANNEL_ID,
-            notificationId = callId.hashCode(),
-            title = "$emoji $statusText",
-            content = "$customerName ($customerPhone) - $driverName",
-            bigText = bigTextContent,
-            callId = callId,
-            color = color,
-            autoCancel = true,
-            timeoutAfter = 30000
-        )
+        // 운행 시작/완료만 알림 표시 — 그 외(기사 수락·정산 대기)는 데이터만 (2026-06-12 알림정리)
+        if (statusText == "운행 시작" || statusText == "운행 완료") {
+            showNotification(
+                channelId = STATUS_CHANGE_CHANNEL_ID,
+                notificationId = callId.hashCode(),
+                title = "$emoji $statusText",
+                content = "$customerName ($customerPhone) - $driverName",
+                bigText = bigTextContent,
+                callId = callId,
+                color = color,
+                autoCancel = true,
+                timeoutAfter = 30000
+            )
+        } else {
+            Log.d(TAG, "[STATUS_CHANGE] 알림 생략(데이터만) - statusText=$statusText")
+        }
     }
 
     private fun handleDriverStatusUpdate(remoteMessage: RemoteMessage, driverId: String) {
@@ -1103,17 +1085,22 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         intent.putExtra("statusMessage", statusMessage)
         sendBroadcast(intent)
 
-        showNotification(
-            channelId = DRIVER_UPDATE_CHANNEL_ID,
-            notificationId = "driver_status_$driverId".hashCode(),
-            title = "📍 기사 상태 업데이트",
-            content = "$driverName: $statusMessage",
-            bigText = "기사: $driverName\n상태: $statusMessage",
-            callId = driverId,
-            color = ContextCompat.getColor(this, android.R.color.holo_blue_light),
-            autoCancel = true,
-            timeoutAfter = 10000
-        )
+        // 온라인(출근)/오프라인(퇴근)만 알림 표시 — 그 외(대기중·배차됨·운행중·정산대기)는 데이터만 (2026-06-12 알림정리)
+        if (newStatus == "ONLINE" || newStatus == "OFFLINE") {
+            showNotification(
+                channelId = DRIVER_UPDATE_CHANNEL_ID,
+                notificationId = "driver_status_$driverId".hashCode(),
+                title = "📍 기사 상태 업데이트",
+                content = "$driverName: $statusMessage",
+                bigText = "기사: $driverName\n상태: $statusMessage",
+                callId = driverId,
+                color = ContextCompat.getColor(this, android.R.color.holo_blue_light),
+                autoCancel = true,
+                timeoutAfter = 10000
+            )
+        } else {
+            Log.d(TAG, "[DRIVER_STATUS] 알림 생략(데이터만) - newStatus=$newStatus")
+        }
     }
 
     private fun handleSharedCallCancelled(remoteMessage: RemoteMessage, callId: String) {
