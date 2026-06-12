@@ -74,8 +74,17 @@ class PTTManager {
     private val pttRecorder = PttRecorder()
     private var recordPending = false
 
+    // ── [STT 스파이크] 라이브 발화 오디오를 WAV로 캡처 (Agora startAudioRecording = 채널 tap, 전송 비파괴) ──
+    //   캡처 WAV → 온폰 전사 → 무음 PTT-텍스트 메시지. 전사 후 WAV 즉시 삭제.
+    //   OFF면 LIVE 기기에서 실음성 WAV가 cache에 안 쌓임. (call_manager 포팅 2026-06-12)
+    private val sttSpikeEnabled = true
+    private var sttCapturing = false
+    private var sttCapturePath: String? = null
+
     /** (보존) 콜드 발화 종료 시 콜백. 현재 startTransmit이 호출 안 함. */
     var onColdVoiceMemo: ((File, Long) -> Unit)? = null
+    /** [STT] 라이브 발화 전사 텍스트 → 무음 PTT-텍스트 채팅 메시지(MainActivity에서 배선). */
+    var onPttTranscript: ((String) -> Unit)? = null
     /** RECORD_AUDIO 미허가 시 → 호출측 권한 요청 (보존). */
     var onRecordUnavailable: (() -> Unit)? = null
 
@@ -314,6 +323,7 @@ class PTTManager {
             _state.value = PttState.TALKING
             playCue(inCall = true) // 2차 비프
             engine?.muteLocalAudioStream(false) // 마이크 라이브
+            startSttCapture() // [STT] 발화 오디오 WAV 캡처 시작 (전송 비파괴)
             Log.i(TAG, "fireReady: TALKING (mic live), gap=${wait}ms")
         }
     }
@@ -421,6 +431,7 @@ class PTTManager {
         }
 
         val eng = engine ?: run { _state.value = PttState.IDLE; mode = EngineMode.NONE; return }
+        stopSttCapture() // [STT] 발화 오디오 WAV 캡처 정지 (전체 발화 포함 위해 mute 전에)
         playCue(inCall = true) // 종료 오버톤
         eng.updateChannelMediaOptions(ChannelMediaOptions().apply { publishMicrophoneTrack = false })
         // ★ enableLocalAudio(false) 호출 금지 — 토글 시 remote audio playback pause 유발(WARM 수신 무음 회귀).
@@ -430,6 +441,66 @@ class PTTManager {
         mode = EngineMode.WARM // 채널 유지(워밍창) — 다음 발화/수신 즉시 라이브
         scheduleLeave(CONV_WARM_MS)
         Log.i(TAG, "stopTransmit: WARM 전환 (${CONV_WARM_MS / 1000}s 워밍창)")
+    }
+
+    /** [STT 스파이크] 발화 오디오를 WAV로 녹음 시작 — Agora 채널 오디오 tap. 전송(publish)은 안 건드림(비파괴). */
+    private fun startSttCapture() {
+        if (!sttSpikeEnabled) return // 게이트 OFF — 캡처 안 함(stopSttCapture도 no-op)
+        val eng = engine ?: return
+        if (sttCapturing) return
+        try {
+            val dir = java.io.File(appCtx?.cacheDir, "ptt_stt").apply { mkdirs() }
+            val path = java.io.File(dir, "ptt_stt_${System.currentTimeMillis()}.wav").absolutePath
+            // 16kHz/MEDIUM, whisper 친화. .wav 출력. fileRecordOption=1(MIC) = 로컬 마이크 원본만
+            // (MIXED=3은 비프·플레이백 섞여 STT 횡설수설 → MIC로 깨끗한 발화 캡처).
+            val cfg = io.agora.rtc2.internal.AudioRecordingConfiguration().apply {
+                filePath = path
+                sampleRate = 16000
+                quality = 1
+                fileRecordOption = io.agora.rtc2.Constants.AUDIO_FILE_RECORDING_MIC
+                recordingChannel = 1
+            }
+            val ret = eng.startAudioRecording(cfg)
+            sttCapturing = ret == 0
+            sttCapturePath = if (sttCapturing) path else null
+            Log.i(TAG, "[STT] startAudioRecording ret=$ret path=$path")
+        } catch (e: Exception) {
+            Log.e(TAG, "[STT] startSttCapture 실패", e)
+        }
+    }
+
+    /** [STT 스파이크] 녹음 정지 + 저장 경로에서 파일을 뽑아 whisper 전사 → 무음 PTT-텍스트 + WAV 삭제. */
+    private fun stopSttCapture() {
+        if (!sttCapturing) return
+        sttCapturing = false
+        val path = sttCapturePath
+        sttCapturePath = null
+        try {
+            engine?.stopAudioRecording()
+            Log.i(TAG, "[STT] stopAudioRecording saved=$path")
+        } catch (e: Exception) {
+            Log.e(TAG, "[STT] stopSttCapture 실패", e)
+            return
+        }
+        if (path == null) return
+        val wav = java.io.File(path)
+        appCtx?.let { WhisperTranscriber.attachContext(it) }
+        // 전사 + 무음 PTT-텍스트 메시지 + WAV 삭제. 백그라운드라 PTT 라이프사이클(비프·전송) 비파괴.
+        scope.launch(Dispatchers.IO) {
+            try {
+                val text = WhisperTranscriber.transcribe(wav)
+                if (!text.isNullOrBlank()) {
+                    Log.i(TAG, "[STT] 전사: $text")
+                    onPttTranscript?.invoke(text)
+                } else {
+                    Log.i(TAG, "[STT] 전사 결과 없음(빈/실패) — 메시지 생략")
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "[STT] 전사 처리 실패", e)
+            } finally {
+                try { if (wav.exists()) wav.delete() } catch (_: Throwable) {}
+            }
+        }
     }
 
     fun release() {

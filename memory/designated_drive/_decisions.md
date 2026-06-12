@@ -218,4 +218,11 @@
 - **E2E 검증(office 1004, S21+→ZFlip4)**: 캡처 ret=0 → tiny 로드(4스레드) → 전사(거침: 군청→"군총") → sendPttText 발송성공 → 수신 ZFlip4 `chatType=ptt` **무음 INSERT**(playChatSound 0). 전 경로 작동. 정확도는 tiny라 거칠지만 채택(위 근거).
 - 빌드자산: `onphone_stt_probe/whisper.cpp/build-jni-ko/`(재빌드 .so), 모델 `onphone_stt_probe/models_dl/ggml-tiny-q5_1.bin`, 폰 `filesDir`에 adb push(프로덕션=첫실행 다운로드는 후속).
 - 플랜: `~/.claude/plans/idempotent-launching-pony.md`(누락·오염 교정판). **미푸시(로컬 커밋 대기).**
-- **⛳ 남은(후속·별 커밋)**: pickup 캡처 재이식(현 캡처=call_manager만, pickup은 코드 제거됨) · 프로덕션 모델 다운로드(첫 실행) · 🎙 전사 표식(선택) · WAV 헤더가 비표준이면 decodeWaveFile 보정(현 작동=표준 가정 통과).
+- **⛳ 남은(후속·별 커밋)**: ~~pickup 캡처 재이식~~ **✅완료(2026-06-12, 아래 항목)** · 프로덕션 모델 다운로드(첫 실행) · 🎙 전사 표식(선택) · WAV 헤더가 비표준이면 decodeWaveFile 보정(현 작동=표준 가정 통과).
+
+### [확정·2026-06-12 실측·미커밋] PTT→텍스트 pickup 포팅 완료 + 전사 정확도 = whisper small 엔진 공통 한계(지명 약점)
+- **pickup 포팅 완료**(call_manager → pickup_driver_app, surgical): ① whisper JNI(LibWhisper·WhisperCpuConfig)+PttTranscriber+jniLibs 4 .so 복사 ② PTTManager STT 조각(sttSpikeEnabled·startSttCapture@fireReady·stopSttCapture@stopTransmit·onPttTranscript) ③ ChatRepository.sendPttText(type="ptt") ④ MainActivity onPttTranscript 후크+sendPttTextViaRepo(ROLE_PICKUP_DRIVER, senderName "픽업기사") ⑤ build.gradle abiFilters 'arm64-v8a'+jniLibs.useLegacyPackaging. + **세로고정**(manifest portrait — pickup엔 원래 screenOrientation 없었음, call_manager는 있음). 빌드·S22(R5CT41TJZFP) install·small+VAD 모델 안착. 수신측 무음(`chatType=="ptt"`)·Room type 컬럼·렌더 = 9-B에서 이미 완비(2차 누락검토 통과).
+- **★ 전사 정확도 = 엔진 공통 한계(pickup 무죄)**: small 정상 로드(logcat `ggml-small-q5_1.bin (181MB)`)인데도 "양평역"→**"양평력/양통력"**. **call_manager(S21+ small)도 동일** — 21:01 발화 raw `수연이 양평력으로 가`. 즉 두 폰 동일 small 엔진이라 동일하게 깸(포팅 정상). **일반 문장은 잘 잡고(예 "형님 그 수연이 도착하면 시장으로 가주세요") 지명·고유명사만 핀포인트로 깸**(양평역·포천("포청")·분청 등). = whisper 한국어 지명 약점(결정대장 기존 기록과 일치).
+- **→ [잠정·다음 작업] 지명 가제티어(사전) 후처리** = 전사 결과를 양평 지명·단골 기사명 사전으로 스냅("양평력/양통력"→"양평역"). 결정대장 "비프 트림·자모 가제티어 스냅" 후속 예정과 일치. **call_manager·pickup 공통 적용**(같은 엔진). 또는 sherpa-onnx+hotwords 재평가(엔진 교체라 측정 후).
+- **도구 학습**: 클코 Bash의 `adb push`가 깨진 원인 = **Git Bash MSYS 경로 자동변환**(`/data/local/tmp`→`C:/Program Files/Git/data/local/tmp`로 둔갑, "1 file pushed" 가짜 성공). **`MSYS_NO_PATHCONV=1` 접두로 복구** → 클코 도구로 push 가능(이전엔 됐던 게 이 변환 때문에 이 세션 깨졌던 것). adb shell/install/run-as는 영향 없음(파일 인자 없어서).
+- **미커밋**: `feature/reservation-engine-poc` 로컬(코드 A~E + 세로고정). E2E 발화까지 실연됨(전사 체인 작동, 정확도만 지명 보정 대기).

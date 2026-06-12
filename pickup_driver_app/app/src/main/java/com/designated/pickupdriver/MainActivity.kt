@@ -80,6 +80,8 @@ class MainActivity : ComponentActivity() {
 
         // PTT 콜백 배선 — 콜드 음성메모 송신은 @Singleton ChatRepository 직접 호출(Hilt 스코프 우회).
         pttManager.onColdVoiceMemo = { file, durationMs -> sendPttVoiceMemoViaRepo(file, durationMs) }
+        // [STT] 라이브 발화 전사 텍스트 → 무음 PTT-텍스트 메시지 (ViewModel 우회, repo 직접).
+        pttManager.onPttTranscript = { text -> sendPttTextViaRepo(text) }
         pttManager.onRecordUnavailable = { recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }
 
         val start = if (auth.currentUser != null &&
@@ -228,6 +230,21 @@ class MainActivity : ComponentActivity() {
             provinceId = p, cityId = c, officeId = o,
             senderId = senderId, senderName = "픽업기사", senderRole = ChatRepository.ROLE_PICKUP_DRIVER,
             file = file, durationMs = durationMs, autoplay = true,
+        )
+    }
+
+    /** [STT] PTT 발화 전사 텍스트 → 무음 PTT-텍스트 메시지. ChatRepository 직접 호출(Hilt 스코프 우회). */
+    private fun sendPttTextViaRepo(text: String) {
+        val (p, c, o) = getOfficeInfoForPtt()
+        val senderId = auth.currentUser?.uid
+        if (p == null || c == null || o == null || senderId == null) {
+            Log.w("MainActivity", "PTT 텍스트: 사무실/인증 정보 없음 — drop")
+            return
+        }
+        chatRepository.sendPttText(
+            provinceId = p, cityId = c, officeId = o,
+            senderId = senderId, senderName = "픽업기사", senderRole = ChatRepository.ROLE_PICKUP_DRIVER,
+            text = text,
         )
     }
 
