@@ -10,7 +10,8 @@ import kotlinx.coroutines.flow.Flow
  * 픽업앱 콜 DAO
  *
  * UI 는 [getActiveCallsFlow] 로 활성 콜만 구독.
- * WAITING 30분 컷오프는 SQL 단계에서 처리 — `status != 'WAITING' OR timestamp >= :cutoff`.
+ * 영업일 컷오프는 SQL 단계에서 처리 — `timestamp >= :activeCutoff` (지난 영업일 콜 = 표기 제외,
+ * 기사가 운행완료를 안 누른 박제 콜이 다음날까지 남는 문제 차단. 2026-06-13).
  */
 @Dao
 interface CallDao {
@@ -22,7 +23,7 @@ interface CallDao {
           AND cityId = :cityId
           AND officeId = :officeId
           AND status IN (:activeStatuses)
-          AND (status != 'WAITING' OR timestamp >= :waitingCutoff)
+          AND timestamp >= :activeCutoff
         ORDER BY timestamp DESC
         """
     )
@@ -31,7 +32,7 @@ interface CallDao {
         cityId: String,
         officeId: String,
         activeStatuses: List<String>,
-        waitingCutoff: Long
+        activeCutoff: Long
     ): Flow<List<LocalCall>>
 
     @Query("SELECT * FROM calls WHERE id = :callId")

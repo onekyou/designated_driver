@@ -39,6 +39,8 @@ class CallRepository @Inject constructor(
     companion object {
         private const val TAG = "PickupCallRepo"
         private const val INITIAL_LOAD_LIMIT = 100L
+        // 영업일 시작 시각 (KST 10시) — 정산 영업일 경계와 동일
+        private const val BUSINESS_DAY_START_HOUR = 10
         // WAITING 제외: 픽업기사는 대리기사가 배차받은 콜만 모니터링 (2026-05-11)
         private val ACTIVE_STATUSES = listOf(
             Constants.STATUS_ASSIGNED,
@@ -46,12 +48,30 @@ class CallRepository @Inject constructor(
             Constants.STATUS_IN_PROGRESS,
             Constants.STATUS_AWAITING_SETTLEMENT
         )
+
+        /**
+         * 현재 영업일 시작(가장 최근 도래한 KST 10:00) epoch millis.
+         * 현재가 10시 이전이면 전날 10:00. 이 시각 이전 생성 콜은 지난 영업일 = 표기 제외.
+         * (기사가 운행완료 미입력한 박제 콜이 다음날까지 남는 문제 차단. 2026-06-13)
+         */
+        fun businessDayStartMillis(nowMillis: Long = System.currentTimeMillis()): Long {
+            val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Seoul"))
+            cal.timeInMillis = nowMillis
+            cal.set(java.util.Calendar.HOUR_OF_DAY, BUSINESS_DAY_START_HOUR)
+            cal.set(java.util.Calendar.MINUTE, 0)
+            cal.set(java.util.Calendar.SECOND, 0)
+            cal.set(java.util.Calendar.MILLISECOND, 0)
+            if (cal.timeInMillis > nowMillis) {
+                cal.add(java.util.Calendar.DAY_OF_MONTH, -1)
+            }
+            return cal.timeInMillis
+        }
     }
 
     // ===== Flow 노출 =====
 
     fun getActiveCallsFlow(provinceId: String, cityId: String, officeId: String): Flow<List<LocalCall>> {
-        val cutoff = System.currentTimeMillis() - Constants.WAITING_CUTOFF_MS
+        val cutoff = businessDayStartMillis()
         return callDao.getActiveCallsFlow(provinceId, cityId, officeId, ACTIVE_STATUSES, cutoff)
     }
 
