@@ -1272,13 +1272,25 @@ class SettlementViewModel(application: Application) : AndroidViewModel(applicati
             .collection("offices").document(officeId)
             .collection("designated_drivers").document(driverId)
 
+        // P7 게이트 #4 누수 차단 — 삭제 직전 Firestore에서 confirmedAt를 직접 읽어
+        //   매니저 [정산확인] 도장이 찍힌(confirmed) 정산만 삭제, 미확인은 보존.
+        //   (서버 진실 기반 — _dailySettlementList stale 1회 fetch에 의존하지 않음:
+        //    정산화면 체류 중 갓 제출된 미확인분도 안전하게 보존됨.)
+        //   보존된 미확인 요약은 다음 세션 모달이 재등장시켜 강제 확인. 삭제는 확인 후 영업마감에서만.
         viewModelScope.launch {
-            driverRef.update(
-                mapOf(
-                    "dailySettlement" to com.google.firebase.firestore.FieldValue.delete()
+            firestore.runTransaction { txn ->
+                val snap = txn.get(driverRef)
+                @Suppress("UNCHECKED_CAST")
+                val dsMap = snap.get("dailySettlement") as? Map<String, Any?>
+                    ?: return@runTransaction "none"            // 정산 없음 → 무시
+                if (dsMap["confirmedAt"] == null) return@runTransaction "kept"  // 미확인 → 보존
+                txn.update(
+                    driverRef,
+                    mapOf("dailySettlement" to com.google.firebase.firestore.FieldValue.delete())
                 )
-            ).addOnSuccessListener {
-                Log.d("SettlementViewModel", "DailySettlement cleared for driver $driverId")
+                "deleted"
+            }.addOnSuccessListener { result ->
+                Log.d("SettlementViewModel", "clearDailySettlement($driverId) = $result")
             }.addOnFailureListener { e ->
                 Log.e("SettlementViewModel", "Failed to clear dailySettlement", e)
             }

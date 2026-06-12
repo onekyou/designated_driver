@@ -189,7 +189,7 @@ fun AllTripsScreen(vm: SettlementViewModel = viewModel(), onHome: (() -> Unit)? 
                     Button(
                         onClick = {
                             vm.clearAllTrips()
-                            finalizeResultMessage = "오전 10시 10분에 자동 마감됩니다"
+                            finalizeResultMessage = "업무가 마감되었습니다"
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF4444))
                     ) {
