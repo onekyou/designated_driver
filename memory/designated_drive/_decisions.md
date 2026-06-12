@@ -226,3 +226,14 @@
 - **→ [잠정·다음 작업] 지명 가제티어(사전) 후처리** = 전사 결과를 양평 지명·단골 기사명 사전으로 스냅("양평력/양통력"→"양평역"). 결정대장 "비프 트림·자모 가제티어 스냅" 후속 예정과 일치. **call_manager·pickup 공통 적용**(같은 엔진). 또는 sherpa-onnx+hotwords 재평가(엔진 교체라 측정 후).
 - **도구 학습**: 클코 Bash의 `adb push`가 깨진 원인 = **Git Bash MSYS 경로 자동변환**(`/data/local/tmp`→`C:/Program Files/Git/data/local/tmp`로 둔갑, "1 file pushed" 가짜 성공). **`MSYS_NO_PATHCONV=1` 접두로 복구** → 클코 도구로 push 가능(이전엔 됐던 게 이 변환 때문에 이 세션 깨졌던 것). adb shell/install/run-as는 영향 없음(파일 인자 없어서).
 - **미커밋**: `feature/reservation-engine-poc` 로컬(코드 A~E + 세로고정). E2E 발화까지 실연됨(전사 체인 작동, 정확도만 지명 보정 대기).
+
+## 알림 정리 (소리·표기 트랙)
+
+### [확정·2026-06-13 push `4f625eed`/`10982fce`/`7f346af4`] 3앱 알림음 정리 + 콜매니저 표기 축소 + 픽업 콜표기 12h 롤링
+- **계기(원규씨)**: 콜매니저 알림이 너무 많고 모든 알림음이 동일(=ptt 효과음이 채팅·콜에까지 새서 무전처럼 들림).
+- **알림음 [확정]**: `R.raw.ptt_start`(ptt 효과음)는 **PTT 본체(PTTManager.playCue) 전용**. 채팅(playChatSound·채널)·콜·상태 알림은 전부 **기본 알림음**(`RingtoneManager.getDefaultUri(TYPE_NOTIFICATION)`). 공유콜만 알람음 유지. 사운드 바꾸는 채널은 **ID 버전업 + 구채널 deleteNotificationChannel**(안드로이드는 채널 생성 시 사운드 1회 고정 → ID 안 바꾸면 기존 폰 미반영). dumpsys 실측 확인. 3앱(call_manager·pickup·driver). driver는 이미 기본음이라 죽은 `chat_messages_ptt` 채널만 삭제.
+  - "모든 알림음 동일" 원인 규명: 구 채널들이 빌드마다 재배정되는 **리소스ID(2131…)를 사운드 URI로 박제** → 한 리소스로 collapse. 이번엔 안정적 시스템 URI(`content://settings/system/...`)로 전환해 재발 차단.
+- **콜매니저 표기 축소 [확정·원규씨 결정]**: **새 콜(NEW_CALL)=데이터만(무음)** / 기사 상태변경=`ONLINE`(출근)·`OFFLINE`(퇴근)만 알림(대기중·배차·운행중·정산대기 데이터만) / 운행상태=운행시작·운행완료만(기사수락·정산대기 데이터만) / **콜취소·기사승인·신규회원·전달실패·업무마감제출=기본음 알림 유지**(처음 전부 무음화 후 원규씨가 이 5종 복원 지시). DB저장·브로드캐스트는 유지, `showNotification`만 제거. (status 문자열은 functions·driver `DriverStatus.kt`로 교차확인: 출근=ONLINE/퇴근=OFFLINE/대기중복귀=WAITING.)
+- **픽업 콜표기 = 콜매니저식 12h 롤링 윈도우 [확정]** (영업일 10시 경계 `fe8ef8d3` **폐기**→`7f346af4` 대체): 기사가 운행완료 미입력한 박제 콜이 활성상태(IN_PROGRESS·정산대기 등)로 무기한 표시되던 문제. call_manager `CallRepository.getCallsFlow`의 **생성 후 12시간 메모리 필터** 패턴 채택 — `combine(DAO Flow, 1분 ticker)`로 `now-12h` 필터 → 앱 켠 채여도 자동 갱신. DB복사본 주입검증(11h·now 표시 / 13h·25h 숨김). **10시 경계 폐기 사유**: 원규씨가 콜매니저 기존 패턴(롤링 12h)에 맞추라 지시. 표기 필터만(Firestore/Room 행 보존).
+  - 범위 밖: 픽업 refreshData의 Firestore측 시간필터(`whereIn+whereGreaterThan`=복합색인 필요·런타임 위험) → 후속. 박제 콜 **원천 정리(기사 강제 마감)**는 정산 게이트 별 트랙.
+- **⛳ 미검증(런타임)**: 사운드 채널(dumpsys)·12h 필터(DB)는 실측했으나 **표기 억제 동작(새콜 무음·억제타입 침묵·유지타입 기본음)은 실 FCM 미확인** → 실콜 or 테스트스크립트 1회로 닫을 것. **실 파일럿폰 설치 미실시**(개발 3단말 S21+·S22·ZFlip4만). 전부 클라전용·functions 무변경(영향 반경 작음).
