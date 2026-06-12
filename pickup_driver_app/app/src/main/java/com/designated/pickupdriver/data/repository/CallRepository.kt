@@ -10,7 +10,10 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
@@ -39,8 +42,11 @@ class CallRepository @Inject constructor(
     companion object {
         private const val TAG = "PickupCallRepo"
         private const val INITIAL_LOAD_LIMIT = 100L
-        // 영업일 시작 시각 (KST 10시) — 정산 영업일 경계와 동일
-        private const val BUSINESS_DAY_START_HOUR = 10
+        // 활성 콜 표기 윈도우 = 생성 후 12시간 (콜매니저 getCallsFlow 12시간 버킷과 동일).
+        // 기사가 운행완료를 안 누른 박제 콜이 12시간 뒤 표기에서 자동 제외됨. (2026-06-13)
+        private const val ACTIVE_WINDOW_MS = 12L * 60L * 60L * 1000L
+        // 시간 경과 자동 반영용 주기 (콜매니저 startSharedCallTicker와 동일 60초).
+        private const val TICK_MS = 60_000L
         // WAITING 제외: 픽업기사는 대리기사가 배차받은 콜만 모니터링 (2026-05-11)
         private val ACTIVE_STATUSES = listOf(
             Constants.STATUS_ASSIGNED,
@@ -48,31 +54,30 @@ class CallRepository @Inject constructor(
             Constants.STATUS_IN_PROGRESS,
             Constants.STATUS_AWAITING_SETTLEMENT
         )
-
-        /**
-         * 현재 영업일 시작(가장 최근 도래한 KST 10:00) epoch millis.
-         * 현재가 10시 이전이면 전날 10:00. 이 시각 이전 생성 콜은 지난 영업일 = 표기 제외.
-         * (기사가 운행완료 미입력한 박제 콜이 다음날까지 남는 문제 차단. 2026-06-13)
-         */
-        fun businessDayStartMillis(nowMillis: Long = System.currentTimeMillis()): Long {
-            val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Seoul"))
-            cal.timeInMillis = nowMillis
-            cal.set(java.util.Calendar.HOUR_OF_DAY, BUSINESS_DAY_START_HOUR)
-            cal.set(java.util.Calendar.MINUTE, 0)
-            cal.set(java.util.Calendar.SECOND, 0)
-            cal.set(java.util.Calendar.MILLISECOND, 0)
-            if (cal.timeInMillis > nowMillis) {
-                cal.add(java.util.Calendar.DAY_OF_MONTH, -1)
-            }
-            return cal.timeInMillis
-        }
     }
 
     // ===== Flow 노출 =====
 
-    fun getActiveCallsFlow(provinceId: String, cityId: String, officeId: String): Flow<List<LocalCall>> {
-        val cutoff = businessDayStartMillis()
-        return callDao.getActiveCallsFlow(provinceId, cityId, officeId, ACTIVE_STATUSES, cutoff)
+    /**
+     * 활성 콜 Flow. 콜매니저 패턴 — 생성 후 12시간(ACTIVE_WINDOW_MS) 윈도우를 메모리에서 필터.
+     * DAO Flow(DB 변경) 또는 ticker(1분 주기) 중 하나만 emit해도 combine이 재계산 →
+     * 앱을 켜둔 채여도 12시간 지난 콜이 자동으로 빠진다(화면 새로고침 불필요).
+     */
+    fun getActiveCallsFlow(provinceId: String, cityId: String, officeId: String): Flow<List<LocalCall>> =
+        combine(
+            callDao.getActiveCallsFlow(provinceId, cityId, officeId, ACTIVE_STATUSES),
+            tickerFlow()
+        ) { calls, _ ->
+            val cutoff = System.currentTimeMillis() - ACTIVE_WINDOW_MS
+            calls.filter { it.timestamp >= cutoff }
+        }
+
+    /** 1분마다 Unit을 emit(첫 emit 즉시) — combine의 시간 윈도우 재계산 트리거. */
+    private fun tickerFlow(): Flow<Unit> = flow {
+        while (true) {
+            emit(Unit)
+            delay(TICK_MS)
+        }
     }
 
     // ===== 첫 진입 시 reconciliation (.get 1회) =====
