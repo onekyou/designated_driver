@@ -230,6 +230,7 @@
   - **★ 핵심 한계(실측)**: whisper가 같은 "양평역"을 들쭉날쭉 전사 — 1자모 오류(양평**력**)면 교정되나 2자모(양**통**)면 보존(미교정). 가제티어는 "조금 틀림"만 고침. 심한 오전사·"양통"류는 **whisper 품질 영역**(엔진/프롬프트, 별 트랙). 오교정(틀린 지명 박제)은 "헷갈리면 보존"으로 차단 = 안전 우선.
   - **rules 변경**: `firestore.rules` `match /settings/gazetteer { allow read: if isAuthenticated() }`(픽업기사 read용, write는 admin). 배포 완료(원규씨 승인). 다른 settings는 그대로 admin 전용.
   - **범위 밖(후속)**: 기사명 교정(designated_drivers 권한·동기화 별도), 콜 출발/목적지 자동축적, "군청" 등 비행정지명 시드(사장 운영 추가), whisper initial_prompt. sherpa-onnx+hotwords 재평가도 후속(엔진 교체라 측정 후).
+  - **★ 보급 인계(누락 방지)**: gazetteer 시드는 **현재 1004 테스트 사무실만**(`RUbeBEvGGYP5wMhJHhMF`). **보급 시 실 사무실마다 `node functions/scripts/seed-gazetteer.js <officeId>` 실행 필수** — 미시드면 사전 빈 set → 교정 no-op(무해하나 효과 0). 양평 실사무실(`nEkf0X9g3LZtRX94Mrzu`) 미시드 확인(2026-06-15). rules(settings/gazetteer read)는 전역 배포라 OK.
 - **도구 학습**: 클코 Bash의 `adb push`가 깨진 원인 = **Git Bash MSYS 경로 자동변환**(`/data/local/tmp`→`C:/Program Files/Git/data/local/tmp`로 둔갑, "1 file pushed" 가짜 성공). **`MSYS_NO_PATHCONV=1` 접두로 복구** → 클코 도구로 push 가능(이전엔 됐던 게 이 변환 때문에 이 세션 깨졌던 것). adb shell/install/run-as는 영향 없음(파일 인자 없어서).
 - **미커밋**: `feature/reservation-engine-poc` 로컬(코드 A~E + 세로고정). E2E 발화까지 실연됨(전사 체인 작동, 정확도만 지명 보정 대기). ※이후 `39754c4c`로 커밋됨.
 
