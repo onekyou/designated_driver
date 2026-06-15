@@ -231,7 +231,17 @@
   - **rules 변경**: `firestore.rules` `match /settings/gazetteer { allow read: if isAuthenticated() }`(픽업기사 read용, write는 admin). 배포 완료(원규씨 승인). 다른 settings는 그대로 admin 전용.
   - **범위 밖(후속)**: 기사명 교정(designated_drivers 권한·동기화 별도), 콜 출발/목적지 자동축적, "군청" 등 비행정지명 시드(사장 운영 추가), whisper initial_prompt. sherpa-onnx+hotwords 재평가도 후속(엔진 교체라 측정 후).
 - **도구 학습**: 클코 Bash의 `adb push`가 깨진 원인 = **Git Bash MSYS 경로 자동변환**(`/data/local/tmp`→`C:/Program Files/Git/data/local/tmp`로 둔갑, "1 file pushed" 가짜 성공). **`MSYS_NO_PATHCONV=1` 접두로 복구** → 클코 도구로 push 가능(이전엔 됐던 게 이 변환 때문에 이 세션 깨졌던 것). adb shell/install/run-as는 영향 없음(파일 인자 없어서).
-- **미커밋**: `feature/reservation-engine-poc` 로컬(코드 A~E + 세로고정). E2E 발화까지 실연됨(전사 체인 작동, 정확도만 지명 보정 대기).
+- **미커밋**: `feature/reservation-engine-poc` 로컬(코드 A~E + 세로고정). E2E 발화까지 실연됨(전사 체인 작동, 정확도만 지명 보정 대기). ※이후 `39754c4c`로 커밋됨.
+
+### [확정·2026-06-15 구현·실폰검증] 운행 중(콜 IN_PROGRESS) 대리기사 PTT 음성 수신 차단
+- **요구(원규씨)**: 대리기사 운행 시작 → PTT **음성 수신만** 차단(운전 안전) / 채팅 전사 텍스트는 **블랙박스로 계속 쌓임** / **운행완료 버튼부터 음성 복구**(정산확정 아님) / 운행 중 송수신은 텍스트로 확인.
+- **구현(driver_app만, functions·송신측 무변경)**:
+  - ① `DriverViewModel.init` collector — `_uiState.activeCall?.status == STATUS_IN_PROGRESS`를 `distinctUntilChanged`로 관찰해 `prefs(PREF_KEY_PTT_BLOCK_ONTRIP)` 미러링. **activeCall.status가 콜 상태 단일 수렴점**이라 운행시작·완료·취소(cancelTrip)·외부변경·재시작 모두 자동 커버. (원안의 "3지점 직접 기록"은 cancelTrip 이탈 누락 → 차단 안 풀리는 버그였음 = 누락검토 성과로 collector로 전환.)
+  - ② `PttAudioManager.onWake` 진입부 — prefs true면 join skip(음성 차단). **io.agora.rtc2.Constants import와 충돌 회피 위해 driverapp Constants 풀패키지명** 사용(오염검토 성과).
+  - ③ `Constants.PREF_KEY_PTT_BLOCK_ONTRIP`. prefs = `PREFS_NAME`(주입 sharedPreferences=AppModule:39, 서비스와 동일 파일 확정).
+- **채팅 텍스트 무영향**: 음성 wake(`ptt_dispatch`)와 채팅(`NEW_CHAT_MESSAGE`→`handleChatMessage`) FCM 분기 분리 → 차단해도 전사 텍스트 계속 INSERT(블랙박스 자동 유지).
+- **검증(실폰)**: 운행 중 음성 차단 + 운행완료 후 복구 실동작 통과(원규씨 확인). 빌드·ZFlip4 install. ※설치 직후 일시 랙은 재시작으로 해소(로그상 ANR/크래시 없음, 본 변경 무관 — collector는 status 변화 시 prefs write만).
+- **범위 밖**: 픽업기사(송수신 주체, 별 정책) · PREPARING(출발지 이동) 구간(요구는 IN_PROGRESS만).
 
 ## 알림 정리 (소리·표기 트랙)
 

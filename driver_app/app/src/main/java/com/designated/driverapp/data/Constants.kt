@@ -41,6 +41,7 @@ object Constants {
     const val PREF_KEY_CITY_ID = "pref_city_id"
     const val PREF_KEY_OFFICE_ID = "pref_office_id"
     const val PREF_KEY_PENDING_FCM_TOKEN = "pref_pending_fcm_token"
+    const val PREF_KEY_PTT_BLOCK_ONTRIP = "ptt_block_ontrip"  // 운행 중(콜 IN_PROGRESS) PTT 음성 수신 차단 플래그
 
     const val STATUS_WAITING = "WAITING"
     const val STATUS_ASSIGNED = "ASSIGNED"

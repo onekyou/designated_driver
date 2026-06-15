@@ -41,6 +41,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
@@ -185,6 +187,17 @@ class DriverViewModel @Inject constructor(
     init {
         auth.addAuthStateListener(authStateListener)
         bindDriverService()
+
+        // [PTT 차단] 콜 IN_PROGRESS(운행 중)면 prefs 플래그 ON → PttAudioManager 가 음성 수신 차단.
+        //  activeCall.status 가 콜 상태 단일 수렴점 → 운행시작/완료/취소/외부변경/재시작 모두 자동 미러링.
+        viewModelScope.launch {
+            _uiState.map { it.activeCall?.status == Constants.STATUS_IN_PROGRESS }
+                .distinctUntilChanged()
+                .collect { inProgress ->
+                    sharedPreferences.edit()
+                        .putBoolean(Constants.PREF_KEY_PTT_BLOCK_ONTRIP, inProgress).apply()
+                }
+        }
     }
 
     override fun onCleared() {

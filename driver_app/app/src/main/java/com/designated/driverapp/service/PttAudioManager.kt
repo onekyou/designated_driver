@@ -174,6 +174,15 @@ class PttAudioManager {
      *  regionId/officeId 는 기사 prefs 출처(채널 = `${regionId}_${officeId}_ptt`, 매니저와 동일 사무실).
      */
     fun onWake(ctx: Context, regionId: String, officeId: String, expectedChannel: String?) {
+        // [PTT 차단] 운행 중(콜 IN_PROGRESS)이면 음성 수신 join 자체를 스킵(채팅 텍스트는 별개 경로라 계속 쌓임).
+        //  풀패키지명 — 이 파일은 io.agora.rtc2.Constants 를 import 중이라 driverapp Constants 와 충돌 회피.
+        val blocked = ctx.getSharedPreferences(
+                com.designated.driverapp.data.Constants.PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(com.designated.driverapp.data.Constants.PREF_KEY_PTT_BLOCK_ONTRIP, false)
+        if (blocked) {
+            Log.i(TAG, "onWake: 운행 중(콜 IN_PROGRESS) — PTT 음성 수신 차단(join skip)")
+            return
+        }
         ensureEngine(ctx)
         val eng = engine ?: run { Log.e(TAG, "onWake: engine null"); return }
 
