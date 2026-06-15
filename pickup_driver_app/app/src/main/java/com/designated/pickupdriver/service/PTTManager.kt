@@ -218,7 +218,7 @@ class PTTManager {
     }
 
     /**
-     * 효과음 1회(시작 1차/2차·종료 오버톤 공용). 채팅음 = R.raw.ptt_start.
+     * 효과음 1회(시작 1차/2차·종료 오버톤 공용) — PTT 전용 R.raw.ptt_start (채팅·콜 알림은 기본 알림음, 2026-06-12 알림정리).
      *  inCall=true(통화모드): ring/notification 억제되므로 통화 신호음 usage로 가청.
      */
     private fun playCue(inCall: Boolean) {
