@@ -605,6 +605,12 @@
 - **잔여(선택)**: keep.audiosessiontype 파라미터 보존(끊김 원인 아님, 효과 미측정) / 2단계 지연(토큰 선발급 캐시+wake fire-and-forget) 미진입 / master 9개월 분기 정리 별도.
 - **클코 학습**: 6/3 "WARM이 수신을 깬다"를 *단정*하고 롤백 plan을 세웠으나, 6/6 게이트형 진단(원인 단정 금지·라우트 락 베이스라인 후 로그 귀속)으로 오진 판명. 2자→3자 환경 차이가 메시 버그를 가렸음. 단정 전 실측·로그 교차 필수.
 
+## 6/16 ★ 검증 트랙 시작 + 콜드스타트/앱진입 배차 수락 버그 수정 (커밋 503cf4b1 push됨)
+- **검증 트랙 발의(원규씨)**: 6월 신규기능 실동작 검증(원칙=최소개입·자유사용). 검증 3겹(①코드 정합감사 ②런타임 시뮬 테스트사무실1004 ③기기 핸즈온, PTT는 실폰검증 충분→생략). **시나리오 v2**(픽업 포함 콜생애 8단계: 출근→전화콜→배차+PTT→픽업이송→운행시작(PTT차단)→운행완료→마감→정산확인) = 다음 검증 기준선. 픽업앱=읽기전용 모니터(액션버튼0, 조율은 PTT, 픽업-콜 매칭 시스템에 없음).
+- **버그 수정(driver_app 4파일, push)**: 화면오프 배차→알림클릭/앱진입→수락해도 운행준비 안가고 메인, 배차확인 여러번(오래된 묵은버그). **뒷단**=acceptCall이 인메모리 assignedCalls 의존→콜드스타트 못찾음(activeCall 미세팅)→2단계 트랜잭션 callSnapshot을 CallInfo로 파싱·반환해 보장세팅(`runTransaction<CallInfo?>`). **앞단**=앱 열면(onResume) 미수락배차 수락팝업 자동(`call_assigned` FCM→로컬 prefs `PREF_KEY_PENDING_DISPATCH`→수락/거절/무효시 `clearPendingDispatch`, **Firestore 읽기0**). 플립폰(ZFlip4) 검증통과·**S21+/S22 미설치(플립폰만 최신)**.
+- **미결(다음세션)**: ①⚠️정산 `onDriverSettlementSubmitted` 트리거가 `dailySettlement.status`(없는 필드) 검사→불발의심(매니저 정산제출 FCM 안올수도, 미확정·런타임확인필요) ②운행중취소 요금0(정산미반영, 부분요금=정책판단 대기) ③기사상태 enum과다(ONLINE≈WAITING통합후보·ACCEPTED불일치 잠재버그·PENDING_CONFIRM 정산중복, 정산중심부라 보류) ④알림음 정산대기 정리보류.
+- **교훈**: 정적분석↔실동작 갭 큼 — STATUS_CHANGE가 죽은코드로 보였으나 운행시작/완료 소리+팝업은 **in-app(DashboardViewModel Firestore 리스너)** 경로로 작동, "기사 운행취소"는 자동아니라 원규씨 수동취소. logcat 실측+실사용 확인으로만 확정. 원규씨 최초 "실 동작 검증 필요" 직관 정확. driver_app assignedCallsListener 등=죽은변수(미등록). 상세=`memory/designated_drive/session_2026-06-16_verification_dispatch_fix.md`.
+
 ## SUPERSEDED 자료 위치 (참고용)
 - `memory/designated_drive/project_business_model.md` (마스터 §3.1, §3.4, §10.4 흡수)
 - `memory/designated_drive/project_expansion_vision.md` (마스터 §1.3 환상 ③)
