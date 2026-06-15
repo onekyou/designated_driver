@@ -302,6 +302,12 @@ service cloud.firestore {
       // =============================
       //  Settings (콜매니저 계획서에 따름)
       // =============================
+      // 지명 가제티어: PTT 전사 교정 사전. 픽업기사(권한 약함)도 read 해야 하므로 완화.
+      // (다른 settings 문서는 아래 규칙대로 isOfficeAdmin 전용. write 는 여기서도 admin 전용.)
+      match /settings/gazetteer {
+        allow read: if isAuthenticated();
+        allow write: if isOfficeAdmin(provinceId, cityId, officeId);
+      }
       match /settings/{settingId} {
         allow read, write: if isOfficeAdmin(provinceId, cityId, officeId);
       }

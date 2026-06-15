@@ -9,6 +9,7 @@ import android.util.Log
 import androidx.exifinterface.media.ExifInterface
 import com.designated.callmanager.data.local.AppDatabase
 import com.designated.callmanager.data.local.LocalChatMessage
+import com.designated.callmanager.util.GazetteerCorrector
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -46,6 +47,27 @@ class ChatRepository(
 ) {
     private val chatDao = database.chatMessageDao()
     private val storage by lazy { FirebaseStorage.getInstance() }
+
+    // [가제티어] 지명 사전 메모리 캐시(세션 1회 로드). 기사 등록 등 변경은 다음 세션 반영.
+    @Volatile private var placesCache: Set<String>? = null
+
+    /** settings/gazetteer 의 places 1회 로드. 실패/없음 = 빈 set(교정 no-op, graceful). */
+    private suspend fun loadPlaces(provinceId: String, cityId: String, officeId: String): Set<String> {
+        return try {
+            val doc = firestore
+                .collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
+                .collection("offices").document(officeId)
+                .collection("settings").document("gazetteer")
+                .get().await()
+            @Suppress("UNCHECKED_CAST")
+            val places = (doc.get("places") as? List<String>) ?: emptyList()
+            places.toSet().also { Log.d(TAG, "[loadPlaces] 지명 사전 ${it.size}개 로드") }
+        } catch (e: Exception) {
+            Log.w(TAG, "[loadPlaces] 사전 로드 실패 — 교정 비활성(graceful)", e)
+            emptySet()
+        }
+    }
 
     companion object {
         private const val TAG = "ChatRepository"
@@ -186,6 +208,8 @@ class ChatRepository(
         }
 
         scope.launch {
+            if (placesCache == null) placesCache = loadPlaces(provinceId, cityId, officeId)
+            val correctedText = GazetteerCorrector.correct(cleanText, placesCache ?: emptySet())
             val messageRef = firestore
                 .collection("provinces").document(provinceId)
                 .collection("cities").document(cityId)
@@ -203,7 +227,7 @@ class ChatRepository(
                 senderId = senderId,
                 senderName = senderName,
                 senderRole = senderRole,
-                text = cleanText,
+                text = correctedText,
                 createdAt = nowMs,
                 clientCreatedAt = nowMs,
                 sendStatus = LocalChatMessage.SEND_STATUS_SENDING,
@@ -220,7 +244,7 @@ class ChatRepository(
                     "senderId" to senderId,
                     "senderName" to senderName,
                     "senderRole" to senderRole,
-                    "text" to cleanText,
+                    "text" to correctedText,
                     "type" to "ptt",
                     "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
                     "clientCreatedAt" to nowMs,

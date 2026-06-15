@@ -35,7 +35,7 @@ object WhisperTranscriber : PttTranscriber {
     //   값은 잠정(logcat의 nsp/avgP 실측으로 보정). 보수적으로 잡아 정상 발화는 안 막음.
     private const val NO_SPEECH_MAX = 0.60f   // 이 이상 = 무음/비음성(헛것) 의심
     private const val AVG_TOKEN_P_MIN = 0.45f  // 이 미만 = 횡설수설 의심
-    private const val LOW_CONF_MARKER = "(전사 불명확)"
+    const val LOW_CONF_MARKER = "(전사 불명확)"   // public: 가제티어 후처리가 스킵 판단에 참조
 
     override suspend fun transcribe(wav: File): String? {
         val ctx = ensureContext() ?: return null
