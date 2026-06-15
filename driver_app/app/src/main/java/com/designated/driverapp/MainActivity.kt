@@ -340,6 +340,15 @@ class MainActivity : ComponentActivity() {
         // 백그라운드에서 취소된 콜이 있으면 UI 정리
         if (auth.currentUser != null) {
             driverViewModel.refreshActiveCallStatus()
+
+            // [앱 진입 자동 수락팝업] 미수락 배차가 있으면(알림 탭 없이 앱만 열어도) 수락팝업 자동.
+            // prefs는 로컬이라 Firestore 읽기 0. pending 있을 때만 기존 handleNotificationCallId 경로 호출.
+            val pendingDispatch = getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+                .getString(Constants.PREF_KEY_PENDING_DISPATCH, null)
+            if (!pendingDispatch.isNullOrBlank()) {
+                Log.d(TAG, "onResume - 미수락 배차 감지: $pendingDispatch → 수락팝업")
+                driverViewModel.setNotificationCallId(pendingDispatch)
+            }
         }
 
         // 알림 설정이 꺼져있는지 확인 (로그인 상태 + 이번 세션에서 아직 안 물어봤을 때만)

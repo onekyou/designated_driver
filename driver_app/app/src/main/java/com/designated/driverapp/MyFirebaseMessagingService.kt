@@ -166,6 +166,10 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 sendDeliveryAck(notificationId)
             }
 
+            // [앱 진입 자동 수락팝업] 미수락 배차 callId를 로컬에 기록 → 앱 onResume서 소비(Firestore 읽기 0).
+            // 수락/거절/무효 시 DriverViewModel.clearPendingDispatch()로 제거.
+            prefs.edit().putString(Constants.PREF_KEY_PENDING_DISPATCH, callId).apply()
+
             // DriverForegroundService에 콜 정보 전달
             Log.d(TAG, "DriverForegroundService에 콜 정보 전달: $callId")
             val serviceIntent = DriverForegroundService.newCallAssignedIntent(this, callId, title, body)

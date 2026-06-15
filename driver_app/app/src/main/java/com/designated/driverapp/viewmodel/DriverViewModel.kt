@@ -434,7 +434,7 @@ class DriverViewModel @Inject constructor(
         Log.d(TAG, "🔵 Driver Ref 경로: provinces/$provinceId/cities/$cityId/offices/$officeId/designated_drivers/$driverId")
 
         Log.d(TAG, "🔵 Transaction 시작")
-        firestore.runTransaction { transaction ->
+        val acceptedCallInfo = firestore.runTransaction<CallInfo?> { transaction ->
             Log.d(TAG, "🔵 Transaction 내부 - 콜 문서 읽기")
             val callSnapshot = transaction.get(callRef)
 
@@ -459,9 +459,29 @@ class DriverViewModel @Inject constructor(
                 Log.w(TAG, "⚠️ 콜 상태가 ASSIGNED가 아님: $currentStatus")
                 throw IllegalStateException("CALL_NOT_ASSIGNABLE: current status is $currentStatus")
             }
+
+            // 콜드스타트 fallback용: update 전(ASSIGNED) 데이터를 CallInfo로 파싱, status만 ACCEPTED로 덮음
+            callSnapshot.toObject(CallInfo::class.java)?.copy(id = callSnapshot.id, status = Constants.STATUS_ACCEPTED)
         }.await()
         Log.d(TAG, "🔵 Transaction 완료")
 
+        // 콜드스타트 보강: 1단계에서 assignedCalls 미스로 activeCall을 못 채운 경우, 트랜잭션이 읽은 콜로 보장 세팅
+        if (acceptedCallInfo != null) {
+            _uiState.update { current ->
+                if (current.activeCall?.id == callId) current   // 정상 경로(1단계서 이미 세팅) → 그대로
+                else current.copy(
+                    activeCall = acceptedCallInfo,
+                    driverStatus = DriverStatus.ACCEPTED,
+                    newCallPopup = null,
+                    assignedCalls = if (current.assignedCalls.any { it.id == callId })
+                        current.assignedCalls.map { if (it.id == callId) it.copy(status = Constants.STATUS_ACCEPTED) else it }
+                    else current.assignedCalls + acceptedCallInfo
+                )
+            }
+            Log.d(TAG, "🔵 콜드스타트 보강 - activeCall 보장 세팅: $callId")
+        }
+
+        clearPendingDispatch()   // 수락 완료 → 미수락 배차 플래그 제거
         Log.d(TAG, "✅ 콜 수락 완료: $callId")
             } catch (e: Exception) {
                 Log.e(TAG, "❌ 콜 수락 실패: ${e.message}", e)
@@ -630,6 +650,7 @@ class DriverViewModel @Inject constructor(
             )
         }
 
+        clearPendingDispatch()   // 거절 → 미수락 배차 플래그 제거
         Log.d(TAG, "콜 거절 완료: callId=$callId")
     }
 
@@ -1250,6 +1271,12 @@ class DriverViewModel @Inject constructor(
         return Triple(provinceId, cityId, officeId)
     }
 
+    /** 미수락 배차 플래그 제거 — 수락/거절/무효 콜 시 호출. 앱 진입 자동 수락팝업이 다시 안 뜨도록. */
+    private fun clearPendingDispatch() {
+        appContext.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().remove(Constants.PREF_KEY_PENDING_DISPATCH).apply()
+    }
+
     private fun performFirestoreUpdate(block: suspend () -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.update { it.copy(errorMessage = null) }
@@ -1395,6 +1422,7 @@ class DriverViewModel @Inject constructor(
                     }
                     Log.d(TAG, "handleNotificationCallId: processed assigned call")
                 } else if (callInfo != null) {
+                    clearPendingDispatch()   // ASSIGNED 아님(취소/완료 등) → 미수락 배차 플래그 무효, 제거
                     // 취소된 콜이면 무시하고 홈으로
                     val cancelStatuses = listOf("CANCELED", "CANCELLED_BY_CUSTOMER", "CANCELLED_BY_DRIVER")
                     if (callInfo.status in cancelStatuses) {

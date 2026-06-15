@@ -42,6 +42,7 @@ object Constants {
     const val PREF_KEY_OFFICE_ID = "pref_office_id"
     const val PREF_KEY_PENDING_FCM_TOKEN = "pref_pending_fcm_token"
     const val PREF_KEY_PTT_BLOCK_ONTRIP = "ptt_block_ontrip"  // 운행 중(콜 IN_PROGRESS) PTT 음성 수신 차단 플래그
+    const val PREF_KEY_PENDING_DISPATCH = "pref_pending_dispatch_call_id"  // 미수락 배차 callId — 앱 진입 시 수락팝업 자동 (Firestore 읽기 0, 로컬 플래그)
 
     const val STATUS_WAITING = "WAITING"
     const val STATUS_ASSIGNED = "ASSIGNED"
