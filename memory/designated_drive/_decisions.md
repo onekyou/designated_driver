@@ -120,6 +120,14 @@
 - 화면 꺼진 채 볼륨키 전역 캡처(Accessibility)는 **안 씀**(삼성 절전 재허용 마찰 = 행동0 적).
 - 통화없는 화면오프 능동발화의 입력 수단은 미결(블루투스 등 후속). 주력 = 통화-trigger prewarm(아래).
 
+### [확정·2026-06-17 구현·컴파일검증·★실폰미검증] 인앱 PTT 트리거 = 볼륨키 단일 누름(hold-to-talk), 업/다운 무관
+- **요구(원규씨)**: 현장에서 볼륨키 찾아 두 번 누르기 불편 → **버튼 누르기 시작 = 즉시 발화, 떼면 송신 종료**. 업/다운 아무 키나, **둘 동시 눌러도 안전**.
+- **변경(call_manager·pickup `MainActivity.dispatchKeyEvent`)**: 기존 "더블탭 arm→2번째 hold"(VOLUME_DOWN만) 폐기 → `VOLUME_DOWN||VOLUME_UP` ACTION_DOWN(repeatCount==0)에서 즉시 `startTransmit`, **모든 볼륨키 뗀 뒤**(`pttPressedKeys` 집합 empty) `stopTransmit`. `pttFirstTapUpTime`/`pttPendingFirstTapDown` 필드 제거(외부참조 0 확인), `pttHolding` 유지(onPause 안전망 정합), onPause에 `pttPressedKeys.clear()` 추가.
+- **오염 검토 통과**: 제거 필드 = dispatchKeyEvent 내부 전용 / 앱 전체 `onKeyDown`·`setVolumeControlStream` 0건 / PTTManager(비프 큐·STT 캡처·9-A) 무변경 / driver_app=PTT 송신無 무관.
+- **부작용(양해됨)**: MainActivity 화면 떠있는 동안 볼륨버튼 **소리조절 불가**(업·다운 둘 다 PTT 전용). 전용폰이라 OK. 다른 화면은 볼륨 정상.
+- ⚠️ **실폰 런타임 미검증** — 방문 전 개발폰(S21+ call_mgr / S22 pickup) install 후 누름→발화·떼기→종료·업/다운·동시누름 확인 필요. 컴파일·재빌드는 통과(17:27/17:29).
+- "전역 볼륨키 캡처 배제"[확정]과 무관(이건 인앱 foreground 처리, 전역 후크 아님).
+
 ### [확정·2026-06-09 구현·측정통과] 콜드스타트 단축 = 토큰 캐시 + wake fire-and-forget (★비용 무관)
 - **진단(코드 직접 확인 2026-06-09)**: `generateAgoraToken`·`sendPttWake` 둘 다 이미 `minInstances:1`(ptt.ts L24·L120 — 함수 콜드 주범 아님). 5초 = ① 송신측 직렬 왕복(토큰 await→join→wake await) + ② **READY_TIMEOUT 3초**(`PTTManager` L46) — 수신측이 `onWake`에서 또 `generateAgoraToken` 호출(PTTManager L288)해 join 느림 → `remoteUsers>0` 지연.
 - **대안**: Agora 토큰 24h 캐시(송·수신 양쪽 함수 왕복 제거 → **수신측 join 가속 → READY_TIMEOUT 병목까지 완화**) + wake fire-and-forget(응답 안 기다리고 join; fireReady는 onUserJoined/타임아웃이 결정 L209·244). → 5초 → ~1~1.5초(수신측 FCM Doze 도달만, 비프 흡수).

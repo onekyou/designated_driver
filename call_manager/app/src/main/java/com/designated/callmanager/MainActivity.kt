@@ -168,9 +168,8 @@ class MainActivity : ComponentActivity() {
     // PTT 송신 (탭 후 hold-to-talk). 엔진은 발화 시점 Activity 컨텍스트로 생성(onCreate 컨텍스트 불안정 회피).
     // PTT 송수신 매니저 — Application 단일 인스턴스 공유(PttReceiverService와 동일 엔진). RtcEngine 싱글톤 보장.
     private val pttManager get() = (application as CallManagerApplication).pttManager
-    private var pttFirstTapUpTime = 0L       // 첫 탭(arm) up 시각
-    private var pttPendingFirstTapDown = false // 첫 탭 down 후 up 대기
-    private var pttHolding = false           // 두 번째 누름 유지(발화) 중
+    private var pttHolding = false           // 발화(hold) 중
+    private val pttPressedKeys = HashSet<Int>() // 현재 눌린 볼륨키 (업/다운 동시 누름 안전 처리)
     // 콜드 판정(pttFromBackground 등) 제거 — 포그라운드 발화는 항상 라이브(2026-06-03 재설계).
 
     private lateinit var permissionManager: CallManagerPermissionManager
@@ -1033,41 +1032,35 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * 볼륨다운 2회(짧은 간격) → PTT 발화 토글. 시스템 볼륨 변경은 차단(return true).
-     * 과거 검증 패턴(`6ae77f74`) 정합 — 화면 꺼짐 송신(BackgroundPTTService)은 확장 단계.
+     * 볼륨 버튼(업/다운 무관) 누르기 시작 = 즉시 발화(hold-to-talk), 떼면 종료. 시스템 볼륨 변경은 차단(return true).
+     * 업/다운 동시 누름 안전 — 첫 키에서 시작, 모든 키 뗀 뒤 종료. 화면 꺼짐 송신은 별도 트랙.
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+        val kc = event.keyCode
+        if (kc == KeyEvent.KEYCODE_VOLUME_DOWN || kc == KeyEvent.KEYCODE_VOLUME_UP) {
             when (event.action) {
                 KeyEvent.ACTION_DOWN -> {
                     if (event.repeatCount == 0) {
-                        val now = android.os.SystemClock.elapsedRealtime()
-                        if (now - pttFirstTapUpTime < 500L) {
-                            // 두 번째 누름 = 발화 시작(hold)
+                        pttPressedKeys.add(kc)
+                        if (!pttHolding) {
                             val (p, c, o) = getOfficeInfoForPtt()
                             if (p != null && c != null && o != null) {
                                 pttHolding = true
-                                pttFirstTapUpTime = 0L
                                 pttManager.startTransmit(this, p, c, o)
-                                Log.d("MainActivity", "PTT hold 시작")
+                                Log.d("MainActivity", "PTT 발화 시작 (단일 누름)")
                             } else {
                                 Log.w("MainActivity", "PTT: 사무실 정보 없음 — 발화 불가")
                             }
-                        } else {
-                            // 첫 탭 후보(down) — up에서 arm
-                            pttPendingFirstTapDown = true
                         }
                     }
                     // repeatCount>0 (hold 중 키반복) 무시
                 }
                 KeyEvent.ACTION_UP -> {
-                    if (pttHolding) {
+                    pttPressedKeys.remove(kc)
+                    if (pttPressedKeys.isEmpty() && pttHolding) {
                         pttHolding = false
                         pttManager.stopTransmit()
-                        Log.d("MainActivity", "PTT hold 종료(손 뗌)")
-                    } else if (pttPendingFirstTapDown) {
-                        pttPendingFirstTapDown = false
-                        pttFirstTapUpTime = android.os.SystemClock.elapsedRealtime() // arm 윈도우 시작
+                        Log.d("MainActivity", "PTT 발화 종료 (손 뗌)")
                     }
                 }
             }
@@ -1135,6 +1128,7 @@ class MainActivity : ComponentActivity() {
             pttManager.stopTransmit()
             Log.d("MainActivity", "PTT onPause 안전종료")
         }
+        pttPressedKeys.clear()
         try {
             unregisterReceiver(callDetectedReceiver)
         } catch (e: IllegalArgumentException) {

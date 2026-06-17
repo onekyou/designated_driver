@@ -60,9 +60,8 @@ class MainActivity : ComponentActivity() {
     private val pttManager get() = PickupDriverApplication.getInstance().pttManager
 
     // PTT 송신 상태 (call_manager 패턴). 콜드 판정 제거 — 포그라운드 발화는 항상 라이브(2026-06-03 재설계).
-    private var pttFirstTapUpTime = 0L
-    private var pttPendingFirstTapDown = false
     private var pttHolding = false
+    private val pttPressedKeys = HashSet<Int>() // 현재 눌린 볼륨키 (업/다운 동시 누름 안전 처리)
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -168,39 +167,35 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * 볼륨다운 2회(짧은 간격) → PTT 발화 토글(hold-to-talk). 시스템 볼륨 변경은 차단(return true).
-     * (call_manager dispatchKeyEvent 패턴 이식 — 화면 꺼짐 송신은 별도 트랙)
+     * 볼륨 버튼(업/다운 무관) 누르기 시작 = 즉시 발화(hold-to-talk), 떼면 종료. 시스템 볼륨 변경은 차단(return true).
+     * 업/다운 동시 누름 안전 — 첫 키에서 시작, 모든 키 뗀 뒤 종료. 화면 꺼짐 송신은 별도 트랙.
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+        val kc = event.keyCode
+        if (kc == KeyEvent.KEYCODE_VOLUME_DOWN || kc == KeyEvent.KEYCODE_VOLUME_UP) {
             when (event.action) {
                 KeyEvent.ACTION_DOWN -> {
                     if (event.repeatCount == 0) {
-                        val now = SystemClock.elapsedRealtime()
-                        if (now - pttFirstTapUpTime < 500L) {
-                            // 두 번째 누름 = 발화 시작(hold)
+                        pttPressedKeys.add(kc)
+                        if (!pttHolding) {
                             val (p, c, o) = getOfficeInfoForPtt()
                             if (p != null && c != null && o != null) {
                                 pttHolding = true
-                                pttFirstTapUpTime = 0L
                                 pttManager.startTransmit(this, p, c, o)
-                                Log.d("MainActivity", "PTT hold 시작")
+                                Log.d("MainActivity", "PTT 발화 시작 (단일 누름)")
                             } else {
                                 Log.w("MainActivity", "PTT: 사무실 정보 없음 — 발화 불가")
                             }
-                        } else {
-                            pttPendingFirstTapDown = true
                         }
                     }
+                    // repeatCount>0 (hold 중 키반복) 무시
                 }
                 KeyEvent.ACTION_UP -> {
-                    if (pttHolding) {
+                    pttPressedKeys.remove(kc)
+                    if (pttPressedKeys.isEmpty() && pttHolding) {
                         pttHolding = false
                         pttManager.stopTransmit()
-                        Log.d("MainActivity", "PTT hold 종료(손 뗌)")
-                    } else if (pttPendingFirstTapDown) {
-                        pttPendingFirstTapDown = false
-                        pttFirstTapUpTime = SystemClock.elapsedRealtime()
+                        Log.d("MainActivity", "PTT 발화 종료 (손 뗌)")
                     }
                 }
             }
@@ -264,6 +259,7 @@ class MainActivity : ComponentActivity() {
             pttHolding = false
             pttManager.stopTransmit()
         }
+        pttPressedKeys.clear()
     }
 
     private fun requestNotificationPermissionIfNeeded() {

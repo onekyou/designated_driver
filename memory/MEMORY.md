@@ -18,6 +18,8 @@
 - **현장 런북**: 0)폰3대(매니저/픽업/대리) 1)기존앱 삭제 2)새APK 설치(매니저=call_detector+call_manager/픽업=pickup/대리=driver) 3)**모델 adb push=call_manager·pickup만**(driver=수신·렌더만 모델불요) — `ggml-small-q5_1.bin`+`ggml-silero`VAD→filesDir(`MSYS_NO_PATHCONV=1` 주의) 4)각앱 사무실 로그인(officeId 재기록) 5)시드(✅완료) 6)검증=PTT음성+전사+테스트콜1건. ⚠️PTT앱 폰당1개·같은office채널.
 - **APK 현황(6/17 대조)**: 4앱 산출물 전부 "빌드→폰검증→커밋" 패턴이라 내용상 현재 코드 일치(call_manager·pickup APK가 가제티어 커밋 18분 전이나 working tree 빌드라 코드 포함). 그래도 **방문 직전 4앱 클린 재빌드 권장**(싸구려 보험). 브랜치 `feature/reservation-engine-poc` 미푸시 0·미커밋 코드 0(전부 push됨).
 - **남은 보급 준비(총알대리 한정)**: 위 현장 설치(폰 확보 시) · 9-B Commit 2 실콜검증 · 공유콜 잔여 3트리거 · (다중 보급 시) 모델 APK 번들.
+- **★ PTT 트리거 단일누름 변경(6/17, call_manager+pickup, 미커밋→이번 종료 커밋)**: 더블탭 폐기 → **볼륨키(업/다운 무관) 누르기 시작=즉시 발화, 떼면 종료**(동시누름 안전). `dispatchKeyEvent`에서 `pttFirstTapUpTime`/`pttPendingFirstTapDown` 제거+`pttPressedKeys` 집합 도입. 오염검토 통과·컴파일/재빌드 통과(call_mgr 17:27·pickup 17:29 APK). ⚠️**실폰 런타임 미검증** = 다음 최우선(개발폰 install→누름/떼기/업·다운/동시누름 확인). 부작용=MainActivity 화면서 볼륨 소리조절 불가(전용폰 OK). 상세=결정대장 "인앱 PTT 트리거 단일 누름".
+- **4앱 APK 현황(6/17)**: call_manager 71MB·pickup 49MB = PTT변경 재빌드 / call_detector 34MB·driver_app 156MB = up-to-date(코드 현재). 전부 방문 install 준비됨(방문 직전 재빌드는 선택).
 
 ## 한 줄 요약
 콜마당 = 양평 동네 생활 OS. 대리는 첫 사용 케이스. 식당 = 4중 노드 (호출/포인트/거점/쿠폰).
