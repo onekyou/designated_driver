@@ -120,12 +120,12 @@
 - 화면 꺼진 채 볼륨키 전역 캡처(Accessibility)는 **안 씀**(삼성 절전 재허용 마찰 = 행동0 적).
 - 통화없는 화면오프 능동발화의 입력 수단은 미결(블루투스 등 후속). 주력 = 통화-trigger prewarm(아래).
 
-### [확정·2026-06-17 구현·컴파일검증·★실폰미검증] 인앱 PTT 트리거 = 볼륨키 단일 누름(hold-to-talk), 업/다운 무관
+### [확정·2026-06-17 구현·2026-06-19 실폰검증통과·push c44068b0] 인앱 PTT 트리거 = 볼륨키 단일 누름(hold-to-talk), 업/다운 무관
 - **요구(원규씨)**: 현장에서 볼륨키 찾아 두 번 누르기 불편 → **버튼 누르기 시작 = 즉시 발화, 떼면 송신 종료**. 업/다운 아무 키나, **둘 동시 눌러도 안전**.
 - **변경(call_manager·pickup `MainActivity.dispatchKeyEvent`)**: 기존 "더블탭 arm→2번째 hold"(VOLUME_DOWN만) 폐기 → `VOLUME_DOWN||VOLUME_UP` ACTION_DOWN(repeatCount==0)에서 즉시 `startTransmit`, **모든 볼륨키 뗀 뒤**(`pttPressedKeys` 집합 empty) `stopTransmit`. `pttFirstTapUpTime`/`pttPendingFirstTapDown` 필드 제거(외부참조 0 확인), `pttHolding` 유지(onPause 안전망 정합), onPause에 `pttPressedKeys.clear()` 추가.
 - **오염 검토 통과**: 제거 필드 = dispatchKeyEvent 내부 전용 / 앱 전체 `onKeyDown`·`setVolumeControlStream` 0건 / PTTManager(비프 큐·STT 캡처·9-A) 무변경 / driver_app=PTT 송신無 무관.
 - **부작용(양해됨)**: MainActivity 화면 떠있는 동안 볼륨버튼 **소리조절 불가**(업·다운 둘 다 PTT 전용). 전용폰이라 OK. 다른 화면은 볼륨 정상.
-- ⚠️ **실폰 런타임 미검증** — 방문 전 개발폰(S21+ call_mgr / S22 pickup) install 후 누름→발화·떼기→종료·업/다운·동시누름 확인 필요. 컴파일·재빌드는 통과(17:27/17:29).
+- ✅ **실폰 런타임 검증 통과(2026-06-19)**: call_manager(S21+ R3CR312MB1L)·pickup(S22 R5CT41TJZFP) install 후 — `adb input keyevent` 스모크로 업/다운 둘 다 누름→`PTT 발화 시작 (단일 누름)`·뗌→`PTT 발화 종료 (손 뗌)` 1쌍씩(중복0) 로그 실측 + **원규씨 손으로 홀드(3초 꾹→뗄 때만 종료)·동시누름(업+다운 둘 누름→하나 떼도 유지→나머지 떼면 종료) 직접 확인 통과**. push `c44068b0`(코드)+`15bb3c8c`(docs).
 - "전역 볼륨키 캡처 배제"[확정]과 무관(이건 인앱 foreground 처리, 전역 후크 아님).
 
 ### [확정·2026-06-09 구현·측정통과] 콜드스타트 단축 = 토큰 캐시 + wake fire-and-forget (★비용 무관)
