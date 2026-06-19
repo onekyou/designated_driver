@@ -72,6 +72,9 @@ class ChatRepository(
     companion object {
         private const val TAG = "ChatRepository"
         private const val INITIAL_LOAD_LIMIT = 50L
+        // 블랙박스 시스템 메시지 증분 풀 — 채팅 열 때 마지막 동기화 이후만 당김(SharedPrefs watermark).
+        private const val SYNC_PREFS = "chat_sync_prefs"
+        private const val SYNC_PULL_LIMIT = 300L
 
         const val ROLE_MANAGER = "MANAGER"
         const val ROLE_DESIGNATED_DRIVER = "DESIGNATED_DRIVER"
@@ -400,50 +403,7 @@ class ChatRepository(
                 .get()
                 .await()
 
-            val messages = snapshot.documents.mapNotNull { doc ->
-                val senderId = doc.getString("senderId") ?: return@mapNotNull null
-                val senderName = doc.getString("senderName") ?: "알 수 없음"
-                val senderRole = doc.getString("senderRole") ?: ROLE_MANAGER
-                val text = doc.getString("text") ?: ""
-                val imageUrl = doc.getString("imageUrl")?.takeIf { it.isNotEmpty() }
-                val imagePath = doc.getString("imagePath")?.takeIf { it.isNotEmpty() }
-                val imageWidth = doc.getLong("imageWidth")?.toInt()
-                val imageHeight = doc.getLong("imageHeight")?.toInt()
-                val audioUrl = doc.getString("audioUrl")?.takeIf { it.isNotEmpty() }
-                val audioPath = doc.getString("audioPath")?.takeIf { it.isNotEmpty() }
-                val audioDurationMs = doc.getLong("audioDurationMs")
-                val audioAutoplay = doc.getBoolean("audioAutoplay") ?: false
-                val type = doc.getString("type") ?: "" // 블랙박스 9-B: "system" = 시스템 이벤트
-                val createdAt = (doc.get("createdAt") as? Timestamp)?.toDate()?.time
-                    ?: doc.getLong("clientCreatedAt") ?: return@mapNotNull null
-                val clientCreatedAt = doc.getLong("clientCreatedAt") ?: createdAt
-
-                // text / imageUrl / audioUrl 중 하나는 있어야 함
-                if (text.isBlank() && imageUrl.isNullOrEmpty() && audioUrl.isNullOrEmpty()) return@mapNotNull null
-
-                LocalChatMessage(
-                    id = doc.id,
-                    provinceId = provinceId,
-                    cityId = cityId,
-                    officeId = officeId,
-                    senderId = senderId,
-                    senderName = senderName,
-                    senderRole = senderRole,
-                    text = text,
-                    createdAt = createdAt,
-                    clientCreatedAt = clientCreatedAt,
-                    sendStatus = LocalChatMessage.SEND_STATUS_SENT,
-                    imageUrl = imageUrl,
-                    imagePath = imagePath,
-                    imageWidth = imageWidth,
-                    imageHeight = imageHeight,
-                    audioUrl = audioUrl,
-                    audioPath = audioPath,
-                    audioDurationMs = audioDurationMs,
-                    audioAutoplay = audioAutoplay,
-                    type = type,
-                )
-            }
+            val messages = snapshot.documents.mapNotNull { mapDoc(it, provinceId, cityId, officeId) }
 
             if (messages.isNotEmpty()) {
                 chatDao.insertAll(messages)
@@ -451,6 +411,94 @@ class ChatRepository(
             }
         } catch (e: Exception) {
             Log.e(TAG, "[loadInitialMessages] 실패", e)
+        }
+    }
+
+    /** Firestore 메시지 문서 → LocalChatMessage (loadInitialMessages·syncSince 공용). 누락/빈 메시지 = null. */
+    private fun mapDoc(
+        doc: com.google.firebase.firestore.DocumentSnapshot,
+        provinceId: String,
+        cityId: String,
+        officeId: String,
+    ): LocalChatMessage? {
+        val senderId = doc.getString("senderId") ?: return null
+        val senderName = doc.getString("senderName") ?: "알 수 없음"
+        val senderRole = doc.getString("senderRole") ?: ROLE_MANAGER
+        val text = doc.getString("text") ?: ""
+        val imageUrl = doc.getString("imageUrl")?.takeIf { it.isNotEmpty() }
+        val imagePath = doc.getString("imagePath")?.takeIf { it.isNotEmpty() }
+        val imageWidth = doc.getLong("imageWidth")?.toInt()
+        val imageHeight = doc.getLong("imageHeight")?.toInt()
+        val audioUrl = doc.getString("audioUrl")?.takeIf { it.isNotEmpty() }
+        val audioPath = doc.getString("audioPath")?.takeIf { it.isNotEmpty() }
+        val audioDurationMs = doc.getLong("audioDurationMs")
+        val audioAutoplay = doc.getBoolean("audioAutoplay") ?: false
+        val type = doc.getString("type") ?: "" // 블랙박스 9-B: "system" = 시스템 이벤트
+        val createdAt = (doc.get("createdAt") as? Timestamp)?.toDate()?.time
+            ?: doc.getLong("clientCreatedAt") ?: return null
+        val clientCreatedAt = doc.getLong("clientCreatedAt") ?: createdAt
+        if (text.isBlank() && imageUrl.isNullOrEmpty() && audioUrl.isNullOrEmpty()) return null
+        return LocalChatMessage(
+            id = doc.id,
+            provinceId = provinceId,
+            cityId = cityId,
+            officeId = officeId,
+            senderId = senderId,
+            senderName = senderName,
+            senderRole = senderRole,
+            text = text,
+            createdAt = createdAt,
+            clientCreatedAt = clientCreatedAt,
+            sendStatus = LocalChatMessage.SEND_STATUS_SENT,
+            imageUrl = imageUrl,
+            imagePath = imagePath,
+            imageWidth = imageWidth,
+            imageHeight = imageHeight,
+            audioUrl = audioUrl,
+            audioPath = audioPath,
+            audioDurationMs = audioDurationMs,
+            audioAutoplay = audioAutoplay,
+            type = type,
+        )
+    }
+
+    /**
+     * 블랙박스(시스템) 메시지 증분 풀 — 채팅 시트 열 때 호출.
+     *  시스템 메시지는 더 이상 FCM 푸시 안 됨(onChatMessageCreated 스킵) → 여기서 마지막 동기화 이후만 당겨 Room INSERT(REPLACE 멱등).
+     *  watermark(lastChatSyncAt)는 **풀에 의해서만 전진** → 라이브 메시지가 시간상 추월해도 시스템 메시지 누락 0.
+     *  미설정 시 Room의 max(createdAt)부터(이미 캐시된 것 재read 방지). limit=300 안전캡(백로그 크면 다음 열람 때 이어짐).
+     */
+    suspend fun syncSince(provinceId: String, cityId: String, officeId: String) {
+        try {
+            val prefs = context.getSharedPreferences(SYNC_PREFS, Context.MODE_PRIVATE)
+            val key = "lastChatSyncAt_${provinceId}_${cityId}_$officeId"
+            val stored = prefs.getLong(key, -1L)
+            val watermark = if (stored >= 0L) stored
+                else (chatDao.getMaxCreatedAt(provinceId, cityId, officeId) ?: 0L)
+
+            val snapshot = firestore
+                .collection("provinces").document(provinceId)
+                .collection("cities").document(cityId)
+                .collection("offices").document(officeId)
+                .collection("chatRoom").document("main")
+                .collection("messages")
+                .whereGreaterThan("createdAt", Timestamp(java.util.Date(watermark)))
+                .orderBy("createdAt", Query.Direction.ASCENDING)
+                .limit(SYNC_PULL_LIMIT)
+                .get().await()
+
+            val messages = snapshot.documents.mapNotNull { mapDoc(it, provinceId, cityId, officeId) }
+            if (messages.isNotEmpty()) {
+                chatDao.insertAll(messages)
+                val maxCreated = messages.maxOf { it.createdAt }
+                prefs.edit().putLong(key, maxCreated).apply()
+                Log.d(TAG, "[syncSince] 증분 INSERT ${messages.size}건, watermark→$maxCreated")
+            } else {
+                if (stored < 0L) prefs.edit().putLong(key, watermark).apply() // 최초 watermark 박음
+                Log.d(TAG, "[syncSince] 신규 0건 (watermark=$watermark)")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "[syncSince] 실패", e)
         }
     }
 

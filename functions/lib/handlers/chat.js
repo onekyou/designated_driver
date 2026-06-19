@@ -153,6 +153,13 @@ exports.onChatMessageCreated = (0, firestore_1.onDocumentCreated)({
         logger.warn(`[onChatMessageCreated:${messageId}] senderId 누락 또는 text/imageUrl/audioUrl 모두 누락`);
         return;
     }
+    // 블랙박스 시스템 메시지(type:"system") = 팬아웃 스킵. 평소 안 보는 기록이라 매 이벤트 푸시(토큰 3컬렉션 read + FCM) 대신
+    //  클라가 채팅 열 때 증분 풀(ChatRepository.syncSince)로 동기화 → 시스템 메시지당 토큰read·FCM 제거(다중 보급 비용 절감).
+    //  Firestore write(postSystemMessage)는 그대로 → 기록 보존. ptt/일반 메시지는 현행 푸시 유지.
+    if (msg.type === "system") {
+        logger.info(`[onChatMessageCreated:${messageId}] system(블랙박스) — 팬아웃 skip (클라 풀 동기화)`);
+        return;
+    }
     const senderId = msg.senderId;
     const senderName = (_a = msg.senderName) !== null && _a !== void 0 ? _a : "알 수 없음";
     const senderRole = (_b = msg.senderRole) !== null && _b !== void 0 ? _b : "MANAGER";

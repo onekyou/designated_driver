@@ -46,6 +46,10 @@ fun DashboardWithChatSheet(
             keyboardController?.hide()
         }
     }
+    // 블랙박스 열람(시트 펼침) 시 시스템 메시지 증분 풀 — 시스템 메시지는 FCM 미푸시라 여기서 동기화. 평소 안 열면 read 0.
+    LaunchedEffect(isExpanded) {
+        if (isExpanded) chatViewModel.syncMessages()
+    }
     BackHandler(enabled = isExpanded) {
         coroutineScope.launch { scaffoldState.bottomSheetState.partialExpand() }
     }

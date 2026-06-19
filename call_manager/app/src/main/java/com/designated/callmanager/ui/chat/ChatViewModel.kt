@@ -94,6 +94,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * 블랙박스(시스템) 메시지 증분 풀 — 채팅 시트 열 때마다 호출(init 아님: VM은 Activity 1회 생성이라 init은 1회뿐).
+     *  시스템 메시지는 FCM 미푸시라 여기서 마지막 동기화 이후만 당겨 Room INSERT. 평소 안 열면 read 0.
+     */
+    fun syncMessages() {
+        if (!isReady) return
+        viewModelScope.launch {
+            runCatching { chatRepository.syncSince(provinceId, cityId, officeId) }
+                .onFailure { e -> Log.e(TAG, "[syncMessages] 실패", e) }
+        }
+    }
+
     private suspend fun fetchSenderName() {
         try {
             val firestore = FirebaseFirestore.getInstance()

@@ -1632,6 +1632,10 @@ private fun DashboardWithChatSheet(
             keyboardController?.hide()
         }
     }
+    // 블랙박스 열람(시트 펼침) 시 시스템 메시지 증분 풀 — 시스템 메시지는 FCM 미푸시라 여기서 동기화. 평소 안 열면 read 0.
+    LaunchedEffect(isExpanded) {
+        if (isExpanded) chatViewModel.syncMessages()
+    }
     // 외부(ACTION_SEND) 에서 sheet 펼침 요청 감지 — 카톡 등 공유 수신 시 자동 expand
     val shouldExpand by chatViewModel.shouldExpandSheet.collectAsState()
     LaunchedEffect(shouldExpand) {
