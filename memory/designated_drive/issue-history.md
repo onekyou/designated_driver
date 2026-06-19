@@ -50,6 +50,17 @@
 
 ## 날짜별 작업 상세 (MEMORY.md에서 이관)
 
+### 2026-06-20 — 기사앱 stale 콜 → 수락팝업/뒤로가기 무한루프 하드닝 (커밋 78533cdf, push)
+- **증상(1004 테스트 사무실)**: 기사앱 시작 시 운행내역 강제진입 + 수락팝업/벨 2초 반복 + 뒤로가기 왕복.
+- **방아쇠 = Firestore 잔존 콜 데이터** (1004 사무실 `RUbeBEvGGYP5wMhJHhMF`에 콜 26개 — stale ASSIGNED 1·미마감 COMPLETED 13·WAITING 12). 데이터 삭제 + 기사 settlementLastCleared 갱신으로 1차 해소(클라 버그 아님, 데이터 잔존이 방아쇠).
+- **하드닝(클라 전용, functions/Firestore 무변경)**:
+  - **Fix 1** `DriverViewModel.acceptCall`: 수락 트랜잭션을 예외 throw → **sealed `AcceptOutcome` 반환**으로 전환. terminal(NotAssignable: 취소/완료/삭제)이면 팝업 무한복원 안 함 + `clearPendingDispatch`. 일시오류(네트워크)만 catch에서 롤백·재시도. (예외 메시지 매칭 의존 제거)
+  - **Fix 3** `DriverViewModel`: stale ASSIGNED(이전 영업일=workdayStart 이전) 팝업 가드. ★실측으로 **stale 팝업의 실제 경로 = FCM→`PREF_KEY_PENDING_DISPATCH`→`handleNotificationCallId`** 확인 → `loadCurrentActiveCall` + `handleNotificationCallId` **두 경로 모두** 가드 + PENDING_DISPATCH 소거(재발 차단). `currentWorkdayStartMillis()` 헬퍼 추출(DRY, needsDailyClose와 공유).
+  - **Fix 2** `AppNavigation` + `HistorySettlementScreen`: 운행내역 BackHandler **이중등록**(무동작 + popBackStack) → 충돌로 P7 게이트 무력화 + 왕복. **단일 조건부**(`if(!needsDailyClose) onNavigateBack()`)로 통합 — 미마감 시 차단, 평소 메뉴 진입 시 정상 복귀.
+- **실폰(Z Flip4) 실증 전건 통과**: stale 주입→팝업 억제·재발0 / 미마감→뒤로가기 차단 / COMPLETED 콜 수락→NotAssignable 처리·팝업 재등장0 / 정상 시작 회귀. (Fix2 정상-복귀 분기만 코드 검증, 게이트 분기는 실증)
+- **교훈**: "고쳤다" 단정 전 실측 필수 — Fix3 첫 위치(loadCurrentActiveCall)만으론 부족, 실제 팝업 경로는 handleNotificationCallId였음.
+- **유의**: 설치본은 **debug 빌드**(현장 배포는 release 별도). 일회성 스크립트 `functions/scripts/cleanup-1004-calls.js`·`verify-1004.js`는 OAuth secret 하드코딩이라 **미커밋·로컬 보존**(`.gitignore` 처리). 1004는 테스트 사무실이라 콜 전삭제 라이브 무관.
+
 ### 2026-03-24 — 손님앱/기사앱 콜 취소 개선
 - **손님앱 콜 취소 확장**: CallService cancelCall()에 ACCEPTED/PREPARING 허용, HomeScreen 취소 버튼 DRIVER_ARRIVING까지 표시
 - **기사앱 cancelTrip() HOLD→CANCELLED_BY_DRIVER**: 대면 취소 시 확정 취소, 포인트 환불, 손님 FCM 전송

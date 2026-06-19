@@ -129,3 +129,7 @@ firestore-export-json/
 # --- Local cache for external data extraction (Phase B Kiwi etc.) ---
 functions/scripts/.kiwi-cache/
 functions/lib/public/
+
+# 일회성 운영/검증 스크립트 (OAuth secret 하드코딩 — 커밋 금지)
+functions/scripts/cleanup-1004-calls.js
+functions/scripts/verify-1004.js
