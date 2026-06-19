@@ -28,7 +28,6 @@ import com.designated.driverapp.data.Constants
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.activity.compose.BackHandler
 
 object AppDestinations {
     const val LOGIN_ROUTE = "login"
@@ -127,11 +126,8 @@ fun AppNavigation(
             )
         }
         composable(AppDestinations.HISTORY_SETTLEMENT_ROUTE) {
-            // 정산 페이지에서 시스템 뒤로가기 버튼 차단
-            BackHandler(enabled = true) {
-                // 아무 동작도 하지 않음
-            }
-
+            // 뒤로가기 처리는 HistorySettlementScreen 내부 단일 BackHandler에서 needsDailyClose 조건부로 수행.
+            // (이전: 여기 무동작 BackHandler + 화면 내부 popBackStack BackHandler 이중등록 → 충돌로 게이트 무력화/왕복)
             HistorySettlementScreen(
                 navController = navController,
                 viewModel = driverViewModel,

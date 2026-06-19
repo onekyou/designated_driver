@@ -56,6 +56,12 @@ import android.Manifest
 
 private const val TAG = "DriverViewModel"
 
+/** 콜 수락 트랜잭션 결과 — 예외 메시지 문자열 매칭 대신 타입으로 terminal(수락 불가) 판정(SDK 예외 래핑에 무관, 견고). */
+private sealed class AcceptOutcome {
+    data class Accepted(val call: CallInfo?) : AcceptOutcome()
+    data class NotAssignable(val currentStatus: String?) : AcceptOutcome()
+}
+
 @HiltViewModel
 class DriverViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
@@ -237,6 +243,20 @@ class DriverViewModel @Inject constructor(
         }
     }
 
+    /** 현재 영업일 시작(오전 10시 경계). submitDailySettlement·needsDailyClose 동일 규칙. */
+    private fun currentWorkdayStartMillis(): Long {
+        val cal = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 10)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+            if (System.currentTimeMillis() < timeInMillis) {
+                add(java.util.Calendar.DAY_OF_MONTH, -1)
+            }
+        }
+        return cal.timeInMillis
+    }
+
     /**
      * 앱 시작 시 현재 운행 중인 콜이 있는지 확인 (1회 조회)
      * 정상 출근: 조회 결과 없음 → 빈 화면
@@ -290,7 +310,13 @@ class DriverViewModel @Inject constructor(
                     val activeCall = assignedCalls.firstOrNull {
                         it.statusEnum == CallStatus.ACCEPTED || it.statusEnum == CallStatus.IN_PROGRESS
                     }
-                    val newCall = assignedCalls.firstOrNull { it.statusEnum == CallStatus.ASSIGNED }
+                    // 시작 시 stale ASSIGNED 가드: 이전 영업일(workdayStart 이전)에 박제된 ASSIGNED 콜은
+                    // 팝업으로 띄우지 않음(데이터 잔존이 수락팝업/벨을 깨우는 것 차단). stale 콜 자체 소거는 서버 timeout 몫.
+                    val workdayStartMillis = currentWorkdayStartMillis()
+                    val newCall = assignedCalls.firstOrNull {
+                        it.statusEnum == CallStatus.ASSIGNED &&
+                        ((it.assignedTimestamp ?: it.timestamp)?.toDate()?.time ?: 0L) >= workdayStartMillis
+                    }
                     val reservedCall = assignedCalls.firstOrNull { it.statusEnum == CallStatus.RESERVED }
                     val settlementCall = assignedCalls.firstOrNull {
                         it.statusEnum == CallStatus.AWAITING_SETTLEMENT &&
@@ -398,6 +424,7 @@ class DriverViewModel @Inject constructor(
 
         // ✅ 1단계: 즉시 로컬 UI 업데이트 (리스너 기다리지 않음)
         Log.d(TAG, "🔵 1단계: 로컬 UI 업데이트 시작")
+        val prevStatus = _uiState.value.driverStatus   // 수락 불가(NotAssignable) 시 복원용 — 낙관적 ACCEPTED 되돌림
         _uiState.update { currentState ->
             val acceptedCall = currentState.assignedCalls.find { it.id == callId }
             Log.d(TAG, "🔵 찾은 콜: ${acceptedCall?.id}, 상태: ${acceptedCall?.status}")
@@ -434,58 +461,73 @@ class DriverViewModel @Inject constructor(
         Log.d(TAG, "🔵 Driver Ref 경로: provinces/$provinceId/cities/$cityId/offices/$officeId/designated_drivers/$driverId")
 
         Log.d(TAG, "🔵 Transaction 시작")
-        val acceptedCallInfo = firestore.runTransaction<CallInfo?> { transaction ->
+        val outcome = firestore.runTransaction<AcceptOutcome> { transaction ->
             Log.d(TAG, "🔵 Transaction 내부 - 콜 문서 읽기")
             val callSnapshot = transaction.get(callRef)
 
             if (!callSnapshot.exists()) {
-                Log.e(TAG, "❌ 콜 문서가 존재하지 않음")
-                throw Exception("콜 문서를 찾을 수 없습니다.")
+                Log.w(TAG, "⚠️ 콜 문서가 존재하지 않음 → NotAssignable")
+                return@runTransaction AcceptOutcome.NotAssignable(null)
             }
-
-            val callData = callSnapshot.data
-            Log.d(TAG, "🔵 콜 문서 데이터: $callData")
 
             val currentStatus = callSnapshot.getString(Constants.FIELD_STATUS)
             Log.d(TAG, "🔵 현재 콜 상태: $currentStatus")
 
             if (currentStatus == Constants.STATUS_ASSIGNED) {
-                Log.d(TAG, "🔵 Transaction - 콜 상태를 ACCEPTED로 업데이트")
+                Log.d(TAG, "🔵 Transaction - 콜 ACCEPTED + 기사 PREPARING 업데이트")
                 transaction.update(callRef, Constants.FIELD_STATUS, Constants.STATUS_ACCEPTED)
-
-                Log.d(TAG, "🔵 Transaction - 기사 상태를 PREPARING으로 업데이트")
                 transaction.update(driverRef, Constants.FIELD_STATUS, DriverStatus.PREPARING.value)
-            } else {
-                Log.w(TAG, "⚠️ 콜 상태가 ASSIGNED가 아님: $currentStatus")
-                throw IllegalStateException("CALL_NOT_ASSIGNABLE: current status is $currentStatus")
-            }
-
-            // 콜드스타트 fallback용: update 전(ASSIGNED) 데이터를 CallInfo로 파싱, status만 ACCEPTED로 덮음
-            callSnapshot.toObject(CallInfo::class.java)?.copy(id = callSnapshot.id, status = Constants.STATUS_ACCEPTED)
-        }.await()
-        Log.d(TAG, "🔵 Transaction 완료")
-
-        // 콜드스타트 보강: 1단계에서 assignedCalls 미스로 activeCall을 못 채운 경우, 트랜잭션이 읽은 콜로 보장 세팅
-        if (acceptedCallInfo != null) {
-            _uiState.update { current ->
-                if (current.activeCall?.id == callId) current   // 정상 경로(1단계서 이미 세팅) → 그대로
-                else current.copy(
-                    activeCall = acceptedCallInfo,
-                    driverStatus = DriverStatus.ACCEPTED,
-                    newCallPopup = null,
-                    assignedCalls = if (current.assignedCalls.any { it.id == callId })
-                        current.assignedCalls.map { if (it.id == callId) it.copy(status = Constants.STATUS_ACCEPTED) else it }
-                    else current.assignedCalls + acceptedCallInfo
+                // 콜드스타트 fallback용: update 전(ASSIGNED) 데이터를 CallInfo로 파싱, status만 ACCEPTED로 덮음
+                AcceptOutcome.Accepted(
+                    callSnapshot.toObject(CallInfo::class.java)?.copy(id = callSnapshot.id, status = Constants.STATUS_ACCEPTED)
                 )
+            } else {
+                Log.w(TAG, "⚠️ 콜 상태가 ASSIGNED가 아님: $currentStatus → NotAssignable")
+                AcceptOutcome.NotAssignable(currentStatus)
             }
-            Log.d(TAG, "🔵 콜드스타트 보강 - activeCall 보장 세팅: $callId")
-        }
+        }.await()
+        Log.d(TAG, "🔵 Transaction 완료: $outcome")
 
-        clearPendingDispatch()   // 수락 완료 → 미수락 배차 플래그 제거
-        Log.d(TAG, "✅ 콜 수락 완료: $callId")
+        when (outcome) {
+            is AcceptOutcome.Accepted -> {
+                val acceptedCallInfo = outcome.call
+                // 콜드스타트 보강: 1단계에서 assignedCalls 미스로 activeCall을 못 채운 경우, 트랜잭션이 읽은 콜로 보장 세팅
+                if (acceptedCallInfo != null) {
+                    _uiState.update { current ->
+                        if (current.activeCall?.id == callId) current   // 정상 경로(1단계서 이미 세팅) → 그대로
+                        else current.copy(
+                            activeCall = acceptedCallInfo,
+                            driverStatus = DriverStatus.ACCEPTED,
+                            newCallPopup = null,
+                            assignedCalls = if (current.assignedCalls.any { it.id == callId })
+                                current.assignedCalls.map { if (it.id == callId) it.copy(status = Constants.STATUS_ACCEPTED) else it }
+                            else current.assignedCalls + acceptedCallInfo
+                        )
+                    }
+                    Log.d(TAG, "🔵 콜드스타트 보강 - activeCall 보장 세팅: $callId")
+                }
+                clearPendingDispatch()   // 수락 완료 → 미수락 배차 플래그 제거
+                Log.d(TAG, "✅ 콜 수락 완료: $callId")
+            }
+            is AcceptOutcome.NotAssignable -> {
+                // 콜이 이미 취소/타기사 배정/삭제됨 = terminal. 팝업 되살리지 않음(무한복원 차단) + 정리.
+                Log.w(TAG, "⚠️ 콜 수락 불가(이미 처리됨): status=${outcome.currentStatus}, callId=$callId")
+                _uiState.update { current ->
+                    current.copy(
+                        assignedCalls = current.assignedCalls.filterNot { it.id == callId },
+                        activeCall = if (current.activeCall?.id == callId) null else current.activeCall,
+                        newCallPopup = if (current.newCallPopup?.id == callId) null else current.newCallPopup,
+                        driverStatus = prevStatus,   // 낙관적 ACCEPTED 되돌림(진입 직전 실제값)
+                        errorMessage = "이미 처리된 콜입니다."
+                    )
+                }
+                clearPendingDispatch()   // 잔존 PENDING_DISPATCH 제거 → onResume 재트리거 차단
+            }
+        }
             } catch (e: Exception) {
-                Log.e(TAG, "❌ 콜 수락 실패: ${e.message}", e)
-                // UI 상태 롤백: ACCEPTED -> ASSIGNED로 되돌리기
+                // 여기 도달 = genuine 일시적 오류(네트워크 등). NotAssignable은 예외 아닌 결과로 처리됨.
+                Log.e(TAG, "❌ 콜 수락 실패(일시적 오류 추정): ${e.message}", e)
+                // 콜은 Firestore에 여전히 ASSIGNED일 수 있음 → 롤백+팝업 복원(사용자 재시도 가능)
                 _uiState.update { current ->
                     current.copy(
                         assignedCalls = current.assignedCalls.map {
@@ -1397,7 +1439,17 @@ class DriverViewModel @Inject constructor(
 
                 val callInfo = callDocument.toObject(CallInfo::class.java)?.copy(id = callDocument.id)
 
-                if (callInfo != null && callInfo.statusEnum == CallStatus.ASSIGNED) {
+                // 시작/onResume stale 가드: 이전 영업일(workdayStart 이전) 박제 ASSIGNED는 팝업/벨 안 띄움 + PENDING_DISPATCH 제거(재트리거 차단).
+                // (stale 팝업의 실제 경로 = FCM call_assigned → PENDING_DISPATCH → onResume → 여기. loadCurrentActiveCall 가드와 짝.)
+                val callFreshMillis = (callInfo?.assignedTimestamp ?: callInfo?.timestamp)?.toDate()?.time ?: 0L
+                val isStaleAssigned = callInfo != null && callInfo.statusEnum == CallStatus.ASSIGNED &&
+                    callFreshMillis < currentWorkdayStartMillis()
+
+                if (isStaleAssigned) {
+                    clearPendingDispatch()
+                    Log.w(TAG, "handleNotificationCallId: stale ASSIGNED(이전영업일) 무시 + pending 제거: $callId")
+                    _uiState.update { it.copy(navigateToHome = true) }
+                } else if (callInfo != null && callInfo.statusEnum == CallStatus.ASSIGNED) {
                     // ✅ 배차된 콜이면 assignedCalls에 추가
                     _uiState.update { currentState ->
                         val updatedCalls = if (currentState.assignedCalls.none { it.id == callInfo.id }) {
@@ -1741,16 +1793,7 @@ class DriverViewModel @Inject constructor(
             // 현재 영업일 시작(오전 10시 경계, submitDailySettlement L1513 동일 규칙) 이전에
             // 완료됐는데 아직 정산(clear) 안 된 운행이 하나라도 있으면 = 어제 미마감.
             // (오늘 근무 중 누적분은 workdayStart 이후라 제외 → 정상 근무를 막지 않음.)
-            val workdayStartCal = java.util.Calendar.getInstance().apply {
-                set(java.util.Calendar.HOUR_OF_DAY, 10)
-                set(java.util.Calendar.MINUTE, 0)
-                set(java.util.Calendar.SECOND, 0)
-                set(java.util.Calendar.MILLISECOND, 0)
-                if (System.currentTimeMillis() < timeInMillis) {
-                    add(java.util.Calendar.DAY_OF_MONTH, -1)
-                }
-            }
-            val workdayStartMillis = workdayStartCal.timeInMillis
+            val workdayStartMillis = currentWorkdayStartMillis()
             _needsDailyClose.value = tripItems.any { it.timestamp < workdayStartMillis }
             Log.d(TAG, "needsDailyClose=${_needsDailyClose.value} (workdayStart=$workdayStartMillis)")
 

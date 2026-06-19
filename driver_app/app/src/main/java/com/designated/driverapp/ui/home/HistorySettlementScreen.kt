@@ -120,9 +120,11 @@ fun HistorySettlementScreen(
         }
     }
 
-    // 시스템 뒤로가기 버튼 처리
+    // 시스템 뒤로가기: 미마감(게이트) 중엔 차단, 평소(메뉴 진입)엔 정상 복귀.
+    // (단일 BackHandler — AppNavigation의 무동작 핸들러 제거로 이중등록·왕복 해소)
+    val needsDailyClose by viewModel.needsDailyClose.collectAsStateWithLifecycle()
     BackHandler(enabled = true) {
-        onNavigateBack()
+        if (!needsDailyClose) onNavigateBack()
     }
 
     // 비율 정보 다이얼로그 (읽기 전용 - 비율은 사무실에서 설정)
