@@ -16,6 +16,7 @@
 - **★ 서버 STT(Cloud Run) 경로 시도→기각**: transcribePtt callable 구현·배포·실폰까지 갔으나 **콜드스타트 75초**(large-turbo CPU)가 Firebase callable 70초 타임아웃 초과→채팅 무반응. 원규씨 "서버가 더 복잡, 온폰 자동다운로드가 낫다"→온폰 채택. `transcribePtt` 함수는 **배포된 채 휴면 보존**(예약엔진 STT 패턴 자산), 앱 ServerTranscriber/swap은 git 원복.
 - **★ Gemini vs faster-whisper 측정(실통화 6건)→PTT용 whisper 유지 확정**: 짧은 대리호출(s5)에서 **Gemini 환각 루프**("데려다줄게" 수백회·토큰폭발 24원·구간유실) / whisper 폭주0·우아한오청. 깨끗·긴통화는 Gemini 약우세지만 PTT(짧고 거친 무전)는 whisper. 결정대장 "[확정 보강] PTT 측정". (서버STT도 엔진은 whisper 유지 = 위치만 바뀜, [확정] 위반 아님.)
 - **✅ PTT 단일누름(볼륨키 hold-to-talk) 실폰검증 통과·push `c44068b0`+docs** — adb keyevent 스모크+원규씨 손으로 홀드·동시누름 확인. 결정대장 "인앱 PTT 트리거 단일 누름".
+- **★ 블랙박스 system 메시지 푸시→풀 전환 완성·실폰E2E·배포·push `c29a1527`**(원규씨 "블랙박스 언제까지 늘어놓을 수 없어 + read 폭발?"). 조사=**read는 이미 효율적**(Local-First Room캐시+신규 FCM push+7일 cleanup, 일상 read≈0). 진짜 비용=`onChatMessageCreated`가 시스템 메시지(콜당~6건)마다 토큰3컬렉션 read+FCM 팬아웃. → **type:"system"만 풀 전용**(서버 `if(type==="system")return` 팬아웃 skip + 클라3앱 `syncSince` 채팅 시트 열 때 증분 풀, watermark SharedPrefs 풀에만 전진·`getMaxCreatedAt` 초기화). ptt·일반채팅=푸시 유지. **★누락검토 성과**: 트리거가 VM.init(Activity 1회)이면 1회만 풀리는 치명버그→시트 expand `LaunchedEffect`로 정정. E2E(S21+): 팬아웃skip·FCM미수신·시트열기 풀INSERT·재열람 신규0(watermark) 통과. **효과=블랙박스 늘려도 비용 불변.** 결정대장 "블랙박스 system 푸시→풀".
 - **⛳ 남은 보급 준비**: 현장 클린 재설치(폰 확보 시 — 이제 모델 adb push 불요, APK만) · 9-B Commit 2 실콜검증 · 공유콜 잔여 3트리거. (전사 정확도=가제티어 사전 보강 별트랙.)
 
 ## 6/17 ★ 파일럿 사무실 정체성 확정 + 총알대리 가제티어 시드 완료 + 현장 클린 재설치 런북
