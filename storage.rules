@@ -66,5 +66,13 @@ service firebase.storage {
         && request.resource.size < 30 * 1024 * 1024
         && request.resource.contentType.matches('audio/.*');
     }
+
+    // --- PTT 온폰 STT 모델 (whisper ggml) — 앱 첫 실행 시 다운로드 ---
+    //  • 인증 사용자 read (매니저·픽업 기사앱). 케이블·adb push 없이 원격 보급용.
+    //  • write 금지 — 운영자가 gcloud(서비스계정)로만 업로드. 모델 교체 = 버킷 파일만 교체.
+    match /ptt_models/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
   }
 }

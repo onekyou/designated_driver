@@ -6,8 +6,12 @@ import android.app.NotificationManager
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
+import android.content.Intent
 import androidx.core.app.NotificationCompat
+import com.designated.pickupdriver.service.ModelDownloadService
+import com.designated.pickupdriver.service.ModelDownloader
 import com.designated.pickupdriver.service.PTTManager
+import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
@@ -24,6 +28,18 @@ class PickupDriverApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         INSTANCE = this
+
+        // 온폰 PTT 전사 모델 자동 다운로드(로그인 후, 없으면) — 케이블·adb push 없이 원격 보급.
+        //  포그라운드 서비스로 받아 백그라운드 네트워크 스로틀에도 190MB 완주.
+        FirebaseAuth.getInstance().addAuthStateListener { auth ->
+            if (auth.currentUser != null && ModelDownloader.modelsMissing(this)) {
+                try {
+                    androidx.core.content.ContextCompat.startForegroundService(
+                        this, Intent(this, ModelDownloadService::class.java),
+                    )
+                } catch (_: Throwable) { /* 백그라운드 제한 — 다음 포그라운드 진입 시 재시도 */ }
+            }
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(NotificationManager::class.java) ?: return
 

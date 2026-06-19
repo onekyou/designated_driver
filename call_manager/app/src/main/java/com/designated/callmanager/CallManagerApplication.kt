@@ -1,6 +1,7 @@
 package com.designated.callmanager
 
 import android.app.Application
+import android.content.Intent
 import android.util.Log
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -9,6 +10,8 @@ import com.designated.callmanager.data.local.AppDatabase
 import com.designated.callmanager.data.repository.CallRepository
 import com.designated.callmanager.data.repository.ChatRepository
 import com.designated.callmanager.data.repository.DriverRepository
+import com.designated.callmanager.service.ModelDownloader
+import com.designated.callmanager.service.ModelDownloadService
 import com.designated.callmanager.service.PTTManager
 import com.designated.callmanager.service.PresenceManager
 import com.google.firebase.FirebaseApp
@@ -111,6 +114,17 @@ class CallManagerApplication : Application() {
             if (auth.currentUser != null) {
                 Log.d(TAG, "사용자 로그인됨 - Presence 초기화")
                 PresenceManager.reinitialize(this)
+                // 온폰 PTT 전사 모델 자동 다운로드(없으면) — 케이블·adb push 없이 원격 보급.
+                //  포그라운드 서비스로 받아 백그라운드 네트워크 스로틀에도 190MB 완주.
+                if (ModelDownloader.modelsMissing(this)) {
+                    try {
+                        androidx.core.content.ContextCompat.startForegroundService(
+                            this, Intent(this, ModelDownloadService::class.java),
+                        )
+                    } catch (e: Throwable) {
+                        Log.w(TAG, "모델 다운로드 서비스 시작 실패(백그라운드 제한?) — 다음 포그라운드 진입 시 재시도: ${e.message}")
+                    }
+                }
             } else {
                 Log.d(TAG, "사용자 로그아웃됨 - Presence 정리")
                 PresenceManager.onLogout()

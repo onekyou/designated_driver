@@ -49,6 +49,7 @@ export {
 } from "./handlers/wallet";
 export { generateAgoraToken, sendPttWake, sendPttPreWake } from "./handlers/ptt";
 export { parseReservation } from "./handlers/reservation";
+export { transcribePtt } from "./handlers/pttStt";
 export { migrateExistingOfficesWallet } from "./scripts/migrateExistingOfficesWallet";
 import { addChatMember, postSystemMessage } from "./handlers/chat";
 import express from "express";
