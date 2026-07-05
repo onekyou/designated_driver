@@ -314,7 +314,7 @@
 - **상태**: 정책 [확정], **Phase 1 구현·배포·검증 완료(2026-07-05)**.
   - **Commit 1(`96d2b511`)**: 선불 게이트를 사무실간 콜로 확장 — `index.ts:1350` 조건 `sourceRestaurantId &&` 제거(→`if(afterData.claimedOfficeId)`). checkOfficeWalletForClaim/revert/WALLET_INSUFFICIENT FCM 재사용. call_manager에 WALLET_INSUFFICIENT 알림 핸들러 신규. 검증(1004 클라인증 REST): 잔액충분→CLAIMED 유지 / 잔액4000→revert(OPEN+INSUFFICIENT_BALANCE) 둘 다 PASS. onSharedCallClaimed 배포. 실사무실 잔액 총알대리·1004 각 30000P(≥5000)라 revert폭주 없음.
   - **Commit 2(요율 config)**: `points.ts` pointRatio 하드코딩 → `system_config/commission.sharedCallRatio` 읽기(없으면 0.1 폴백=문서 만들기 전 불변). 검증: 0.15 세팅→회수 3000(20000×0.15) PASS. onSharedCallCompleted 배포.
-  - ⛳ 남은 검증: 실폰 WALLET_INSUFFICIENT 알림 렌더(기기 연결됨, 다음). threshold 5000·기본요율 10%는 원규씨 금액 미정=현행 유지.
+  - ✅ 실폰 검증(S21+ 설치): WALLET_INSUFFICIENT data FCM(FCM v1 OAuth 직접 전송)→logcat 핸들러 발화+"포인트 충전이 필요합니다" 알림 렌더 확인. **Phase 1 전 검증(게이트 양성/음성·식당콜 회귀·요율 config·실폰 알림) 통과.** threshold 5000·기본요율 10%는 원규씨 금액 미정=현행 유지.
 - **🐛 이월·기존 엣지케이스(2026-07-05 발견)**: 사무실이 **자기 공유콜을 자기가 수임→완료**하면 processSharedCallPoints가 source(+)·target(−)를 **같은 points 문서에 써 두 번째(−10%)가 첫(+10%)을 덮어써 net −10%** 손실. 실 운영엔 A≠B라 무해(자기 공유는 무의미), 내 변경 무관. 방어 원하면 source==target 스킵 가드(후속).
 - **Phase 2(앞단 UX: detector 필드·완료통지 푸시·공유콜 UI) / Phase 3(충전·환전 운영) = 후속.**
 
