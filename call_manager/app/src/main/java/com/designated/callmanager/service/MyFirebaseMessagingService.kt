@@ -74,6 +74,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             "NOTIFICATION_FAILURE",  // 알림 전달 실패 경고는 항상 처리
             "SETTLEMENT_SUBMITTED",  // 기사 업무마감 제출 알림
             "WALLET_INSUFFICIENT",   // 공유콜 수임 잔액부족 revert 통지 (수임 시 매니저는 포그라운드라 항상 처리 필수)
+            "SHARED_CALL_COMMISSION",// 내가 올린 공유콜 완료·수수료 적립 통지 (콜 올린 사무실의 '파악')
             "NEW_CHAT_MESSAGE",      // 사무실 단톡방 메시지 (포그라운드도 Room INSERT 필요)
             "ptt_dispatch",          // PTT 라이브 수신 wake (포그라운드도 수신 join 필요)
             "ptt_prewake"            // PTT 콜드 선행 깨우기 (no-op, 필터 통과만)
@@ -133,6 +134,29 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 bigText = "현재 잔액 ${balance}P\n콜을 잡으려면 ${required}P 이상 필요합니다. 지갑에서 충전해 주세요.",
                 callId = "wallet_insufficient",
                 color = ContextCompat.getColor(this, android.R.color.holo_red_dark),
+                autoCancel = true,
+                timeoutAfter = 0
+            )
+            return
+        }
+
+        // SHARED_CALL_COMMISSION: 내가 올린 공유콜이 타 사무실에서 완료 → 수수료 적립됨. 콜 올린 사무실의 '파악'.
+        if (messageType == "SHARED_CALL_COMMISSION") {
+            val commission = remoteMessage.data["commission"] ?: "0"
+            val newBalance = remoteMessage.data["newBalance"] ?: "0"
+            val departure = remoteMessage.data["departure"] ?: ""
+            val destination = remoteMessage.data["destination"] ?: ""
+            val route = if (departure.isNotBlank() || destination.isNotBlank())
+                "${departure.ifBlank { "출발지" }} → ${destination.ifBlank { "도착지" }}\n" else ""
+            Log.d(TAG, "🔔 SHARED_CALL_COMMISSION - 수수료 +${commission}P, 잔액 ${newBalance}P")
+            showNotification(
+                channelId = STATUS_CHANGE_CHANNEL_ID,
+                notificationId = "shared_commission".hashCode(),
+                title = "공유콜 완료 · 수수료 적립",
+                content = "수수료 +${commission}P 적립 (잔액 ${newBalance}P)",
+                bigText = "${route}수수료 +${commission}P가 적립되었습니다.\n현재 잔액 ${newBalance}P",
+                callId = "shared_commission",
+                color = ContextCompat.getColor(this, android.R.color.holo_green_dark),
                 autoCancel = true,
                 timeoutAfter = 0
             )

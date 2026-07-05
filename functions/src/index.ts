@@ -2676,7 +2676,7 @@ export const onSharedCallCompleted = onDocumentUpdated(
             sourceSharedCallId
           );
         } else {
-          await processSharedCallPoints(
+          const commissionResult = await processSharedCallPoints(
             sharedCallData,
             provinceId,
             cityId,
@@ -2684,6 +2684,51 @@ export const onSharedCallCompleted = onDocumentUpdated(
             fare,
             sourceSharedCallId
           );
+
+          // A(콜 올린 사무실) '파악': 완료·수수료 통지 (FCM + 블랙박스). best-effort — 통지 실패가 회수를 깨지 않음.
+          if (commissionResult.processed && commissionResult.commission > 0) {
+            try {
+              const srcProv = sharedCallData.sourceProvinceId;
+              const srcCity = sharedCallData.sourceCityId;
+              const srcOffice = sharedCallData.sourceOfficeId;
+              const commission = commissionResult.commission;
+              const newBalance = commissionResult.sourceBalance;
+              const dep = sharedCallData.departure || "";
+              const dest = sharedCallData.destination || "";
+
+              // FCM → A 관리자 (admins where associatedOffice == source office)
+              const adminQ = await admin.firestore().collection("admins")
+                .where("associatedProvinceId", "==", srcProv)
+                .where("associatedCityId", "==", srcCity)
+                .where("associatedOfficeId", "==", srcOffice)
+                .get();
+              const commissionTokens: string[] = [];
+              adminQ.docs.forEach((d) => { const f = d.data().fcmToken; if (f) commissionTokens.push(f); });
+              if (commissionTokens.length > 0) {
+                await admin.messaging().sendEachForMulticast({
+                  tokens: commissionTokens,
+                  notification: {
+                    title: "공유콜 완료 · 수수료 적립",
+                    body: `수수료 +${commission}P (잔액 ${newBalance}P)`,
+                  },
+                  data: {
+                    type: "SHARED_CALL_COMMISSION",
+                    departure: dep,
+                    destination: dest,
+                    fare: String(fare),
+                    commission: String(commission),
+                    newBalance: String(newBalance),
+                  },
+                });
+              }
+
+              // 블랙박스 9-B: A 채팅에 무음 시스템 메시지 (push→pull, 팬아웃 비용 0)
+              await postSystemMessage(srcProv, srcCity, srcOffice,
+                `공유콜 완료 · 수수료 +${commission}P (잔액 ${newBalance}P)`);
+            } catch (notifyErr) {
+              logger.error(`[call-completed:${callId}] A 완료·수수료 통지 실패(best-effort)`, notifyErr);
+            }
+          }
         }
 
         logger.info(`[call-completed:${callId}] 공유콜 완료 처리 및 포인트 분배 완료. SharedCallId: ${sourceSharedCallId}`);

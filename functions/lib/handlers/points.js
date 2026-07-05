@@ -71,6 +71,8 @@ async function processSharedCallPoints(sharedCallData, provinceId, cityId, offic
         logger.warn(`[points] commission config 읽기 실패 — 기본 0.1 사용`, e);
     }
     const pointAmount = Math.round(fare * pointRatio);
+    // A(source) 완료·수수료 통지용 반환값. 멱등 early-return이면 processed:false 유지(중복 통지 방지).
+    let result = { processed: false, commission: 0, sourceBalance: 0 };
     logger.info(`[points] 포인트 처리 시작. 요금: ${fare}, 요율: ${pointRatio}, 포인트: ${pointAmount}, sharedCallId: ${sourceSharedCallId}`);
     await admin.firestore().runTransaction(async (tx) => {
         var _a, _b;
@@ -138,8 +140,10 @@ async function processSharedCallPoints(sharedCallData, provinceId, cityId, offic
             createdBy: "system",
             relatedSharedCallId: sourceSharedCallId
         });
+        result = { processed: true, commission: pointAmount, sourceBalance };
         logger.info(`[points] 포인트 처리 완료. Source: +${pointAmount}, Target: -${pointAmount}`);
     });
+    return result;
 }
 /**
  * 포인트 초기화 (테스트용)
