@@ -56,9 +56,22 @@ const logger = functions.logger;
  * @returns 처리 결과
  */
 async function processSharedCallPoints(sharedCallData, provinceId, cityId, officeId, fare, sourceSharedCallId) {
-    const pointRatio = 0.1; // 10% 수수료
+    var _a;
+    // 공유콜 수수료율 = 중앙 config(system_config/commission.sharedCallRatio). 콘솔 운영(rules write:false).
+    // 프로모션 시 콜마당이 중앙 조정. 사무실별 아님(B가 A에 내는 값이라 플랫폼 소관). 없거나 범위밖이면 0.1.
+    let pointRatio = 0.1; // 기본 10% 수수료
+    try {
+        const cfgSnap = await admin.firestore().collection("system_config").doc("commission").get();
+        const r = (_a = cfgSnap.data()) === null || _a === void 0 ? void 0 : _a.sharedCallRatio;
+        if (typeof r === "number" && r > 0 && r <= 1) {
+            pointRatio = r;
+        }
+    }
+    catch (e) {
+        logger.warn(`[points] commission config 읽기 실패 — 기본 0.1 사용`, e);
+    }
     const pointAmount = Math.round(fare * pointRatio);
-    logger.info(`[points] 포인트 처리 시작. 요금: ${fare}, 포인트: ${pointAmount}, sharedCallId: ${sourceSharedCallId}`);
+    logger.info(`[points] 포인트 처리 시작. 요금: ${fare}, 요율: ${pointRatio}, 포인트: ${pointAmount}, sharedCallId: ${sourceSharedCallId}`);
     await admin.firestore().runTransaction(async (tx) => {
         var _a, _b;
         // ====== 중복 처리 방지 체크 ======
