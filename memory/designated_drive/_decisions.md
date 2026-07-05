@@ -311,7 +311,12 @@
 - **요율 = 10% 유지하되 설정값화**: `pointRatio`/`OFFICE_CHARGE_RATIO` 하드코딩(points.ts:25,496) → 사무실·프로모션별 조정 가능하게 settings로. 기본 10%.
 - **공유 범위 = 같은 시/도 유지(당분간)**: 양평 클러스터로 네트워크 닭-달걀 먼저 해소. 광역 브로드캐스트는 검증 후.
 - **충전 방식 = 수동 입금확인 먼저**: 사무실 계좌입금→총관리자 확인→포인트 적립(wallet.ts processDeposit 존재). PG 자동화는 나중. 환전=역방향(포인트→총관리자 승인→현금, submitWithdrawalRequest 존재).
-- **상태**: 정책 [확정], 구현 [잠정](미착수). 앞단 "공유콜 위주 앱"은 이 정산 모델 위에 올라감. 구현 순서·슬라이스는 별도 플랜.
+- **상태**: 정책 [확정], **Phase 1 구현·배포·검증 완료(2026-07-05)**.
+  - **Commit 1(`96d2b511`)**: 선불 게이트를 사무실간 콜로 확장 — `index.ts:1350` 조건 `sourceRestaurantId &&` 제거(→`if(afterData.claimedOfficeId)`). checkOfficeWalletForClaim/revert/WALLET_INSUFFICIENT FCM 재사용. call_manager에 WALLET_INSUFFICIENT 알림 핸들러 신규. 검증(1004 클라인증 REST): 잔액충분→CLAIMED 유지 / 잔액4000→revert(OPEN+INSUFFICIENT_BALANCE) 둘 다 PASS. onSharedCallClaimed 배포. 실사무실 잔액 총알대리·1004 각 30000P(≥5000)라 revert폭주 없음.
+  - **Commit 2(요율 config)**: `points.ts` pointRatio 하드코딩 → `system_config/commission.sharedCallRatio` 읽기(없으면 0.1 폴백=문서 만들기 전 불변). 검증: 0.15 세팅→회수 3000(20000×0.15) PASS. onSharedCallCompleted 배포.
+  - ⛳ 남은 검증: 실폰 WALLET_INSUFFICIENT 알림 렌더(기기 연결됨, 다음). threshold 5000·기본요율 10%는 원규씨 금액 미정=현행 유지.
+- **🐛 이월·기존 엣지케이스(2026-07-05 발견)**: 사무실이 **자기 공유콜을 자기가 수임→완료**하면 processSharedCallPoints가 source(+)·target(−)를 **같은 points 문서에 써 두 번째(−10%)가 첫(+10%)을 덮어써 net −10%** 손실. 실 운영엔 A≠B라 무해(자기 공유는 무의미), 내 변경 무관. 방어 원하면 source==target 스킵 가드(후속).
+- **Phase 2(앞단 UX: detector 필드·완료통지 푸시·공유콜 UI) / Phase 3(충전·환전 운영) = 후속.**
 
 ### [기록·2026-07-05] 위생 조치 (같은 커밋)
 - settings.local.json untrack+ignore(시크릿 재발 방지) / recordingS·마늘밭·명함주소·google-services.json.bak gitignore / **명함주소.txt가 calldetector 호스팅에 라이브 공개돼 있었음(200) → OneDrive `콜마당_PII보관_20260705/` 이동 + 재배포로 제거(404 확인)**. callmadang-web은 401 게이트 뒤라 안전.
