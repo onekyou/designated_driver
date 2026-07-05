@@ -301,7 +301,7 @@
 - **Cloud Functions(Admin SDK)는 rules를 전부 우회** (Firebase 공식 문서: "server client libraries bypass all Cloud Firestore Security Rules"). 코드베이스가 22+곳에서 "CF 전용"으로 오해하고 사용 → 실제로는 비로그인 공개였음(공개 API키만으로 접근 가능).
 - **서버 전용 봉인 = `if false`가 정석.** rules 파일 머리에 경고 주석 박음. 이 [확정]을 모르는 세션이 "CF 허용하려면 request.auth==null 추가"로 회귀하는 것 금지.
 - **차단 스프린트 실행 완료(`87b219af`, push·배포·검증)**: allow 분기 25곳 잠금(if false/분기 삭제 — 코드 삭제 0, 블라인드 방식) + 공유콜 수임 claimedOfficeId=본인 사무실 검증 + customerPoints/pointTransactions 관리자 한정 + emergency_alerts create 정상화(null→isAuthenticated, 거꾸로 잠겨 있었음). 비로그인 REST 부정경로 6/6 차단(403)·양성대조 200 실측. 롤백 = `firestore.rules.bak-20260705`(리포+스크래치패드) 재배포.
-- **⛳ 잔여 게이트**: 실폰 회귀(테스트 사무실 — 공유콜 게시→수임 CLAIMED 성공 / 정산 제출 1건 / 채팅 1건 / 포인트 read). 불변식(null 분기는 인증 클라에 영향 0)상 안전하나 실측으로 닫을 것. 기기 미연결이라 폰 연결 시.
+- **✅ 실폰 회귀 완료(2026-07-05, 1004 테스트 사무실)**: 클라이언트 인증 경로(REST, Admin SDK 아님=rules 실평가) 5종 실측 전부 PASS — ①공유콜 게시 200 ②양성:자기 사무실 수임 200 ③음성:타 사무실 claimedOfficeId 조작 수임 403 ④포인트 자가충전 403(if false) ⑤포인트 read 200(무변경). 스크립트=scratchpad verify-rules-client.mjs. 폰(S21+ call_manager) logcat 권한거부 = 전부 무관 확인: 콜드실행시 calls/designated_drivers 거부=Auth복원 레이스(read규칙 백업본과 바이트동일·복원후 소멸), 재실행 2건=tokenRefreshRequests(백업본에도 규칙 없던 default-deny=기존). → 봉인이 정상 read/수임 무손상 확정.
 - **이월(전환 설계에서)**: calls create `if true`(L140대, auth 복원 전 콜 유실 위험으로 보류) / calls·shared_calls·designated_drivers·customerInfo 광역 read(PII, 공유망 UX와 결합) / attributions·attributionTokens(랜딩 QR 결합) / 사무실간 수임 잔액 게이트(정책) / 테스트 버튼 제거.
 - **팀 점검 오판 2건 기록**: ① detector-analyst "사무실간 수수료 회수 없음" = claim 잔액게이트(식당콜 전용)를 회수 게이트로 오독 — 실제 회수는 `onSharedCallCompleted`(index.ts:2612)서 사무실간 A+10%/B-10% zero-sum 정상 작동 ② hygiene-analyst "키스토어 암호 커밋 이력 유입" = 오판(git log -S 실측: 미커밋 작업트리에만 있었음 → 라인 삭제로 종결, 로테이션 불요).
 
