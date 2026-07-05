@@ -316,7 +316,12 @@
   - **Commit 2(요율 config)**: `points.ts` pointRatio 하드코딩 → `system_config/commission.sharedCallRatio` 읽기(없으면 0.1 폴백=문서 만들기 전 불변). 검증: 0.15 세팅→회수 3000(20000×0.15) PASS. onSharedCallCompleted 배포.
   - ✅ 실폰 검증(S21+ 설치): WALLET_INSUFFICIENT data FCM(FCM v1 OAuth 직접 전송)→logcat 핸들러 발화+"포인트 충전이 필요합니다" 알림 렌더 확인. **Phase 1 전 검증(게이트 양성/음성·식당콜 회귀·요율 config·실폰 알림) 통과.** threshold 5000·기본요율 10%는 원규씨 금액 미정=현행 유지.
 - **🐛 이월·기존 엣지케이스(2026-07-05 발견)**: 사무실이 **자기 공유콜을 자기가 수임→완료**하면 processSharedCallPoints가 source(+)·target(−)를 **같은 points 문서에 써 두 번째(−10%)가 첫(+10%)을 덮어써 net −10%** 손실. 실 운영엔 A≠B라 무해(자기 공유는 무의미), 내 변경 무관. 방어 원하면 source==target 스킵 가드(후속).
-- **Phase 2(앞단 UX: detector 필드·완료통지 푸시·공유콜 UI) / Phase 3(충전·환전 운영) = 후속.**
+- **Phase 2 구현·배포·검증 완료(2026-07-05, 기존 call_manager 공유콜 중심 강화 — 원규씨 [확정])**:
+  - **★ 프레이밍 정정**: "detector 공유콜 필드 채우기"는 **불가능**(자동감지 공유는 콜 생성 순간=목적지·요금 협상 전이라 정보가 세상에 없음). 자동공유=전화번호만+수임 사무실이 손님에게 전화가 정상 설계. 수동공유(shareCall)만 정보 채워짐.
+  - **Commit 1(완료·수수료 통지)**: A(콜 올린 사무실)가 완료·수수료를 능동적으로 아는 경로가 전무였음 → `processSharedCallPoints` 반환 추가 + `onSharedCallCompleted`에서 A 관리자에 `SHARED_CALL_COMMISSION` FCM(수수료·새잔액) + `postSystemMessage` 블랙박스, best-effort. call_manager 핸들러 신설. 검증(1004): 수수료 거래 2000+A 채팅 시스템메시지+실폰 알림 렌더. onSharedCallCompleted 배포.
+  - **Commit 2(자동공유 표시 개선)**: 서버 FCM body+대시보드 카드가 자동공유(dep/dest 빈값)를 "출발지→도착지/0원" 대신 "📞 손님에게 전화 필요"+번호로. 검증: cross-source 자동공유→폰 logcat "CUSTOM body: 📞 손님에게 전화 필요". onSharedCallCreated 배포.
+  - ⛳ Phase 2b(후속): 공유콜 대시보드 부각(prominence, UI 설계 별도)·지갑 unread 뱃지·식당콜 완료통지.
+- **Phase 3(충전·환전 운영 UI) = 후속.**
 
 ### [기록·2026-07-05] 위생 조치 (같은 커밋)
 - settings.local.json untrack+ignore(시크릿 재발 방지) / recordingS·마늘밭·명함주소·google-services.json.bak gitignore / **명함주소.txt가 calldetector 호스팅에 라이브 공개돼 있었음(200) → OneDrive `콜마당_PII보관_20260705/` 이동 + 재배포로 제거(404 확인)**. callmadang-web은 401 게이트 뒤라 안전.
