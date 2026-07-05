@@ -320,7 +320,7 @@
   - **★ 프레이밍 정정**: "detector 공유콜 필드 채우기"는 **불가능**(자동감지 공유는 콜 생성 순간=목적지·요금 협상 전이라 정보가 세상에 없음). 자동공유=전화번호만+수임 사무실이 손님에게 전화가 정상 설계. 수동공유(shareCall)만 정보 채워짐.
   - **Commit 1(완료·수수료 통지)**: A(콜 올린 사무실)가 완료·수수료를 능동적으로 아는 경로가 전무였음 → `processSharedCallPoints` 반환 추가 + `onSharedCallCompleted`에서 A 관리자에 `SHARED_CALL_COMMISSION` FCM(수수료·새잔액) + `postSystemMessage` 블랙박스, best-effort. call_manager 핸들러 신설. 검증(1004): 수수료 거래 2000+A 채팅 시스템메시지+실폰 알림 렌더. onSharedCallCompleted 배포.
   - **Commit 2(자동공유 표시 개선)**: 서버 FCM body+대시보드 카드가 자동공유(dep/dest 빈값)를 "출발지→도착지/0원" 대신 "📞 손님에게 전화 필요"+번호로. 검증: cross-source 자동공유→폰 logcat "CUSTOM body: 📞 손님에게 전화 필요". onSharedCallCreated 배포.
-  - ⛳ Phase 2b(후속): 공유콜 대시보드 부각(prominence, UI 설계 별도)·지갑 unread 뱃지·식당콜 완료통지.
+- **Phase 2b 완료·검증(2026-07-06, DashboardScreen.kt만)**: 공유콜 대시보드 부각. **★단순화 교훈**: 처음 배지+강조배너로 구현했으나 원규씨 "공유콜 섹션이 이미 있는데? 먼저 두면 되잖아" → 과설계 인정, 되돌리고 **공유 콜 섹션을 최상단으로 스왑**(weight 공유콜 5.4/내부콜 3.6/기사 1). 배지·배너 오버레이 없이 순서만으로 "공유콜 중심" 직접 달성. 실폰 스크린샷 검증(공유 콜 섹션 최상단·수임 카드 즉시 노출). 클라 전용. `feedback` = 단순함엔 단순으로(섹션이 이미 있으면 부각=순서지 오버레이 아님).
 - **Phase 3(충전·환전 운영 UI) = 후속.**
 
 ### [기록·2026-07-05] 위생 조치 (같은 커밋)
