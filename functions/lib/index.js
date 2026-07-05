@@ -849,6 +849,16 @@ exports.onSharedCallCreated = (0, firestore_1.onDocumentCreated)({
             logger.warn(`[shared-created:${callId}] 알림을 보낼 관리자 토큰이 없습니다.`);
             return;
         }
+        // 자동공유(detector)는 출발/도착이 없음(정보가 아직 세상에 없음) → "손님 전화 필요"로 표시.
+        // 수동공유(shareCall)만 출발/도착/요금이 채워짐 → 기존 route/요금 표시.
+        const sc_hasTrip = !!(sharedCallData.departure || sharedCallData.destination);
+        const sc_phone = sharedCallData.phoneNumber || "전화번호";
+        const sc_body = sc_hasTrip
+            ? `${sharedCallData.departure || "출발지"} → ${sharedCallData.destination || "도착지"}`
+            : `📞 손님에게 전화 필요`;
+        const sc_customMessage = sc_hasTrip
+            ? `${sharedCallData.departure || "출발지"} → ${sharedCallData.destination || "도착지"}\n요금: ${sharedCallData.fare || 0}원\n📞 ${sc_phone}`
+            : `📞 손님에게 전화 필요\n${sc_phone}`;
         // Data-only FCM 메시지 - 앱에서 커스텀 알림 생성
         const message = (0, fcmPayload_1.buildMulticastFcmPayload)({
             data: {
@@ -861,11 +871,11 @@ exports.onSharedCallCreated = (0, firestore_1.onDocumentCreated)({
                 phoneNumber: sharedCallData.phoneNumber || "",
                 // 앱에서 알림 생성용 데이터
                 title: "🔄 새로운 공유콜!",
-                body: `${sharedCallData.departure || "출발지"} → ${sharedCallData.destination || "도착지"}`,
-                customMessage: `${sharedCallData.departure || "출발지"} → ${sharedCallData.destination || "도착지"}\n요금: ${sharedCallData.fare || 0}원\n📞 ${sharedCallData.phoneNumber || "전화번호"}`,
+                body: sc_body,
+                customMessage: sc_customMessage,
             },
             title: "🔄 새로운 공유콜!",
-            body: `${sharedCallData.departure || "출발지"} → ${sharedCallData.destination || "도착지"}`,
+            body: sc_body,
             level: "time-sensitive",
         }, tokens);
         // 🚨 실제 전송되는 페이로드 확인

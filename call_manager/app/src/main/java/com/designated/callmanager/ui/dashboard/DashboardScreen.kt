@@ -2907,8 +2907,8 @@ fun SharedCallCard(
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
-                } else {
-                    // 일반 콜은 출발지-도착지와 요금만 표시
+                } else if (!sharedCall.departure.isNullOrBlank() || !sharedCall.destination.isNullOrBlank()) {
+                    // 수동공유(정보 있음): 출발지-도착지와 요금 표시
                     Text(
                         text = "${sharedCall.departure ?: "출발지"} → ${sharedCall.destination ?: "도착지"}",
                         fontWeight = FontWeight.Bold,
@@ -2917,6 +2917,20 @@ fun SharedCallCard(
                     sharedCall.fare?.let {
                         Text(
                             text = "요금: ${it}원",
+                            color = Color.LightGray,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                } else {
+                    // 자동공유(정보 없음): "출발지→도착지/0원" 오해 대신 손님 전화 안내
+                    Text(
+                        text = "📞 손님에게 전화 필요",
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    sharedCall.phoneNumber?.takeIf { it.isNotBlank() }?.let {
+                        Text(
+                            text = it,
                             color = Color.LightGray,
                             style = MaterialTheme.typography.bodySmall
                         )
