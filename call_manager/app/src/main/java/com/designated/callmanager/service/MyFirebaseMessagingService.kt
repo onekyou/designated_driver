@@ -73,6 +73,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             "STATUS_CHANGE",         // 운행 시작/완료 알림은 항상 처리
             "NOTIFICATION_FAILURE",  // 알림 전달 실패 경고는 항상 처리
             "SETTLEMENT_SUBMITTED",  // 기사 업무마감 제출 알림
+            "WALLET_INSUFFICIENT",   // 공유콜 수임 잔액부족 revert 통지 (수임 시 매니저는 포그라운드라 항상 처리 필수)
             "NEW_CHAT_MESSAGE",      // 사무실 단톡방 메시지 (포그라운드도 Room INSERT 필요)
             "ptt_dispatch",          // PTT 라이브 수신 wake (포그라운드도 수신 join 필요)
             "ptt_prewake"            // PTT 콜드 선행 깨우기 (no-op, 필터 통과만)
@@ -113,6 +114,26 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 color = ContextCompat.getColor(this, android.R.color.holo_orange_dark),
                 autoCancel = true,
                 isSettlement = true,
+                timeoutAfter = 0
+            )
+            return
+        }
+
+        // WALLET_INSUFFICIENT: 공유콜 수임 잔액부족 → 서버가 콜을 OPEN으로 revert함. 매니저에게 사유 통지.
+        // (callId는 있으나 콜 상세를 열지 않음 — is* 플래그 없이 대시보드만 열어 지갑 충전 유도)
+        if (messageType == "WALLET_INSUFFICIENT") {
+            val balance = remoteMessage.data["balance"] ?: "0"
+            val required = remoteMessage.data["required"] ?: "5000"
+            Log.w(TAG, "🔔 WALLET_INSUFFICIENT - 잔액 ${balance}P, 필요 ${required}P (공유콜 수임 revert)")
+            showNotification(
+                channelId = STATUS_CHANGE_CHANNEL_ID,
+                notificationId = "wallet_insufficient".hashCode(),
+                title = "포인트 충전이 필요합니다",
+                content = "포인트 부족으로 공유콜을 잡지 못했습니다.",
+                bigText = "현재 잔액 ${balance}P\n콜을 잡으려면 ${required}P 이상 필요합니다. 지갑에서 충전해 주세요.",
+                callId = "wallet_insufficient",
+                color = ContextCompat.getColor(this, android.R.color.holo_red_dark),
+                autoCancel = true,
                 timeoutAfter = 0
             )
             return

@@ -1345,9 +1345,11 @@ export const onSharedCallClaimed = onDocumentUpdated(
 
       logger.info(`[shared:${callId}] assignedDriverId=${afterData.claimedDriverId}`);
 
-      // PR 1 — 결정 #11: claim 시점 wallet 잔액 ≥ 5,000 검증 (잔액 부족 사무실은 revert + 매니저 충전 안내)
-      // 식당앱 콜(sourceRestaurantId 존재)에만 적용. 기존 사무실간 zero-sum 콜은 면제 (마이그레이션 윈도우 안전 + 의미 정합)
-      if (afterData.sourceRestaurantId && afterData.claimedOfficeId) {
+      // 선불 포인트 게이트: claim 시점 수임 사무실 wallet 잔액 ≥ 5,000 검증 (부족 시 revert + 매니저 충전 안내)
+      // 2026-07-05 공유콜 지역 OS 전환[확정]: 식당콜 한정 → 전 공유콜(사무실간 포함)로 확장.
+      //   근거 = 사무실간 zero-sum 콜도 B가 A에 −10% 지급 → 선불 잔액 없으면 미회수 부채. targetProvince/City는
+      //   수임 함수가 수임 사무실 자기값으로 덮어써(claimShared*) checkOfficeWalletForClaim이 수임 사무실 지갑을 정확히 조회.
+      if (afterData.claimedOfficeId) {
         const { allowed, balance } = await checkOfficeWalletForClaim(
           afterData.targetProvinceId,
           afterData.targetCityId,
