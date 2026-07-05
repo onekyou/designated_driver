@@ -598,22 +598,9 @@ fun DashboardScreen(
                 }
 
 
-                CallListContainer(
-                    modifier = Modifier.fillMaxWidth().weight(5.4f),
-                    calls = calls.filter { call ->
-                        val status = CallStatus.fromFirestoreValue(call.status)
-                        // CANCELLED(취소요청)은 표시, 완료/취소 계열만 숨김
-                        status != CallStatus.COMPLETED && status != CallStatus.CANCELED && status != CallStatus.SHARED_OUT && status != CallStatus.CANCELLED_BY_CUSTOMER && status != CallStatus.CANCELLED_BY_DRIVER
-                    },
-                    title = "내부 호출 목록",
-                    onCallClick = { callInfo -> viewModel.showCallDialog(callInfo.id) },
-                    onAddCallClick = { viewModel.createEmptyCallAndShowAssignment() }
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
+                // Phase 2b: 공유콜 중심 — 공유 콜 섹션을 최상단·크게, 내부 호출 목록은 아래로.
                 SharedCallListContainer(
-                    modifier = Modifier.fillMaxWidth().weight(3.6f),
+                    modifier = Modifier.fillMaxWidth().weight(5.4f),
                     sharedCalls = sharedCalls,
                     onAccept = { call ->
                         selectedSharedCall = call
@@ -627,6 +614,20 @@ fun DashboardScreen(
                         viewModel.deleteSharedCall(call.id)
                     },
                     currentOfficeId = officeId
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                CallListContainer(
+                    modifier = Modifier.fillMaxWidth().weight(3.6f),
+                    calls = calls.filter { call ->
+                        val status = CallStatus.fromFirestoreValue(call.status)
+                        // CANCELLED(취소요청)은 표시, 완료/취소 계열만 숨김
+                        status != CallStatus.COMPLETED && status != CallStatus.CANCELED && status != CallStatus.SHARED_OUT && status != CallStatus.CANCELLED_BY_CUSTOMER && status != CallStatus.CANCELLED_BY_DRIVER
+                    },
+                    title = "내부 호출 목록",
+                    onCallClick = { callInfo -> viewModel.showCallDialog(callInfo.id) },
+                    onAddCallClick = { viewModel.createEmptyCallAndShowAssignment() }
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
