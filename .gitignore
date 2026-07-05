@@ -133,3 +133,11 @@ functions/lib/public/
 # 일회성 운영/검증 스크립트 (OAuth secret 하드코딩 — 커밋 금지)
 functions/scripts/cleanup-1004-calls.js
 functions/scripts/verify-1004.js
+
+# --- 차단 스프린트 2026-07-05: PII/시크릿 위생 ---
+**/google-services.json.bak
+call_manager/recordingS/
+.claude/마늘밭*.txt
+**/명함주소.txt
+.claude/settings.local.json
+firestore.rules.bak-*
