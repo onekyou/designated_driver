@@ -306,5 +306,12 @@
 - **🐛 이월·기존 버그(2026-07-05 발견)**: `tokenRefreshRequests` 컬렉션에 **rules match 블록이 아예 없어 default-deny**. CF가 이 컬렉션에 write(`functions/src/index.ts:3686`, Admin SDK라 통과)해 매니저 FCM 토큰 강제갱신을 요청하지만, **매니저 앱은 이걸 snapshotListener로 read**(`call_manager/…/MainActivity.kt:1549`)하는데 규칙이 없어 **항상 거부 → 토큰 강제갱신 기능이 조용히 죽어 있음**. 차단 스프린트 이전부터 존재(내 변경 무관, 백업본에도 규칙 없음). 수정=간단(`match /…/tokenRefreshRequests/{managerId} { allow read: if isOfficeAdmin(...) 또는 본인 managerId; write: if false; }`)이나 공유콜 전환 범위 밖 → 별도 처리. 영향=토큰 만료 시 FCM 미수신 가능성(강제갱신 폴백이 안 도는 만큼).
 - **팀 점검 오판 2건 기록**: ① detector-analyst "사무실간 수수료 회수 없음" = claim 잔액게이트(식당콜 전용)를 회수 게이트로 오독 — 실제 회수는 `onSharedCallCompleted`(index.ts:2612)서 사무실간 A+10%/B-10% zero-sum 정상 작동 ② hygiene-analyst "키스토어 암호 커밋 이력 유입" = 오판(git log -S 실측: 미커밋 작업트리에만 있었음 → 라인 삭제로 종결, 로테이션 불요).
 
+### [확정·2026-07-05 원규씨 결정] 공유콜 정산 = 선불 포인트 모델 (+ 요율 설정값 / 범위 같은 시/도 / 충전 수동먼저)
+- **정산 모델 = 선불 포인트**: B사무실은 전용계좌 입금→포인트 충전 후에만 공유콜 수임 가능. 잔액 부족 시 수임 차단. (후불/신용 답변을 원규씨가 거두고 권장=선불 채택.) 근거=미회수 부채 원천 차단 + 기존 `checkOfficeWalletForClaim`(≥임계 포인트) 게이트 재사용 + 전용계좌가 자금원. **구현 = 이 게이트를 식당콜(sourceRestaurantId) 한정에서 사무실간 콜 전체로 확장.** ⛳임계 금액은 미정(운영 시작 시).
+- **요율 = 10% 유지하되 설정값화**: `pointRatio`/`OFFICE_CHARGE_RATIO` 하드코딩(points.ts:25,496) → 사무실·프로모션별 조정 가능하게 settings로. 기본 10%.
+- **공유 범위 = 같은 시/도 유지(당분간)**: 양평 클러스터로 네트워크 닭-달걀 먼저 해소. 광역 브로드캐스트는 검증 후.
+- **충전 방식 = 수동 입금확인 먼저**: 사무실 계좌입금→총관리자 확인→포인트 적립(wallet.ts processDeposit 존재). PG 자동화는 나중. 환전=역방향(포인트→총관리자 승인→현금, submitWithdrawalRequest 존재).
+- **상태**: 정책 [확정], 구현 [잠정](미착수). 앞단 "공유콜 위주 앱"은 이 정산 모델 위에 올라감. 구현 순서·슬라이스는 별도 플랜.
+
 ### [기록·2026-07-05] 위생 조치 (같은 커밋)
 - settings.local.json untrack+ignore(시크릿 재발 방지) / recordingS·마늘밭·명함주소·google-services.json.bak gitignore / **명함주소.txt가 calldetector 호스팅에 라이브 공개돼 있었음(200) → OneDrive `콜마당_PII보관_20260705/` 이동 + 재배포로 제거(404 확인)**. callmadang-web은 401 게이트 뒤라 안전.
